@@ -30,7 +30,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -331,7 +330,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &eventpb.WorkflowExecutionCancelRequestedEventAttributes{
 			Cause:                    "",
 			ExternalInitiatedEventId: 1,
-			ExternalWorkflowExecution: &executionpb.WorkflowExecution{
+			ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: externalWorkflowID,
 				RunId:      uuid.New(),
 			},
@@ -476,7 +475,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = eventpb.EventType_ActivityTaskCancelRequested
 		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: &eventpb.ActivityTaskCancelRequestedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskScheduledEventAttributes().DecisionTaskCompletedEventId,
-			ActivityId:                   lastEvent.GetActivityTaskScheduledEventAttributes().ActivityId,
+			ScheduledEventId:             lastEvent.GetEventId(),
 		}}
 		return historyEvent
 	})
@@ -493,22 +492,6 @@ func InitializeHistoryEventGenerator(
 			ScheduledEventId:             lastEvent.EventId,
 			StartedEventId:               lastEvent.EventId,
 			Identity:                     identity,
-		}}
-		return historyEvent
-	})
-	activityCancelRequestFail := NewHistoryEventVertex(eventpb.EventType_RequestCancelActivityTaskFailed.String())
-	activityCancelRequestFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*eventpb.HistoryEvent)
-		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
-		eventID := lastGeneratedEvent.GetEventId() + 1
-		versionBump := input[2].(int64)
-		subVersion := input[3].(int64)
-		version := lastGeneratedEvent.GetVersion() + versionBump + subVersion
-		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = eventpb.EventType_RequestCancelActivityTaskFailed
-		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: &eventpb.RequestCancelActivityTaskFailedEventAttributes{
-			ActivityId:                   uuid.New(),
-			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskCancelRequestedEventAttributes().DecisionTaskCompletedEventId,
 		}}
 		return historyEvent
 	})
@@ -541,14 +524,10 @@ func InitializeHistoryEventGenerator(
 	activityCancelReqToCancel := NewHistoryEventEdge(activityCancelRequest, activityCancel)
 	activityCancelReqToCancel.SetCondition(hasPendingActivity)
 
-	activityCancelReqToCancelFail := NewHistoryEventEdge(activityCancelRequest, activityCancelRequestFail)
-	activityCancelRequestFailToDecisionSchedule := NewHistoryEventEdge(activityCancelRequestFail, decisionSchedule)
-	activityCancelRequestFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-
 	activityModel.AddEdge(decisionCompleteToATSchedule, activityScheduleToStart, activityStartToComplete,
 		activityStartToFail, activityStartToTimedOut, decisionCompleteToATSchedule, activityCompleteToDecisionSchedule,
 		activityFailToDecisionSchedule, activityTimedOutToDecisionSchedule, activityCancelReqToCancel,
-		activityCancelReqToCancelFail, activityCancelToDecisionSchedule, activityCancelRequestFailToDecisionSchedule)
+		activityCancelToDecisionSchedule)
 
 	// Setup timer model
 	timerModel := NewHistoryEventModel()
@@ -663,7 +642,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.EventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      uuid.New(),
 			},
@@ -682,7 +661,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -702,7 +681,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -722,7 +701,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -742,7 +721,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -762,7 +741,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:        namespace,
 			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -810,7 +789,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: externalWorkflowID,
 				RunId:      uuid.New(),
 			},
@@ -831,7 +810,7 @@ func InitializeHistoryEventGenerator(
 			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -850,7 +829,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: &eventpb.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
 			Namespace:        namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -869,7 +848,7 @@ func InitializeHistoryEventGenerator(
 			RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 				DecisionTaskCompletedEventId: lastEvent.EventId,
 				Namespace:                    namespace,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: externalWorkflowID,
 					RunId:      uuid.New(),
 				},
@@ -889,7 +868,7 @@ func InitializeHistoryEventGenerator(
 			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -908,7 +887,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: &eventpb.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
 			Namespace:        namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},

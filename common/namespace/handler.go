@@ -47,7 +47,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -201,7 +200,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	info := &persistenceblobs.NamespaceInfo{
-		Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 		Name:        registerRequest.GetName(),
 		Status:      namespacepb.NamespaceStatus_Registered,
 		Owner:       registerRequest.GetOwnerEmail(),
@@ -278,7 +277,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	d.logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(registerRequest.GetName()),
-		tag.WorkflowNamespaceIDBytes(namespaceResponse.ID),
+		tag.WorkflowNamespaceID(namespaceResponse.ID),
 	)
 
 	return nil, nil
@@ -335,7 +334,7 @@ func (d *HandlerImpl) DescribeNamespace(
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetName(),
-		ID:   primitives.MustParseUUID(describeRequest.GetId()),
+		ID:   describeRequest.GetId(),
 	}
 	resp, err := d.metadataMgr.GetNamespace(req)
 	if err != nil {
@@ -576,7 +575,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	d.logger.Info("Update namespace succeeded",
 		tag.WorkflowNamespace(info.Name),
-		tag.WorkflowNamespaceIDBytes(info.Id),
+		tag.WorkflowNamespaceID(info.Id),
 	)
 	return response, nil
 }
@@ -640,7 +639,7 @@ func (d *HandlerImpl) createResponse(
 		Description: info.Description,
 		OwnerEmail:  info.Owner,
 		Data:        info.Data,
-		Id:          primitives.UUIDString(info.Id),
+		Id:          info.Id,
 	}
 
 	configResult := &namespacepb.NamespaceConfiguration{

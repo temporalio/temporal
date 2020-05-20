@@ -31,8 +31,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (
@@ -50,7 +50,7 @@ var (
 		EventType: eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
 		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
 			},

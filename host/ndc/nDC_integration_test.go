@@ -48,7 +48,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -255,7 +254,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 		host.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -1145,7 +1144,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		token []byte,
 	) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		execution := &executionpb.WorkflowExecution{
+		execution := &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
@@ -1640,7 +1639,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:            &commonpb.WorkflowType{Name: workflowType},
 			ParentWorkflowNamespace: namespace,
-			ParentWorkflowExecution: &executionpb.WorkflowExecution{
+			ParentWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: uuid.New(),
 				RunId:      uuid.New(),
 			},
@@ -1727,7 +1726,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 		req := &historyservice.ReplicateEventsV2Request{
 			NamespaceId: s.namespaceID,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

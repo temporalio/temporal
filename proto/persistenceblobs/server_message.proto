@@ -27,9 +27,12 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
 import "common/message.proto";
+import "common/server_enum.proto";
+
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
 import "execution/enum.proto";
+import "execution/server_enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
@@ -72,7 +75,7 @@ message ActivityInfo {
     repeated string retryNonRetryableErrors = 28;
     failure.Failure retryLastFailure = 29;
     string retryLastWorkerIdentity = 30;
-    bytes namespaceId = 31;
+    string namespaceId = 31;
     int64 scheduleId = 32;
     common.Payloads lastHeartbeatDetails = 33;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 34;
@@ -94,11 +97,12 @@ message ShardInfo {
     map<string, int64> replicationDLQAckLevel = 13;
 }
 
+
 message ReplicationTaskInfo {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string workflowId = 2;
-    bytes runId = 3;
-    int32 taskType = 4;
+    string runId = 3;
+    common.TaskType taskType = 4;
     int64 version = 5;
     int64 firstEventId = 6;
     int64 nextEventId = 7;
@@ -113,10 +117,10 @@ message ReplicationTaskInfo {
 }
 
 message TimerTaskInfo {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string workflowId = 2;
-    bytes runId = 3;
-    int32 taskType = 4;
+    string runId = 3;
+    common.TaskType taskType = 4;
     int32 timeoutType = 5;
     int64 version = 6;
     int64 scheduleAttempt = 7;
@@ -126,13 +130,13 @@ message TimerTaskInfo {
 }
 
 message TransferTaskInfo {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string workflowId = 2;
-    bytes runId = 3;
-    int32 taskType = 4;
-    bytes targetNamespaceId = 5;
+    string runId = 3;
+    common.TaskType taskType = 4;
+    string targetNamespaceId = 5;
     string targetWorkflowId = 6;
-    bytes targetRunId = 7;
+    string targetRunId = 7;
     string taskList = 8;
     bool targetChildWorkflowOnly = 9;
     int64 scheduleId = 10;
@@ -145,7 +149,7 @@ message TransferTaskInfo {
 // HistoryBranchRange represents a piece of range for a branch.
 message HistoryBranchRange {
     // BranchId of original branch forked from.
-    bytes branchId = 1;
+    string branchId = 1;
     // Beginning node for the range, inclusive.
     int64 beginNodeId = 2;
     // Ending node for the range, exclusive.
@@ -154,8 +158,8 @@ message HistoryBranchRange {
 
 // For history persistence to serialize/deserialize branch details.
 message HistoryBranch {
-    bytes treeId = 1;
-    bytes branchId = 2;
+    string treeId = 1;
+    string branchId = 2;
     repeated HistoryBranchRange ancestors = 3;
 }
 
@@ -177,9 +181,9 @@ message TimerInfo {
 }
 
 message TaskInfo {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string workflowId = 2;
-    bytes runId = 3;
+    string runId = 3;
     int64 scheduleId = 4;
     google.protobuf.Timestamp createdTime = 5;
     google.protobuf.Timestamp expiry = 6;
@@ -191,7 +195,7 @@ message AllocatedTaskInfo {
 }
 
 message TaskListInfo {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string name = 2;
     tasklist.TaskListType taskType = 3;
     tasklist.TaskListKind kind = 5;
@@ -219,17 +223,17 @@ message RequestCancelInfo {
 
 message WorkflowExecutionState {
     string createRequestId = 1;
-    bytes runId = 2;
-    int32 state = 3;
+    string runId = 2;
+    execution.WorkflowExecutionState state = 3;
     execution.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
-    bytes namespaceId = 61;
+    string namespaceId = 61;
     string workflowId = 62;
-    bytes parentNamespaceId = 1;
+    string parentNamespaceId = 1;
     string parentWorkflowId = 2;
-    bytes parentRunId = 3;
+    string parentRunId = 3;
     int64 initiatedId = 4;
     int64 completionEventBatchId = 5;
     bytes completionEvent = 6;
@@ -297,7 +301,7 @@ message ChildExecutionInfo {
     bytes initiatedEvent = 4;
     string initiatedEventEncoding = 5;
     string startedWorkflowId = 6;
-    bytes startedRunId = 7;
+    string startedRunId = 7;
     bytes startedEvent = 8;
     string startedEventEncoding = 9;
     string createRequestId = 10;
@@ -319,7 +323,7 @@ message NamespaceDetail {
 }
 
 message NamespaceInfo {
-    bytes id = 1;
+    string id = 1;
     namespace.NamespaceStatus status = 2;
     string name = 3;
     string description = 4;
@@ -336,7 +340,6 @@ message NamespaceConfig {
     int32 retentionDays = 1;
     bool emitMetric = 2;
     string archivalBucket = 3;
-    int32 archivalStatus = 4;
     namespace.BadBinaries badBinaries = 16;
     namespace.ArchivalStatus historyArchivalStatus = 18;
     string historyArchivalURI = 19;

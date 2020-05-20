@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -45,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -392,9 +392,9 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		return nil
 	}
 	p.logger.Info("Put history replication to DLQ",
-		tag.WorkflowNamespaceIDBytes(request.TaskInfo.GetNamespaceId()),
+		tag.WorkflowNamespaceID(request.TaskInfo.GetNamespaceId()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunId()),
+		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
 
@@ -426,11 +426,11 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId: taskAttributes.GetNamespaceId(),
 				WorkflowId:  taskAttributes.GetWorkflowId(),
-				RunId:       primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:       taskAttributes.GetRunId(),
 				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    persistence.ReplicationTaskTypeSyncActivity,
+				TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
@@ -440,11 +440,11 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId:         primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId:         taskAttributes.GetNamespaceId(),
 				WorkflowId:          taskAttributes.GetWorkflowId(),
-				RunId:               primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:               taskAttributes.GetRunId(),
 				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            persistence.ReplicationTaskTypeHistory,
+				TaskType:            commongenpb.TaskType_ReplicationHistory,
 				FirstEventId:        taskAttributes.GetFirstEventId(),
 				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
@@ -469,11 +469,11 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceId:  primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				NamespaceId:  taskAttributes.GetNamespaceId(),
 				WorkflowId:   taskAttributes.GetWorkflowId(),
-				RunId:        primitives.MustParseUUID(taskAttributes.GetRunId()),
+				RunId:        taskAttributes.GetRunId(),
 				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     persistence.ReplicationTaskTypeHistory,
+				TaskType:     commongenpb.TaskType_ReplicationHistory,
 				FirstEventId: events[0].GetEventId(),
 				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),

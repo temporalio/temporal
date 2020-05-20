@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -212,7 +213,7 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: baseWE.ID,
 			RunId:      baseWE.RunID,
 		},
@@ -233,7 +234,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 
 	resp, err := svClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: newWE.ID,
 			RunId:      newWE.RunID,
 		},

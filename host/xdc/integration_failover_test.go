@@ -278,7 +278,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -309,7 +309,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -363,7 +363,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
 		queryResp, err := client.QueryWorkflow(host.NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -439,7 +439,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      rid,
 		},
@@ -583,7 +583,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	firstDecisionMade := false
 	secondDecisionMade := false
 	workflowCompleted := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !firstDecisionMade {
 			firstDecisionMade = true
@@ -638,7 +638,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -671,7 +671,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -753,7 +753,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		workflowCompleteTimes++
@@ -886,7 +886,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -916,7 +916,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -959,7 +959,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   terminateReason,
@@ -972,7 +972,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -1073,7 +1073,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *eventpb.HistoryEvent
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
@@ -1209,7 +1209,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
@@ -1253,7 +1253,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -1289,7 +1289,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -1311,7 +1311,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalInput2 := payloads.EncodeString("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		SignalName: signalName2,
@@ -1399,7 +1399,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	timerCreated := false
 	timerFired := false
 	workflowCompleted := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !timerCreated {
@@ -1410,7 +1410,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			signalInput := payloads.EncodeString("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: namespace,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
@@ -1431,7 +1431,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		if !timerFired {
 			resp, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: namespace,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
@@ -1570,7 +1570,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activitySent := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activitySent {
 			activitySent = true
@@ -1589,7 +1589,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 						InitialIntervalInSeconds: 1,
 						MaximumAttempts:          3,
 						MaximumIntervalInSeconds: 1,
-						NonRetriableErrorReasons: []string{"bad-bug"},
+						NonRetryableErrorTypes:   []string{"bad-bug"},
 						BackoffCoefficient:       1,
 					},
 				}},
@@ -1607,7 +1607,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// activity handler
 	activity1Called := false
 	heartbeatDetails := payloads.EncodeString("details")
-	atHandler1 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler1 := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		activity1Called = true
 		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -1619,7 +1619,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	// activity handler
 	activity2Called := false
-	atHandler2 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler2 := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		activity2Called = true
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -1650,7 +1650,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(host.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1704,7 +1704,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
@@ -1779,7 +1779,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	decisionFailed := false
 	workflowFinished := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !decisionFailed {
 			decisionFailed = true
@@ -1890,7 +1890,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		return []*decisionpb.Decision{
 			{
@@ -1936,7 +1936,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
@@ -1988,7 +1988,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 			InitialIntervalInSeconds: 1,
 			MaximumAttempts:          3,
 			MaximumIntervalInSeconds: 1,
-			NonRetriableErrorReasons: []string{"bad-bug"},
+			NonRetryableErrorTypes:   []string{"bad-bug"},
 			BackoffCoefficient:       1,
 		},
 	}
@@ -1996,8 +1996,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	var executions []*executionpb.WorkflowExecution
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	var executions []*commonpb.WorkflowExecution
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		executions = append(executions, execution)
 		return []*decisionpb.Decision{
@@ -2057,7 +2057,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *executionpb.WorkflowExecution) []*eventpb.HistoryEvent {
+func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*eventpb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,

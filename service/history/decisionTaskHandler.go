@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -197,7 +196,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -255,10 +254,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		return err
 	}
 
-	activityID := attr.GetActivityId()
+	scheduleID := attr.GetScheduledEventId()
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.decisionTaskCompletedID,
-		activityID,
+		scheduleID,
 		handler.identity,
 	)
 	switch err.(type) {
@@ -280,12 +279,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		}
 		return nil
 	case *serviceerror.InvalidArgument:
-		_, err = handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
-			handler.decisionTaskCompletedID,
-			activityID,
-			activityCancellationMsgActivityIDUnknown,
+		return handler.handlerFailDecision(
+			eventpb.DecisionTaskFailedCause_BadRequestCancelActivityAttributes, "",
 		)
-		return err
+
 	default:
 		return err
 	}
@@ -577,7 +574,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -735,7 +732,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -791,7 +788,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	if err := handler.validateDecisionAttr(

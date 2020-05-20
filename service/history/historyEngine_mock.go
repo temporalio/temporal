@@ -30,14 +30,13 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	replication "github.com/temporalio/temporal/.gen/proto/replication"
 	persistence "github.com/temporalio/temporal/common/persistence"
+	common "go.temporal.io/temporal-proto/common"
 	event "go.temporal.io/temporal-proto/event"
-	execution "go.temporal.io/temporal-proto/execution"
+	reflect "reflect"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -581,7 +580,7 @@ func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest interfac
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution execution.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution common.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)

@@ -67,8 +67,8 @@ import (
 	"github.com/temporalio/temporal/service/worker/replicator"
 )
 
-// Cadence hosts all of cadence services in one process
-type Cadence interface {
+// Temporal hosts all of temporal services in one process
+type Temporal interface {
 	Start() error
 	Stop()
 	GetAdminClient() adminservice.AdminServiceClient
@@ -78,7 +78,7 @@ type Cadence interface {
 }
 
 type (
-	cadenceImpl struct {
+	temporalImpl struct {
 		frontendService common.Daemon
 		matchingService common.Daemon
 		historyServices []common.Daemon
@@ -122,8 +122,8 @@ type (
 		HistoryCountLimitWarn  int
 	}
 
-	// CadenceParams contains everything needed to bootstrap Cadence
-	CadenceParams struct {
+	// TemporalParams contains everything needed to bootstrap Temporal
+	TemporalParams struct {
 		ClusterMetadata                  cluster.Metadata
 		PersistenceConfig                config.Persistence
 		MessagingClient                  messaging.Client
@@ -154,9 +154,9 @@ type (
 	}
 )
 
-// NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(params *CadenceParams) Cadence {
-	return &cadenceImpl{
+// NewTemporal returns an instance that hosts full temporal in one process
+func NewTemporal(params *TemporalParams) Temporal {
+	return &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadata:                  params.ClusterMetadata,
 		persistenceConfig:                params.PersistenceConfig,
@@ -182,11 +182,11 @@ func NewCadence(params *CadenceParams) Cadence {
 	}
 }
 
-func (c *cadenceImpl) enableWorker() bool {
+func (c *temporalImpl) enableWorker() bool {
 	return c.workerConfig.EnableArchiver || c.workerConfig.EnableIndexer || c.workerConfig.EnableReplicator
 }
 
-func (c *cadenceImpl) Start() error {
+func (c *temporalImpl) Start() error {
 	hosts := make(map[string][]string)
 	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
 	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
@@ -220,7 +220,7 @@ func (c *cadenceImpl) Start() error {
 	return nil
 }
 
-func (c *cadenceImpl) Stop() {
+func (c *temporalImpl) Stop() {
 	if c.enableWorker() {
 		c.shutdownWG.Add(4)
 	} else {
@@ -241,7 +241,7 @@ func (c *cadenceImpl) Stop() {
 	c.shutdownWG.Wait()
 }
 
-func (c *cadenceImpl) FrontendGRPCAddress() string {
+func (c *temporalImpl) FrontendGRPCAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7134"
@@ -256,7 +256,7 @@ func (c *cadenceImpl) FrontendGRPCAddress() string {
 	}
 }
 
-func (c *cadenceImpl) FrontendRingpopAddress() string {
+func (c *temporalImpl) FrontendRingpopAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7124"
@@ -272,7 +272,7 @@ func (c *cadenceImpl) FrontendRingpopAddress() string {
 }
 
 // penultimatePortDigit: 2 - ringpop, 3 - gRPC
-func (c *cadenceImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
+func (c *temporalImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
 	var hosts []string
 	startPort := penultimatePortDigit * 10
 	switch c.clusterNo {
@@ -296,7 +296,7 @@ func (c *cadenceImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
 	return hosts
 }
 
-func (c *cadenceImpl) MatchingGRPCServiceAddress() string {
+func (c *temporalImpl) MatchingGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7136"
@@ -311,7 +311,7 @@ func (c *cadenceImpl) MatchingGRPCServiceAddress() string {
 	}
 }
 
-func (c *cadenceImpl) MatchingServiceRingpopAddress() string {
+func (c *temporalImpl) MatchingServiceRingpopAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7126"
@@ -326,7 +326,7 @@ func (c *cadenceImpl) MatchingServiceRingpopAddress() string {
 	}
 }
 
-func (c *cadenceImpl) WorkerGRPCServiceAddress() string {
+func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7138"
@@ -341,7 +341,7 @@ func (c *cadenceImpl) WorkerGRPCServiceAddress() string {
 	}
 }
 
-func (c *cadenceImpl) WorkerServiceRingpopAddress() string {
+func (c *temporalImpl) WorkerServiceRingpopAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7128"
@@ -356,19 +356,19 @@ func (c *cadenceImpl) WorkerServiceRingpopAddress() string {
 	}
 }
 
-func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceClient {
+func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
-func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
+func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
-func (c *cadenceImpl) GetHistoryClient() historyservice.HistoryServiceClient {
+func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
-func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(resource.BootstrapParams)
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
@@ -419,7 +419,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	connection := params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress())
+	connection := params.RPCFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 	go frontendService.Start()
@@ -429,7 +429,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(
+func (c *temporalImpl) startHistory(
 	hosts map[string][]string,
 	startWG *sync.WaitGroup,
 ) {
@@ -497,7 +497,7 @@ func (c *cadenceImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0])
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -513,7 +513,7 @@ func (c *cadenceImpl) startHistory(
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 
 	params := new(resource.BootstrapParams)
 	params.Name = common.MatchingServiceName
@@ -556,7 +556,7 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(resource.BootstrapParams)
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
@@ -637,7 +637,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
@@ -665,7 +665,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 	}
 }
 
-func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
@@ -685,7 +685,7 @@ func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, 
 	}
 }
 
-func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, service resource.Resource) {
+func (c *temporalImpl) startWorkerIndexer(params *resource.BootstrapParams, service resource.Resource) {
 	params.DynamicConfig.UpdateValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
 	workerConfig := worker.NewConfig(params)
 	c.indexer = indexer.NewIndexer(
@@ -701,7 +701,7 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 	}
 }
 
-func (c *cadenceImpl) createSystemNamespace() error {
+func (c *temporalImpl) createSystemNamespace() error {
 	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadata.GetCurrentClusterName())
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
@@ -709,11 +709,11 @@ func (c *cadenceImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *cadenceImpl) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
+func (c *temporalImpl) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
 	return c.executionMgrFactory
 }
 
-func (c *cadenceImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.HistoryMgrNumConns, c.historyConfig.NumHistoryShards)
 	client.OverrideValue(dynamicconfig.ExecutionMgrNumConns, c.historyConfig.NumHistoryShards)
 	client.OverrideValue(dynamicconfig.EnableNDC, c.enableNDC)
@@ -772,6 +772,23 @@ type rpcFactoryImpl struct {
 	sync.Mutex
 	listener       net.Listener
 	ringpopChannel *tchannel.Channel
+	serverCfg      config.GroupTLS
+}
+
+func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
+	return nil, nil
+}
+
+func (c *rpcFactoryImpl) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
+	return nil, nil
+}
+
+func (c *rpcFactoryImpl) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
+	return c.CreateGRPCConnection(hostName)
+}
+
+func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+	return c.CreateGRPCConnection(hostName)
 }
 
 func newRPCFactoryImpl(sName, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
@@ -832,7 +849,7 @@ func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := rpc.Dial(hostName)
+	connection, err := rpc.Dial(hostName, nil)
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

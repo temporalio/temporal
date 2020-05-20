@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -157,13 +156,13 @@ func (s *engine3Suite) TearDownTest() {
 
 func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -232,7 +231,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -266,7 +265,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -312,7 +311,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()

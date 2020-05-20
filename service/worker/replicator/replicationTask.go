@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -194,7 +194,7 @@ func newHistoryReplicationTask(
 		req: &historyservice.ReplicateEventsRequest{
 			SourceCluster: sourceCluster,
 			NamespaceId:   attr.NamespaceId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -289,7 +289,7 @@ func newHistoryReplicationV2Task(
 		},
 		req: &historyservice.ReplicateEventsV2Request{
 			NamespaceId: attr.NamespaceId,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},

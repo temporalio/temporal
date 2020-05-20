@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -132,11 +131,11 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 		TaskId:              12345,
 		VisibilityTimestamp: types.TimestampNow(),
 	}
-	executionInfo := executionpb.WorkflowExecution{
+	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
-	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.GetNamespaceId()), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := newWorkflowExecutionContext(task.GetNamespaceId(), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()

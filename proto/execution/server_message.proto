@@ -24,11 +24,11 @@ package execution;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/execution";
 
-import "execution/message.proto";
+import "common/message.proto";
 
 message ParentExecutionInfo {
     string namespaceId = 1;
     string namespace = 2;
-    execution.WorkflowExecution execution = 3;
+    common.WorkflowExecution execution = 3;
     int64 initiatedId = 4;
 }

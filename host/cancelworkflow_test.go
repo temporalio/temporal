@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -73,7 +72,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -103,7 +102,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -129,7 +128,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	_, err = s.engine.RequestCancelWorkflowExecution(NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -138,7 +137,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	_, err = s.engine.RequestCancelWorkflowExecution(NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -155,7 +154,7 @@ GetHistoryLoop:
 	for i := 1; i < 3; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -224,7 +223,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -256,7 +255,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -274,7 +273,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
@@ -339,7 +338,7 @@ CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -375,7 +374,7 @@ GetHistoryLoop:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.foreignNamespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we2.RunId,
 			},
@@ -444,7 +443,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -476,7 +475,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -508,7 +507,7 @@ CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},

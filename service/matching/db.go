@@ -28,18 +28,18 @@ import (
 	"sync"
 	"sync/atomic"
 
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
 	taskListDB struct {
 		sync.Mutex
-		namespaceID  primitives.UUID
+		namespaceID  string
 		taskListName string
 		taskListKind tasklistpb.TaskListKind
 		taskType     tasklistpb.TaskListType
@@ -64,7 +64,7 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, namespaceID primitives.UUID, name string, taskType tasklistpb.TaskListType, kind tasklistpb.TaskListKind, logger log.Logger) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, namespaceID string, name string, taskType tasklistpb.TaskListType, kind tasklistpb.TaskListKind, logger log.Logger) *taskListDB {
 	return &taskListDB{
 		namespaceID:  namespaceID,
 		taskListName: name,

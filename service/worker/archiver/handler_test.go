@@ -33,10 +33,9 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal"
 	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/activity"
-
-	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/workflow"
 

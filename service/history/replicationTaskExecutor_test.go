@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
@@ -256,7 +256,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	}
 	request := &historyservice.ReplicateEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -290,7 +290,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	}
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

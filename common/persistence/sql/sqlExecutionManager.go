@@ -33,6 +33,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -158,11 +160,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != p.WorkflowStateCompleted {
+			if row.State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, p.WorkflowStateCompleted),
+						workflowID, row.State, executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed),
 				}
 			}
 			runIDStr := row.RunID.String()
@@ -830,7 +832,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		}
 
 		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
-		if info.GetTaskType() == p.ReplicationTaskTypeHistory {
+		if info.GetTaskType() == commongenpb.TaskType_ReplicationHistory {
 			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
 				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}

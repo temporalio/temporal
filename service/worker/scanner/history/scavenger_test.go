@@ -42,7 +42,7 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 )
@@ -56,17 +56,17 @@ type (
 )
 
 var (
-	treeID1 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000001")
-	treeID2 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000002")
-	treeID3 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000003")
-	treeID4 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000004")
-	treeID5 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000005")
+	treeID1 = primitives.MustValidateUUID("deadbeef-17ee-0000-0000-000000000001")
+	treeID2 = primitives.MustValidateUUID("deadbeef-17ee-0000-0000-000000000002")
+	treeID3 = primitives.MustValidateUUID("deadbeef-17ee-0000-0000-000000000003")
+	treeID4 = primitives.MustValidateUUID("deadbeef-17ee-0000-0000-000000000004")
+	treeID5 = primitives.MustValidateUUID("deadbeef-17ee-0000-0000-000000000005")
 
-	branchID1 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000001")
-	branchID2 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000002")
-	branchID3 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000003")
-	branchID4 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000004")
-	branchID5 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000005")
+	branchID1 = primitives.MustValidateUUID("deadbeef-face-0000-0000-000000000001")
+	branchID2 = primitives.MustValidateUUID("deadbeef-face-0000-0000-000000000002")
+	branchID3 = primitives.MustValidateUUID("deadbeef-face-0000-0000-000000000003")
+	branchID4 = primitives.MustValidateUUID("deadbeef-face-0000-0000-000000000004")
+	branchID5 = primitives.MustValidateUUID("deadbeef-face-0000-0000-000000000005")
 )
 
 func TestScavengerTestSuite(t *testing.T) {
@@ -240,28 +240,28 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
@@ -285,14 +285,14 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []p.HistoryBranchDetail{
 			{
-				TreeID:   treeID1.String(),
-				BranchID: branchID1.String(),
+				TreeID:   treeID1,
+				BranchID: branchID1,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				TreeID:   treeID2.String(),
-				BranchID: branchID2.String(),
+				TreeID:   treeID2,
+				BranchID: branchID2,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
@@ -304,14 +304,14 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		Branches: []p.HistoryBranchDetail{
 			{
-				TreeID:   treeID3.String(),
-				BranchID: branchID3.String(),
+				TreeID:   treeID3,
+				BranchID: branchID3,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				TreeID:   treeID4.String(),
-				BranchID: branchID4.String(),
+				TreeID:   treeID4,
+				BranchID: branchID4,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
@@ -320,28 +320,28 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
@@ -391,15 +391,15 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []p.HistoryBranchDetail{
 			{
 				// skip
-				TreeID:   treeID1.String(),
-				BranchID: branchID1.String(),
+				TreeID:   treeID1,
+				BranchID: branchID1,
 				ForkTime: time.Now(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				// split error
-				TreeID:   treeID2.String(),
-				BranchID: branchID2.String(),
+				TreeID:   treeID2,
+				BranchID: branchID2,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
@@ -412,22 +412,22 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []p.HistoryBranchDetail{
 			{
 				// delete succ
-				TreeID:   treeID3.String(),
-				BranchID: branchID3.String(),
+				TreeID:   treeID3,
+				BranchID: branchID3,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
-				TreeID:   treeID4.String(),
-				BranchID: branchID4.String(),
+				TreeID:   treeID4,
+				BranchID: branchID4,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
-				TreeID:   treeID5.String(),
-				BranchID: branchID5.String(),
+				TreeID:   treeID5,
+				BranchID: branchID5,
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
@@ -436,7 +436,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
@@ -444,14 +444,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID5",
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",
 		},

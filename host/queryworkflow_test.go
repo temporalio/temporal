@@ -84,7 +84,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -116,7 +116,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -159,7 +159,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	queryWorkflowFn := func(queryType string) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -244,7 +244,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -276,7 +276,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -319,7 +319,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	queryWorkflowFn := func(queryType string) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -388,7 +388,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -420,7 +420,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -460,7 +460,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	queryWorkflowFn := func(queryType string, rejectCondition querypb.QueryRejectCondition) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -597,7 +597,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	activityScheduled := false
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -636,7 +636,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -679,7 +679,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -701,7 +701,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -781,7 +781,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -820,7 +820,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -861,7 +861,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		shortCtx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Second)
 		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -879,7 +879,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -941,7 +941,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	activityScheduled := false
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
@@ -982,7 +982,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -1023,7 +1023,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1043,7 +1043,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -1130,7 +1130,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	activityScheduled := false
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activityScheduled {
 			activityScheduled = true
@@ -1170,7 +1170,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	}
 
 	// activity handler
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -1213,7 +1213,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1233,7 +1233,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
@@ -1255,7 +1255,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		signalInput := payloads.EncodeString("my signal input")
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1337,7 +1337,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	workflowExecution := &executionpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	}

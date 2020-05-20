@@ -34,6 +34,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
@@ -310,7 +311,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		WorkflowID:      s.workflowID,
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
-		State:           persistence.WorkflowStateRunning,
+		State:           executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 		Status:          executionpb.WorkflowExecutionStatus_Running,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -357,6 +358,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
-	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionInfo.State)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, executionInfo.Status)
 }

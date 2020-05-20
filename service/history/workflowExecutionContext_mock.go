@@ -30,12 +30,11 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/temporalio/temporal/common/persistence"
-	execution "go.temporal.io/temporal-proto/execution"
+	common "go.temporal.io/temporal-proto/common"
+	reflect "reflect"
+	time "time"
 )
 
 // MockworkflowExecutionContext is a mock of workflowExecutionContext interface.
@@ -90,10 +89,10 @@ func (mr *MockworkflowExecutionContextMockRecorder) getNamespaceID() *gomock.Cal
 }
 
 // getExecution mocks base method.
-func (m *MockworkflowExecutionContext) getExecution() *execution.WorkflowExecution {
+func (m *MockworkflowExecutionContext) getExecution() *common.WorkflowExecution {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getExecution")
-	ret0, _ := ret[0].(*execution.WorkflowExecution)
+	ret0, _ := ret[0].(*common.WorkflowExecution)
 	return ret0
 }
 
@@ -118,7 +117,7 @@ func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecution() *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadWorkflowExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).loadWorkflowExecution))
 }
 
-// loadWorkflowExecutionForReplication mocks base method
+// loadWorkflowExecutionForReplication mocks base method.
 func (m *MockworkflowExecutionContext) loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadWorkflowExecutionForReplication", incomingVersion)
@@ -127,13 +126,13 @@ func (m *MockworkflowExecutionContext) loadWorkflowExecutionForReplication(incom
 	return ret0, ret1
 }
 
-// loadWorkflowExecutionForReplication indicates an expected call of loadWorkflowExecutionForReplication
+// loadWorkflowExecutionForReplication indicates an expected call of loadWorkflowExecutionForReplication.
 func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecutionForReplication(incomingVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadWorkflowExecutionForReplication", reflect.TypeOf((*MockworkflowExecutionContext)(nil).loadWorkflowExecutionForReplication), incomingVersion)
 }
 
-// loadExecutionStats mocks base method
+// loadExecutionStats mocks base method.
 func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistence.ExecutionStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadExecutionStats")

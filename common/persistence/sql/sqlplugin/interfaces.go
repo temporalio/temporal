@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"time"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
@@ -168,7 +169,7 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
-		State            int
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
@@ -369,7 +370,7 @@ type (
 	HistoryTreeFilter struct {
 		ShardID  int
 		TreeID   primitives.UUID
-		BranchID *primitives.UUID
+		BranchID primitives.UUID
 	}
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table

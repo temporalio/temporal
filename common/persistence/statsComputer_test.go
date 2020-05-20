@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -67,7 +66,7 @@ func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionReq
 func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	ms := s.createRequest()
 	namespaceID := "A"
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
 	}

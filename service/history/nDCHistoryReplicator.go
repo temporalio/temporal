@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -444,7 +444,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},

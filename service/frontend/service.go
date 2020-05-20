@@ -246,7 +246,12 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
@@ -301,7 +306,8 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
 }

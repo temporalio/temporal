@@ -25,8 +25,12 @@
 package payloads
 
 import (
+	"bytes"
+
 	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/encoded"
+
+	"github.com/temporalio/temporal/common/payload"
 )
 
 var (
@@ -35,20 +39,34 @@ var (
 
 func EncodeString(str string) *commonpb.Payloads {
 	// Error can be safely ignored here becase string always can be converted to JSON
-	payload, _ := dataConverter.ToData(str)
-	return payload
+	ps, _ := dataConverter.ToData(str)
+	return ps
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	// Error can be safely ignored here becase []byte always can be raw encoded
-	payload, _ := dataConverter.ToData(bytes)
-	return payload
+	ps, _ := dataConverter.ToData(bytes)
+	return ps
 }
 
-func Encode(valuePtr ...interface{}) (*commonpb.Payloads, error) {
-	return dataConverter.ToData(valuePtr...)
+func Encode(value ...interface{}) (*commonpb.Payloads, error) {
+	return dataConverter.ToData(value...)
 }
 
-func Decode(payload *commonpb.Payloads, valuePtr ...interface{}) error {
-	return dataConverter.FromData(payload, valuePtr...)
+func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
+	return dataConverter.FromData(ps, valuePtr...)
+}
+
+func ToString(ps *commonpb.Payloads) string {
+	var buf bytes.Buffer
+	buf.WriteString("{")
+	for _, p := range ps.GetPayloads() {
+		buf.WriteString(payload.ToString(p))
+		buf.WriteString(",")
+	}
+	if buf.Len() > 1 {
+		buf.Truncate(buf.Len() - 1) // cut the last comma
+	}
+	buf.WriteString("}")
+	return buf.String()
 }

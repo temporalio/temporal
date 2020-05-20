@@ -34,8 +34,11 @@ import (
 type (
 	// RPCFactory creates gRPC listener and connection.
 	RPCFactory interface {
+		GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
+		GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
 		GetGRPCListener() net.Listener
 		GetRingpopChannel() *tchannel.Channel
-		CreateGRPCConnection(hostName string) *grpc.ClientConn
+		CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn
+		CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn
 	}
 )

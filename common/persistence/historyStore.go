@@ -36,7 +36,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -100,7 +99,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
 		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    primitives.UUID(uuid.NewRandom()),
+		NewBranchID:    uuid.New(),
 		Info:           request.Info,
 		ShardID:        shardID,
 	}
@@ -400,7 +399,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
 	// decreasing(otherwise we skip the events), eventID should be continuous(otherwise return error)
-	logger := m.logger.WithTags(tag.WorkflowBranchIDBytes(branch.BranchId), tag.WorkflowTreeIDBytes(branch.TreeId))
+	logger := m.logger.WithTags(tag.WorkflowBranchID(branch.BranchId), tag.WorkflowTreeID(branch.TreeId))
 
 	return dataBlobs, token, dataSize, logger, nil
 }

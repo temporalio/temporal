@@ -35,10 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
@@ -52,7 +52,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -181,7 +180,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -216,13 +215,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -236,7 +235,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_PushToMatching() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -272,13 +271,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -293,7 +292,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -328,13 +327,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -350,7 +349,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -378,13 +377,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -398,7 +397,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_PushToMatching() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -427,13 +426,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -448,7 +447,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_FirstDecision() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -476,13 +475,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -499,7 +498,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_NonFirstDecision() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -532,13 +531,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -555,7 +554,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -588,13 +587,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeCloseExecution,
+		TaskType:            commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -610,14 +609,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -649,16 +648,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testTargetNamespaceID),
+		TargetNamespaceId:   testTargetNamespaceID,
 		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:         targetExecution.GetRunId(),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeCancelExecution,
+		TaskType:            commongenpb.TaskType_TransferCancelExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -671,9 +670,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
-		primitives.UUIDString(transferTask.GetNamespaceId()), transferTask.GetWorkflowId(),
-		primitives.UUIDString(transferTask.GetRunId()), nextEventID,
-		primitives.UUIDString(transferTask.GetRunId()), common.EndEventID,
+		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
+		transferTask.GetRunId(), nextEventID,
+		transferTask.GetRunId(), common.EndEventID,
 	).Return(nil).Once()
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
@@ -685,14 +684,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -723,16 +722,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testTargetNamespaceID),
+		TargetNamespaceId:   testTargetNamespaceID,
 		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:         targetExecution.GetRunId(),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeCancelExecution,
+		TaskType:            commongenpb.TaskType_TransferCancelExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -748,14 +747,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pending() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -789,16 +788,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testTargetNamespaceID),
+		TargetNamespaceId:   testTargetNamespaceID,
 		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:         targetExecution.GetRunId(),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeSignalExecution,
+		TaskType:            commongenpb.TaskType_TransferSignalExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -811,9 +810,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
-		primitives.UUIDString(transferTask.GetNamespaceId()), transferTask.GetWorkflowId(),
-		primitives.UUIDString(transferTask.GetRunId()), nextEventID,
-		primitives.UUIDString(transferTask.GetRunId()), common.EndEventID,
+		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
+		transferTask.GetRunId(), nextEventID,
+		transferTask.GetRunId(), common.EndEventID,
 	).Return(nil).Once()
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
@@ -825,14 +824,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -865,16 +864,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testTargetNamespaceID),
+		TargetNamespaceId:   testTargetNamespaceID,
 		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:         targetExecution.GetRunId(),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeSignalExecution,
+		TaskType:            commongenpb.TaskType_TransferSignalExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -890,7 +889,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Pending() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -929,16 +928,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testChildNamespaceID),
+		TargetNamespaceId:   testChildNamespaceID,
 		TargetWorkflowId:    childWorkflowID,
-		TargetRunId:         nil,
+		TargetRunId:         "",
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeStartChildExecution,
+		TaskType:            commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -951,9 +950,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
-		primitives.UUIDString(transferTask.GetNamespaceId()), transferTask.GetWorkflowId(),
-		primitives.UUIDString(transferTask.GetRunId()), nextEventID,
-		primitives.UUIDString(transferTask.GetRunId()), common.EndEventID,
+		transferTask.GetNamespaceId(), transferTask.GetWorkflowId(),
+		transferTask.GetRunId(), nextEventID,
+		transferTask.GetRunId(), common.EndEventID,
 	).Return(nil).Once()
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
@@ -965,7 +964,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1003,16 +1002,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
-		TargetNamespaceId:   primitives.MustParseUUID(testChildNamespaceID),
+		TargetNamespaceId:   testChildNamespaceID,
 		TargetWorkflowId:    childWorkflowID,
-		TargetRunId:         nil,
+		TargetRunId:         "",
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeStartChildExecution,
+		TaskType:            commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1029,7 +1028,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1058,13 +1057,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeRecordWorkflowStarted,
+		TaskType:            commongenpb.TaskType_TransferRecordWorkflowStarted,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1074,7 +1073,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowID,
 			RunId:      executionInfo.RunID,
 		},
@@ -1092,7 +1091,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributesTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1121,13 +1120,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:             s.version,
-		NamespaceId:         primitives.MustParseUUID(s.namespaceID),
+		NamespaceId:         s.namespaceID,
 		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               primitives.MustParseUUID(execution.GetRunId()),
+		RunId:               execution.GetRunId(),
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            persistence.TransferTaskTypeUpsertWorkflowSearchAttributes,
+		TaskType:            commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1137,7 +1136,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowID,
 			RunId:      executionInfo.RunID,
 		},

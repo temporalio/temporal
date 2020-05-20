@@ -30,10 +30,12 @@ import (
 	"context"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
+
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -87,7 +89,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
 	namespaceID := request.GetNamespaceId()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
@@ -195,7 +197,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateZombie {
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
@@ -282,7 +284,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateCompleted {
+		if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {

@@ -42,7 +42,6 @@ import (
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/convert"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
@@ -137,7 +136,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	pgSize := 100
 
 	for i := 0; i < totalTrees; i++ {
-		treeID := uuid.NewRandom()
+		treeID := uuid.NewRandom().String()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
 
@@ -155,7 +154,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			uuidTreeId := primitives.MustParseUUID(br.TreeID)
+			uuidTreeId := br.TreeID
 			if trees[string(uuidTreeId)] == true {
 				delete(trees, string(uuidTreeId))
 
@@ -178,7 +177,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	bi, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 
@@ -367,7 +366,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 // TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
 	concurrency := 20
 	m := sync.Map{}
@@ -486,7 +485,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 // TestConcurrentlyForkAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
-	treeID := uuid.NewRandom()
+	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
@@ -704,7 +703,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID []byte) ([]byte, error) {
+func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
 	return p.NewHistoryBranchToken(treeID)
 }
 
@@ -733,7 +732,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblo
 	return resp.Branches
 }
 
-func (s *HistoryV2PersistenceSuite) descTree(treeID []byte) []*persistenceblobs.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
 		ShardID: convert.IntPtr(int(s.ShardInfo.GetShardId())),

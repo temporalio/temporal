@@ -40,6 +40,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -267,7 +268,7 @@ OtherEventsLoop:
 
 func (s *mutableStateSuite) TestReorderEvents() {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -283,7 +284,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
+		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 		Status:               executionpb.WorkflowExecutionStatus_Running,
 		NextEventID:          int64(8),
 		LastProcessedEvent:   int64(3),
@@ -557,7 +558,7 @@ func (s *mutableStateSuite) TestEventReapplied() {
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent) {
 	namespaceID := testNamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      runID,
 	}
@@ -726,7 +727,7 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry 
 
 func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -741,7 +742,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
+		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 		Status:               executionpb.WorkflowExecutionStatus_Running,
 		NextEventID:          int64(101),
 		LastProcessedEvent:   int64(99),
