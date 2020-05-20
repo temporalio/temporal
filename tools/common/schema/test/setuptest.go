@@ -75,15 +75,15 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	// test command fails without required arguments
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema"}))
 	tables, err := db.ListTables()
-	tb.Nil(err)
-	tb.Equal(0, len(tables))
+	tb.NoError(err)
+	tb.Empty(tables)
 
 	tmpDir, err := ioutil.TempDir("", "setupSchemaTestDir")
-	tb.Nil(err)
+	tb.NoError(err)
 	defer os.Remove(tmpDir)
 
 	sqlFile, err := ioutil.TempFile(tmpDir, "setupSchema.cliOptionsTest")
-	tb.Nil(err)
+	tb.NoError(err)
 	defer os.Remove(sqlFile.Name())
 
 	_, err = sqlFile.WriteString(sqlFileContent)
@@ -92,8 +92,8 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	// make sure command doesn't succeed without version or disable-version
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name()}))
 	tables, err = db.ListTables()
-	tb.Nil(err)
-	tb.Equal(0, len(tables))
+	tb.NoError(err)
+	tb.Empty(tables)
 
 	for i := 0; i < 4; i++ {
 
@@ -108,20 +108,18 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 		}
 
 		expectedTables := getExpectedTables(versioningEnabled, expectedTables)
-		tables, err = db.ListTables()
-		tb.Nil(err)
-		tb.Equal(len(expectedTables), len(tables))
-
-		for _, t := range tables {
-			_, ok := expectedTables[t]
-			tb.True(ok)
-			delete(expectedTables, t)
+		var expected []string
+		for t := range expectedTables {
+			expected = append(expected, t)
 		}
-		tb.Equal(0, len(expectedTables))
+
+		tables, err = db.ListTables()
+		tb.NoError(err)
+		tb.ElementsMatch(expected, tables)
 
 		gotVer, err := db.ReadSchemaVersion()
 		if versioningEnabled {
-			tb.Nil(err)
+			tb.NoError(err)
 			tb.Equal(ver, gotVer)
 		} else {
 			tb.NotNil(err)
@@ -132,7 +130,6 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 func getExpectedTables(versioningEnabled bool, wantTables []string) map[string]struct{} {
 	expectedTables := make(map[string]struct{})
 	for _, tab := range wantTables {
-		expectedTables[tab] = struct{}{}
 		expectedTables[tab] = struct{}{}
 	}
 	if versioningEnabled {

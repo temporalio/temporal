@@ -32,6 +32,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 )
 
 type (
@@ -65,6 +66,14 @@ type (
 	// for sorting a set of version
 	// strings
 	byVersion []string
+
+	// squashVersion represents a squashed statement batch
+	// for a shortcut between the versions
+	squashVersion struct {
+		prev    string
+		ver     string
+		dirName string
+	}
 )
 
 const (
@@ -121,8 +130,9 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 		log.Printf("found zero updates from current version %v", currVer)
 		return nil
 	}
-
+	updStart := time.Now()
 	for _, cs := range updates {
+		csStart := time.Now()
 
 		err := task.execCQLStmts(cs.version, cs.cqlStmts)
 		if err != nil {
@@ -133,9 +143,11 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 			return err
 		}
 
-		log.Printf("Schema updated from %v to %v\n", currVer, cs.version)
+		log.Printf("Schema updated from %v to %v, elapsed %v\n", currVer, cs.version, time.Since(csStart))
 		currVer = cs.version
 	}
+
+	log.Printf("All schema changes completed in %v\n", time.Since(updStart))
 
 	return nil
 }
@@ -188,7 +200,13 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 			return nil, fmt.Errorf("error processing manifest for version %v:%v", vd, e.Error())
 		}
 
-		if m.CurrVersion != dirToVersion(vd) {
+		if squashVersionStrRegex.MatchString(vd) {
+			_, v := squashDirToVersion(vd)
+			if m.CurrVersion != v {
+				return nil, fmt.Errorf("manifest version doesn't match with dirname, dir=%v,manifest.version=%v",
+					vd, m.CurrVersion)
+			}
+		} else if m.CurrVersion != dirToVersion(vd) {
 			return nil, fmt.Errorf("manifest version doesn't match with dirname, dir=%v,manifest.version=%v",
 				vd, m.CurrVersion)
 		}
@@ -308,33 +326,53 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 		return nil, err
 	}
 
-	hasEndVer := len(endVer) > 0
-
-	if hasEndVer && cmpVersion(startVer, endVer) >= 0 {
-		return nil, fmt.Errorf("startVer (%v) must be less than endVer (%v)", startVer, endVer)
+	var dirNames []string
+	for _, dir := range subdirs {
+		if dir.IsDir() {
+			dirNames = append(dirNames, dir.Name())
+		}
 	}
 
+	result, squashes, err := filterDirectories(dirNames, startVer, endVer)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(squashes) == 0 || len(result) == 0 {
+		// if no shortcuts are found between the versions,
+		// apply them one by one incrementally
+		return result, nil
+	}
+
+	return findShortestPath(startVer, dirToVersion(result[len(result)-1]), result, squashes)
+}
+
+func filterDirectories(dirNames []string, startVer string, endVer string) ([]string, []squashVersion, error) {
 	var endFound bool
 	var highestVer string
 	var result []string
+	var squashes []squashVersion
+	hasEndVer := len(endVer) > 0
 
-	for _, dir := range subdirs {
+	if hasEndVer && cmpVersion(startVer, endVer) >= 0 {
+		return nil, nil, fmt.Errorf("startVer (%v) must be less than endVer (%v)", startVer, endVer)
+	}
 
-		if !dir.IsDir() {
+	for _, dirname := range dirNames {
+
+		var prev, ver string
+		if versionStrRegex.MatchString(dirname) {
+			ver = dirToVersion(dirname)
+		} else if squashVersionStrRegex.MatchString(dirname) {
+			prev, ver = squashDirToVersion(dirname)
+			if cmpVersion(prev, ver) >= 0 {
+				return nil, nil, fmt.Errorf("invalid squashed version %q, %v >= %v", dirname, prev, ver)
+			}
+		} else {
 			continue
 		}
 
-		dirname := dir.Name()
-
-		if !versionStrRegex.MatchString(dirname) {
-			continue
-		}
-
-		ver := dirToVersion(dirname)
-
-		if len(highestVer) == 0 {
-			highestVer = ver
-		} else if cmpVersion(ver, highestVer) > 0 {
+		if len(highestVer) == 0 || cmpVersion(ver, highestVer) > 0 {
 			highestVer = ver
 		}
 
@@ -348,27 +386,35 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 			continue // out of range
 		}
 
+		if len(prev) > 0 && cmpVersion(prev, startVer) < 0 {
+			continue // out of range
+		}
+
 		endFound = endFound || (highcmp == 0)
-		result = append(result, dirname)
+		if len(prev) == 0 {
+			result = append(result, dirname)
+		} else {
+			squashes = append(squashes, squashVersion{prev: prev, ver: ver, dirName: dirname})
+		}
 	}
 
 	// when endVer is specified, atleast one result MUST be found since startVer < endVer
 	if hasEndVer && !endFound {
-		return nil, fmt.Errorf("version dir not found for target version %v", endVer)
+		return nil, nil, fmt.Errorf("version dir not found for target version %v", endVer)
 	}
 
 	// when endVer is empty and no result is found, then the highest version
 	// found must be equal to startVer, else return error
-	if !hasEndVer && len(result) == 0 {
+	if !hasEndVer && len(result) == 0 && len(squashes) == 0 {
 		if len(highestVer) == 0 || cmpVersion(startVer, highestVer) != 0 {
-			return nil, fmt.Errorf("no subdirs found with version >= %v", startVer)
+			return nil, nil, fmt.Errorf("no subdirs found with version >= %v", startVer)
 		}
-		return result, nil
+		return result, nil, nil
 	}
 
 	sort.Sort(byVersion(result))
 
-	return result, nil
+	return result, squashes, nil
 }
 
 // sets up a temporary dryrun database for
@@ -384,6 +430,11 @@ func (task *UpdateTask) setupDryrunDatabase() error {
 
 func dirToVersion(dir string) string {
 	return dir[1:]
+}
+
+func squashDirToVersion(dir string) (string, string) {
+	splits := strings.Split(dir[1:], "-")
+	return splits[0], splits[1]
 }
 
 func (v byVersion) Len() int {

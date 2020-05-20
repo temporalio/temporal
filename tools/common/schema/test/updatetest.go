@@ -25,8 +25,15 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 
+	"github.com/hashicorp/go-version"
+	"github.com/otiai10/copy"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
@@ -73,17 +80,109 @@ func (tb *UpdateSchemaTestBase) RunDryrunTest(app *cli.App, db DB, dbNameFlag st
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", dir}))
 	ver, err := db.ReadSchemaVersion()
-	tb.Nil(err)
+	tb.NoError(err)
 	// update the version to the latest
 	tb.Log.Info(ver)
 	tb.Equal(ver, endVersion)
 	tb.NoError(db.DropAllTables())
 }
 
+// RunShortcutTest checks that shortcut changes match incremental changes
+func (tb *UpdateSchemaTestBase) RunShortcutTest(app *cli.App, db DB, dbNameFlag string, dir string, schemaCmd string, schemaCmdArgs ...string) {
+	tmpDir, err := ioutil.TempDir("", "shortcut_test")
+	tb.NoError(err)
+	defer os.RemoveAll(tmpDir)
+
+	versionStrRegex := regexp.MustCompile(`^v\d+(\.\d+)?$`)
+	squashVersionStrRegex := regexp.MustCompile(`^s\d+(\.\d+)?-\d+(\.\d+)?$`)
+
+	contents, err := ioutil.ReadDir(dir)
+	tb.NoError(err)
+
+	// process the flags for schema tool
+	var processedArgs []string
+	for _, arg := range schemaCmdArgs {
+		if strings.Contains(arg, "%s") {
+			processedArgs = append(processedArgs, fmt.Sprintf(arg, tb.DBName))
+			continue
+		}
+		processedArgs = append(processedArgs, arg)
+	}
+
+	// a noop schema tool run, to fail early if the command does not exist
+	// or the flags are invalid
+	co, err := exec.Command(schemaCmd, processedArgs...).CombinedOutput()
+	tb.Require().NoError(err, "error running noop schema command %q with arguments %#v\n output: %s",
+		schemaCmd, processedArgs, string(co))
+
+	squashes := map[string]string{}
+	var targetVersions []string
+	// copy the incremental versions and gather shortcut info
+	for _, d := range contents {
+		if d.IsDir() {
+			if versionStrRegex.MatchString(d.Name()) {
+				tb.NoError(copy.Copy(filepath.Join(dir, d.Name()), filepath.Join(tmpDir, d.Name())))
+			}
+			if squashVersionStrRegex.MatchString(d.Name()) {
+				splits := strings.Split(d.Name()[1:], "-")
+				tb.Equal(2, len(splits))
+				squashes[d.Name()] = splits[1]
+				targetVersions = append(targetVersions, splits[1])
+			}
+		}
+	}
+
+	// sort the target versions
+	sort.Slice(targetVersions, func(i, j int) bool {
+		v1, err := version.NewVersion(targetVersions[i])
+		tb.NoError(err)
+		v2, err := version.NewVersion(targetVersions[j])
+		tb.NoError(err)
+
+		return v1.Compare(v2) < 0
+	})
+
+	expectedState := map[string]string{}
+
+	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
+	for _, tv := range targetVersions {
+		tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", tmpDir, "-v", tv}))
+		v, err := db.ReadSchemaVersion()
+		tb.NoError(err)
+		tb.Equal(tv, v)
+
+		o, err := exec.Command(schemaCmd, processedArgs...).Output()
+		tb.Require().NoError(err, "error exporting schema: command %q with arguments %#v\n output: %s",
+			schemaCmd, processedArgs, string(o))
+
+		expectedState[tv] = string(o)
+	}
+
+	tb.NoError(db.DropAllTables())
+
+	for sDirName, ver := range squashes {
+		tb.Run(sDirName, func() {
+			tmpDestDir := filepath.Join(tmpDir, sDirName)
+			copy.Copy(filepath.Join(dir, sDirName), tmpDestDir)
+			defer os.RemoveAll(tmpDestDir)
+			defer func() { tb.NoError(db.DropAllTables()) }()
+
+			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
+			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", tmpDir, "-v", ver}))
+
+			vo, err := exec.Command(schemaCmd, processedArgs...).Output()
+			tb.Require().NoError(err, "error exporting schema: command %q with arguments %#v\n output: %s",
+				schemaCmd, processedArgs, string(vo))
+
+			tb.Equal(expectedState[ver], string(vo))
+		})
+	}
+}
+
 // RunUpdateSchemaTest tests schema update
 func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
 	tmpDir, err := ioutil.TempDir("", "update_schema_test")
-	tb.Nil(err)
+	tb.NoError(err)
 	defer os.RemoveAll(tmpDir)
 
 	tb.makeSchemaVersionDirs(tmpDir, sqlFileContent)
@@ -91,24 +190,21 @@ func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameF
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-v", "0.0"}))
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", tmpDir, "-v", "2.0"}))
 
-	expected := getExpectedTables(true, expectedTables)
-	expected["domains"] = struct{}{}
+	expectedMap := getExpectedTables(true, expectedTables)
+	expectedMap["domains"] = struct{}{}
+	var expected []string
+	for t := range expectedMap {
+		expected = append(expected, t)
+	}
 
 	ver, err := db.ReadSchemaVersion()
-	tb.Nil(err)
+	tb.NoError(err)
 	tb.Equal("2.0", ver)
 
 	tables, err := db.ListTables()
-	tb.Nil(err)
-	tb.Equal(len(expected), len(tables))
+	tb.NoError(err)
+	tb.ElementsMatch(expected, tables)
 
-	for _, t := range tables {
-		_, ok := expected[t]
-		tb.True(ok)
-		delete(expected, t)
-	}
-
-	tb.Equal(0, len(expected))
 	tb.NoError(db.DropAllTables())
 }
 
@@ -123,9 +219,9 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	dir := rootDir + "/v1.0"
 	tb.NoError(os.Mkdir(rootDir+"/v1.0", os.FileMode(0700)))
 	err := ioutil.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 	err = ioutil.WriteFile(dir+"/base.sql", []byte(sqlFileContent), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 
 	mData = `{
 		"CurrVersion": "2.0",
@@ -142,7 +238,7 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	dir = rootDir + "/v2.0"
 	tb.NoError(os.Mkdir(rootDir+"/v2.0", os.FileMode(0700)))
 	err = ioutil.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 	err = ioutil.WriteFile(dir+"/domain.cql", []byte(domain), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 }

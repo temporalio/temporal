@@ -1,0 +1,9 @@
+{
+    "CurrVersion": "0.23",
+    "MinCompatibleVersion": "0.23",
+    "Description": "Squashed 0.0 -> 0.23 schema",
+    "SchemaUpdateCqlFiles": [
+      "schema_0_23.cql",
+      "data_0_23.cql"
+    ]
+  }

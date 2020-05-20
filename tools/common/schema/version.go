@@ -34,6 +34,9 @@ var versionStrRegex = regexp.MustCompile(`^v\d+(\.\d+)?$`)
 // represents names of the form x.x where minor version is always single digit
 var versionNumRegex = regexp.MustCompile(`^\d+(\.\d+)?$`)
 
+// represents names of the form sx.x-y.y where x.x and y.y. are (major, minor) version pairs
+var squashVersionStrRegex = regexp.MustCompile(`^s\d+(\.\d+)?-\d+(\.\d+)?$`)
+
 // cmpVersion compares two version strings
 // returns 0 if a == b
 // returns < 0 if a < b

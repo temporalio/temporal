@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl https://bootstrap.pypa.io/get-pip.py | python
-RUN pip install PyYAML==3.13
+RUN pip install PyYAML==3.13 cqlsh==5.0.4
 
 RUN go get -u github.com/golang/dep/cmd/dep
 RUN go get -u github.com/Masterminds/glide
