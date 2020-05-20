@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	querypb "go.temporal.io/temporal-proto/query"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -45,9 +44,9 @@ import (
 )
 
 type (
-	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	decisionTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error)
-	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
 
 	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error)

@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
@@ -133,7 +133,7 @@ func executeArchivalExeternalWorkflow(
 	ctx context.Context,
 	client cadenceClient,
 	scheduledTimeNanos int64,
-) (*executionpb.WorkflowExecution, error) {
+) (*commonpb.WorkflowExecution, error) {
 	workflowID := fmt.Sprintf("%v.%v", wfTypeArchivalExternal, uuid.New())
 	ops := newWorkflowOptions(workflowID, childWorkflowTimeout)
 	ops.TaskList = archivalTaskListName
@@ -145,7 +145,7 @@ func executeArchivalExeternalWorkflow(
 	if err := workflowRun.Get(ctx, nil); err != nil {
 		return nil, err
 	}
-	return &executionpb.WorkflowExecution{
+	return &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      workflowRun.GetRunID(),
 	}, nil

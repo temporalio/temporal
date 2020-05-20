@@ -28,7 +28,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -44,7 +44,7 @@ type (
 	}
 
 	writeTaskRequest struct {
-		execution  *executionpb.WorkflowExecution
+		execution  *commonpb.WorkflowExecution
 		taskInfo   *persistenceblobs.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
@@ -99,7 +99,7 @@ func (w *taskWriter) isStopped() bool {
 	return atomic.LoadInt64(&w.stopped) == 1
 }
 
-func (w *taskWriter) appendTask(execution *executionpb.WorkflowExecution,
+func (w *taskWriter) appendTask(execution *commonpb.WorkflowExecution,
 	taskInfo *persistenceblobs.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {

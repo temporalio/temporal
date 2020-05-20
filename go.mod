@@ -4,10 +4,10 @@ go 1.14
 
 require (
 	cloud.google.com/go/storage v1.8.0
-	github.com/Shopify/sarama v1.26.3
+	github.com/Shopify/sarama v1.26.4
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
-	github.com/aws/aws-sdk-go v1.30.29
-	github.com/benbjohnson/clock v1.0.1 // indirect
+	github.com/aws/aws-sdk-go v1.31.1
+	github.com/benbjohnson/clock v1.0.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
@@ -22,7 +22,6 @@ require (
 	github.com/fatih/color v1.9.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
-	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.4.3
@@ -65,20 +64,17 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.23.0
-	go.temporal.io/temporal-proto v0.20.34
+	go.temporal.io/temporal v0.23.1
+	go.temporal.io/temporal-proto v0.23.1
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37 // indirect
 	golang.org/x/mod v0.3.0 // indirect
-	golang.org/x/net v0.0.0-20200513185701-a91f0712d120 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20200515095857-1151b9dac4a9 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
-	golang.org/x/tools v0.0.0-20200515220128-d3bf790afa53 // indirect
+	golang.org/x/tools v0.0.0-20200519205726-57a9e4404bf7 // indirect
 	google.golang.org/api v0.24.0
-	google.golang.org/genproto v0.0.0-20200515170657-fc4c6c6a6587 // indirect
 	google.golang.org/grpc v1.29.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/validator.v2 v2.0.0-20191107172027-c3144fdedc21

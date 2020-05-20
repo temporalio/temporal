@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -80,7 +81,7 @@ var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
 func newHistoryEventNotification(
 	namespaceID string,
-	workflowExecution *executionpb.WorkflowExecution,
+	workflowExecution *commonpb.WorkflowExecution,
 	lastFirstEventID int64,
 	nextEventID int64,
 	previousStartedEventID int64,

@@ -39,8 +39,8 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 )
@@ -330,7 +330,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 
 	resetContext := newWorkflowExecutionContext(
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      resetRunID,
 		},
@@ -470,7 +470,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 			ctx,
 			namespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

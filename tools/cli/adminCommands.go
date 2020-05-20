@@ -33,8 +33,8 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
@@ -170,7 +170,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -431,7 +431,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &executionpb.WorkflowExecution{WorkflowId: wid}
+		req.ExecutionForHost = &commonpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
 		req.ShardIdForHost = int32(sid)
@@ -464,7 +464,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},

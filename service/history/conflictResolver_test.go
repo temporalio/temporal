@@ -132,7 +132,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testNamespaceID, executionpb.WorkflowExecution{
+	s.mockContext = newWorkflowExecutionContext(testNamespaceID, commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      testRunID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)

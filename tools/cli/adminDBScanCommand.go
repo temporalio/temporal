@@ -34,6 +34,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -648,7 +649,7 @@ func concreteExecutionStillExists(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
@@ -683,7 +684,7 @@ func concreteExecutionStillOpen(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},

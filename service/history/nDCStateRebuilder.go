@@ -40,8 +40,8 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -209,7 +209,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.NamespaceID,
 		requestID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowIdentifier.WorkflowID,
 			RunId:      workflowIdentifier.RunID,
 		},

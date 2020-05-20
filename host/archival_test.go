@@ -63,7 +63,7 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	numRuns := 1
 	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -84,7 +84,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
 
 	for _, runID := range runIDs {
-		execution := &executionpb.WorkflowExecution{
+		execution := &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
@@ -104,7 +104,7 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	numActivities := 10
 	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, 1)[0]
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -166,7 +166,7 @@ func (s *integrationSuite) getNamespaceID(namespace string) string {
 	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *integrationSuite) isHistoryArchived(namespace string, execution *executionpb.WorkflowExecution) bool {
+func (s *integrationSuite) isHistoryArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.archivalNamespace,
 		Execution: execution,
@@ -182,7 +182,7 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *execut
 	return false
 }
 
-func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecution) bool {
+func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
@@ -199,10 +199,10 @@ func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecu
 	return false
 }
 
-func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *executionpb.WorkflowExecution) bool {
+func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
 	request := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		},
@@ -250,7 +250,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 	runCounter := 1
 
 	dtHandler := func(
-		execution *executionpb.WorkflowExecution,
+		execution *commonpb.WorkflowExecution,
 		wt *commonpb.WorkflowType,
 		previousStartedEventID int64,
 		startedEventID int64,
@@ -302,7 +302,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 	}
 
 	atHandler := func(
-		execution *executionpb.WorkflowExecution,
+		execution *commonpb.WorkflowExecution,
 		activityType *commonpb.ActivityType,
 		activityID string,
 		input *commonpb.Payloads,

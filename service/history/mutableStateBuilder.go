@@ -1660,7 +1660,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *executiongenpb.ParentExecutionInfo,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	previousExecutionState mutableState,
 	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	firstRunID string,
@@ -1771,7 +1771,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -1820,7 +1820,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *eventpb.HistoryEvent,
 ) error {
@@ -1875,7 +1875,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
 		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
-		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetriableErrorReasons
+		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetryableErrorTypes
 	}
 
 	e.executionInfo.AutoResetPoints = rolloverAutoResetPointsWithExpiringTime(
@@ -2086,7 +2086,7 @@ func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskTimedOutEvent(
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 ) error {
 	return e.decisionTaskManager.ReplicateDecisionTaskTimedOutEvent(timeoutType)
 }
@@ -2219,7 +2219,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		ai.BackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
 		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
 		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
-		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetriableErrorReasons
+		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetryableErrorTypes
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
@@ -2395,7 +2395,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskFailedEvent(
 func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 	lastHeartBeatDetails *commonpb.Payloads,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2405,8 +2405,8 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	}
 
 	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedID != startedEventID || ((timeoutType == eventpb.TimeoutType_StartToClose ||
-		timeoutType == eventpb.TimeoutType_Heartbeat) && ai.StartedID == common.EmptyEventID) {
+	if !ok || ai.StartedID != startedEventID || ((timeoutType == commonpb.TimeoutType_StartToClose ||
+		timeoutType == commonpb.TimeoutType_Heartbeat) && ai.StartedID == common.EmptyEventID) {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3321,7 +3321,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 
 	var err error
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: e.executionInfo.WorkflowID,
 		RunId:      newRunID,
 	}
@@ -3332,7 +3332,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		parentInfo = &executiongenpb.ParentExecutionInfo{
 			NamespaceId: e.executionInfo.ParentNamespaceID,
 			Namespace:   parentNamespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: e.executionInfo.ParentWorkflowID,
 				RunId:      e.executionInfo.ParentRunID,
 			},
@@ -3500,7 +3500,7 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 	namespace string,
-	execution *executionpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
@@ -3583,7 +3583,7 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionFailedEvent(
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 	initiatedID int64,
-	childExecution *executionpb.WorkflowExecution,
+	childExecution *commonpb.WorkflowExecution,
 	attributes *eventpb.WorkflowExecutionCompletedEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3626,7 +3626,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCompletedEvent(
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	childExecution *executionpb.WorkflowExecution,
+	childExecution *commonpb.WorkflowExecution,
 	attributes *eventpb.WorkflowExecutionFailedEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3669,7 +3669,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionFailedEvent(
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 	initiatedID int64,
-	childExecution *executionpb.WorkflowExecution,
+	childExecution *commonpb.WorkflowExecution,
 	attributes *eventpb.WorkflowExecutionCanceledEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3712,7 +3712,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCanceledEvent(
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
-	childExecution *executionpb.WorkflowExecution,
+	childExecution *commonpb.WorkflowExecution,
 	attributes *eventpb.WorkflowExecutionTerminatedEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3755,7 +3755,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTerminatedEvent(
 
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	initiatedID int64,
-	childExecution *executionpb.WorkflowExecution,
+	childExecution *commonpb.WorkflowExecution,
 	attributes *eventpb.WorkflowExecutionTimedOutEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 

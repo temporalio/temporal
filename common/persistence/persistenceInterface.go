@@ -448,7 +448,7 @@ type (
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
 	InternalAppendHistoryEventsRequest struct {
 		NamespaceID       string
-		Execution         executionpb.WorkflowExecution
+		Execution         commonpb.WorkflowExecution
 		FirstEventID      int64
 		EventBatchVersion int64
 		RangeID           int64
