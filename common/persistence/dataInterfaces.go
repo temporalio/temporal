@@ -153,6 +153,7 @@ const (
 const (
 	ReplicationTaskTypeHistory = iota
 	ReplicationTaskTypeSyncActivity
+	ReplicationTaskTypeFailoverMarker
 )
 
 // Types of timers
@@ -603,6 +604,15 @@ type (
 		TaskID              int64
 		Version             int64
 		ScheduledID         int64
+	}
+
+	// FailoverMarkerTask is the marker for graceful failover
+	FailoverMarkerTask struct {
+		TaskID              int64
+		VisibilityTimestamp time.Time
+		Version             int64
+		SourceCluster       string
+		DomainID            string
 	}
 
 	// ReplicationInfo represents the information stored for last replication event details per cluster
@@ -2253,6 +2263,41 @@ func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the history replication task
+func (a *FailoverMarkerTask) GetType() int {
+	return ReplicationTaskTypeFailoverMarker
+}
+
+// GetVersion returns the version of the history replication task
+func (a *FailoverMarkerTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the history replication task
+func (a *FailoverMarkerTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the history replication task
+func (a *FailoverMarkerTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the history replication task
+func (a *FailoverMarkerTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (a *FailoverMarkerTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *FailoverMarkerTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 

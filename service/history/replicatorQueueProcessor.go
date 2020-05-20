@@ -333,7 +333,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	// TODO: Remove this after enabled the rpc replication
 	clusterMetadata := p.shard.GetClusterMetadata()
 	for name, cluster := range clusterMetadata.GetAllClusterInfo() {
-		if !cluster.Enabled || clusterMetadata.GetCurrentClusterName() == name{
+		if !cluster.Enabled || clusterMetadata.GetCurrentClusterName() == name {
 			continue
 		}
 		p.shard.UpdateClusterReplicationLevel(name, ackLevel)
