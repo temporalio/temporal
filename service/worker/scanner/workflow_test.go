@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
-	"go.uber.org/zap"
 
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
@@ -83,8 +82,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 
 	mockResource.TaskMgr.On("ListTaskList", mock.Anything).Return(&p.ListTaskListResponse{}, nil)
 	ctx := scannerContext{
-		Resource:  mockResource,
-		zapLogger: zap.NewNop(),
+		Resource: mockResource,
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{

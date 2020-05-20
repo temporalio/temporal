@@ -379,7 +379,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
 		},
@@ -405,7 +405,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 		},
 	}

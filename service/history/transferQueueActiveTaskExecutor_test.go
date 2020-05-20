@@ -33,15 +33,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
+
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -63,7 +63,7 @@ import (
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+
 	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
 	warchiver "github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
@@ -226,7 +226,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -260,10 +260,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
-		TargetNamespaceId: primitives.MustParseUUID(testTargetNamespaceID),
+		NamespaceId:       s.namespaceID,
+		TargetNamespaceId: testTargetNamespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
+		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferActivityTask,
@@ -278,13 +278,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) GetNamespaceIDBytes() primitives.UUID {
-	return primitives.MustParseUUID(s.namespaceID)
-}
-
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -318,10 +314,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		NamespaceId:       s.namespaceID,
+		TargetNamespaceId: s.targetNamespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
+		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferActivityTask,
@@ -341,7 +337,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDecision() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -368,9 +364,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferDecisionTask,
@@ -387,7 +383,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstDecision() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -421,9 +417,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferDecisionTask,
@@ -440,7 +436,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_NonFirstDecision() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -480,9 +476,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    stickyTaskListName,
 		TaskType:    commongenpb.TaskType_TransferDecisionTask,
@@ -499,7 +495,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionNotSticky_MutableStateSticky() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -539,9 +535,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferDecisionTask,
@@ -558,7 +554,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -588,9 +584,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferDecisionTask,
@@ -606,7 +602,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -616,7 +612,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
 	parentNamespace := "some random parent namespace Name"
-	parentExecution := &executionpb.WorkflowExecution{
+	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -652,9 +648,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferCloseExecution,
@@ -679,7 +675,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -711,9 +707,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferCloseExecution,
@@ -732,7 +728,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -843,9 +839,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferCloseExecution,
@@ -865,7 +861,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -934,9 +930,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferCloseExecution,
@@ -955,7 +951,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1024,9 +1020,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferCloseExecution,
@@ -1044,14 +1040,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1081,12 +1077,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferCancelExecution,
@@ -1106,14 +1102,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1143,12 +1139,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferCancelExecution,
@@ -1168,14 +1164,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1205,12 +1201,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferCancelExecution,
@@ -1228,14 +1224,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1269,12 +1265,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferSignalExecution,
@@ -1289,10 +1285,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockHistoryClient.EXPECT().RemoveSignalMutableState(gomock.Any(), &historyservice.RemoveSignalMutableStateRequest{
-		NamespaceId: primitives.UUID(transferTask.GetTargetNamespaceId()).String(),
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		NamespaceId: transferTask.GetTargetNamespaceId(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.GetTargetWorkflowId(),
-			RunId:      primitives.UUID(transferTask.GetTargetRunId()).String(),
+			RunId:      transferTask.GetTargetRunId(),
 		},
 		RequestId: si.GetRequestId(),
 	}).Return(nil, nil).Times(1)
@@ -1303,14 +1299,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1344,12 +1340,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferSignalExecution,
@@ -1369,14 +1365,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1410,12 +1406,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(s.targetNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: s.targetNamespaceID,
 		TargetWorkflowId:  targetExecution.GetWorkflowId(),
-		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
+		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferSignalExecution,
@@ -1433,7 +1429,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1472,12 +1468,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
@@ -1498,7 +1494,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
@@ -1511,7 +1507,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1560,12 +1556,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
@@ -1591,7 +1587,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1641,12 +1637,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childWorkflowID,
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
@@ -1660,7 +1656,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
@@ -1673,14 +1669,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	childExecution := executionpb.WorkflowExecution{
+	childExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random child workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1725,12 +1721,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
-		NamespaceId:       s.GetNamespaceIDBytes(),
+		NamespaceId:       s.namespaceID,
 		WorkflowId:        execution.GetWorkflowId(),
-		RunId:             primitives.MustParseUUID(execution.GetRunId()),
-		TargetNamespaceId: primitives.MustParseUUID(testChildNamespaceID),
+		RunId:             execution.GetRunId(),
+		TargetNamespaceId: testChildNamespaceID,
 		TargetWorkflowId:  childExecution.GetWorkflowId(),
-		TargetRunId:       nil,
+		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
 		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
@@ -1753,7 +1749,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1785,9 +1781,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferRecordWorkflowStarted,
@@ -1804,7 +1800,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1832,9 +1828,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:     s.version,
-		NamespaceId: s.GetNamespaceIDBytes(),
+		NamespaceId: s.namespaceID,
 		WorkflowId:  execution.GetWorkflowId(),
-		RunId:       primitives.MustParseUUID(execution.GetRunId()),
+		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
 		TaskType:    commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes,
@@ -1869,11 +1865,11 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	ai *persistence.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       primitives.UUID(task.GetTargetNamespaceId()).String(),
-		SourceNamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
-		Execution: &executionpb.WorkflowExecution{
+		NamespaceId:       task.GetTargetNamespaceId(),
+		SourceNamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUID(task.GetRunId()).String(),
+			RunId:      task.GetRunId(),
 		},
 		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.GetScheduleId(),
@@ -1886,9 +1882,9 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	mutableState mutableState,
 ) *matchingservice.AddDecisionTaskRequest {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	taskList := &tasklistpb.TaskList{Name: task.TaskList}
 	executionInfo := mutableState.GetExecutionInfo()
@@ -1899,7 +1895,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	}
 
 	return &matchingservice.AddDecisionTaskRequest{
-		NamespaceId:                   primitives.UUID(task.GetNamespaceId()).String(),
+		NamespaceId:                   task.GetNamespaceId(),
 		Execution:                     &execution,
 		TaskList:                      taskList,
 		ScheduleId:                    task.GetScheduleId(),
@@ -1914,16 +1910,16 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 	mutableState mutableState,
 	backoffSeconds int32,
 ) *persistence.RecordWorkflowExecutionStartedRequest {
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	executionTimestamp := time.Unix(0, startEvent.GetTimestamp()).Add(time.Duration(backoffSeconds) * time.Second)
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		Namespace:          namespace,
-		NamespaceID:        primitives.UUID(task.GetNamespaceId()).String(),
+		NamespaceID:        task.GetNamespaceId(),
 		Execution:          *execution,
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     startEvent.GetTimestamp(),
@@ -1940,17 +1936,17 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 	rci *persistenceblobs.RequestCancelInfo,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
-	sourceExecution := executionpb.WorkflowExecution{
+	sourceExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
-		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
+		RunId:      task.GetTargetRunId(),
 	}
 
 	return &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		NamespaceId: task.GetTargetNamespaceId(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace:         targetNamespace,
 			WorkflowExecution: &targetExecution,
@@ -1970,17 +1966,17 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 	si *persistenceblobs.SignalInfo,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
-	sourceExecution := executionpb.WorkflowExecution{
+	sourceExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
-		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
+		RunId:      task.GetTargetRunId(),
 	}
 
 	return &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		NamespaceId: task.GetTargetNamespaceId(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         targetNamespace,
 			WorkflowExecution: &targetExecution,
@@ -2006,13 +2002,13 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 	event, err := mutableState.GetChildExecutionInitiatedEvent(task.GetScheduleId())
 	s.NoError(err)
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	now := time.Now()
 	return &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
+		NamespaceId: task.GetTargetNamespaceId(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                       childNamespace,
 			WorkflowId:                      attributes.WorkflowId,
@@ -2027,7 +2023,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
 		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
-			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
+			NamespaceId: task.GetNamespaceId(),
 			Namespace:   testNamespace,
 			Execution:   &execution,
 			InitiatedId: task.GetScheduleId(),
@@ -2043,15 +2039,15 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 	mutableState mutableState,
 ) *persistence.UpsertWorkflowExecutionRequest {
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUID(task.GetRunId()).String(),
+		RunId:      task.GetRunId(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 
 	return &persistence.UpsertWorkflowExecutionRequest{
 		Namespace:        namespace,
-		NamespaceID:      primitives.UUID(task.GetNamespaceId()).String(),
+		NamespaceID:      task.GetNamespaceId(),
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   startEvent.GetTimestamp(),

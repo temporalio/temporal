@@ -53,6 +53,7 @@ import (
 
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -94,14 +95,14 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 			if f.Kind() == reflect.Invalid {
 				continue
 			}
+			fieldName := t.Field(i).Name
 			fieldValue := valueToString(f, printFully, maxFieldLength)
-			if len(fieldValue) == 0 {
+			if fieldValue == "" {
 				continue
 			}
 			if buf.Len() > 1 {
 				buf.WriteString(", ")
 			}
-			fieldName := t.Field(i).Name
 			if !isAttributeName(fieldName) {
 				if !printFully {
 					fieldValue = trimTextAndBreakWords(fieldValue, maxFieldLength)
@@ -125,6 +126,9 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string {
 	switch v.Kind() {
 	case reflect.Ptr:
+		if ps, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
+			return payloads.ToString(ps)
+		}
 		return valueToString(v.Elem(), printFully, maxFieldLength)
 	case reflect.Struct:
 		return anyToString(v.Interface(), printFully, maxFieldLength)
@@ -148,13 +152,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			case []byte:
 				str += string(typedV)
 			case *commonpb.Payload:
-				var data string
-				err := payload.Decode(typedV, &data)
-				if err == nil {
-					str += data
-				} else {
-					str += anyToString(*typedV, printFully, maxFieldLength)
-				}
+				str += payload.ToString(typedV)
 			default:
 				str += val.String()
 			}
@@ -472,12 +470,12 @@ func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	for _, eventTypeName := range eventpb.EventType_name {
-		if name == eventTypeName+"EventAttributes" {
-			return true
-		}
+	eventType := strings.TrimSuffix(name, "EventAttributes")
 
+	if _, ok := eventpb.EventType_value[eventType]; ok {
+		return true
 	}
+
 	return false
 }
 
@@ -744,12 +742,27 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 }
 
 // process and validate input provided through cmd or file
-func processJSONInput(c *cli.Context) string {
-	return processJSONInputHelper(c, jsonTypeInput)
+func processJSONInput(c *cli.Context) *commonpb.Payloads {
+	rawJson := processJSONInputHelper(c, jsonTypeInput)
+	if len(rawJson) == 0 {
+		return nil
+	}
+
+	var v interface{}
+	if err := json.Unmarshal(rawJson, &v); err != nil {
+		ErrorAndExit("Input is not a valid JSON.", err)
+	}
+
+	p, err := payloads.Encode(v)
+	if err != nil {
+		ErrorAndExit("Unable to encode Input.", err)
+	}
+
+	return p
 }
 
 // process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) string {
+func processJSONInputHelper(c *cli.Context, jType jsonType) []byte {
 	var flagNameOfRawInput string
 	var flagNameOfInputFileName string
 
@@ -761,12 +774,11 @@ func processJSONInputHelper(c *cli.Context, jType jsonType) string {
 		flagNameOfRawInput = FlagMemo
 		flagNameOfInputFileName = FlagMemoFile
 	default:
-		return ""
+		return nil
 	}
 
-	var input string
 	if c.IsSet(flagNameOfRawInput) {
-		input = c.String(flagNameOfRawInput)
+		return []byte(c.String(flagNameOfRawInput))
 	} else if c.IsSet(flagNameOfInputFileName) {
 		inputFile := c.String(flagNameOfInputFileName)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
@@ -775,14 +787,9 @@ func processJSONInputHelper(c *cli.Context, jType jsonType) string {
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
-		input = string(data)
+		return data
 	}
-	if input != "" {
-		if err := validateJSONs(input); err != nil {
-			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
-		}
-	}
-	return input
+	return nil
 }
 
 // validate whether str is a valid json or multi valid json concatenated with spaces/newlines

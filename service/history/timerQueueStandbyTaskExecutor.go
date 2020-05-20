@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -218,7 +217,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
-		isHeartBeatTask := timerTask.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
+		isHeartBeatTask := timerTask.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
 		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
 		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
 		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
@@ -273,7 +272,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if timerTask.TimeoutType == int32(eventpb.TimeoutType_ScheduleToStart) {
+	if timerTask.TimeoutType == int32(commonpb.TimeoutType_ScheduleToStart) {
 		return nil
 	}
 
@@ -458,9 +457,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetNamespaceId(),
 			timerTask.GetWorkflowId(),
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -468,11 +467,11 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetNamespaceId(),
 			timerTask.GetWorkflowId(),
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -482,9 +481,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(timerTask.GetNamespaceId()),
+			tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 			tag.WorkflowID(timerTask.GetWorkflowId()),
-			tag.WorkflowRunIDBytes(timerTask.GetRunId()),
+			tag.WorkflowRunID(timerTask.GetRunId()),
 			tag.ClusterName(t.clusterName))
 	}
 

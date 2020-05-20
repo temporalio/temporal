@@ -43,6 +43,11 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
+	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	yaml "gopkg.in/yaml.v2"
+
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -54,13 +59,8 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
-	"github.com/urfave/cli"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicationgenpb.ReplicationTask) bool
@@ -501,7 +501,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
 			},
@@ -520,9 +520,9 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 
 		exeInfo := resp.State.ExecutionInfo
 		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			NamespaceId:         namespaceID,
 			WorkflowId:          wid,
-			RunId:               primitives.MustParseUUID(rid),
+			RunId:               rid,
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			BranchToken:         exeInfo.BranchToken,
@@ -547,7 +547,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					NamespaceID: namespaceID,
-					Execution: executionpb.WorkflowExecution{
+					Execution: commonpb.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
 					},

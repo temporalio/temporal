@@ -34,6 +34,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -186,7 +187,34 @@ type (
 		MaxExecutions     *int64
 		AverageExecutions int64
 	}
+
+	historyBranchByteKey struct {
+		TreeID   []byte
+		BranchID []byte
+	}
 )
+
+func byteKeyFromProto(p *persistenceblobs.HistoryBranch) (*historyBranchByteKey, error) {
+	branchBytes, err := primitives.ParseUUID(p.BranchId)
+	if err != nil {
+		return nil, err
+	}
+
+	treeBytes, err := primitives.ParseUUID(p.TreeId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyBranchByteKey{TreeID: treeBytes, BranchID: branchBytes}, nil
+}
+
+func (h *historyBranchByteKey) GetTreeId() primitives.UUID {
+	return h.TreeID
+}
+
+func (h *historyBranchByteKey) GetBranchId() primitives.UUID {
+	return h.BranchID
+}
 
 // AdminDBScan is used to scan over all executions in database and detect corruptions
 func AdminDBScan(c *cli.Context) {
@@ -384,6 +412,10 @@ func verifyHistoryExists(
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistenceblobs.HistoryBranch) {
 	var branch persistenceblobs.HistoryBranch
 	err := branchDecoder.Decode(execution.BranchToken, &branch)
+	byteBranch, err := byteKeyFromProto(&branch)
+	if err != nil {
+		return VerificationResultCheckFailure, nil, nil
+	}
 	if err != nil {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,
@@ -423,8 +455,8 @@ func verifyHistoryExists(
 				WorkflowID:  execution.WorkflowID,
 				RunID:       execution.RunID,
 				NextEventID: execution.NextEventID,
-				TreeID:      branch.GetTreeId(),
-				BranchID:    branch.GetBranchId(),
+				TreeID:      byteBranch.GetTreeId(),
+				BranchID:    byteBranch.GetBranchId(),
 				CloseStatus: execution.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: HistoryMissing,
@@ -450,8 +482,8 @@ func verifyHistoryExists(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: HistoryMissing,
@@ -472,6 +504,10 @@ func verifyFirstHistoryEvent(
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
+	byteBranch, err := byteKeyFromProto(branch)
+	if err != nil {
+		return VerificationResultCheckFailure
+	}
 	firstBatch, err := payloadSerializer.DeserializeBatchEvents(history.History[0])
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
@@ -490,8 +526,8 @@ func verifyFirstHistoryEvent(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
@@ -507,8 +543,8 @@ func verifyFirstHistoryEvent(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
@@ -531,6 +567,10 @@ func verifyCurrentExecution(
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
 ) VerificationResult {
+	byteBranch, err := byteKeyFromProto(branch)
+	if err != nil {
+		return VerificationResultCheckFailure
+	}
 	if !executionOpen(execution) {
 		return VerificationResultNoCorruption
 	}
@@ -559,8 +599,8 @@ func verifyCurrentExecution(
 				WorkflowID:  execution.WorkflowID,
 				RunID:       execution.RunID,
 				NextEventID: execution.NextEventID,
-				TreeID:      branch.GetTreeId(),
-				BranchID:    branch.GetBranchId(),
+				TreeID:      byteBranch.GetTreeId(),
+				BranchID:    byteBranch.GetBranchId(),
 				CloseStatus: execution.Status,
 				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 					CorruptionType: OpenExecutionInvalidCurrentExecution,
@@ -587,8 +627,8 @@ func verifyCurrentExecution(
 			WorkflowID:  execution.WorkflowID,
 			RunID:       execution.RunID,
 			NextEventID: execution.NextEventID,
-			TreeID:      branch.GetTreeId(),
-			BranchID:    branch.GetBranchId(),
+			TreeID:      byteBranch.GetTreeId(),
+			BranchID:    byteBranch.GetBranchId(),
 			CloseStatus: execution.Status,
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: OpenExecutionInvalidCurrentExecution,
@@ -609,7 +649,7 @@ func concreteExecutionStillExists(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
@@ -644,7 +684,7 @@ func concreteExecutionStillOpen(
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: execution.NamespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},

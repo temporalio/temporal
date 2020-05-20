@@ -70,7 +70,8 @@ func NewRingpopFactory(
 	return newRingpopFactory(rpConfig, channel, serviceName, servicePortMap, logger, metadataManager)
 }
 
-func validateRingpopConfig(rpConfig *config.Membership) error {
+// ValidateRingpopConfig validates that ringpop config is parseable and valid
+func ValidateRingpopConfig(rpConfig *config.Membership) error {
 	if len(rpConfig.Name) == 0 {
 		return fmt.Errorf("ringpop config missing `name` param")
 	}
@@ -89,7 +90,7 @@ func newRingpopFactory(
 	metadataManager persistence.ClusterMetadataManager,
 ) (*RingpopFactory, error) {
 
-	if err := validateRingpopConfig(rpConfig); err != nil {
+	if err := ValidateRingpopConfig(rpConfig); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {

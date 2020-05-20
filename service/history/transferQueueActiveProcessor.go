@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const identityHistoryService = "history-service"
@@ -89,7 +88,7 @@ func newTransferQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(task.GetNamespaceId()).String(), task)
+		return taskAllocator.verifyActiveTask(task.GetNamespaceId(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -215,7 +214,7 @@ func newTransferQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(task.GetNamespaceId()).String(), task)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceId(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const

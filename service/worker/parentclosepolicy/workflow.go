@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/temporal"
 	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -114,7 +113,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &executionpb.WorkflowExecution{
+					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},
@@ -127,7 +126,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &executionpb.WorkflowExecution{
+					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},

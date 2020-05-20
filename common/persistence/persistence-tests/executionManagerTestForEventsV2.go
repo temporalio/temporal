@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
@@ -38,8 +39,6 @@ import (
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/common/checksum"
 
 	"github.com/pborman/uuid"
@@ -111,7 +110,7 @@ func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected checksu
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -208,7 +207,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistories() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow-version-history",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -303,7 +302,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 //TestContinueAsNew test
 func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
@@ -321,7 +320,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 
-	newWorkflowExecution := executionpb.WorkflowExecution{
+	newWorkflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "64c7e15a-3fd7-4182-9c6f-6f25a4fa2614",
 	}
@@ -401,7 +400,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-replication-state-test",
 		RunId:      runID,
 	}
@@ -455,9 +454,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
-	s.Equal(workflowExecution.RunId, primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(workflowExecution.RunId, tsk.GetRunId())
 	s.Equal(int64(1), tsk.GetFirstEventId())
 	s.Equal(int64(3), tsk.GetNextEventId())
 	s.Equal(int64(9), tsk.Version)
@@ -553,9 +552,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk1.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk1.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk1.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk1.GetWorkflowId())
-	s.Equal(workflowExecution.RunId, primitives.UUIDString(tsk1.GetRunId()))
+	s.Equal(workflowExecution.RunId, tsk1.GetRunId())
 	s.Equal(int64(3), tsk1.GetFirstEventId())
 	s.Equal(int64(5), tsk1.GetNextEventId())
 	s.Equal(int64(10), tsk1.Version)
@@ -614,7 +613,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	}
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution executionpb.WorkflowExecution,
+func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
@@ -676,7 +675,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -746,9 +745,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
 	s.EqualValues(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
-	s.Equal(workflowExecution.RunId, primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(workflowExecution.RunId, tsk.GetRunId())
 	s.Equal(int64(1), tsk.GetFirstEventId())
 	s.Equal(int64(3), tsk.GetNextEventId())
 	s.Equal(int64(9), tsk.Version)
@@ -838,7 +837,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	}
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -976,9 +975,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk = taskR[0]
 	s.EqualValues(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
-	s.Equal(insertInfo.RunID, primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(insertInfo.RunID, tsk.GetRunId())
 	s.Equal(int64(10), tsk.GetFirstEventId())
 	s.Equal(int64(30), tsk.GetNextEventId())
 	s.Equal(true, tsk.ResetWorkflow)
@@ -1108,7 +1107,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1178,9 +1177,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
 	s.EqualValues(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
-	s.Equal(workflowExecution.RunId, primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(workflowExecution.RunId, tsk.GetRunId())
 	s.Equal(int64(1), tsk.GetFirstEventId())
 	s.Equal(int64(3), tsk.GetNextEventId())
 	s.Equal(int64(9), tsk.Version)
@@ -1252,7 +1251,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	updatedReplicationState := copyReplicationState(replicationState0)
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -1384,9 +1383,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk = taskR[0]
 	s.EqualValues(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
-	s.Equal(insertInfo.RunID, primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(insertInfo.RunID, tsk.GetRunId())
 	s.Equal(int64(10), tsk.GetFirstEventId())
 	s.Equal(int64(30), tsk.GetNextEventId())
 	s.Equal(int64(90), tsk.Version)
@@ -1515,7 +1514,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1564,7 +1563,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}

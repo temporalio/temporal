@@ -60,7 +60,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -127,7 +126,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -169,7 +168,7 @@ func (s *engine2Suite) TearDownTest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -237,7 +236,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -308,7 +307,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	namespaceID := testNamespaceID
-	workflowExecution := &executionpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -338,7 +337,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	namespaceID := testNamespaceID
-	workflowExecution := &executionpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -368,7 +367,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -402,7 +401,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -439,7 +438,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -487,7 +486,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 
 func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -532,7 +531,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -576,7 +575,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -618,7 +617,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 
 func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -677,7 +676,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	namespaceID := testNamespaceID
-	workflowExecution := &executionpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -710,7 +709,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -760,7 +759,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -781,7 +780,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
 				RunId:      workflowExecution.RunId,
 			},
@@ -796,7 +795,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	namespaceID := testNamespaceID
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -814,7 +813,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
 				RunId:      workflowExecution.RunId,
 			},
@@ -825,7 +824,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecution, tl, identity string,
+func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
 	startDecision bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
@@ -834,7 +833,7 @@ func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecut
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
-	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(we.GetRunId()))
+	_ = msBuilder.SetHistoryTree(we.GetRunId())
 
 	return msBuilder
 }
@@ -845,14 +844,14 @@ func (s *engine2Suite) printHistory(builder mutableState) string {
 
 func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
 	taskToken := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 2,
 	}
 	serializedTaskToken, _ := taskToken.Marshal()
@@ -1453,7 +1452,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
-func (s *engine2Suite) getBuilder(namespaceID string, we executionpb.WorkflowExecution) mutableState {
+func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecution) mutableState {
 	weContext, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(namespaceID, we)
 	if err != nil {
 		return nil

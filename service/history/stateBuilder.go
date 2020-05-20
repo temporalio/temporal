@@ -30,15 +30,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -48,7 +47,7 @@ type (
 		applyEvents(
 			namespaceID string,
 			requestID string,
-			execution executionpb.WorkflowExecution,
+			execution commonpb.WorkflowExecution,
 			history []*eventpb.HistoryEvent,
 			newRunHistory []*eventpb.HistoryEvent,
 			newRunNDC bool,
@@ -93,7 +92,7 @@ func newStateBuilder(
 func (b *stateBuilderImpl) applyEvents(
 	namespaceID string,
 	requestID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	history []*eventpb.HistoryEvent,
 	newRunHistory []*eventpb.HistoryEvent,
 	newRunNDC bool,
@@ -147,7 +146,7 @@ func (b *stateBuilderImpl) applyEvents(
 				if err != nil {
 					return nil, err
 				}
-				parentNamespaceID = primitives.UUIDString(parentNamespaceEntry.GetInfo().Id)
+				parentNamespaceID = parentNamespaceEntry.GetInfo().Id
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
@@ -183,7 +182,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				primitives.MustParseUUID(execution.GetRunId()),
+				execution.GetRunId(),
 			); err != nil {
 				return nil, err
 			}
@@ -627,7 +626,7 @@ func (b *stateBuilderImpl) applyEvents(
 				newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
 
 				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-				newExecution := executionpb.WorkflowExecution{
+				newExecution := commonpb.WorkflowExecution{
 					WorkflowId: execution.WorkflowId,
 					RunId:      newRunID,
 				}

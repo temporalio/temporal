@@ -66,11 +66,15 @@ func newTaskPersistence(db sqlplugin.DB, nShards int, log log.Logger) (persisten
 func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
 	var rangeID int64
 	var ackLevel int64
-	shardID := m.shardID(request.NamespaceID, request.TaskList)
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+	shardID := m.shardID(nidBytes, request.TaskList)
 	namespaceID := request.NamespaceID
 	rows, err := m.db.SelectFromTaskLists(&sqlplugin.TaskListsFilter{
 		ShardID:     shardID,
-		NamespaceID: &namespaceID,
+		NamespaceID: &nidBytes,
 		Name:        &request.TaskList,
 		TaskType:    convert.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
@@ -90,7 +94,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			}
 			row := sqlplugin.TaskListsRow{
 				ShardID:      shardID,
-				NamespaceID:  namespaceID,
+				NamespaceID:  nidBytes,
 				Name:         request.TaskList,
 				TaskType:     int64(request.TaskType),
 				Data:         blob.Data,
@@ -124,7 +128,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
-		err1 := lockTaskList(tx, shardID, namespaceID, request.TaskList, request.TaskType, rangeID)
+		err1 := lockTaskList(tx, shardID, nidBytes, request.TaskList, request.TaskType, rangeID)
 		if err1 != nil {
 			return err1
 		}
@@ -165,14 +169,17 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 }
 
 func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
-	shardID := m.shardID(request.TaskListInfo.GetNamespaceId(), request.TaskListInfo.Name)
-	namespaceID := request.TaskListInfo.GetNamespaceId()
+	nidBytes, err := primitives.ParseUUID(request.TaskListInfo.GetNamespaceId())
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+
+	shardID := m.shardID(nidBytes, request.TaskListInfo.Name)
 
 	tl := request.TaskListInfo
 	tl.LastUpdated = types.TimestampNow()
 
 	var blob serialization.DataBlob
-	var err error
 	if request.TaskListInfo.Kind == tasklistpb.TaskListKind_Sticky {
 		tl.Expiry, err = types.TimestampProto(stickyTaskListTTL())
 		if err != nil {
@@ -184,7 +191,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 		if _, err := m.db.ReplaceIntoTaskLists(&sqlplugin.TaskListsRow{
 			ShardID:      shardID,
-			NamespaceID:  namespaceID,
+			NamespaceID:  nidBytes,
 			RangeID:      request.RangeID,
 			Name:         request.TaskListInfo.Name,
 			TaskType:     int64(request.TaskListInfo.TaskType),
@@ -201,13 +208,13 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 	}
 	err = m.txExecute("UpdateTaskList", func(tx sqlplugin.Tx) error {
 		err1 := lockTaskList(
-			tx, shardID, namespaceID, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.RangeID)
+			tx, shardID, nidBytes, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.RangeID)
 		if err1 != nil {
 			return err1
 		}
 		result, err1 := tx.UpdateTaskLists(&sqlplugin.TaskListsRow{
 			ShardID:      shardID,
-			NamespaceID:  namespaceID,
+			NamespaceID:  nidBytes,
 			RangeID:      request.RangeID,
 			Name:         request.TaskListInfo.Name,
 			TaskType:     int64(request.TaskListInfo.TaskType),
@@ -302,10 +309,14 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 }
 
 func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequest) error {
-	namespaceID := request.TaskList.NamespaceID
+	nidBytes, err := primitives.ParseUUID(request.TaskList.NamespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(err.Error())
+	}
+
 	result, err := m.db.DeleteFromTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID:     m.shardID(namespaceID, request.TaskList.Name),
-		NamespaceID: &namespaceID,
+		ShardID:     m.shardID(nidBytes, request.TaskList.Name),
+		NamespaceID: &nidBytes,
 		Name:        &request.TaskList.Name,
 		TaskType:    convert.Int64Ptr(int64(request.TaskList.TaskType)),
 		RangeID:     &request.RangeID,
@@ -326,13 +337,18 @@ func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListReque
 func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
 	tasksRows := make([]sqlplugin.TasksRow, len(request.Tasks))
 	for i, v := range request.Tasks {
+		nidBytes, err := primitives.ParseUUID(v.Data.GetNamespaceId())
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+
 		blob, err := serialization.TaskInfoToBlob(v)
 
 		if err != nil {
 			return nil, err
 		}
 		tasksRows[i] = sqlplugin.TasksRow{
-			NamespaceID:  v.Data.GetNamespaceId(),
+			NamespaceID:  nidBytes,
 			TaskListName: request.TaskListInfo.Data.Name,
 			TaskType:     int64(request.TaskListInfo.Data.TaskType),
 			TaskID:       v.GetTaskId(),
@@ -342,14 +358,18 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 	}
 	var resp *persistence.CreateTasksResponse
 	err := m.txExecute("CreateTasks", func(tx sqlplugin.Tx) error {
+		nidBytes, err := primitives.ParseUUID(request.TaskListInfo.Data.GetNamespaceId())
+		if err != nil {
+			return serviceerror.NewInternal(err.Error())
+		}
+
 		if _, err1 := tx.InsertIntoTasks(tasksRows); err1 != nil {
 			return err1
 		}
 		// Lock task list before committing.
 		err1 := lockTaskList(tx,
-			m.shardID(request.TaskListInfo.Data.GetNamespaceId(),
-				request.TaskListInfo.Data.Name),
-			request.TaskListInfo.Data.GetNamespaceId(),
+			m.shardID(nidBytes, request.TaskListInfo.Data.Name),
+			nidBytes,
 			request.TaskListInfo.Data.Name,
 			request.TaskListInfo.Data.TaskType,
 			request.TaskListInfo.RangeID)
@@ -363,8 +383,13 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 }
 
 func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+
 	rows, err := m.db.SelectFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:  request.NamespaceID,
+		NamespaceID:  nidBytes,
 		TaskListName: request.TaskList,
 		TaskType:     int64(request.TaskType),
 		MinTaskID:    &request.ReadLevel,
@@ -388,10 +413,15 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 }
 
 func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
+	nidBytes, err := primitives.ParseUUID(request.TaskList.NamespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(err.Error())
+	}
+
 	taskID := request.TaskID
 	taskList := request.TaskList
-	_, err := m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:  taskList.NamespaceID,
+	_, err = m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
+		NamespaceID:  nidBytes,
 		TaskListName: taskList.Name,
 		TaskType:     int64(taskList.TaskType),
 		TaskID:       &taskID})
@@ -402,8 +432,12 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 }
 
 func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return 0, serviceerror.NewInternal(err.Error())
+	}
 	result, err := m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:          request.NamespaceID,
+		NamespaceID:          nidBytes,
 		TaskListName:         request.TaskListName,
 		TaskType:             int64(request.TaskType),
 		TaskIDLessThanEquals: &request.TaskID,

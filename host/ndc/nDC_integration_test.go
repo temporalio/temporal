@@ -47,7 +47,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -254,7 +253,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 		host.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -563,7 +562,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   31,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: eventpb.TimeoutType_StartToClose,
+					TimeoutType: commonpb.TimeoutType_StartToClose,
 				}},
 			},
 		}},
@@ -578,7 +577,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -588,7 +587,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -1145,7 +1144,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		token []byte,
 	) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		execution := &executionpb.WorkflowExecution{
+		execution := &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
@@ -1368,7 +1367,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -1378,7 +1377,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -1435,7 +1434,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   32,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: eventpb.TimeoutType_StartToClose,
+					TimeoutType: commonpb.TimeoutType_StartToClose,
 				}},
 			},
 		}},
@@ -1641,7 +1640,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:            &commonpb.WorkflowType{Name: workflowType},
 			ParentWorkflowNamespace: namespace,
-			ParentWorkflowExecution: &executionpb.WorkflowExecution{
+			ParentWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: uuid.New(),
 				RunId:      uuid.New(),
 			},
@@ -1728,7 +1727,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 		req := &historyservice.ReplicateEventsV2Request{
 			NamespaceId: s.namespaceID,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

@@ -132,10 +132,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetWorkflowID() *gomock.Call {
 }
 
 // GetRunId mocks base method
-func (m *MockqueueTaskInfo) GetRunId() []byte {
+func (m *MockqueueTaskInfo) GetRunId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRunId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -146,10 +146,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetRunID() *gomock.Call {
 }
 
 // GetNamespaceId mocks base method
-func (m *MockqueueTaskInfo) GetNamespaceId() []byte {
+func (m *MockqueueTaskInfo) GetNamespaceId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -359,10 +359,10 @@ func (mr *MockqueueTaskMockRecorder) GetWorkflowID() *gomock.Call {
 }
 
 // GetRunId mocks base method
-func (m *MockqueueTask) GetRunId() []byte {
+func (m *MockqueueTask) GetRunId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRunId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
@@ -373,10 +373,10 @@ func (mr *MockqueueTaskMockRecorder) GetRunID() *gomock.Call {
 }
 
 // GetNamespaceId mocks base method
-func (m *MockqueueTask) GetNamespaceId() []byte {
+func (m *MockqueueTask) GetNamespaceId() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceId")
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 

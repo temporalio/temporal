@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -50,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/task"
@@ -535,9 +534,9 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	err0 = validateTaskToken(token)
@@ -586,14 +585,14 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCause_UnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
-		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
+		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
 
 		if err == nil {
@@ -1397,9 +1396,11 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 		return nil, h.error(errSourceClusterNotSet, scope, "", "")
 	}
 
-	if request.GetShardId() == 0 {
-		return nil, h.error(errShardIDNotSet, scope, "", "")
-	}
+	// TODO: Disabling this check as 0 is a valid ShardID.  Correct long term fix is to have ShardID start from 1
+	// so we can enable this check to validate ShardID is not set.
+	// if request.GetShardId() == 0 {
+	// 	return nil, h.error(errShardIDNotSet, scope, "", "")
+	// }
 
 	if request.GetTimestamp() == 0 {
 		return nil, h.error(errTimestampNotSet, scope, "", "")
@@ -1750,7 +1751,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	err = engine.RefreshWorkflowTasks(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		},
