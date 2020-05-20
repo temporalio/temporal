@@ -78,8 +78,9 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
-	insecureFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, serverCfgInsecure)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS)
 	s.NoError(err)
+	insecureFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
@@ -136,11 +137,14 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 		},
 	}
 
-	frontendMutualTLSFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, localStoreMutualTLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
+	frontendMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
-	frontendServerTLSFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, localStoreServerTLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	s.NoError(err)
+	frontendServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NoError(err)
 	s.NotNil(frontendServerTLSFactory)
 
@@ -202,11 +206,14 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 		},
 	}
 
-	internodeMutualTLSFactory, err := NewFactory(rpcTestCfgDefault, "worker", s.logger, localStoreMutualTLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
 	s.NoError(err)
+	internodeMutualTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
-	internodeServerTLSFactory, err := NewFactory(rpcTestCfgDefault, "worker", s.logger, localStoreServerTLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	s.NoError(err)
+	internodeServerTLSFactory := NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NoError(err)
 	s.NotNil(internodeServerTLSFactory)
 

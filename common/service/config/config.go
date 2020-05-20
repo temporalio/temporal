@@ -136,7 +136,7 @@ type (
 		CertFile          string    `yaml:"certFile"`
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
 		KeyFile           string    `yaml:"keyFile"`
-  	// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+  		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
 		// This value is ignored if `requireClientAuth` is not enabled.
 		ClientCAFiles     []string  `yaml:"clientCaFiles"`
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
@@ -145,6 +145,12 @@ type (
 
 	// ClientTLS contains TLS configuration for clients.
 	ClientTLS struct {
+		// DNS name to validate against for server to server connections.
+		// Required when TLS is enabled in a multi-host cluster.
+		// This name should be referenced by the certificate specified in the ServerTLS section.
+		ServerName string `yaml:"serverName"`
+
+		// Optional - A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust.
 		RootCAFiles []string `yaml:"rootCaFiles"`
 	}
 
@@ -471,4 +477,8 @@ func (c *Config) Validate() error {
 func (c *Config) String() string {
 	out, _ := json.MarshalIndent(c, "", "    ")
 	return string(out)
+}
+
+func (r *GroupTLS) IsEnabled() bool {
+	return r.Server.KeyFile != ""
 }
