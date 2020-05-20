@@ -30,13 +30,12 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -85,31 +84,31 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		transferTask.TaskType != persistence.TransferTaskTypeCloseExecution {
+		transferTask.TaskType != commongenpb.TaskType_TransferCloseExecution {
 		// guarantee the processing of workflow execution close
 		return nil
 	}
 
 	switch transferTask.TaskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferActivityTask:
 		return t.processActivityTask(transferTask)
-	case persistence.TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferDecisionTask:
 		return t.processDecisionTask(transferTask)
-	case persistence.TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferCloseExecution:
 		return t.processCloseExecution(transferTask)
-	case persistence.TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferCancelExecution:
 		return t.processCancelExecution(transferTask)
-	case persistence.TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferSignalExecution:
 		return t.processSignalExecution(transferTask)
-	case persistence.TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferStartChildExecution:
 		return t.processStartChildExecution(transferTask)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(transferTask)
-	case persistence.TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferResetWorkflow:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask
@@ -247,9 +246,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			workflowTypeName,
 			workflowStartTimestamp,
 			workflowExecutionTimestamp.UnixNano(),
@@ -443,9 +442,9 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
@@ -457,9 +456,9 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		)
 	}
 	return t.upsertWorkflowExecution(
-		primitives.UUIDString(transferTask.GetNamespaceId()),
+		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
-		primitives.UUIDString(transferTask.GetRunId()),
+		transferTask.GetRunId(),
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
@@ -570,9 +569,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			0,
@@ -580,11 +579,11 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetNamespaceId(),
 			transferTask.GetWorkflowId(),
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(transferTask.GetRunId()),
+			transferTask.GetRunId(),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -596,9 +595,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(transferTask.GetNamespaceId()),
+			tag.WorkflowNamespaceID(transferTask.GetNamespaceId()),
 			tag.WorkflowID(transferTask.GetWorkflowId()),
-			tag.WorkflowRunIDBytes(transferTask.GetRunId()),
+			tag.WorkflowRunID(transferTask.GetRunId()),
 			tag.SourceCluster(t.clusterName))
 	}
 

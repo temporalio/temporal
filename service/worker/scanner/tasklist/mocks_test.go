@@ -38,9 +38,9 @@ import (
 
 type (
 	mockTaskTable struct {
-		namespaceID []byte
+		namespaceID string
 		workflowID  string
-		runID       []byte
+		runID       string
 		nextTaskID  int64
 		tasks       []*persistenceblobs.AllocatedTaskInfo
 	}
@@ -52,16 +52,16 @@ type (
 
 func newMockTaskTable() *mockTaskTable {
 	return &mockTaskTable{
-		namespaceID: uuid.NewRandom(),
+		namespaceID: uuid.New(),
 		workflowID:  uuid.New(),
-		runID:       uuid.NewRandom(),
+		runID:       uuid.New(),
 	}
 }
 
 func (tbl *mockTaskListTable) generate(name string, idle bool) {
 	tl := p.PersistedTaskListInfo{
 		Data: &persistenceblobs.TaskListInfo{
-			NamespaceId: uuid.NewRandom(),
+			NamespaceId: uuid.New(),
 			Name:        name,
 			LastUpdated: types.TimestampNow(),
 		},

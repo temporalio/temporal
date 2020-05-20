@@ -28,8 +28,6 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -77,7 +75,7 @@ func newTimerQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUIDString(timer.GetNamespaceId()), timer)
+		return taskAllocator.verifyStandbyTask(clusterName, timer.GetNamespaceId(), timer)
 	}
 
 	timerGate := NewRemoteTimerGate()

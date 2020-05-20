@@ -26,8 +26,8 @@ persistence:
         maxIdleConns: 2
         maxConnLifetime: "1h"
 
-server:
-  ringpop:
+global:
+  membership:
     name: temporal
     maxJoinDuration: 30s
   pprof:

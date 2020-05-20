@@ -38,6 +38,7 @@ import (
 
 	m "github.com/temporalio/temporal/.gen/proto/matchingservice"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -45,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -87,11 +87,11 @@ func newTransferQueueTaskExecutorBase(
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
-) (string, executionpb.WorkflowExecution) {
+) (string, commonpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
 }
 
@@ -103,16 +103,16 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != persistence.TransferTaskTypeActivityTask {
+	if task.TaskType != commongenpb.TaskType_TransferActivityTask {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
-		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &executionpb.WorkflowExecution{
+		NamespaceId:       task.GetTargetNamespaceId(),
+		SourceNamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
 		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.GetScheduleId(),
@@ -131,15 +131,15 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
+	if task.TaskType != commongenpb.TaskType_TransferDecisionTask {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &executionpb.WorkflowExecution{
+		NamespaceId: task.GetNamespaceId(),
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
 		TaskList:                      tasklist,
 		ScheduleId:                    task.GetScheduleId(),
@@ -180,7 +180,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -224,7 +224,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -287,7 +287,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			NamespaceID: namespaceID,
 			Namespace:   namespace,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

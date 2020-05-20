@@ -45,7 +45,7 @@ const (
 
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
-	config         *config.Ringpop
+	config         *config.Membership
 	channel        *tchannel.Channel
 	serviceName    string
 	servicePortMap map[string]int
@@ -60,7 +60,7 @@ type RingpopFactory struct {
 // NewRingpopFactory builds a ringpop factory conforming
 // to the underlying configuration
 func NewRingpopFactory(
-	rpConfig *config.Ringpop,
+	rpConfig *config.Membership,
 	channel *tchannel.Channel,
 	serviceName string,
 	servicePortMap map[string]int,
@@ -70,7 +70,8 @@ func NewRingpopFactory(
 	return newRingpopFactory(rpConfig, channel, serviceName, servicePortMap, logger, metadataManager)
 }
 
-func validateRingpopConfig(rpConfig *config.Ringpop) error {
+// ValidateRingpopConfig validates that ringpop config is parseable and valid
+func ValidateRingpopConfig(rpConfig *config.Membership) error {
 	if len(rpConfig.Name) == 0 {
 		return fmt.Errorf("ringpop config missing `name` param")
 	}
@@ -81,7 +82,7 @@ func validateRingpopConfig(rpConfig *config.Ringpop) error {
 }
 
 func newRingpopFactory(
-	rpConfig *config.Ringpop,
+	rpConfig *config.Membership,
 	channel *tchannel.Channel,
 	serviceName string,
 	servicePortMap map[string]int,
@@ -89,7 +90,7 @@ func newRingpopFactory(
 	metadataManager persistence.ClusterMetadataManager,
 ) (*RingpopFactory, error) {
 
-	if err := validateRingpopConfig(rpConfig); err != nil {
+	if err := ValidateRingpopConfig(rpConfig); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {

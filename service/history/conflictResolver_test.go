@@ -39,7 +39,9 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -50,7 +52,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -131,7 +132,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testNamespaceID, executionpb.WorkflowExecution{
+	s.mockContext = newWorkflowExecutionContext(testNamespaceID, commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      testRunID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -149,7 +150,7 @@ func (s *conflictResolverSuite) TestReset() {
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
-	prevState := persistence.WorkflowStateRunning
+	prevState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
 
 	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
@@ -209,7 +210,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
 		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    persistence.WorkflowStateCreated,
+		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 		Status:                   executionpb.WorkflowExecutionStatus_Running,
 		LastFirstEventID:         event1.GetEventId(),
 		NextEventID:              nextEventID,
@@ -288,7 +289,7 @@ func (s *conflictResolverSuite) TestReset() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(event1.GetVersion()).Return(sourceCluster).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID)}, &persistenceblobs.NamespaceConfig{}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: namespaceID}, &persistenceblobs.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 
 	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)

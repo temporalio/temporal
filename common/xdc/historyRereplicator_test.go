@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -51,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -102,7 +100,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.namespace = "some random namespace name"
 	s.targetClusterName = "some random target cluster name"
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -167,7 +165,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -183,7 +181,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -320,7 +318,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      beginingRunID,
 		},
@@ -336,7 +334,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID1,
 		},
@@ -352,7 +350,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID1,
 		},
@@ -368,7 +366,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -384,7 +382,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID2,
 		},
@@ -400,7 +398,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      midRunID2,
 		},
@@ -416,7 +414,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -432,7 +430,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      endingRunID,
 		},
@@ -506,7 +504,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -522,7 +520,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -538,7 +536,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -552,7 +550,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -644,7 +642,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -660,7 +658,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -676,7 +674,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      newRunID,
 		},
@@ -692,7 +690,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -706,7 +704,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -775,7 +773,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 
 	s.Equal(&historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -791,7 +789,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "some random workflow ID",
 			RunId:      uuid.New(),
 		},
@@ -827,7 +825,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -864,7 +862,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -879,7 +877,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}, nil).Times(1)
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -905,7 +903,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	}
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -976,7 +974,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -992,7 +990,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1029,7 +1027,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1045,7 +1043,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1084,7 +1082,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -1126,7 +1124,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      currentRunID,
 			},
@@ -1162,7 +1160,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
 		},

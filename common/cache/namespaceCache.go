@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 // ReplicationPolicy is the namespace's replication policy,
@@ -374,7 +373,7 @@ func (c *namespaceCache) GetNamespaceID(
 	if err != nil {
 		return "", err
 	}
-	return primitives.UUIDString(entry.info.Id), nil
+	return entry.info.Id, nil
 }
 
 // GetNamespaceName returns namespace name given the namespace id
@@ -458,8 +457,8 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	newCacheNameToID := newNamespaceCache()
 	newCacheByID := newNamespaceCache()
 	for _, namespace := range c.GetAllNamespace() {
-		newCacheNameToID.Put(namespace.info.Name, primitives.UUIDString(namespace.info.Id))
-		newCacheByID.Put(primitives.UUIDString(namespace.info.Id), namespace)
+		newCacheNameToID.Put(namespace.info.Name, namespace.info.Id)
+		newCacheByID.Put(namespace.info.Id, namespace)
 	}
 
 UpdateLoop:
@@ -472,11 +471,11 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, primitives.UUIDString(namespace.info.Id), namespace)
+		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, namespace.info.Id, namespace)
 		if err != nil {
 			return err
 		}
-		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, primitives.UUIDString(nextEntry.info.Id))
+		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.Id)
 
 		if prevEntry != nil {
 			prevEntries = append(prevEntries, prevEntry)
@@ -500,7 +499,7 @@ func (c *namespaceCache) checkNamespaceExists(
 	id string,
 ) error {
 
-	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: primitives.MustParseUUID(id)})
+	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
 	return err
 }
 

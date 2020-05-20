@@ -28,14 +28,13 @@ import "common/server_enum.proto";
 import "common/message.proto";
 import "namespace/server_message.proto";
 import "event/server_message.proto";
-import "execution/message.proto";
 import "replication/server_message.proto";
 import "version/message.proto";
 import "cluster/server_message.proto";
 
 message DescribeWorkflowExecutionRequest {
     string namespace = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
 }
 
 message DescribeWorkflowExecutionResponse {
@@ -50,7 +49,7 @@ message DescribeHistoryHostRequest {
     //ip:port
     string hostAddress = 1;
     int32 shardIdForHost = 2;
-    execution.WorkflowExecution executionForHost = 3;
+    common.WorkflowExecution executionForHost = 3;
 }
 
 message DescribeHistoryHostResponse {
@@ -71,7 +70,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    int32 type = 2;
+    common.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }
@@ -81,7 +80,7 @@ message RemoveTaskResponse {
 
 message GetWorkflowExecutionRawHistoryRequest {
     string namespace = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     int64 firstEventId = 3;
     int64 nextEventId = 4;
     int32 maximumPageSize = 5;
@@ -101,7 +100,7 @@ message GetWorkflowExecutionRawHistoryResponse {
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
     string namespace = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     int64 startEventId = 3;
     int64 startEventVersion = 4;
     int64 endEventId = 5;
@@ -150,7 +149,7 @@ message GetDLQReplicationMessagesResponse {
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
     string namespace = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     common.DataBlob events = 3;
 }
 
@@ -213,7 +212,7 @@ message MergeDLQMessagesResponse {
 
 message RefreshWorkflowTasksRequest {
     string namespace = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
 }
 
 message RefreshWorkflowTasksResponse {

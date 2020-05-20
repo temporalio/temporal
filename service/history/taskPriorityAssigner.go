@@ -36,7 +36,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 )
 
@@ -107,7 +106,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 	}
 
 	// timer of transfer task, first check if namespace is active or not
-	namespace, active, err := a.getNamespaceInfo(primitives.UUIDString(task.GetNamespaceId()))
+	namespace, active, err := a.getNamespaceInfo(task.GetNamespaceId())
 	if err != nil {
 		return err
 	}

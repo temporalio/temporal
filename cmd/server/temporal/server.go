@@ -47,6 +47,7 @@ import (
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/config/ringpop"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -118,9 +119,18 @@ func (s *server) startService() common.Daemon {
 	}
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
+	err = ringpop.ValidateRingpopConfig(&s.cfg.Global.Membership)
+	if err != nil {
+		log.Fatalf("Ringpop config validation error - %v", err)
+	}
+
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
-	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
+	params.RPCFactory, err = rpc.NewFactory(&svcCfg.RPC, params.Name, params.Logger, &s.cfg.Global)
+
+	if err != nil {
+		log.Fatalf("error constructing RPC factory: %v", err)
+	}
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
@@ -133,7 +143,7 @@ func (s *server) startService() common.Daemon {
 	params.MembershipFactoryInitializer =
 		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
-				&s.cfg.Server.Ringpop,
+				&s.cfg.Global.Membership,
 				params.RPCFactory.GetRingpopChannel(),
 				params.Name,
 				servicePortMap,
@@ -164,13 +174,17 @@ func (s *server) startService() common.Daemon {
 	)
 
 	if s.cfg.PublicClient.HostPort == "" {
-		log.Fatalf("need to provide an endpoint config for PublicClient")
+		log.Fatal("need to provide an endpoint config for PublicClient")
 	} else {
-		var err error
+		zapLogger, err := zap.NewProduction()
+		if err != nil {
+			log.Fatalf("failed to initialize zap logger: %v", err)
+		}
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     s.cfg.PublicClient.HostPort,
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
+			Logger:       zapLogger,
 		})
 		if err != nil {
 			log.Fatalf("failed to create public client: %v", err)

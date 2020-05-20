@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"github.com/temporalio/temporal/.gen/proto/common"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -110,19 +112,13 @@ func WorkflowType(wfType string) Tag {
 }
 
 // WorkflowState returns tag for WorkflowState
-func WorkflowState(s int) Tag {
-	return newInt("wf-state", s)
+func WorkflowState(s executiongenpb.WorkflowExecutionState) Tag {
+	return newInt("wf-state", int(s))
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) Tag {
 	return newStringTag("wf-run-id", runID)
-}
-
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowRunIDBytes(runID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-run-id", runID)
 }
 
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
@@ -180,12 +176,6 @@ func BlobSizeViolationOperation(operation string) Tag {
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
 func WorkflowNamespaceID(namespaceID string) Tag {
 	return newStringTag("wf-namespace-id", namespaceID)
-}
-
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowNamespaceIDBytes(namespaceID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-namespace-id", namespaceID)
 }
 
 // WorkflowNamespace returns tag for WorkflowNamespace
@@ -255,16 +245,6 @@ func WorkflowTreeID(treeID string) Tag {
 // WorkflowBranchID returns tag for WorkflowBranchID
 func WorkflowBranchID(branchID string) Tag {
 	return newStringTag("wf-branch-id", branchID)
-}
-
-// WorkflowTreeIDBytes returns tag for WorkflowTreeIDBytes
-func WorkflowTreeIDBytes(treeIDBytes []byte) Tag {
-	return newBinaryTag("wf-tree-id", treeIDBytes)
-}
-
-// WorkflowBranchIDBytes returns tag for WorkflowBranchIDBytes
-func WorkflowBranchIDBytes(branchIDBytes []byte) Tag {
-	return newBinaryTag("wf-branch-id", branchIDBytes)
 }
 
 // workflow task
@@ -526,8 +506,8 @@ func TaskID(taskID int64) Tag {
 }
 
 // TaskType returns tag for TaskType for queue processor
-func TaskType(taskType int32) Tag {
-	return newInt32("queue-task-type", taskType)
+func TaskType(taskType common.TaskType) Tag {
+	return newInt32("queue-task-type", int32(taskType))
 }
 
 // TaskVersion returns tag for TaskVersion

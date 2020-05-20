@@ -32,8 +32,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
@@ -77,7 +77,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
-		connection, err := rpc.Dial(TestFlags.FrontendAddrGRPC)
+		connection, err := rpc.Dial(TestFlags.FrontendAddrGRPC, nil)
 		if err != nil {
 			s.Require().NoError(err)
 		}
@@ -180,7 +180,7 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *executionpb.WorkflowExecution) {
+func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	history := &eventpb.History{
 		Events: events,
@@ -188,7 +188,7 @@ func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *exec
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(namespace string, execution *executionpb.WorkflowExecution) []*eventpb.HistoryEvent {
+func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*eventpb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -219,7 +219,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:     uuid.NewRandom(),
+				Id:     uuid.New(),
 				Name:   s.archivalNamespace,
 				Status: namespacepb.NamespaceStatus_Registered,
 			},
@@ -246,7 +246,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 
 	s.Logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(s.archivalNamespace),
-		tag.WorkflowNamespaceIDBytes(response.ID),
+		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
 }

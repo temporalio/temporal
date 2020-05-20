@@ -30,7 +30,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
@@ -46,7 +45,7 @@ import (
 type (
 	nDCReplicationTask interface {
 		getNamespaceID() string
-		getExecution() *executionpb.WorkflowExecution
+		getExecution() *commonpb.WorkflowExecution
 		getWorkflowID() string
 		getRunID() string
 		getEventTime() time.Time
@@ -66,7 +65,7 @@ type (
 	nDCReplicationTaskImpl struct {
 		sourceCluster  string
 		namespaceID    string
-		execution      *executionpb.WorkflowExecution
+		execution      *commonpb.WorkflowExecution
 		version        int64
 		firstEvent     *eventpb.HistoryEvent
 		lastEvent      *eventpb.HistoryEvent
@@ -168,7 +167,7 @@ func (t *nDCReplicationTaskImpl) getNamespaceID() string {
 	return t.namespaceID
 }
 
-func (t *nDCReplicationTaskImpl) getExecution() *executionpb.WorkflowExecution {
+func (t *nDCReplicationTaskImpl) getExecution() *commonpb.WorkflowExecution {
 	return t.execution
 }
 
@@ -277,7 +276,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	newRunTask := &nDCReplicationTaskImpl{
 		sourceCluster: t.sourceCluster,
 		namespaceID:   t.namespaceID,
-		execution: &executionpb.WorkflowExecution{
+		execution: &commonpb.WorkflowExecution{
 			WorkflowId: t.execution.WorkflowId,
 			RunId:      newRunID,
 		},

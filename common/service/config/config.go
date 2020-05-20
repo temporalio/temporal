@@ -47,8 +47,8 @@ const (
 type (
 	// Config contains the configuration for a set of temporal services
 	Config struct {
-		// Server is process-wide service-related configuration
-		Server Server `yaml:"server"`
+		// Global is process-wide service-related configuration
+		Global Global `yaml:"global"`
 		// Persistence contains the configuration for temporal datastores
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
@@ -74,13 +74,13 @@ type (
 
 	// Service contains the service specific config items
 	Service struct {
-		// TChannel is the tchannel configuration
+		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
 		// Metrics is the metrics subsystem configuration
 		Metrics Metrics `yaml:"metrics"`
 	}
 
-	// PProf contains the rpc config items
+	// PProf contains the config items for the pprof utility
 	PProf struct {
 		// Port is the port on which the PProf will bind to
 		Port int `yaml:"port"`
@@ -104,19 +104,55 @@ type (
 		LogLevel string `yaml:"logLevel"`
 	}
 
-	// Server contains config items that apply process-wide to all services
-	Server struct {
-		// Ringpop is the ringpop related configuration
-		Ringpop Ringpop `yaml:"ringpop"`
+	// Global contains config items that apply process-wide to all services
+	Global struct {
+		// Membership is the ringpop related configuration
+		Membership Membership `yaml:"membership"`
 		// PProf is the PProf configuration
 		PProf PProf `yaml:"pprof"`
+		// TLS controls the communication encryption configuration
+		TLS RootTLS `yaml:"tls"`
 	}
 
-	// Ringpop contains the ringpop config items
-	Ringpop struct {
-		// Name to be used in ringpop advertisement
+	// RootTLS contains all TLS settings for the Temporal server
+	RootTLS struct {
+		// Internode controls backend service communication TLS settings.
+		Internode GroupTLS `yaml:"internode"`
+		// Frontend controls SDK Client to Frontend communication TLS settings.
+		Frontend  GroupTLS `yaml:"frontend"`
+	}
+
+	// GroupTLS contains an instance client and server TLS settings
+	GroupTLS struct {
+		// Client handles client TLS settings
+		Client ClientTLS `yaml:"client"`
+		// Server handles the server (listener) TLS settings
+		Server ServerTLS `yaml:"server"`
+	}
+
+	// ServerTLS contains items to load server TLS configuration
+	ServerTLS struct {
+		// The path to the file containing the PEM-encoded public key of the certificate to use.
+		CertFile          string    `yaml:"certFile"`
+		// The path to the file containing the PEM-encoded private key of the certificate to use.
+		KeyFile           string    `yaml:"keyFile"`
+  	// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+		// This value is ignored if `requireClientAuth` is not enabled.
+		ClientCAFiles     []string  `yaml:"clientCaFiles"`
+		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
+		RequireClientAuth bool      `yaml:"requireClientAuth"`
+	}
+
+	// ClientTLS contains TLS configuration for clients.
+	ClientTLS struct {
+		RootCAFiles []string `yaml:"rootCaFiles"`
+	}
+
+	// Membership contains config items related to the membership layer of temporal
+	Membership struct {
+		// Name to be used in advertisement to other nodes
 		Name string `yaml:"name" validate:"nonzero"`
-		// MaxJoinDuration is the max wait time to join the ring
+		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
 		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)

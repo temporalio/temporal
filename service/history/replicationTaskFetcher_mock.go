@@ -29,9 +29,8 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockReplicationTaskFetcher is a mock of ReplicationTaskFetcher interface.

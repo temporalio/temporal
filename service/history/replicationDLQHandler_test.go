@@ -45,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 )
 
@@ -133,9 +132,9 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*persistenceblobs.ReplicationTaskInfo{
 			&persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),
-				RunId:       primitives.MustParseUUID(uuid.New()),
+				RunId:       uuid.New(),
 				TaskId:      0,
 				TaskType:    1,
 			},
@@ -187,9 +186,9 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*persistenceblobs.ReplicationTaskInfo{
 			&persistenceblobs.ReplicationTaskInfo{
-				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				NamespaceId: uuid.New(),
 				WorkflowId:  uuid.New(),
-				RunId:       primitives.MustParseUUID(uuid.New()),
+				RunId:       uuid.New(),
 				TaskId:      0,
 				TaskType:    1,
 			},

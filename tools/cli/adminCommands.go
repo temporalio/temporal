@@ -33,10 +33,11 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
@@ -45,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 )
@@ -65,8 +65,8 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    primitives.MustParseUUID(tid),
-			BranchID:  primitives.MustParseUUID(bid),
+			TreeID:    tid,
+			BranchID:  bid,
 			MinNodeID: 1,
 			MaxNodeID: maxEventID,
 			PageSize:  maxEventID,
@@ -170,7 +170,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -373,9 +373,9 @@ func AdminRemoveTask(c *cli.Context) {
 
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	typeID := getRequiredIntOption(c, FlagTaskType)
+	taskCategory := commongenpb.TaskCategory(getRequiredIntOption(c, FlagTaskType))
 	var visibilityTimestamp int64
-	if common.TaskType(typeID) == common.TaskTypeTimer {
+	if taskCategory == commongenpb.TaskCategory_TaskCategory_Timer {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 
@@ -384,7 +384,7 @@ func AdminRemoveTask(c *cli.Context) {
 
 	req := &adminservice.RemoveTaskRequest{
 		ShardId:             int32(shardID),
-		Type:                int32(typeID),
+		Category:            taskCategory,
 		TaskId:              taskID,
 		VisibilityTimestamp: visibilityTimestamp,
 	}
@@ -431,7 +431,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &executionpb.WorkflowExecution{WorkflowId: wid}
+		req.ExecutionForHost = &commonpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
 		req.ShardIdForHost = int32(sid)
@@ -464,7 +464,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},

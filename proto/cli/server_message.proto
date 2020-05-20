@@ -36,14 +36,14 @@ message DescribeWorkflowExecutionResponse {
 }
 
 message WorkflowExecutionInfo {
-    execution.WorkflowExecution execution = 1;
+    common.WorkflowExecution execution = 1;
     common.WorkflowType type = 2;
     string startTime = 3;
     string closeTime = 4;
     execution.WorkflowExecutionStatus status = 5;
     int64 historyLength = 6;
     string parentNamespaceId = 7;
-    execution.WorkflowExecution parentExecution = 8;
+    common.WorkflowExecution parentExecution = 8;
     int64 executionTime = 9;
     common.Memo memo = 10;
     SearchAttributes searchAttributes = 11;

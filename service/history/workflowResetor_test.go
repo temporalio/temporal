@@ -36,6 +36,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
+
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -47,14 +57,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -162,7 +164,7 @@ func (s *resetorSuite) TearDownTest() {
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -177,7 +179,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -191,7 +193,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -221,6 +223,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -229,7 +232,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -244,6 +247,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -765,15 +769,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
+	compareCurrExeInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(persistence.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(persistence.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_DeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -785,15 +789,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// one activity task, one decision task and one record workflow started task
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_TransferRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_UserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_ActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -839,7 +843,7 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.Act
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -854,7 +858,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -868,7 +872,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -885,7 +889,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	actIDStartedNoRetry := "actID4"
 	signalName1 := "sig1"
 	signalName2 := "sig2"
-	cancelWE := &executionpb.WorkflowExecution{
+	cancelWE := &commonpb.WorkflowExecution{
 		WorkflowId: "cancel-wfid",
 		RunId:      uuid.New().String(),
 	}
@@ -901,6 +905,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -909,7 +914,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -924,6 +929,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
@@ -1412,7 +1418,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
@@ -1437,7 +1443,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -1451,7 +1457,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -1483,6 +1489,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -1500,7 +1507,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -1515,6 +1522,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -2043,7 +2051,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
+	compareCurrExeInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
@@ -2051,8 +2059,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(persistence.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(persistence.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_DeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -2063,16 +2071,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_TransferDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_TransferRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_UserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_ActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -2081,9 +2089,9 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_ReplicationHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
-	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_ReplicationHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -2113,7 +2121,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("standby").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
@@ -2138,7 +2146,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -2152,7 +2160,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -2184,6 +2192,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2201,7 +2210,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -2216,6 +2225,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
@@ -2708,7 +2718,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
@@ -2733,7 +2743,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -2747,7 +2757,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -2779,6 +2789,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2796,7 +2807,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -2808,7 +2819,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              persistence.WorkflowStateCompleted,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3348,16 +3359,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_TransferDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_TransferRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_UserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_ActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -3366,7 +3377,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_ReplicationHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -3396,7 +3407,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -3418,14 +3429,14 @@ func (s *resetorSuite) TestApplyReset() {
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
 	newRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      newRunID,
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -3456,6 +3467,7 @@ func (s *resetorSuite) TestApplyReset() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -3473,7 +3485,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -3485,7 +3497,7 @@ func (s *resetorSuite) TestApplyReset() {
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              persistence.WorkflowStateCompleted,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -4035,15 +4047,15 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_TransferActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_TransferDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(commongenpb.TaskType_UserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(commongenpb.TaskType_ActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)

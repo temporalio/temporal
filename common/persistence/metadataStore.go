@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -152,7 +151,7 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 	_, err := m.CreateNamespace(&CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          primitives.MustParseUUID(common.SystemNamespaceID),
+				Id:          common.SystemNamespaceID,
 				Name:        common.SystemLocalNamespace,
 				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: "Temporal internal system namespace",

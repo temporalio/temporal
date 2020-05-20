@@ -33,8 +33,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -446,7 +446,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -465,7 +465,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

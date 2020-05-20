@@ -12,8 +12,8 @@ persistence:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility_standby"
 
-server:
-  ringpop:
+global:
+  membership:
     name: temporal_standby
     maxJoinDuration: 30s
   pprof:

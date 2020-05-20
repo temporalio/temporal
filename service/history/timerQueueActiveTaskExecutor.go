@@ -31,11 +31,10 @@ import (
 	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -44,7 +43,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -89,19 +87,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case persistence.TaskTypeUserTimer:
+	case commongenpb.TaskType_UserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case persistence.TaskTypeActivityTimeout:
+	case commongenpb.TaskType_ActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case persistence.TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_DecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case persistence.TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_WorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case persistence.TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_ActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case persistence.TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_WorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case persistence.TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_DeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -190,7 +188,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -281,7 +279,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_DecisionTimeout))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -294,7 +292,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(eventpb.TimeoutType(task.TimeoutType)) {
+	switch timerTypeFromProto(commonpb.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
@@ -407,7 +405,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 
-	namespaceID := primitives.UUIDString(task.GetNamespaceId())
+	namespaceID := task.GetNamespaceId()
 	targetNamespaceID := namespaceID
 	if activityInfo.NamespaceID != "" {
 		targetNamespaceID = activityInfo.NamespaceID
@@ -425,13 +423,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			if err != nil {
 				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
 			}
-			targetNamespaceID = primitives.UUIDString(namespaceEntry.GetInfo().Id)
+			targetNamespaceID = namespaceEntry.GetInfo().Id
 		}
 	}
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId())}
+		RunId:      task.GetRunId()}
 	taskList := &tasklistpb.TaskList{
 		Name: activityInfo.TaskList,
 	}
@@ -540,7 +538,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},

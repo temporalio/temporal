@@ -31,6 +31,7 @@ import "event/server_message.proto";
 import "tasklist/message.proto";
 import "execution/enum.proto";
 import "execution/message.proto";
+import "execution/server_enum.proto";
 import "execution/server_message.proto";
 import "namespace/server_message.proto";
 import "replication/server_message.proto";
@@ -59,13 +60,13 @@ message StartWorkflowExecutionResponse {
 
 message GetMutableStateRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
 }
 
 message GetMutableStateResponse {
-    execution.WorkflowExecution execution = 1;
+    common.WorkflowExecution execution = 1;
     common.WorkflowType workflowType = 2;
     int64 nextEventId = 3;
     int64 previousStartedEventId = 4;
@@ -81,10 +82,7 @@ message GetMutableStateResponse {
     int32 eventStoreVersion = 13;
     bytes currentBranchToken = 14;
     map<string, replication.ReplicationInfo> replicationInfo = 15;
-    // TODO: when migrating to gRPC, make this a enum
-    // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
-    int32 workflowState = 16;
+    execution.WorkflowExecutionState workflowState = 16;
     execution.WorkflowExecutionStatus workflowStatus = 17;
     event.VersionHistories versionHistories = 18;
     bool isStickyTaskListEnabled = 19;
@@ -92,13 +90,13 @@ message GetMutableStateResponse {
 
 message PollMutableStateRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
 }
 
 message PollMutableStateResponse {
-    execution.WorkflowExecution execution = 1;
+    common.WorkflowExecution execution = 1;
     common.WorkflowType workflowType = 2;
     int64 nextEventId = 3;
     int64 previousStartedEventId = 4;
@@ -115,13 +113,13 @@ message PollMutableStateResponse {
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
     // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
-    int32 workflowState = 15;
+    execution.WorkflowExecutionState workflowState = 15;
     execution.WorkflowExecutionStatus workflowStatus = 16;
 }
 
 message ResetStickyTaskListRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
 }
 
 message ResetStickyTaskListResponse {
@@ -129,7 +127,7 @@ message ResetStickyTaskListResponse {
 
 message RecordDecisionTaskStartedRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
@@ -156,7 +154,7 @@ message RecordDecisionTaskStartedResponse {
 
 message RecordActivityTaskStartedRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
@@ -227,7 +225,7 @@ message RespondActivityTaskCanceledResponse {
 message SignalWorkflowExecutionRequest {
     string namespaceId = 1;
     workflowservice.SignalWorkflowExecutionRequest signalRequest = 2;
-    execution.WorkflowExecution externalWorkflowExecution = 3;
+    common.WorkflowExecution externalWorkflowExecution = 3;
     bool childWorkflowOnly = 4;
 }
 
@@ -245,7 +243,7 @@ message SignalWithStartWorkflowExecutionResponse {
 
 message RemoveSignalMutableStateRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     string requestId = 3;
 }
 
@@ -273,7 +271,7 @@ message RequestCancelWorkflowExecutionRequest {
     string namespaceId = 1;
     workflowservice.RequestCancelWorkflowExecutionRequest cancelRequest = 2;
     int64 externalInitiatedEventId = 3;
-    execution.WorkflowExecution externalWorkflowExecution = 4;
+    common.WorkflowExecution externalWorkflowExecution = 4;
     bool childWorkflowOnly = 5;
 }
 
@@ -282,7 +280,7 @@ message RequestCancelWorkflowExecutionResponse {
 
 message ScheduleDecisionTaskRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     bool isFirstDecision = 3;
 }
 
@@ -298,9 +296,9 @@ message ScheduleDecisionTaskResponse {
 **/
 message RecordChildExecutionCompletedRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     int64 initiatedId = 3;
-    execution.WorkflowExecution completedExecution = 4;
+    common.WorkflowExecution completedExecution = 4;
     event.HistoryEvent completionEvent = 5;
 }
 
@@ -322,7 +320,7 @@ message DescribeWorkflowExecutionResponse {
 message ReplicateEventsRequest {
     string sourceCluster = 1;
     string namespaceId = 2;
-    execution.WorkflowExecution workflowExecution = 3;
+    common.WorkflowExecution workflowExecution = 3;
     int64 firstEventId = 4;
     int64 nextEventId = 5;
     int64 version = 6;
@@ -342,7 +340,7 @@ message ReplicateEventsResponse {
 
 message ReplicateRawEventsRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     map<string, replication.ReplicationInfo> replicationInfo = 3;
     common.DataBlob history = 4;
     common.DataBlob newRunHistory = 5;
@@ -355,7 +353,7 @@ message ReplicateRawEventsResponse {
 
 message ReplicateEventsV2Request {
     string namespaceId = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     repeated event.VersionHistoryItem versionHistoryItems = 3;
     common.DataBlob events = 4;
     // New run events does not need version history since there is no prior events.
@@ -397,7 +395,7 @@ message SyncActivityResponse {
 
 message DescribeMutableStateRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
 }
 
 message DescribeMutableStateResponse {
@@ -410,7 +408,7 @@ message DescribeHistoryHostRequest {
     //ip:port
     string hostAddress = 1;
     int32 shardIdForHost = 2;
-    execution.WorkflowExecution executionForHost = 3;
+    common.WorkflowExecution executionForHost = 3;
 }
 
 message DescribeHistoryHostResponse {
@@ -431,7 +429,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    int32 type = 2;
+    common.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }

@@ -201,7 +201,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
 	// test upsert
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
@@ -249,7 +249,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	// verify DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -862,7 +862,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	decisionCount := 0
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
@@ -1061,7 +1061,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
@@ -1092,7 +1092,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},

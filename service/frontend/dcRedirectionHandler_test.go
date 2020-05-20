@@ -40,7 +40,6 @@ import (
 	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -408,7 +407,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -527,7 +526,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCanceledRequest{
@@ -575,7 +574,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCompletedRequest{
@@ -623,7 +622,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -671,7 +670,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondDecisionTaskCompletedRequest{
@@ -698,7 +697,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(s.namespaceID),
+		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondDecisionTaskFailedRequest{

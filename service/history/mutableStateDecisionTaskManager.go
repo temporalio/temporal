@@ -37,9 +37,10 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -64,7 +65,7 @@ type (
 		) (*decisionInfo, error)
 		ReplicateDecisionTaskCompletedEvent(event *eventpb.HistoryEvent) error
 		ReplicateDecisionTaskFailedEvent() error
-		ReplicateDecisionTaskTimedOutEvent(timeoutType eventpb.TimeoutType) error
+		ReplicateDecisionTaskTimedOutEvent(timeoutType commonpb.TimeoutType) error
 
 		AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*eventpb.HistoryEvent, error)
 		AddDecisionTaskScheduledEventAsHeartbeat(
@@ -136,9 +137,9 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.msb.GetWorkflowStateStatus()
-	if state != persistence.WorkflowStateZombie {
+	if state != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 		if err := m.msb.UpdateWorkflowStateStatus(
-			persistence.WorkflowStateRunning,
+			executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 			executionpb.WorkflowExecutionStatus_Running,
 		); err != nil {
 			return nil, err
@@ -251,11 +252,11 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskFailedEvent()
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent(
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 ) error {
 	incrementAttempt := true
 	// Do not increment decision attempt in the case of sticky timeout to prevent creating next decision as transient
-	if timeoutType == eventpb.TimeoutType_ScheduleToStart {
+	if timeoutType == commonpb.TimeoutType_ScheduleToStart {
 		incrementAttempt = false
 	}
 	m.FailDecision(incrementAttempt)
@@ -278,9 +279,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTime
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, eventpb.TimeoutType_ScheduleToStart)
+	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, commonpb.TimeoutType_ScheduleToStart)
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutType_ScheduleToStart); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TimeoutType_ScheduleToStart); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -562,10 +563,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 	var event *eventpb.HistoryEvent
 	// Avoid creating new history events when decisions are continuously timing out
 	if dt.Attempt == 0 {
-		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, eventpb.TimeoutType_StartToClose)
+		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, commonpb.TimeoutType_StartToClose)
 	}
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutType_StartToClose); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TimeoutType_StartToClose); err != nil {
 		return nil, err
 	}
 	return event, nil

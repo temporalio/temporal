@@ -37,7 +37,8 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
+
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 )
 
 type (
@@ -130,17 +131,17 @@ func (r *nDCWorkflowImpl) happensAfter(
 func (r *nDCWorkflowImpl) revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
-	if state != persistence.WorkflowStateZombie {
+	if state != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 		return nil
-	} else if state == persistence.WorkflowStateCompleted {
+	} else if state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		// workflow already finished
 		return nil
 	}
 
 	// workflow is in zombie state, need to set the state correctly accordingly
-	state = persistence.WorkflowStateCreated
+	state = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
 	if r.mutableState.HasProcessedOrPendingDecision() {
-		state = persistence.WorkflowStateRunning
+		state = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
@@ -275,7 +276,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
-		persistence.WorkflowStateZombie,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie,
 		executionpb.WorkflowExecutionStatus_Running,
 	)
 }

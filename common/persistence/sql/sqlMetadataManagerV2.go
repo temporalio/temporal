@@ -84,11 +84,16 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 		return nil, err
 	}
 
+	idBytes, err := primitives.ParseUUID(request.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	var resp *persistence.CreateNamespaceResponse
 	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
 		if _, err1 := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
 			Name:                request.Name,
-			ID:                  request.ID,
+			ID:                  idBytes,
 			Data:                request.Namespace.Data,
 			DataEncoding:        request.Namespace.Encoding.String(),
 			IsGlobal:            request.IsGlobal,
@@ -112,14 +117,18 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 }
 
 func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.InternalGetNamespaceResponse, error) {
+	idBytes, err := primitives.ParseUUID(request.ID)
+	if err != nil {
+		return nil, err
+	}
 	filter := &sqlplugin.NamespaceFilter{}
 	switch {
-	case request.Name != "" && request.ID != nil:
+	case request.Name != "" && request.ID != "":
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
 	case request.Name != "":
 		filter.Name = &request.Name
 	case len(request.ID) != 0:
-		filter.ID = &request.ID
+		filter.ID = &idBytes
 	default:
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
@@ -131,7 +140,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 			// We did not return in the above for-loop because there were no rows.
 			identity := request.Name
 			if len(request.ID) > 0 {
-				identity = request.ID.String()
+				identity = request.ID
 			}
 
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
@@ -157,10 +166,15 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 }
 
 func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
+	idBytes, err := primitives.ParseUUID(request.Id)
+	if err != nil {
+		return err
+	}
+
 	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
 		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
 			Name:                request.Name,
-			ID:                  request.Id,
+			ID:                  idBytes,
 			Data:                request.Namespace.Data,
 			DataEncoding:        request.Namespace.Encoding.String(),
 			NotificationVersion: request.NotificationVersion,
@@ -183,8 +197,13 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
+	idBytes, err := primitives.ParseUUID(request.ID)
+	if err != nil {
+		return err
+	}
+
 	return m.txExecute("DeleteNamespace", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: &request.ID})
+		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: &idBytes})
 		return err
 	})
 }
