@@ -395,10 +395,10 @@ func AdminRemoveTask(c *cli.Context) {
 	}
 }
 
-// AdminDescribeShard describes history host
+// AdminDescribeShard describes shard by shard id
 func AdminDescribeShard(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	pFactory := InitializePersistenceFactory(c)
+	pFactory := CreatePersistenceFactory(c)
 	shardManager, err := pFactory.NewShardManager()
 
 	if err != nil {
