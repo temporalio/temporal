@@ -78,6 +78,10 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 	localCertProvider CertProvider,
 	settingsProvider CertProvider,
 ) (*tls.Config, error) {
+	if !localCertProvider.GetSettings().IsEnabled() {
+		return nil, nil
+	}
+
 	// Check if exists under a read lock first
 	s.RLock()
 	if *cachedConfig != nil {
@@ -161,13 +165,9 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 		clientCerts = []tls.Certificate{*cert}
 	}
 
-	// No client settings
-	if clientCerts == nil && serverCa == nil {
-		return nil, nil
-	}
-
 	return &tls.Config{
 		Certificates: clientCerts,
 		RootCAs:      serverCa,
+		ServerName:   remoteProvider.GetSettings().Client.ServerName,
 	}, nil
 }
