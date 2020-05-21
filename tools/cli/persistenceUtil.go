@@ -46,7 +46,6 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 	}
 
 	visibilityStore, _ := CreateDefaultDBConfig(c)
-
 	persistence := config.Persistence{
 		DefaultStore:    "db-default",
 		VisibilityStore: "db-visibility",
@@ -55,7 +54,6 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 			"db-visibility": visibilityStore,
 		},
 	}
-
 	params := resource.BootstrapParams{}
 	params.Name = "cli"
 
@@ -75,7 +73,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 	engine := getRequiredOption(c, FlagDBEngine)
 
-	if engine == "cassandra" {
+	if engine == cassandraKey {
 		defaultConfig := &config.Cassandra{
 			Hosts:    getRequiredOption(c, FlagDBAddress),
 			Port:     c.Int(FlagDBPort),
