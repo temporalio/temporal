@@ -30,6 +30,7 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/temporalio/temporal/common/auth"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
@@ -63,7 +64,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 		params.AbstractDatastoreFactory,
 		c.String(FlagTargetCluster),
 		nil, // MetricsClient
-		nil,
+		loggerimpl.NewNopLogger(),
 	)
 
 	return factory
