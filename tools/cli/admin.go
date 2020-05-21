@@ -832,6 +832,11 @@ func getDBFlags() []cli.Flag {
 			Name:  FlagKeyspace,
 			Usage: "cassandra keyspace",
 		},
+		cli.StringFlag{
+			Name:  FlagVisibilityKeyspace,
+			Value: "temporal_visibility",
+			Usage: "cassandra visibility keyspace",
+		},
 		cli.BoolFlag{
 			Name:  FlagEnableTLS,
 			Usage: "enable TLS over cassandra connection",

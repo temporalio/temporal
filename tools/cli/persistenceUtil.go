@@ -121,7 +121,7 @@ func InitializeVisibilityDBConfig(c *cli.Context) (config.DataStore, error) {
 			Port:     c.Int(FlagDBPort),
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
-			Keyspace: "temporal_visibility", //getRequiredOption(c, FlagKeyspace), TODO
+			Keyspace: getRequiredOption(c, FlagVisibilityKeyspace),
 		}
 
 		if c.Bool(FlagEnableTLS) {
