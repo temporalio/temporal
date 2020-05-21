@@ -71,8 +71,8 @@ const (
 
 	searchAttrInputSeparator = "|"
 
-	cassandraKey = "cassandra"
-	mySQLKey     = "mysql"
+	cassandraDBType = "cassandra"
+	mySQLDBType     = "mysql"
 )
 
 var envKeysForUserName = []string{

@@ -74,7 +74,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 	engine := getRequiredOption(c, FlagDBEngine)
 
-	if engine == cassandraKey {
+	if engine == cassandraDBType {
 		defaultConfig := &config.Cassandra{
 			Hosts:    getRequiredOption(c, FlagDBAddress),
 			Port:     c.Int(FlagDBPort),
