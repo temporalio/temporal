@@ -25,51 +25,126 @@
 package cli
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/auth"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
+	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 // InitializePersistenceFactory returns an initialized persistence managers factory.
 // The factory allows to easily initialize concrete persistence managers to execute commands against persistence layer
 func InitializePersistenceFactory(c *cli.Context) persistenceClient.Factory {
-	config := loadConfig(c)
 
-	if err := config.Validate(); err != nil {
-		log.Fatalf("config validation failed: %v", err)
+	defaultStore, err := InitializeDefaultDBConfig(c)
+
+	if err != nil {
+		ErrorAndExit("InitializePersistenceFactory err", err)
+	}
+
+	visibilityStore, err := InitializeVisibilityDBConfig(c)
+
+	if err != nil {
+		ErrorAndExit("InitializePersistenceFactory err", err)
+	}
+
+	persistence := config.Persistence{
+		DefaultStore:    "db-default",
+		VisibilityStore: "db-visibility",
+		DataStores: map[string]config.DataStore{
+			"db-default":    defaultStore,
+			"db-visibility": visibilityStore,
+		},
 	}
 
 	params := resource.BootstrapParams{}
 	params.Name = "cli"
-	params.Logger = loggerimpl.NewLogger(config.Log.NewZapLogger())
-	params.PersistenceConfig = config.Persistence
 
-	doneC := make(chan struct{})
-	dConfig, err := dynamicconfig.NewFileBasedClient(&config.DynamicConfigClient, params.Logger.WithTags(tag.Service(params.Name)), doneC)
-	if err != nil {
-		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
-		params.DynamicConfig = dynamicconfig.NewNopClient()
-	}
-	params.DynamicConfig = dConfig
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
-
-	clusterMetadata := config.ClusterMetadata
-
-	logger := params.Logger.WithTags(tag.ComponentMetadataInitializer)
 	factory := persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
+		&persistence,
+		GetQPS,
 		params.AbstractDatastoreFactory,
-		clusterMetadata.CurrentClusterName,
+		c.String(FlagTargetCluster),
 		nil, // MetricsClient
-		logger,
+		nil,
 	)
 
 	return factory
+}
+
+// InitializeDefaultDBConfig return default DB configuration based on provided options
+func InitializeDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
+
+	engine := getRequiredOption(c, FlagDBEngine)
+
+	if engine == "cassandra" {
+		defaultConfig := &config.Cassandra{
+			Hosts:    getRequiredOption(c, FlagDBAddress),
+			Port:     c.Int(FlagDBPort),
+			User:     c.String(FlagUsername),
+			Password: c.String(FlagPassword),
+			Keyspace: getRequiredOption(c, FlagKeyspace),
+		}
+
+		if c.Bool(FlagEnableTLS) {
+			defaultConfig.TLS = &auth.TLS{
+				Enabled:                true,
+				CertFile:               c.String(FlagTLSCertPath),
+				KeyFile:                c.String(FlagTLSKeyPath),
+				CaFile:                 c.String(FlagTLSCaPath),
+				EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+			}
+		}
+
+		defaultStore := config.DataStore{
+			Cassandra: defaultConfig,
+		}
+
+		return defaultStore, nil
+	}
+
+	return config.DataStore{}, fmt.Errorf("DB type is not supported by CLI")
+}
+
+// InitializeVisibilityDBConfig return visibility DB configuration based on provided options
+func InitializeVisibilityDBConfig(c *cli.Context) (config.DataStore, error) {
+
+	engine := getRequiredOption(c, FlagDBEngine)
+
+	if engine == "cassandra" {
+		defaultConfig := &config.Cassandra{
+			Hosts:    getRequiredOption(c, FlagDBAddress),
+			Port:     c.Int(FlagDBPort),
+			User:     c.String(FlagUsername),
+			Password: c.String(FlagPassword),
+			Keyspace: "temporal_visibility", //getRequiredOption(c, FlagKeyspace), TODO
+		}
+
+		if c.Bool(FlagEnableTLS) {
+			defaultConfig.TLS = &auth.TLS{
+				Enabled:                true,
+				CertFile:               c.String(FlagTLSCertPath),
+				KeyFile:                c.String(FlagTLSKeyPath),
+				CaFile:                 c.String(FlagTLSCaPath),
+				EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+			}
+		}
+
+		defaultStore := config.DataStore{
+			Cassandra: defaultConfig,
+		}
+
+		return defaultStore, nil
+	}
+
+	return config.DataStore{}, fmt.Errorf("DB type is not supported by CLI")
+}
+
+// GetQPS returns default queries per second
+func GetQPS(...dynamicconfig.FilterOption) int {
+	return 3000
 }
