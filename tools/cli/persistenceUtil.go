@@ -36,21 +36,16 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
-// InitializePersistenceFactory returns an initialized persistence managers factory.
+// CreatePersistenceFactory returns an initialized persistence managers factory.
 // The factory allows to easily initialize concrete persistence managers to execute commands against persistence layer
-func InitializePersistenceFactory(c *cli.Context) persistenceClient.Factory {
+func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 
-	defaultStore, err := InitializeDefaultDBConfig(c)
-
+	defaultStore, err := CreateDefaultDBConfig(c)
 	if err != nil {
-		ErrorAndExit("InitializePersistenceFactory err", err)
+		ErrorAndExit("CreatePersistenceFactory err", err)
 	}
 
-	visibilityStore, err := InitializeVisibilityDBConfig(c)
-
-	if err != nil {
-		ErrorAndExit("InitializePersistenceFactory err", err)
-	}
+	visibilityStore, _ := CreateDefaultDBConfig(c)
 
 	persistence := config.Persistence{
 		DefaultStore:    "db-default",
@@ -76,9 +71,8 @@ func InitializePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 	return factory
 }
 
-// InitializeDefaultDBConfig return default DB configuration based on provided options
-func InitializeDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
-
+// CreateDefaultDBConfig return default DB configuration based on provided options
+func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 	engine := getRequiredOption(c, FlagDBEngine)
 
 	if engine == "cassandra" {
@@ -88,40 +82,6 @@ func InitializeDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
 			Keyspace: getRequiredOption(c, FlagKeyspace),
-		}
-
-		if c.Bool(FlagEnableTLS) {
-			defaultConfig.TLS = &auth.TLS{
-				Enabled:                true,
-				CertFile:               c.String(FlagTLSCertPath),
-				KeyFile:                c.String(FlagTLSKeyPath),
-				CaFile:                 c.String(FlagTLSCaPath),
-				EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
-			}
-		}
-
-		defaultStore := config.DataStore{
-			Cassandra: defaultConfig,
-		}
-
-		return defaultStore, nil
-	}
-
-	return config.DataStore{}, fmt.Errorf("DB type is not supported by CLI")
-}
-
-// InitializeVisibilityDBConfig return visibility DB configuration based on provided options
-func InitializeVisibilityDBConfig(c *cli.Context) (config.DataStore, error) {
-
-	engine := getRequiredOption(c, FlagDBEngine)
-
-	if engine == "cassandra" {
-		defaultConfig := &config.Cassandra{
-			Hosts:    getRequiredOption(c, FlagDBAddress),
-			Port:     c.Int(FlagDBPort),
-			User:     c.String(FlagUsername),
-			Password: c.String(FlagPassword),
-			Keyspace: getRequiredOption(c, FlagVisibilityKeyspace),
 		}
 
 		if c.Bool(FlagEnableTLS) {

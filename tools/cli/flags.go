@@ -31,7 +31,6 @@ const (
 	FlagUsername                          = "username"
 	FlagPassword                          = "password"
 	FlagKeyspace                          = "keyspace"
-	FlagVisibilityKeyspace                = "visibility-keyspace"
 	FlagAddress                           = "address"
 	FlagAddressWithAlias                  = FlagAddress + ", ad"
 	FlagHistoryAddress                    = "history_address"
