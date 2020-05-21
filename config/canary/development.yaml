@@ -1,7 +1,7 @@
 canary:
   namespaces: ["canary"]
-  excludes: ["workflow.searchAttributes", "workflow.batch"]
+  excludes: ["workflow.searchAttributes", "workflow.batch", "workflow.visibility", "workflow.cancellation" ]
 
-cadence:
+temporal:
   service: "frontend"
-  host: "127.0.0.1:7933"
+  host: "127.0.0.1:7233"
