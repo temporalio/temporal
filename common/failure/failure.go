@@ -60,3 +60,31 @@ func NewTimeoutFailure(timeoutType commonpb.TimeoutType) *failurepb.Failure {
 
 	return f
 }
+
+func Truncate(f *failurepb.Failure, maxSize int) *failurepb.Failure {
+	if f == nil {
+		return nil
+	}
+
+	newFailure := &failurepb.Failure{
+		Source: f.Source,
+	}
+
+	if len(f.Message) > maxSize {
+		newFailure.Message = f.Message[:maxSize]
+		return newFailure
+	}
+	newFailure.Message = f.Message
+	maxSize -= len(newFailure.Message)
+
+	if len(f.StackTrace) > maxSize {
+		newFailure.StackTrace = f.StackTrace[:maxSize]
+		return newFailure
+	}
+	newFailure.StackTrace = f.StackTrace
+	maxSize -= len(newFailure.StackTrace)
+
+	newFailure.Cause = Truncate(f.Cause, maxSize)
+
+	return newFailure
+}

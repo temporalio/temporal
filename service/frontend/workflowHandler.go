@@ -1003,6 +1003,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondDecisionTaskFailed"),
 	); err != nil {
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
+
 		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
 		request.Failure = nil
 	}
@@ -1593,8 +1597,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
-		// details exceeds blob size limit, we would truncate the details and put a specific error reason
-		request.Failure = failure.NewServerFailure(common.FailureReasonFailureDetailsExceedsLimit, false)
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
 	}
 
 	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1688,8 +1693,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
-		// details exceeds blob size limit, we would truncate the details and put a specific error reason
-		request.Failure = failure.NewServerFailure(common.FailureReasonFailureDetailsExceedsLimit, false)
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
+		request.Failure = serverFailure
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{

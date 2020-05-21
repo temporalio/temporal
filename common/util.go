@@ -81,7 +81,7 @@ const (
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
-	FailureReasonFailureDetailsExceedsLimit = "Failure details exceed size limit."
+	FailureReasonFailureExceedsLimit = "Failure exceeds size limit."
 	// FailureReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
