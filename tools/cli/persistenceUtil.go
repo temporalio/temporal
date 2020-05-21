@@ -100,7 +100,7 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 		return defaultStore, nil
 	}
 
-	return config.DataStore{}, fmt.Errorf("DB type is not supported by CLI")
+	return config.DataStore{}, fmt.Errorf("DB type %q is not supported by CLI", engine)
 }
 
 // GetQPS returns default queries per second
