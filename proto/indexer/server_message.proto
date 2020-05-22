@@ -27,10 +27,12 @@ import "indexer/server_enum.proto";
 
 message Field {
     FieldType type = 1;
-    string stringData = 2;
-    int64 intData = 3;
-    bool boolData = 4;
-    bytes binaryData = 5;
+    oneof data {
+        string stringData = 2;
+        int64 intData = 3;
+        bool boolData = 4;
+        bytes binaryData = 5;
+    }
 }
 
 message Message {
