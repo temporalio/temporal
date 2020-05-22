@@ -61,13 +61,11 @@ require (
 	go.opencensus.io v0.22.2 // indirect
 	go.uber.org/atomic v1.5.1
 	go.uber.org/cadence v0.11.3-0.20200408211929-2e8992a5ef2d
-	go.uber.org/fx v1.9.0
 	go.uber.org/multierr v1.3.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.0
 	go.uber.org/zap v1.12.0
-	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
