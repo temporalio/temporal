@@ -70,6 +70,9 @@ const (
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
 
 	searchAttrInputSeparator = "|"
+
+	cassandraDBType = "cassandra"
+	mySQLDBType     = "mysql"
 )
 
 var envKeysForUserName = []string{
