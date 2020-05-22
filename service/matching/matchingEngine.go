@@ -621,13 +621,13 @@ func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.Lis
 	if err != nil {
 		return nil, err
 	}
-	partitionHostInfo := make([]*tasklistpb.TaskListPartitionMetadata, len(partitions))
+	partitionHostInfo := []*tasklistpb.TaskListPartitionMetadata{}
 
 	if err != nil {
 		return nil, err
 	}
 	for _, partition := range partitions {
-		if host, err := e.getHostInfo(partition); err != nil {
+		if host, err := e.getHostInfo(partition); err == nil {
 			partitionHostInfo = append(partitionHostInfo,
 				&tasklistpb.TaskListPartitionMetadata{
 					Key:           partition,
