@@ -45,18 +45,21 @@ func TestTruncate(t *testing.T) {
 	newFailure := Truncate(f, 4)
 	assert.Len(newFailure.GetMessage(), 4)
 	assert.Equal(f.GetSource(), newFailure.GetSource())
-	assert.Nil(newFailure.GetFailureInfo())
+	assert.NotNil(newFailure.GetServerFailureInfo())
+	assert.True(newFailure.GetServerFailureInfo().GetNonRetryable())
 
 	f.StackTrace = "some stack trace"
 	newFailure = Truncate(f, len(f.GetMessage())+4)
 	assert.Equal(f.GetMessage(), newFailure.GetMessage())
 	assert.Equal(f.GetSource(), newFailure.GetSource())
 	assert.Len(newFailure.GetStackTrace(), 4)
-	assert.Nil(newFailure.GetFailureInfo())
+	assert.NotNil(newFailure.GetServerFailureInfo())
+	assert.True(newFailure.GetServerFailureInfo().GetNonRetryable())
 
 	newFailure = Truncate(f, 1000)
 	assert.Equal(f.GetMessage(), newFailure.GetMessage())
 	assert.Equal(f.GetSource(), newFailure.GetSource())
 	assert.Equal(f.GetStackTrace(), newFailure.GetStackTrace())
-	assert.Nil(newFailure.GetFailureInfo())
+	assert.NotNil(newFailure.GetServerFailureInfo())
+	assert.True(newFailure.GetServerFailureInfo().GetNonRetryable())
 }

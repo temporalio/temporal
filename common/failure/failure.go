@@ -70,6 +70,20 @@ func Truncate(f *failurepb.Failure, maxSize int) *failurepb.Failure {
 		Source: f.Source,
 	}
 
+	// Keep failure info for ApplicationFailureInfo and for ServerFailureInfo to persist NonRetryable flag.
+	if f.GetApplicationFailureInfo() != nil {
+		newFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			NonRetryable: f.GetApplicationFailureInfo().GetNonRetryable(),
+			Type:         f.GetApplicationFailureInfo().GetType(),
+		}}
+	}
+
+	if f.GetServerFailureInfo() != nil {
+		newFailure.FailureInfo = &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+			NonRetryable: f.GetServerFailureInfo().GetNonRetryable(),
+		}}
+	}
+
 	if len(f.Message) > maxSize {
 		newFailure.Message = f.Message[:maxSize]
 		return newFailure
