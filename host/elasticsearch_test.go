@@ -1103,7 +1103,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.Equal(eventpb.EventType_DecisionTaskFailed, decisionFailedEvent.GetEventType())
 	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
 	s.Equal(eventpb.DecisionTaskFailedCause_BadSearchAttributes, failedDecisionAttr.GetCause())
-	s.NotNil(failedDecisionAttr.GetDetails())
+	s.NotNil(failedDecisionAttr.GetFailure())
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
