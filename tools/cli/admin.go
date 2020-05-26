@@ -839,7 +839,7 @@ func getDBFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagDBAddress,
 			Value: "127.0.0.1",
-			Usage: "persistence address(right now only cassandra is fully supported)",
+			Usage: "persistence address (right now only cassandra is fully supported)",
 		},
 		cli.IntFlag{
 			Name:  FlagDBPort,
