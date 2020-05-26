@@ -864,6 +864,12 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 }
 
 // Timer related methods.
+func (m *executionManagerImpl) GetTimerTask(
+	request *GetTimerTaskRequest,
+) (*GetTimerTaskResponse, error) {
+	return m.persistence.GetTimerTask(request)
+}
+
 func (m *executionManagerImpl) GetTimerIndexTasks(
 	request *GetTimerIndexTasksRequest,
 ) (*GetTimerIndexTasksResponse, error) {

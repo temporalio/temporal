@@ -952,6 +952,18 @@ type (
 		Limit        int   // Limit on the max number of tasks that can be completed. Required param
 	}
 
+	// GetTimerTaskRequest is the request for GetTimerTask
+	GetTimerTaskRequest struct {
+		ShardID             int32
+		TaskID              int64
+		VisibilityTimestamp time.Time
+	}
+
+	// GetTimerTaskResponse is the response to GetTimerTask
+	GetTimerTaskResponse struct {
+		TimerTaskInfo *persistenceblobs.TimerTaskInfo
+	}
+
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
 	// TODO: replace this with an iterator that can configure min and max index.
 	GetTimerIndexTasksRequest struct {
@@ -1342,6 +1354,7 @@ type (
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error

@@ -367,6 +367,24 @@ func AdminGetShardID(c *cli.Context) {
 	fmt.Printf("ShardId for workflowId: %v is %v \n", wid, shardID)
 }
 
+// AdminDescribeTask outputs the details of a task given Task Id, Task Type, Shard Id and Visibility Timestamp
+func AdminDescribeTask(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	tid := getRequiredIntOption(c, FlagTaskID)
+	vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager(sid)
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
+
+	req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
+	timerTask, err := executionManager.GetTimerTask(req)
+
+	prettyPrintJSONObject(timerTask)
+}
+
 // AdminRemoveTask describes history host
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
