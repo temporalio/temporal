@@ -142,9 +142,8 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
@@ -162,9 +161,8 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 
@@ -188,9 +186,8 @@ func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *Archive
 		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)

@@ -168,7 +168,7 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 			switch {
 			case isResponseSuccess(resp.Status):
 				p.ackKafkaMsg(key)
-			case !isResponseRetriable(resp.Status):
+			case !isResponseRetryable(resp.Status):
 				wid, rid, namespaceID := p.getMsgWithInfo(key)
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
@@ -299,14 +299,14 @@ func isResponseSuccess(status int) bool {
 	return false
 }
 
-// isResponseRetriable is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
+// isResponseRetryable is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
 // responses with these status will be kept in queue and retried until success
 // 408 - Request Timeout
 // 429 - Too Many Requests
 // 500 - Node not connected
 // 503 - Service Unavailable
 // 507 - Insufficient Storage
-func isResponseRetriable(status int) bool {
+func isResponseRetryable(status int) bool {
 	switch status {
 	case 408, 429, 500, 503, 507:
 		return true

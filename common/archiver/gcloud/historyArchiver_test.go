@@ -288,7 +288,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	h.Error(err)
 }
 
-func (h *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
+func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
@@ -301,7 +301,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, errors.New("upload non-retriable error")),
+		historyIterator.EXPECT().Next().Return(nil, errors.New("upload non-retryable error")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -314,8 +314,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(ctx, h.testArchivalURI, request, archiver.GetNonRetriableErrorOption(errUploadNonRetriable))
-	h.Equal(errUploadNonRetriable, err)
+	err = historyArchiver.Archive(ctx, h.testArchivalURI, request, archiver.GetNonRetryableErrorOption(errUploadNonRetryable))
+	h.Equal(errUploadNonRetryable, err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Success() {

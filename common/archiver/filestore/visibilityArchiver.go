@@ -98,32 +98,32 @@ func (v *visibilityArchiver) Archive(
 ) (err error) {
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	defer func() {
-		if err != nil && featureCatalog.NonRetriableError != nil {
-			err = featureCatalog.NonRetriableError()
+		if err != nil && featureCatalog.NonRetryableError != nil {
+			err = featureCatalog.NonRetryableError()
 		}
 	}()
 
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 
 	if err := v.ValidateURI(URI); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 		return err
 	}
 
 	if err := archiver.ValidateVisibilityArchivalRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
 		return err
 	}
 
 	dirPath := path.Join(URI.Path(), request.GetNamespaceId())
 	if err = mkdirAll(dirPath, v.dirMode); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
 	}
 
 	encodedVisibilityRecord, err := encode(request)
 	if err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
 		return err
 	}
 
@@ -131,7 +131,7 @@ func (v *visibilityArchiver) Archive(
 	// This format allows the archiver to sort all records without reading the file contents
 	filename := constructVisibilityFilename(request.CloseTimestamp, request.GetRunId())
 	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
 	}
 
