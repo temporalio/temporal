@@ -40,11 +40,11 @@ const (
 	CLI = "cli"
 
 	// SupportedGoSDKVersion indicates the highest go sdk version server will accept requests from
-	SupportedGoSDKVersion = "1.5.0"
+	SupportedGoSDKVersion = "1.6.0"
 	// SupportedJavaSDKVersion indicates the highest java sdk version server will accept requests from
-	SupportedJavaSDKVersion = "1.5.0"
+	SupportedJavaSDKVersion = "1.6.0"
 	// SupportedCLIVersion indicates the highest cli version server will accept requests from
-	SupportedCLIVersion = "1.5.0"
+	SupportedCLIVersion = "1.6.0"
 
 	// StickyQueryUnknownImplConstraints indicates the minimum client version of an unknown client type which supports StickyQuery
 	StickyQueryUnknownImplConstraints = "1.0.0"
