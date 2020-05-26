@@ -48,13 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 )
 
-// Namespace status
-const (
-	NamespaceStatusRegistered = iota
-	NamespaceStatusDeprecated
-	NamespaceStatusDeleted
-)
-
 const (
 	// EventStoreVersion is already deprecated, this is used for forward
 	// compatibility (so that rollback is possible).

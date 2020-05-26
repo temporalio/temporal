@@ -26,6 +26,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
+import "common/enum.proto";
 import "common/message.proto";
 import "common/server_enum.proto";
 
@@ -307,7 +308,7 @@ message ChildExecutionInfo {
     string createRequestId = 10;
     string namespace = 11;
     string workflowTypeName = 12;
-    int32 parentClosePolicy = 13;
+    common.ParentClosePolicy parentClosePolicy = 13;
     int64 initiatedId = 14;
 }
 
