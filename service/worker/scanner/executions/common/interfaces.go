@@ -39,8 +39,8 @@ type (
 	// It can be used to run a group of invariant checks or fixes.
 	// It is responsible for running invariants in their dependency order.
 	InvariantManager interface {
-		RunChecks(Execution) CheckResult
-		RunFixes(Execution) FixResult
+		RunChecks(Execution) ManagerCheckResult
+		RunFixes(Execution) ManagerFixResult
 		InvariantTypes() []InvariantType
 	}
 
@@ -49,7 +49,7 @@ type (
 	// It can also be used to fix the invariant for an execution.
 	Invariant interface {
 		Check(Execution, *InvariantResourceBag) CheckResult
-		Fix(Execution) FixResult
+		Fix(Execution, *InvariantResourceBag) FixResult
 		InvariantType() InvariantType
 	}
 

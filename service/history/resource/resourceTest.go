@@ -22,6 +22,7 @@ package resource
 
 import (
 	"github.com/golang/mock/gomock"
+
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/service/history/events"

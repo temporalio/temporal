@@ -96,8 +96,14 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	}
 }
 
-func (o *openCurrentExecution) Fix(execution common.Execution) common.FixResult {
-	return common.DeleteExecution(&execution, o.pr)
+func (o *openCurrentExecution) Fix(execution common.Execution, resources *common.InvariantResourceBag) common.FixResult {
+	fixResult, checkResult := checkBeforeFix(o, execution, resources)
+	if fixResult != nil {
+		return *fixResult
+	}
+	fixResult = common.DeleteExecution(&execution, o.pr)
+	fixResult.CheckResult = *checkResult
+	return *fixResult
 }
 
 func (o *openCurrentExecution) InvariantType() common.InvariantType {

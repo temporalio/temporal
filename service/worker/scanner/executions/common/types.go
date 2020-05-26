@@ -42,6 +42,8 @@ type (
 	FixResultType string
 	// InvariantType is the type of an invariant
 	InvariantType string
+	// InvariantCollection is a type which indicates a sorted collection of invariants
+	InvariantCollection int
 )
 
 const (
@@ -65,6 +67,11 @@ const (
 	ValidFirstEventInvariantType = "valid_first_event"
 	// OpenCurrentExecution asserts that an open concrete execution must have a valid current execution
 	OpenCurrentExecution = "open_current_execution"
+
+	// InvariantCollectionMutableState is the collection of invariants relating to mutable state
+	InvariantCollectionMutableState InvariantCollection = iota
+	// InvariantCollectionHistory is the collection  of invariants relating to history
+	InvariantCollectionHistory
 )
 
 // The following are types related to Invariant.
@@ -96,8 +103,21 @@ type (
 	// FixResult is the result of running Fix.
 	FixResult struct {
 		FixResultType FixResultType
+		CheckResult   CheckResult
 		Info          string
 		InfoDetails   string
+	}
+
+	// ManagerCheckResult is the result of running a sorted list of checks
+	ManagerCheckResult struct {
+		CheckResultType CheckResultType
+		CheckResults    []CheckResult
+	}
+
+	// ManagerFixResult is the result of running a sorted list of fixes
+	ManagerFixResult struct {
+		FixResultType FixResultType
+		FixResults    []FixResult
 	}
 )
 
@@ -186,13 +206,14 @@ type (
 	// ScanOutputEntity represents a single execution that should be durably recorded by Scan.
 	ScanOutputEntity struct {
 		Execution Execution
-		Result    CheckResult
+		Result    ManagerCheckResult
 	}
 
 	// FixOutputEntity represents a single execution that should be durably recorded by fix.
 	// It contains the ScanOutputEntity that was given as input to fix.
 	FixOutputEntity struct {
-		ScanOutputEntity ScanOutputEntity
-		Result           FixResult
+		Execution Execution
+		Input     ScanOutputEntity
+		Result    ManagerFixResult
 	}
 )

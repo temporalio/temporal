@@ -383,11 +383,11 @@ func (s *UtilSuite) TestDeleteExecution() {
 	testCases := []struct {
 		deleteConcreteErr error
 		deleteCurrentErr  error
-		expectedFixResult FixResult
+		expectedFixResult *FixResult
 	}{
 		{
 			deleteConcreteErr: errors.New("error deleting concrete execution"),
-			expectedFixResult: FixResult{
+			expectedFixResult: &FixResult{
 				FixResultType: FixResultTypeFailed,
 				Info:          "failed to delete concrete workflow execution",
 				InfoDetails:   "error deleting concrete execution",
@@ -395,14 +395,14 @@ func (s *UtilSuite) TestDeleteExecution() {
 		},
 		{
 			deleteCurrentErr: errors.New("error deleting current execution"),
-			expectedFixResult: FixResult{
+			expectedFixResult: &FixResult{
 				FixResultType: FixResultTypeFailed,
 				Info:          "failed to delete current workflow execution",
 				InfoDetails:   "error deleting current execution",
 			},
 		},
 		{
-			expectedFixResult: FixResult{
+			expectedFixResult: &FixResult{
 				FixResultType: FixResultTypeFixed,
 			},
 		},
