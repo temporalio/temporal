@@ -246,18 +246,18 @@ type (
 		ClientImpl                         string
 		AutoResetPoints                    *serialization.DataBlob
 		// for retry
-		Attempt            int32
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		BranchToken        []byte
-		CronSchedule       string
-		Memo               map[string]*commonpb.Payload
-		SearchAttributes   map[string]*commonpb.Payload
+		Attempt                int32
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetriableErrorTypes []string
+		BranchToken            []byte
+		CronSchedule           string
+		Memo                   map[string]*commonpb.Payload
+		SearchAttributes       map[string]*commonpb.Payload
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64
@@ -302,19 +302,19 @@ type (
 		LastHeartBeatUpdatedTime time.Time
 		TimerTaskStatus          int32
 		// For retry
-		Attempt            int32
-		NamespaceID        string
-		StartedIdentity    string
-		TaskList           string
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		LastFailure        *failurepb.Failure
-		LastWorkerIdentity string
+		Attempt                int32
+		NamespaceID            string
+		StartedIdentity        string
+		TaskList               string
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+		LastFailure            *failurepb.Failure
+		LastWorkerIdentity     string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -772,7 +772,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
-		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
+		RetryNonRetryableErrorTypes:             executionInfo.NonRetriableErrorTypes,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
 		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
@@ -863,7 +863,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
 		BranchToken:                        info.GetEventBranchToken(),
-		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
+		NonRetriableErrorTypes:             info.GetRetryNonRetryableErrorTypes(),
 		SearchAttributes:                   info.GetSearchAttributes(),
 		Memo:                               info.GetMemo(),
 	}
@@ -930,7 +930,7 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
 		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
-		NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
+		NonRetryableErrorTypes:   decoded.GetRetryNonRetryableErrorTypes(),
 		LastFailure:              decoded.GetRetryLastFailure(),
 		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
 	}
@@ -978,7 +978,7 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		RetryBackoffCoefficient:       v.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:   v.MaximumInterval,
 		RetryMaximumAttempts:          v.MaximumAttempts,
-		RetryNonRetryableErrors:       v.NonRetriableErrors,
+		RetryNonRetryableErrorTypes:   v.NonRetryableErrorTypes,
 		RetryLastFailure:              v.LastFailure,
 		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
 	}

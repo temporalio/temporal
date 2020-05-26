@@ -260,7 +260,7 @@ type (
 		MaximumInterval        int32
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
-		NonRetryableErrors     []string
+		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
@@ -529,18 +529,18 @@ type (
 		LastHeartBeatUpdatedTime time.Time
 		TimerTaskStatus          int32
 		// For retry
-		Attempt            int32
-		StartedIdentity    string
-		TaskList           string
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		LastFailure        *failurepb.Failure
-		LastWorkerIdentity string
+		Attempt                int32
+		StartedIdentity        string
+		TaskList               string
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+		LastFailure            *failurepb.Failure
+		LastWorkerIdentity     string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}

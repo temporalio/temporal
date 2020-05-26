@@ -5175,7 +5175,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		MaximumInterval:                    sourceInfo.MaximumInterval,
 		WorkflowExpirationTime:             sourceInfo.WorkflowExpirationTime,
 		MaximumAttempts:                    sourceInfo.MaximumAttempts,
-		NonRetryableErrors:                 sourceInfo.NonRetryableErrors,
+		NonRetryableErrorTypes:             sourceInfo.NonRetryableErrorTypes,
 		BranchToken:                        sourceInfo.BranchToken,
 	}
 }
@@ -5229,7 +5229,7 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		MaximumInterval:          sourceInfo.MaximumInterval,
 		ExpirationTime:           sourceInfo.ExpirationTime,
 		MaximumAttempts:          sourceInfo.MaximumAttempts,
-		NonRetriableErrors:       sourceInfo.NonRetriableErrors,
+		NonRetryableErrorTypes:   sourceInfo.NonRetryableErrorTypes,
 		LastFailure:              sourceInfo.LastFailure,
 		LastWorkerIdentity:       sourceInfo.LastWorkerIdentity,
 		// Not written to database - This is used only for deduping heartbeat timer creation

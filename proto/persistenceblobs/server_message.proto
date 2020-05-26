@@ -73,7 +73,7 @@ message ActivityInfo {
     int32 retryMaximumAttempts = 25;
     int64 retryExpirationTimeNanos = 26;
     double retryBackoffCoefficient = 27;
-    repeated string retryNonRetryableErrors = 28;
+    repeated string retryNonRetryableErrorTypes = 28;
     failure.Failure retryLastFailure = 29;
     string retryLastWorkerIdentity = 30;
     string namespaceId = 31;
@@ -271,7 +271,7 @@ message WorkflowExecutionInfo {
     int32 retryMaximumAttempts = 41;
     double retryBackoffCoefficient = 42;
     int64 retryExpirationTimeNanos = 43;
-    repeated string retryNonRetryableErrors = 44;
+    repeated string retryNonRetryableErrorTypes = 44;
     bool hasRetryPolicy = 45;
     string cronSchedule = 46;
     int32 eventStoreVersion = 47;

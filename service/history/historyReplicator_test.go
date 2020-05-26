@@ -2295,7 +2295,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
 		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
 		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
-		NonRetryableErrors:       retryPolicy.GetNonRetryableErrorTypes(),
+		NonRetryableErrorTypes:   retryPolicy.GetNonRetryableErrorTypes(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3549,7 +3549,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
 		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
 		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
-		NonRetryableErrors:       retryPolicy.GetNonRetryableErrorTypes(),
+		NonRetryableErrorTypes:   retryPolicy.GetNonRetryableErrorTypes(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{

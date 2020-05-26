@@ -1259,7 +1259,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				MaximumInterval:        rand.Int31(),
 				WorkflowExpirationTime: time.Now(),
 				MaximumAttempts:        rand.Int31(),
-				NonRetryableErrors:     []string{"badRequestError", "accessDeniedError"},
+				NonRetryableErrorTypes: []string{"badRequestError", "accessDeniedError"},
 				CronSchedule:           "* * * * *",
 				AutoResetPoints:        &testResetPoints,
 				SearchAttributes:       testSearchAttr,
@@ -1324,7 +1324,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
 	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, info.WorkflowExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrors, info.NonRetryableErrors)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrorTypes, info.NonRetryableErrorTypes)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionStats.HistorySize)
 	saVal, ok := info.SearchAttributes[testSearchAttrKey]
@@ -1418,7 +1418,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.MaximumInterval = math.MaxInt32
 	updatedInfo.MaximumAttempts = math.MaxInt32
 	updatedInfo.WorkflowExpirationTime = time.Now()
-	updatedInfo.NonRetryableErrors = []string{"accessDenied", "badRequest"}
+	updatedInfo.NonRetryableErrorTypes = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
 	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
@@ -1468,7 +1468,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info1.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info1.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info1.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetryableErrors, info1.NonRetryableErrors)
+	s.Equal(updatedInfo.NonRetryableErrorTypes, info1.NonRetryableErrorTypes)
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal1)
@@ -1517,7 +1517,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info2.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetryableErrors, info2.NonRetryableErrors)
+	s.Equal(updatedInfo.NonRetryableErrorTypes, info2.NonRetryableErrorTypes)
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal2)
@@ -1563,7 +1563,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info3.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetryableErrors, info3.NonRetryableErrors)
+	s.Equal(updatedInfo.NonRetryableErrorTypes, info3.NonRetryableErrorTypes)
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal3)
@@ -1609,7 +1609,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info4.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetryableErrors, info4.NonRetryableErrors)
+	s.Equal(updatedInfo.NonRetryableErrorTypes, info4.NonRetryableErrorTypes)
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal4)
@@ -2618,7 +2618,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		MaximumAttempts:          math.MaxInt32,
 		BackoffCoefficient:       5.55,
 		ExpirationTime:           currentTime,
-		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
+		NonRetryableErrorTypes:   []string{"accessDenied", "badRequest"},
 		LastWorkerIdentity:       uuid.New(),
 		LastFailure:              failure.NewServerFailure("some random error", false),
 	}}
@@ -2662,7 +2662,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(activityInfos[0].MaximumAttempts, ai.MaximumAttempts)
 	s.Equal(activityInfos[0].BackoffCoefficient, ai.BackoffCoefficient)
 	s.EqualTimes(activityInfos[0].ExpirationTime, ai.ExpirationTime)
-	s.Equal(activityInfos[0].NonRetriableErrors, ai.NonRetriableErrors)
+	s.Equal(activityInfos[0].NonRetryableErrorTypes, ai.NonRetryableErrorTypes)
 	s.Equal(activityInfos[0].LastFailure, ai.LastFailure)
 	s.Equal(activityInfos[0].LastWorkerIdentity, ai.LastWorkerIdentity)
 

@@ -1122,7 +1122,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 		info.MaximumInterval,
 		info.BackoffCoefficient,
 		failure,
-		info.NonRetryableErrors,
+		info.NonRetryableErrorTypes,
 	)
 }
 
@@ -1874,7 +1874,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
 		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
-		e.executionInfo.NonRetryableErrors = event.RetryPolicy.GetNonRetryableErrorTypes()
+		e.executionInfo.NonRetryableErrorTypes = event.RetryPolicy.GetNonRetryableErrorTypes()
 	}
 
 	e.executionInfo.AutoResetPoints = rolloverAutoResetPointsWithExpiringTime(
@@ -2216,7 +2216,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		ai.BackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
 		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
 		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
-		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetryableErrorTypes
+		ai.NonRetryableErrorTypes = attributes.RetryPolicy.NonRetryableErrorTypes
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
@@ -3817,7 +3817,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		failure,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	)
 	if backoffInterval == backoff.NoBackoff {
 		return false, nil
