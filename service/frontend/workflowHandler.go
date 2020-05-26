@@ -1006,9 +1006,6 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
-
-		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
-		request.Failure = nil
 	}
 
 	_, err = wh.GetHistoryClient().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
