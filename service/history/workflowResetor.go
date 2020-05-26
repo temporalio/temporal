@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -284,7 +285,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	decision, _ := newMutableState.GetInFlightDecision()
 
 	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow, nil,
-		identityHistoryService, resetReason, "", baseRunID, newRunID, forkEventVersion)
+		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision failed event.")
 		return
@@ -605,8 +606,7 @@ func (w *workflowResetorImpl) generateTimerTasksForReset(
 
 func getRespondActivityTaskFailedRequestFromActivity(ai *persistence.ActivityInfo, resetReason string) *workflowservice.RespondActivityTaskFailedRequest {
 	return &workflowservice.RespondActivityTaskFailedRequest{
-		Reason:   resetReason,
-		Details:  ai.Details,
+		Failure:  failure.NewResetWorkflowFailure(resetReason, ai.Details),
 		Identity: ai.StartedIdentity,
 	}
 }
