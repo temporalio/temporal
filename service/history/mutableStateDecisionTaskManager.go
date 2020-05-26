@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -89,9 +90,8 @@ type (
 			scheduleEventID int64,
 			startedEventID int64,
 			cause eventpb.DecisionTaskFailedCause,
-			details *commonpb.Payloads,
+			failure *failurepb.Failure,
 			identity string,
-			reason string,
 			binChecksum string,
 			baseRunID string,
 			newRunID string,
@@ -495,9 +495,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payloads,
+	failure *failurepb.Failure,
 	identity string,
-	reason string,
 	binChecksum string,
 	baseRunID string,
 	newRunID string,
@@ -508,9 +507,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 		ScheduledEventId: scheduleEventID,
 		StartedEventId:   startedEventID,
 		Cause:            cause,
-		Details:          details,
+		Failure:          failure,
 		Identity:         identity,
-		Reason:           reason,
 		BinaryChecksum:   binChecksum,
 		BaseRunId:        baseRunID,
 		NewRunId:         newRunID,

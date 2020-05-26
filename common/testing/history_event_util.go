@@ -31,6 +31,8 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+
+	"github.com/temporalio/temporal/common/failure"
 )
 
 const (
@@ -446,7 +448,7 @@ func InitializeHistoryEventGenerator(
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Identity:         identity,
-			Reason:           reason,
+			Failure:          failure.NewServerFailure(reason, false),
 		}}
 		return historyEvent
 	})
@@ -519,8 +521,8 @@ func InitializeHistoryEventGenerator(
 	activityCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
 
 	// TODO: bypass activity cancel request event. Support this event later.
-	//activityScheduleToActivityCancelRequest := NewHistoryEventEdge(activitySchedule, activityCancelRequest)
-	//activityScheduleToActivityCancelRequest.SetCondition(hasPendingActivity)
+	// activityScheduleToActivityCancelRequest := NewHistoryEventEdge(activitySchedule, activityCancelRequest)
+	// activityScheduleToActivityCancelRequest.SetCondition(hasPendingActivity)
 	activityCancelReqToCancel := NewHistoryEventEdge(activityCancelRequest, activityCancel)
 	activityCancelReqToCancel.SetCondition(hasPendingActivity)
 

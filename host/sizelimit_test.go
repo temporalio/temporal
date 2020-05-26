@@ -43,7 +43,6 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payloads"
 )
@@ -179,7 +178,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	lastEvent := history.Events[len(history.Events)-1]
 	s.Equal(eventpb.EventType_WorkflowExecutionFailed, lastEvent.GetEventType())
 	failedEventAttributes := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-	s.Equal(common.FailureReasonSizeExceedsLimit, failedEventAttributes.GetReason())
+	s.False(failedEventAttributes.GetFailure().GetServerFailureInfo().GetNonRetryable())
 
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false

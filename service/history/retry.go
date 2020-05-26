@@ -28,7 +28,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	failurepb "go.temporal.io/temporal-proto/failure"
+
 	"github.com/temporalio/temporal/common/backoff"
 )
 
@@ -40,9 +42,12 @@ func getBackoffInterval(
 	initInterval int32,
 	maxInterval int32,
 	backoffCoefficient float64,
-	failureReason string,
-	nonRetriableErrors []string,
+	failure *failurepb.Failure,
+	nonRetryableTypes []string,
 ) time.Duration {
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff
+	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
 		return backoff.NoBackoff
@@ -75,20 +80,41 @@ func getBackoffInterval(
 		return backoff.NoBackoff
 	}
 
-	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
-	if failureReason == common.FailureReasonCancelDetailsExceedsLimit ||
-		failureReason == common.FailureReasonCompleteResultExceedsLimit ||
-		failureReason == common.FailureReasonHeartbeatExceedsLimit ||
-		failureReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
-		return backoff.NoBackoff
+	return backoffInterval
+}
+
+func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	failure = getCauseFailure(failure)
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
 	}
 
-	// check if error is non-retriable
-	for _, er := range nonRetriableErrors {
-		if er == failureReason {
-			return backoff.NoBackoff
+	if failure.GetApplicationFailureInfo().GetNonRetryable() || failure.GetServerFailureInfo().GetNonRetryable() {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		if failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_StartToClose &&
+			failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_Heartbeat {
+			return false
 		}
 	}
 
-	return backoffInterval
+	if failure.GetApplicationFailureInfo() != nil {
+		failureType := failure.GetApplicationFailureInfo().GetType()
+		for _, nrt := range nonRetryableTypes {
+			if nrt == failureType {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func getCauseFailure(failure *failurepb.Failure) *failurepb.Failure {
+	for ; failure.GetCause() != nil; failure = failure.GetCause() {
+	}
+
+	return failure
 }

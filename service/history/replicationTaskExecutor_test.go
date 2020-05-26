@@ -228,7 +228,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		StartedTime:        0,
 		LastHeartbeatTime:  0,
 		Attempt:            0,
-		LastFailureReason:  "",
+		LastFailure:        nil,
 		LastWorkerIdentity: "",
 	}
 

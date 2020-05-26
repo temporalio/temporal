@@ -422,10 +422,10 @@ func (s *esProcessorSuite) TestIsResponseSuccess() {
 	}
 }
 
-func (s *esProcessorSuite) TestIsResponseRetriable() {
+func (s *esProcessorSuite) TestIsResponseRetryable() {
 	status := []int{408, 429, 500, 503, 507}
 	for _, code := range status {
-		s.True(isResponseRetriable(code))
+		s.True(isResponseRetryable(code))
 	}
 }
 

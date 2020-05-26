@@ -1128,7 +1128,6 @@ func (r *historyReplicator) flushEventsBuffer(
 		"",
 		"",
 		"",
-		"",
 		0,
 	); err != nil {
 		return err

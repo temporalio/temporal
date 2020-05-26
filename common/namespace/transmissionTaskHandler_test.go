@@ -201,7 +201,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	id := primitives.NewUUID().String()
 	name := "some random namespace test name"
-	status, _ := s.namespaceReplicator.convertNamespaceStatusToProto(int(namespacepb.NamespaceStatus_Deprecated))
+	status := namespacepb.NamespaceStatus_Deprecated
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}

@@ -148,16 +148,16 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	s.Error(err)
 }
 
-func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
+func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	nonRetriableErr := errors.New("some non-retryable error")
+	nonRetryableErr := errors.New("some non-retryable error")
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
 		&archiverproto.ArchiveVisibilityRequest{},
-		archiver.GetNonRetriableErrorOption(nonRetriableErr),
+		archiver.GetNonRetryableErrorOption(nonRetryableErr),
 	)
-	s.Equal(nonRetriableErr, err)
+	s.Equal(nonRetryableErr, err)
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
