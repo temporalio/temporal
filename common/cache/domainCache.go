@@ -165,10 +165,9 @@ func NewDomainCache(
 }
 
 func newDomainCache() Cache {
-	opts := &Options{}
-	opts.InitialCapacity = domainCacheInitialSize
-	opts.TTL = domainCacheTTL
-	return New(domainCacheMaxSize, opts)
+	return NewSimple(&SimpleOptions{
+		InitialCapacity: domainCacheInitialSize,
+	})
 }
 
 func newDomainCacheEntry(
