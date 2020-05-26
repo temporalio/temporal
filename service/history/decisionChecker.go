@@ -169,7 +169,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowEventCount(historyCount))
 
 		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
-			Failure: failure.NewServerFailure("Workflow history size / count exceeds limit.", false),
+			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, false),
 		}
 
 		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {

@@ -86,8 +86,10 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
+	// FailureReasonSizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	FailureReasonSizeExceedsLimit = "Workflow history size / count exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
-	FailureReasonTransactionSizeExceedsLimit = "TRANSACTION_SIZE_EXCEEDS_LIMIT"
+	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 )
 
 var (

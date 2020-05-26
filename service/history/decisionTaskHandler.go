@@ -419,7 +419,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_FailWorkflowExecution.String()),
 		attr.GetFailure().Size(),
-		"FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.",
+		"FailWorkflowExecutionDecisionAttributes.Failure exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
