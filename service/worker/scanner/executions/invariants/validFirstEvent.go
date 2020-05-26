@@ -66,8 +66,14 @@ func (v *validFirstEvent) Check(_ common.Execution, resources *common.InvariantR
 	}
 }
 
-func (v *validFirstEvent) Fix(execution common.Execution) common.FixResult {
-	return common.DeleteExecution(&execution, v.pr)
+func (v *validFirstEvent) Fix(execution common.Execution, resources *common.InvariantResourceBag) common.FixResult {
+	fixResult, checkResult := checkBeforeFix(v, execution, resources)
+	if fixResult != nil {
+		return *fixResult
+	}
+	fixResult = common.DeleteExecution(&execution, v.pr)
+	fixResult.CheckResult = *checkResult
+	return *fixResult
 }
 
 func (v *validFirstEvent) InvariantType() common.InvariantType {

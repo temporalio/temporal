@@ -99,8 +99,14 @@ func (h *historyExists) Check(execution common.Execution, resources *common.Inva
 	}
 }
 
-func (h *historyExists) Fix(execution common.Execution) common.FixResult {
-	return common.DeleteExecution(&execution, h.pr)
+func (h *historyExists) Fix(execution common.Execution, resources *common.InvariantResourceBag) common.FixResult {
+	fixResult, checkResult := checkBeforeFix(h, execution, resources)
+	if fixResult != nil {
+		return *fixResult
+	}
+	fixResult = common.DeleteExecution(&execution, h.pr)
+	fixResult.CheckResult = *checkResult
+	return *fixResult
 }
 
 func (h *historyExists) InvariantType() common.InvariantType {
