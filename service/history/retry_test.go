@@ -149,7 +149,7 @@ func Test_NextRetry(t *testing.T) {
 	))
 	ai.Attempt++
 
-	// test non-retriable error
+	// test non-retryable error
 	reason = failure.NewServerFailure("bad-reason", true)
 	a.Equal(backoff.NoBackoff, getBackoffInterval(
 		now,

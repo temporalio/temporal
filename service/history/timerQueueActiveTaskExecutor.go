@@ -220,7 +220,7 @@ Loop:
 		}
 
 		if timerSequenceID.timerType != timerTypeScheduleToStart {
-			// schedule to start timeout is not retriable
+			// schedule to start timeout is not retryable
 			// customer should set larger schedule to start timeout if necessary
 			if ok, err := mutableState.RetryActivity(
 				activityInfo,

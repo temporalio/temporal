@@ -46,7 +46,7 @@ import (
 )
 
 var (
-	errUploadNonRetriable = errors.New("upload non-retriable error")
+	errUploadNonRetryable = errors.New("upload non-retryable error")
 )
 
 const (
@@ -114,14 +114,14 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		sw.Stop()
 		if err != nil {
 
-			if err.Error() != errUploadNonRetriable.Error() {
+			if err.Error() != errUploadNonRetryable.Error() {
 				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
 				return
 			}
 
 			scope.IncCounter(metrics.HistoryArchiverArchiveNonRetryableErrorCount)
-			if featureCatalog.NonRetriableError != nil {
-				err = featureCatalog.NonRetriableError()
+			if featureCatalog.NonRetryableError != nil {
+				err = featureCatalog.NonRetryableError()
 			}
 
 		}
@@ -130,13 +130,13 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
-		return errUploadNonRetriable
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		return errUploadNonRetryable
 	}
 
 	if err := archiver.ValidateHistoryArchiveRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
-		return errUploadNonRetriable
+		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		return errUploadNonRetryable
 	}
 
 	var totalUploadSize int64
@@ -155,22 +155,22 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		if err != nil {
 			logger := logger.WithTags(tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			if !common.IsPersistenceTransientError(err) {
-				logger.Error(archiver.ArchiveNonRetriableErrorMsg)
-				return errUploadNonRetriable
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
+				return errUploadNonRetryable
 			}
 			logger.Error(archiver.ArchiveTransientErrorMsg)
 			return err
 		}
 
 		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
-			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
 		encodedHistoryPart, err := encoder.EncodeHistories(historyBlob.Body)
 		if err != nil {
-			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
-			return errUploadNonRetriable
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
+			return errUploadNonRetryable
 		}
 
 		filename := constructHistoryFilenameMultipart(request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, part)

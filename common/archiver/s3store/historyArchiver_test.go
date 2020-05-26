@@ -374,7 +374,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	s.Error(err)
 }
 
-func (s *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
+func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
@@ -394,7 +394,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	nonRetryableErr := errors.New("some non-retryable error")
-	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request, archiver.GetNonRetriableErrorOption(nonRetryableErr))
+	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request, archiver.GetNonRetryableErrorOption(nonRetryableErr))
 	s.Equal(nonRetryableErr, err)
 }
 

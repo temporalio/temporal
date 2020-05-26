@@ -154,7 +154,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 	s.Equal(errUploadNonRetryable.Error(), err.Error())
 }
 
-func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
+func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetryable)
@@ -183,7 +183,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 	s.Equal(errUploadNonRetryable.Error(), err.Error())
 }
 
-func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
+func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	testArchiveErr := errors.New("some transient error")
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
@@ -317,7 +317,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 	s.Equal(errArchiveVisibilityNonRetryable.Error(), err.Error())
 }
 
-func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriableError() {
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetryable)
@@ -343,7 +343,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriable
 	s.Equal(errArchiveVisibilityNonRetryable.Error(), err.Error())
 }
 
-func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableError() {
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	testArchiveErr := errors.New("some transient error")
 	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)

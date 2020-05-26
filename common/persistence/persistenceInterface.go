@@ -253,7 +253,7 @@ type (
 		MaximumInterval        int32
 		ExpirationTime         time.Time
 		MaximumAttempts        int32
-		NonRetriableErrorTypes []string
+		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		CronSchedule           string
 		Memo                   map[string]*commonpb.Payload
@@ -772,7 +772,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
-		RetryNonRetryableErrorTypes:             executionInfo.NonRetriableErrorTypes,
+		RetryNonRetryableErrorTypes:             executionInfo.NonRetryableErrorTypes,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
 		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
@@ -863,7 +863,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
 		BranchToken:                        info.GetEventBranchToken(),
-		NonRetriableErrorTypes:             info.GetRetryNonRetryableErrorTypes(),
+		NonRetryableErrorTypes:             info.GetRetryNonRetryableErrorTypes(),
 		SearchAttributes:                   info.GetSearchAttributes(),
 		Memo:                               info.GetMemo(),
 	}
