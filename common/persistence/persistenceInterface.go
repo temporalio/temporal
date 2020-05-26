@@ -1006,7 +1006,7 @@ func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionI
 		CreateRequestId:        v.CreateRequestID,
 		Namespace:              v.Namespace,
 		WorkflowTypeName:       v.WorkflowTypeName,
-		ParentClosePolicy:      int32(v.ParentClosePolicy),
+		ParentClosePolicy:      v.ParentClosePolicy,
 	}
 	return info
 }

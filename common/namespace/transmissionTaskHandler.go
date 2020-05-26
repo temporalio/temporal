@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -116,17 +115,4 @@ func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationCon
 		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output
-}
-
-func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (namespacepb.NamespaceStatus, error) {
-	switch input {
-	case persistence.NamespaceStatusRegistered:
-		output := namespacepb.NamespaceStatus_Registered
-		return output, nil
-	case persistence.NamespaceStatusDeprecated:
-		output := namespacepb.NamespaceStatus_Deprecated
-		return output, nil
-	default:
-		return namespacepb.NamespaceStatus_Registered, ErrInvalidNamespaceStatus
-	}
 }
