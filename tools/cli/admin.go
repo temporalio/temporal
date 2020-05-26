@@ -120,7 +120,7 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe shard by id",
+			Usage:   "Describe shard by Id",
 			Flags: append(
 				getDBFlags(),
 				cli.IntFlag{
