@@ -125,7 +125,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				getDBFlags(),
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "The ID of the shard to describe",
+					Usage: "The Id of the shard to describe",
 				},
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
