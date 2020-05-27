@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -388,7 +389,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		startAttributes,
 		int32(cronBackoff.Seconds()),
 		commonpb.ContinueAsNewInitiator_CronSchedule,
-		"",
 		nil,
 		attr.Result,
 	)
@@ -418,8 +418,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_FailWorkflowExecution.String()),
-		attr.GetDetails().Size(),
-		"FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.",
+		attr.GetFailure().Size(),
+		"FailWorkflowExecutionDecisionAttributes.Failure exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -441,7 +441,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetReason())
+	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
@@ -472,8 +472,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		startAttributes,
 		int32(backoffInterval.Seconds()),
 		continueAsNewInitiator,
-		attr.Reason,
-		attr.Details,
+		attr.GetFailure(),
 		startAttributes.LastCompletionResult,
 	)
 }
@@ -884,8 +883,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	attr *eventpb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
-	failureReason string,
-	failureDetails *commonpb.Payloads,
+	failure *failurepb.Failure,
 	lastCompletionResult *commonpb.Payloads,
 ) error {
 
@@ -899,8 +897,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		CronSchedule:                  attr.CronSchedule,
 		BackoffStartIntervalInSeconds: backoffInterval,
 		Initiator:                     continueAsNewIter,
-		FailureReason:                 failureReason,
-		FailureDetails:                failureDetails,
+		Failure:                       failure,
 		LastCompletionResult:          lastCompletionResult,
 		Header:                        attr.Header,
 		Memo:                          attr.Memo,

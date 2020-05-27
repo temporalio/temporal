@@ -422,12 +422,6 @@ func timerTypeFromProto(
 	}
 }
 
-func timerTypeToReason(
-	timerType timerType,
-) string {
-	return fmt.Sprintf("temporalInternal:Timeout %v", timerTypeToProto(timerType))
-}
-
 // Len implements sort.Interface
 func (s timerSequenceIDs) Len() int {
 	return len(s)

@@ -282,7 +282,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		"",
-		"",
 		int64(0),
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)

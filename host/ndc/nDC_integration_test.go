@@ -38,6 +38,7 @@ import (
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -630,8 +631,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},
@@ -1420,8 +1420,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},

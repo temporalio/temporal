@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
@@ -291,8 +292,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		activity1.ScheduleID,
 		activity1.StartedID,
 		&workflowservice.RespondActivityTaskFailedRequest{
-			Reason:   terminateReason,
-			Details:  activity1.Details,
+			Failure:  failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
 			Identity: activity1.StartedIdentity,
 		},
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
@@ -341,7 +341,6 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		nil,
 		identityHistoryService,
-		"",
 		"",
 		"",
 		"",

@@ -31,6 +31,7 @@ import "namespace/message.proto";
 import "replication/message.proto";
 import "event/message.proto";
 import "event/server_message.proto";
+import "failure/message.proto";
 
 message ReplicationInfo {
     int64 version = 1;
@@ -140,10 +141,9 @@ message SyncActivityTaskAttributes {
     int64 lastHeartbeatTime = 9;
     common.Payloads details = 10;
     int32 attempt = 11;
-    string lastFailureReason = 12;
+    failure.Failure lastFailure = 12;
     string lastWorkerIdentity = 13;
-    common.Payloads lastFailureDetails = 14;
-    event.VersionHistory versionHistory = 15;
+    event.VersionHistory versionHistory = 14;
 }
 
 message HistoryTaskV2Attributes {
