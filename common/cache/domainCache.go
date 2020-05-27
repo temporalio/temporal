@@ -771,6 +771,11 @@ func (entry *DomainCacheEntry) GetNotificationVersion() int64 {
 	return entry.notificationVersion
 }
 
+// GetFailoverEndTime return the failover end time
+func (entry *DomainCacheEntry) GetFailoverEndTime() *int64 {
+	return entry.failoverEndTime
+}
+
 // IsDomainActive return whether the domain is active, i.e. non global domain or global domain which active cluster is the current cluster
 func (entry *DomainCacheEntry) IsDomainActive() bool {
 	if !entry.isGlobalDomain {

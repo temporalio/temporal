@@ -47,6 +47,8 @@ var (
 	ErrTaskDiscarded = errors.New("passive task pending for too long")
 	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
+	// ErrTaskRedispatch is the error indicating that the task should be re-dispatch
+	ErrTaskRedispatch = errors.New("redispatch the task while the domain is pending-acitve")
 )
 
 type (
@@ -305,6 +307,10 @@ func (t *taskBase) HandleErr(
 func (t *taskBase) RetryErr(
 	err error,
 ) bool {
+	if err == ErrTaskRedispatch {
+		return false
+	}
+
 	return true
 }
 

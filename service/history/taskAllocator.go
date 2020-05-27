@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/history/shard"
+	htask "github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -80,6 +81,15 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface
 		t.logger.Debug("Domain is not active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	}
+
+	if err := t.checkDomainPendingActive(
+		domainEntry,
+		taskDomainID,
+		task,
+	); err != nil {
+		return false, err
+	}
+
 	t.logger.Debug("Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return true, nil
 }
@@ -88,6 +98,28 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface
 func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetDomainIDs map[string]struct{}, taskDomainID string, task interface{}) (bool, error) {
 	_, ok := targetDomainIDs[taskDomainID]
 	if ok {
+		t.locker.RLock()
+		defer t.locker.RUnlock()
+
+		domainEntry, err := t.domainCache.GetDomainByID(taskDomainID)
+		if err != nil {
+			// it is possible that the domain is deleted
+			// we should treat that domain as not active
+			if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+				t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
+				return false, err
+			}
+			t.logger.Warn("Cannot find domain, default to not process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+			return false, nil
+		}
+		if err := t.checkDomainPendingActive(
+			domainEntry,
+			taskDomainID,
+			task,
+		); err != nil {
+			return false, err
+		}
+
 		t.logger.Debug("Failover Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return true, nil
 	}
@@ -122,6 +154,20 @@ func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskDomainI
 	}
 	t.logger.Debug("Domain is standby, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return true, nil
+}
+
+func (t *taskAllocatorImpl) checkDomainPendingActive(
+	domainEntry *cache.DomainCacheEntry,
+	taskDomainID string,
+	task interface{},
+) error {
+
+	if domainEntry.IsGlobalDomain() && domainEntry.GetFailoverEndTime() != nil {
+		// the domain is pending active, pause on processing this task
+		t.logger.Debug("Domain is not in pending active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		return htask.ErrTaskRedispatch
+	}
+	return nil
 }
 
 // lock block all task allocation
