@@ -23,7 +23,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,10 +34,10 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -61,10 +60,7 @@ type (
 		MetricScope                         int
 	}
 
-	queueTaskInitializer func(task.Info) task.Task
-
 	queueProcessorBase struct {
-		clusterName          string
 		shard                shard.Context
 		timeSource           clock.TimeSource
 		options              *QueueProcessorOptions
@@ -76,7 +72,7 @@ type (
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   task.Processor
 		redispatchQueue      collection.Queue
-		queueTaskInitializer queueTaskInitializer
+		queueTaskInitializer task.Initializer
 
 		lastPollTime time.Time
 
@@ -102,7 +98,7 @@ func newQueueProcessorBase(
 	queueAckMgr queueAckMgr,
 	redispatchQueue collection.Queue,
 	executionCache *execution.Cache,
-	queueTaskInitializer queueTaskInitializer,
+	queueTaskInitializer task.Initializer,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *queueProcessorBase {
@@ -117,11 +113,10 @@ func newQueueProcessorBase(
 	}
 
 	p := &queueProcessorBase{
-		clusterName: clusterName,
-		shard:       shard,
-		timeSource:  shard.GetTimeSource(),
-		options:     options,
-		processor:   processor,
+		shard:      shard,
+		timeSource: shard.GetTimeSource(),
+		options:    options,
+		processor:  processor,
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(options.MaxPollRPS())
@@ -281,7 +276,7 @@ func (p *queueProcessorBase) processBatch() {
 
 	for _, task := range tasks {
 		if submitted := p.submitTask(task); !submitted {
-			// submitted since processor has been shutdown
+			// not submitted since processor has been shutdown
 			return
 		}
 		select {
@@ -308,7 +303,7 @@ func (p *queueProcessorBase) submitTask(
 			newTaskInfo(
 				p.processor,
 				taskInfo,
-				initializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),
+				task.InitializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),
 			),
 		)
 	}
@@ -330,7 +325,7 @@ func (p *queueProcessorBase) redispatchTasks() {
 		return
 	}
 
-	redispatchQueueTasks(
+	queue.RedispatchTasks(
 		p.redispatchQueue,
 		p.queueTaskProcessor,
 		p.logger,
@@ -353,68 +348,4 @@ func (p *queueProcessorBase) complete(
 
 func (p *queueProcessorBase) isPriorityTaskProcessorEnabled() bool {
 	return p.taskProcessor == nil
-}
-
-func redispatchQueueTasks(
-	redispatchQueue collection.Queue,
-	queueTaskProcessor task.Processor,
-	logger log.Logger,
-	metricsScope metrics.Scope,
-	shutdownCh <-chan struct{},
-) {
-	queueLength := redispatchQueue.Len()
-	metricsScope.RecordTimer(metrics.TaskRedispatchQueuePendingTasksTimer, time.Duration(queueLength))
-	for i := 0; i != queueLength; i++ {
-		queueTask := redispatchQueue.Remove().(task.Task)
-		submitted, err := queueTaskProcessor.TrySubmit(queueTask)
-		if err != nil {
-			// the only reason error will be returned here is because
-			// task processor has already shutdown. Just return in this case.
-			logger.Error("failed to redispatch task", tag.Error(err))
-			return
-		}
-		if !submitted {
-			// failed to submit, enqueue again
-			redispatchQueue.Add(queueTask)
-		}
-
-		select {
-		case <-shutdownCh:
-			return
-		default:
-		}
-	}
-}
-
-func initializeLoggerForTask(
-	shardID int,
-	task task.Info,
-	logger log.Logger,
-) log.Logger {
-
-	taskLogger := logger.WithTags(
-		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-	)
-
-	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
-		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-		)
-	case *persistence.TransferTaskInfo:
-		// noop
-	case *persistence.ReplicationTaskInfo:
-		// noop
-	default:
-		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
-	}
-
-	return taskLogger
 }

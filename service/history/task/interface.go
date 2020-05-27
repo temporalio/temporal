@@ -64,6 +64,9 @@ type (
 	// Filter filters Task
 	Filter func(task Info) (bool, error)
 
+	// Initializer initializes a Task based on the Info
+	Initializer func(Info) Task
+
 	// PriorityAssigner assigns priority to Tasks
 	PriorityAssigner interface {
 		Assign(Task) error

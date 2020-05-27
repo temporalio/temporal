@@ -61,7 +61,6 @@ type (
 
 	taskProcessor struct {
 		shard         shard.Context
-		cache         *execution.Cache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
 		config        *config.Config
@@ -107,7 +106,6 @@ func newTaskProcessor(
 
 	base := &taskProcessor{
 		shard:                   shard,
-		cache:                   executionCache,
 		shutdownCh:              make(chan struct{}),
 		tasksCh:                 make(chan *taskInfo, options.queueSize),
 		config:                  shard.GetConfig(),

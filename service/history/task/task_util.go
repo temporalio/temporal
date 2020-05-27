@@ -33,6 +33,148 @@ import (
 	"github.com/uber/cadence/service/history/shard"
 )
 
+// InitializeLoggerForTask creates a new logger with additional tags for task info
+func InitializeLoggerForTask(
+	shardID int,
+	task Info,
+	logger log.Logger,
+) log.Logger {
+
+	taskLogger := logger.WithTags(
+		tag.ShardID(shardID),
+		tag.TaskID(task.GetTaskID()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
+		tag.FailoverVersion(task.GetVersion()),
+		tag.TaskType(task.GetTaskType()),
+		tag.WorkflowDomainID(task.GetDomainID()),
+		tag.WorkflowID(task.GetWorkflowID()),
+		tag.WorkflowRunID(task.GetRunID()),
+	)
+
+	switch task := task.(type) {
+	case *persistence.TimerTaskInfo:
+		taskLogger = taskLogger.WithTags(
+			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+		)
+	case *persistence.TransferTaskInfo:
+		// noop
+	case *persistence.ReplicationTaskInfo:
+		// noop
+	default:
+		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+	}
+
+	return taskLogger
+}
+
+// GetTransferTaskMetricsScope returns the metrics scope index for transfer task
+func GetTransferTaskMetricsScope(
+	taskType int,
+	isActive bool,
+) int {
+	switch taskType {
+	case persistence.TransferTaskTypeActivityTask:
+		if isActive {
+			return metrics.TransferActiveTaskActivityScope
+		}
+		return metrics.TransferStandbyTaskActivityScope
+	case persistence.TransferTaskTypeDecisionTask:
+		if isActive {
+			return metrics.TransferActiveTaskDecisionScope
+		}
+		return metrics.TransferStandbyTaskDecisionScope
+	case persistence.TransferTaskTypeCloseExecution:
+		if isActive {
+			return metrics.TransferActiveTaskCloseExecutionScope
+		}
+		return metrics.TransferStandbyTaskCloseExecutionScope
+	case persistence.TransferTaskTypeCancelExecution:
+		if isActive {
+			return metrics.TransferActiveTaskCancelExecutionScope
+		}
+		return metrics.TransferStandbyTaskCancelExecutionScope
+	case persistence.TransferTaskTypeSignalExecution:
+		if isActive {
+			return metrics.TransferActiveTaskSignalExecutionScope
+		}
+		return metrics.TransferStandbyTaskSignalExecutionScope
+	case persistence.TransferTaskTypeStartChildExecution:
+		if isActive {
+			return metrics.TransferActiveTaskStartChildExecutionScope
+		}
+		return metrics.TransferStandbyTaskStartChildExecutionScope
+	case persistence.TransferTaskTypeRecordWorkflowStarted:
+		if isActive {
+			return metrics.TransferActiveTaskRecordWorkflowStartedScope
+		}
+		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
+	case persistence.TransferTaskTypeResetWorkflow:
+		if isActive {
+			return metrics.TransferActiveTaskResetWorkflowScope
+		}
+		return metrics.TransferStandbyTaskResetWorkflowScope
+	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		if isActive {
+			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
+		}
+		return metrics.TransferStandbyTaskUpsertWorkflowSearchAttributesScope
+	default:
+		if isActive {
+			return metrics.TransferActiveQueueProcessorScope
+		}
+		return metrics.TransferStandbyQueueProcessorScope
+	}
+}
+
+// GetTimerTaskMetricScope returns the metrics scope index for timer task
+func GetTimerTaskMetricScope(
+	taskType int,
+	isActive bool,
+) int {
+	switch taskType {
+	case persistence.TaskTypeDecisionTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskDecisionTimeoutScope
+		}
+		return metrics.TimerStandbyTaskDecisionTimeoutScope
+	case persistence.TaskTypeActivityTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskActivityTimeoutScope
+		}
+		return metrics.TimerStandbyTaskActivityTimeoutScope
+	case persistence.TaskTypeUserTimer:
+		if isActive {
+			return metrics.TimerActiveTaskUserTimerScope
+		}
+		return metrics.TimerStandbyTaskUserTimerScope
+	case persistence.TaskTypeWorkflowTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskWorkflowTimeoutScope
+		}
+		return metrics.TimerStandbyTaskWorkflowTimeoutScope
+	case persistence.TaskTypeDeleteHistoryEvent:
+		if isActive {
+			return metrics.TimerActiveTaskDeleteHistoryEventScope
+		}
+		return metrics.TimerStandbyTaskDeleteHistoryEventScope
+	case persistence.TaskTypeActivityRetryTimer:
+		if isActive {
+			return metrics.TimerActiveTaskActivityRetryTimerScope
+		}
+		return metrics.TimerStandbyTaskActivityRetryTimerScope
+	case persistence.TaskTypeWorkflowBackoffTimer:
+		if isActive {
+			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
+		}
+		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope
+	default:
+		if isActive {
+			return metrics.TimerActiveQueueProcessorScope
+		}
+		return metrics.TimerStandbyQueueProcessorScope
+	}
+}
+
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
 	shard shard.Context,

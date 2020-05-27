@@ -141,9 +141,9 @@ func newTransferQueueActiveProcessor(
 			shard,
 			taskInfo,
 			historyService.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
 			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			transferTaskFilter,
 			processor.taskExecutor,
 			redispatchQueue,
@@ -279,9 +279,9 @@ func newTransferQueueFailoverProcessor(
 			shard,
 			taskInfo,
 			historyService.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
 			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			transferTaskFilter,
 			processor.taskExecutor,
 			redispatchQueue,
@@ -328,6 +328,6 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
+	metricScope := task.GetTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
 	return metricScope, t.taskExecutor.Execute(taskInfo.task, taskInfo.shouldProcessTask)
 }
