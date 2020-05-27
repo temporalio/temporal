@@ -69,26 +69,40 @@ func NewPriorityAssigner(
 func (a *priorityAssignerImpl) Assign(
 	queueTask Task,
 ) error {
-	if queueTask.GetQueueType() == QueueTypeReplication {
+	queueType := queueTask.GetQueueType()
+
+	if queueType == QueueTypeReplication {
 		queueTask.SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass))
 		return nil
 	}
 
-	// timer of transfer task, first check if domain is active or not
-	domainName, active, err := a.getDomainInfo(queueTask.GetDomainID())
+	// timer or transfer task, first check if task is active or not and if domain is active or not
+	isActiveTask := queueType == QueueTypeActiveTimer || queueType == QueueTypeActiveTransfer
+	domainName, isActiveDomain, err := a.getDomainInfo(queueTask.GetDomainID())
 	if err != nil {
 		return err
 	}
 
-	if !active {
+	// there are four cases here:
+	// 1. active task for active domain
+	// 2. active task for standby domain
+	// 3. standby task for active domain
+	// 4. standby task for standby domain
+
+	if !isActiveTask && !isActiveDomain {
+		// only assign low priority to tasks in the fourth case
 		queueTask.SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass))
 		return nil
 	}
 
+	// for case 1 we should give the task a high priority
+	// for case 2 and 3 the task will be a no-op in most cases, also give it a high priority so that
+	// it can be quickly verified/acked and won't prevent the ack level in the processor from advancing
+	// (especially for active processor)
 	if !a.getRateLimiter(domainName).Allow() {
 		queueTask.SetPriority(task.GetTaskPriority(task.DefaultPriorityClass, task.DefaultPrioritySubclass))
 		taggedScope := a.scope.Tagged(metrics.DomainTag(domainName))
-		if queueTask.GetQueueType() == QueueTypeTransfer {
+		if queueType == QueueTypeActiveTransfer || queueType == QueueTypeStandbyTransfer {
 			taggedScope.IncCounter(metrics.TransferTaskThrottledCounter)
 		} else {
 			taggedScope.IncCounter(metrics.TimerTaskThrottledCounter)

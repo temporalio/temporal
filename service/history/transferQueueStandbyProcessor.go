@@ -139,6 +139,7 @@ func newTransferQueueStandbyProcessor(
 		return task.NewTransferTask(
 			shard,
 			taskInfo,
+			task.QueueTypeStandbyTransfer,
 			historyService.metricsClient.Scope(
 				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
 			),

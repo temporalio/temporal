@@ -113,6 +113,7 @@ func newTimerQueueStandbyProcessor(
 		return task.NewTimerTask(
 			shard,
 			taskInfo,
+			task.QueueTypeStandbyTimer,
 			historyService.metricsClient.Scope(
 				getTimerTaskMetricScope(taskInfo.GetTaskType(), false),
 			),
