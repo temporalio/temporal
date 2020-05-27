@@ -104,7 +104,7 @@ func newQueueProcessorBase(
 ) *queueProcessorBase {
 
 	var taskProcessor *taskProcessor
-	if !options.EnablePriorityTaskProcessor() {
+	if queueTaskProcessor == nil || !options.EnablePriorityTaskProcessor() {
 		taskProcessorOptions := taskProcessorOptions{
 			queueSize:   options.BatchSize(),
 			workerCount: options.WorkerCount(),

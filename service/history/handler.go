@@ -155,14 +155,14 @@ func (h *Handler) Start() {
 			processorOptions.FifoSchedulerOptions = &t.FIFOTaskSchedulerOptions{
 				QueueSize:   h.config.TaskSchedulerQueueSize(),
 				WorkerCount: h.config.TaskSchedulerWorkerCount(),
-				RetryPolicy: common.CreatePersistanceRetryPolicy(),
+				RetryPolicy: common.CreateTaskProcessingRetryPolicy(),
 			}
 		case t.SchedulerTypeWRR:
 			processorOptions.WRRSchedulerOptions = &t.WeightedRoundRobinTaskSchedulerOptions{
 				Weights:     h.config.TaskSchedulerRoundRobinWeights,
 				QueueSize:   h.config.TaskSchedulerQueueSize(),
 				WorkerCount: h.config.TaskSchedulerWorkerCount(),
-				RetryPolicy: common.CreatePersistanceRetryPolicy(),
+				RetryPolicy: common.CreateTaskProcessingRetryPolicy(),
 			}
 		default:
 			h.GetLogger().Fatal("Unknown task scheduler type", tag.Value(schedulerType))

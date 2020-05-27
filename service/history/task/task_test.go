@@ -212,6 +212,7 @@ func (s *queueTaskSuite) newTestQueueTaskBase(
 	return newQueueTaskBase(
 		s.mockShard,
 		s.mockQueueTaskInfo,
+		QueueTypeActiveTransfer,
 		s.scope,
 		s.logger,
 		taskFilter,

@@ -109,6 +109,7 @@ func newTimerQueueActiveProcessor(
 		return task.NewTimerTask(
 			shard,
 			taskInfo,
+			task.QueueTypeActiveTimer,
 			historyService.metricsClient.Scope(
 				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), true),
 			),
@@ -225,6 +226,7 @@ func newTimerQueueFailoverProcessor(
 		return task.NewTimerTask(
 			shard,
 			taskInfo,
+			task.QueueTypeActiveTimer,
 			historyService.metricsClient.Scope(
 				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), true),
 			),

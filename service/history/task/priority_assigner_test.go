@@ -146,7 +146,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_ReplicationTask() {
 	s.NoError(err)
 }
 
-func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
+func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask_StandbyDomain() {
 	constants.TestGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
 	defer func() {
 		constants.TestGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
@@ -154,7 +154,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 	s.mockDomainCache.EXPECT().GetDomainByID(constants.TestDomainID).Return(constants.TestGlobalDomainEntry, nil)
 
 	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetQueueType().Return(QueueTypeTransfer).Times(1)
+	mockTask.EXPECT().GetQueueType().Return(QueueTypeStandbyTransfer).AnyTimes()
 	mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
 	mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass)).Times(1)
 
@@ -162,11 +162,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 	s.NoError(err)
 }
 
-func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
+func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask_ActiveDomain() {
 	s.mockDomainCache.EXPECT().GetDomainByID(constants.TestDomainID).Return(constants.TestGlobalDomainEntry, nil)
 
 	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetQueueType().Return(QueueTypeTransfer).AnyTimes()
+	mockTask.EXPECT().GetQueueType().Return(QueueTypeStandbyTransfer).AnyTimes()
 	mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
 	mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass)).Times(1)
 
@@ -174,11 +174,39 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 	s.NoError(err)
 }
 
-func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
+func (s *taskPriorityAssignerSuite) TestAssign_ActiveTask_StandbyDomain() {
+	constants.TestGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
+	defer func() {
+		constants.TestGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
+	}()
 	s.mockDomainCache.EXPECT().GetDomainByID(constants.TestDomainID).Return(constants.TestGlobalDomainEntry, nil)
 
 	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetQueueType().Return(QueueTypeTimer).AnyTimes()
+	mockTask.EXPECT().GetQueueType().Return(QueueTypeActiveTimer).AnyTimes()
+	mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
+	mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass)).Times(1)
+
+	err := s.priorityAssigner.Assign(mockTask)
+	s.NoError(err)
+}
+
+func (s *taskPriorityAssignerSuite) TestAssign_ActiveTransferTask_ActiveDomain() {
+	s.mockDomainCache.EXPECT().GetDomainByID(constants.TestDomainID).Return(constants.TestGlobalDomainEntry, nil)
+
+	mockTask := NewMockTask(s.controller)
+	mockTask.EXPECT().GetQueueType().Return(QueueTypeActiveTransfer).AnyTimes()
+	mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
+	mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass)).Times(1)
+
+	err := s.priorityAssigner.Assign(mockTask)
+	s.NoError(err)
+}
+
+func (s *taskPriorityAssignerSuite) TestAssign_ActiveTimerTask_ActiveDomain() {
+	s.mockDomainCache.EXPECT().GetDomainByID(constants.TestDomainID).Return(constants.TestGlobalDomainEntry, nil)
+
+	mockTask := NewMockTask(s.controller)
+	mockTask.EXPECT().GetQueueType().Return(QueueTypeActiveTimer).AnyTimes()
 	mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
 	mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass)).Times(1)
 
@@ -191,7 +219,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
 
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockTask(s.controller)
-		mockTask.EXPECT().GetQueueType().Return(QueueTypeTimer).AnyTimes()
+		mockTask.EXPECT().GetQueueType().Return(QueueTypeActiveTimer).AnyTimes()
 		mockTask.EXPECT().GetDomainID().Return(constants.TestDomainID).Times(1)
 		if i < s.testTaskProcessRPS {
 			mockTask.EXPECT().SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass)).Times(1)

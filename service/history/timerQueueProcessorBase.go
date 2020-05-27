@@ -103,7 +103,7 @@ func newTimerQueueProcessorBase(
 	config := shard.GetConfig()
 
 	var taskProcessor *taskProcessor
-	if !config.TimerProcessorEnablePriorityTaskProcessor() {
+	if queueTaskProcessor == nil || !config.TimerProcessorEnablePriorityTaskProcessor() {
 		options := taskProcessorOptions{
 			workerCount: config.TimerTaskWorkerCount(),
 			queueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),

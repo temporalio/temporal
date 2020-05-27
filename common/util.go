@@ -69,6 +69,10 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	retryTaskProcessingInitialInterval = 50 * time.Millisecond
+	retryTaskProcessingMaxInterval     = 100 * time.Microsecond
+	retryTaskProcessingMaxAttempts     = 3
+
 	contextExpireThreshold = 10 * time.Millisecond
 
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
@@ -172,6 +176,15 @@ func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryKafkaOperationInitialInterval)
 	policy.SetMaximumInterval(retryKafkaOperationMaxInterval)
 	policy.SetExpirationInterval(retryKafkaOperationExpirationInterval)
+
+	return policy
+}
+
+// CreateTaskProcessingRetryPolicy creates a retry policy for task processing
+func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
+	policy.SetMaximumInterval(retryTaskProcessingMaxInterval)
+	policy.SetMaximumAttempts(retryTaskProcessingMaxAttempts)
 
 	return policy
 }
