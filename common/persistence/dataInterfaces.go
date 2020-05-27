@@ -776,6 +776,17 @@ type (
 		RunID       string
 	}
 
+	// GetTransferTaskRequest is the request for GetTransferTask
+	GetTransferTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetTransferTaskResponse is the response to GetTransferTask
+	GetTransferTaskResponse struct {
+		TransferTaskInfo *persistenceblobs.TransferTaskInfo
+	}
+
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
 		ReadLevel     int64
@@ -1351,6 +1362,7 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error

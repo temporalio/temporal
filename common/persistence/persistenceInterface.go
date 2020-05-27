@@ -98,6 +98,7 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
