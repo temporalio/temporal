@@ -92,7 +92,8 @@ func applyWorkflowMutationTx(
 		runID,
 		workflowMutation.TransferTasks,
 		workflowMutation.ReplicationTasks,
-		workflowMutation.TimerTasks); err != nil {
+		workflowMutation.TimerTasks,
+	); err != nil {
 		return err
 	}
 
@@ -252,7 +253,8 @@ func applyWorkflowSnapshotTxAsReset(
 		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.TimerTasks); err != nil {
+		workflowSnapshot.TimerTasks,
+	); err != nil {
 		return err
 	}
 
@@ -440,7 +442,8 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.TimerTasks); err != nil {
+		workflowSnapshot.TimerTasks,
+	); err != nil {
 		return err
 	}
 
@@ -546,7 +549,8 @@ func applyTasks(
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID,
+	); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("applyTasks failed. Failed to create replication tasks. Error: %v", err),
 		}
@@ -851,8 +855,8 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*sqlblobs.ReplicationInfo
 
+		var lastReplicationInfo map[string]*sqlblobs.ReplicationInfo
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
 
@@ -880,6 +884,9 @@ func createReplicationTasks(
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			lastReplicationInfo = map[string]*sqlblobs.ReplicationInfo{}
 
+		case p.ReplicationTaskTypeFailoverMarker:
+			version = task.GetVersion()
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Unknown replication task: %v", task.GetType()),
@@ -901,6 +908,7 @@ func createReplicationTasks(
 			BranchToken:             branchToken,
 			NewRunBranchToken:       newRunBranchToken,
 			ResetWorkflow:           &resetWorkflow,
+			CreationTime:            common.Int64Ptr(task.GetVisibilityTimestamp().UnixNano()),
 		})
 		if err != nil {
 			return err

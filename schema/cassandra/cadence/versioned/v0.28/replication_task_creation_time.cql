@@ -1,0 +1,1 @@
+ALTER TYPE replication_task ADD created_time bigint;

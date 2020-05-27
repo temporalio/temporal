@@ -5280,6 +5280,29 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	s.Len(resp.Tasks, 0)
 }
 
+// TestCreateFailoverMarkerTasks test
+func (s *ExecutionManagerSuite) TestCreateFailoverMarkerTasks() {
+	domainID := uuid.New()
+	markers := []*p.FailoverMarkerTask{
+		{
+			TaskID:              1,
+			VisibilityTimestamp: time.Now(),
+			DomainID:            domainID,
+			Version:             1,
+		},
+	}
+	err := s.CreateFailoverMarkers(markers)
+	s.NoError(err)
+
+	tasks, err := s.GetReplicationTasks(1, true)
+	s.NoError(err)
+	s.Equal(len(tasks), 1)
+	s.Equal(tasks[0].Version, int64(1))
+	s.Equal(tasks[0].TaskID, int64(1))
+	s.Equal(tasks[0].DomainID, domainID)
+	s.Equal(tasks[0].TaskType, p.ReplicationTaskTypeFailoverMarker)
+}
+
 func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowExecutionInfo {
 	return &p.WorkflowExecutionInfo{
 		DomainID:                    sourceInfo.DomainID,

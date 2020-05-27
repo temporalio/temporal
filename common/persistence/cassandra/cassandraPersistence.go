@@ -214,7 +214,8 @@ const (
 		`branch_token: ?, ` +
 		`reset_workflow: ?, ` +
 		`new_run_event_store_version: ?, ` +
-		`new_run_branch_token: ? ` +
+		`new_run_branch_token: ?, ` +
+		`created_time: ? ` +
 		`}`
 
 	templateTimerTaskType = `{` +
@@ -2801,6 +2802,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		p.EventStoreVersion,
 		task.NewRunBranchToken,
 		defaultVisibilityTimestamp,
+		defaultVisibilityTimestamp,
 		task.GetTaskID())
 
 	err := query.Exec()
@@ -2888,6 +2890,39 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err),
+		}
+	}
+	return nil
+}
+
+func (d *cassandraPersistence) CreateFailoverMarkerTasks(
+	request *p.CreateFailoverMarkersRequest,
+) error {
+
+	batch := d.session.NewBatch(gocql.LoggedBatch)
+	for _, task := range request.Markers {
+		t := []p.Task{task}
+		if err := createReplicationTasks(
+			batch,
+			t,
+			d.shardID,
+			task.DomainID,
+			rowTypeReplicationWorkflowID,
+			rowTypeReplicationRunID,
+		); err != nil {
+			return err
+		}
+	}
+
+	err := d.session.ExecuteBatch(batch)
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CreateFailoverMarkerTasks operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("CreateFailoverMarkerTasks operation failed. Error: %v", err),
 		}
 	}
 	return nil

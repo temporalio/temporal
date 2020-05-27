@@ -33,8 +33,14 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
+)
+
+const (
+	emptyWorkflowID       string = ""
+	emptyReplicationRunID string = "30000000-5000-f000-f000-000000000000"
 )
 
 type sqlExecutionManager struct {
@@ -983,6 +989,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 			BranchToken:         info.GetBranchToken(),
 			NewRunBranchToken:   info.GetNewRunBranchToken(),
 			ResetWorkflow:       info.GetResetWorkflow(),
+			CreationTime:        info.GetCreationTime(),
 		}
 	}
 	var nextPageToken []byte
@@ -1091,6 +1098,43 @@ func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
 		SourceClusterName:      request.SourceClusterName,
 	}); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) CreateFailoverMarkerTasks(
+	request *p.CreateFailoverMarkersRequest,
+) error {
+
+	tx, err := m.db.BeginTx()
+	if err != nil {
+		return err
+	}
+
+	for _, task := range request.Markers {
+		t := []p.Task{task}
+		if err := createReplicationTasks(
+			tx,
+			t,
+			m.shardID,
+			sqlplugin.MustParseUUID(task.DomainID),
+			emptyWorkflowID,
+			sqlplugin.MustParseUUID(emptyReplicationRunID),
+		); err != nil {
+			rollBackErr := tx.Rollback()
+			if rollBackErr != nil {
+				m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			}
+
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("%v: %v", "CreateFailoverMarkerTasks", err),
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", "CreateFailoverMarkerTasks", err),
+		}
 	}
 	return nil
 }

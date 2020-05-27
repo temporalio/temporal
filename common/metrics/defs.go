@@ -170,6 +170,8 @@ const (
 	PersistenceDeleteReplicationTaskFromDLQScope
 	// PersistenceRangeDeleteReplicationTaskFromDLQScope tracks PersistenceRangeDeleteReplicationTaskFromDLQScope calls made by service to persistence layer
 	PersistenceRangeDeleteReplicationTaskFromDLQScope
+	// PersistenceCreateFailoverMakerTaskScope tracks CreateFailoverMakerTasks calls made by service to persistence layer
+	PersistenceCreateFailoverMakerTasksScope
 	// PersistenceGetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
 	PersistenceGetTimerIndexTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
@@ -1067,6 +1069,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetReplicationTasksFromDLQScope:               {operation: "GetReplicationTasksFromDLQ"},
 		PersistenceDeleteReplicationTaskFromDLQScope:             {operation: "DeleteReplicationTaskFromDLQ"},
 		PersistenceRangeDeleteReplicationTaskFromDLQScope:        {operation: "RangeDeleteReplicationTaskFromDLQ"},
+		PersistenceCreateFailoverMakerTasksScope:                 {operation: "CreateFailoverMarkerTasks"},
 		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
 		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
 		PersistenceRangeCompleteTimerTaskScope:                   {operation: "RangeCompleteTimerTask"},
