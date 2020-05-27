@@ -176,7 +176,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		MaximumInterval:                    info.MaximumInterval,
 		WorkflowExpirationTime:             info.ExpirationTime,
 		MaximumAttempts:                    info.MaximumAttempts,
-		NonRetriableErrors:                 info.NonRetriableErrors,
+		NonRetryableErrorTypes:             info.NonRetryableErrorTypes,
 		BranchToken:                        info.BranchToken,
 		CronSchedule:                       info.CronSchedule,
 		AutoResetPoints:                    autoResetPoints,
@@ -296,10 +296,9 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			MaximumInterval:                         v.MaximumInterval,
 			ExpirationTime:                          v.ExpirationTime,
 			MaximumAttempts:                         v.MaximumAttempts,
-			NonRetriableErrors:                      v.NonRetriableErrors,
-			LastFailureReason:                       v.LastFailureReason,
+			NonRetryableErrorTypes:                  v.NonRetryableErrorTypes,
+			LastFailure:                             v.LastFailure,
 			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastFailureDetails:                      v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos[k] = a
@@ -417,10 +416,9 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			MaximumInterval:                         v.MaximumInterval,
 			ExpirationTime:                          v.ExpirationTime,
 			MaximumAttempts:                         v.MaximumAttempts,
-			NonRetriableErrors:                      v.NonRetriableErrors,
-			LastFailureReason:                       v.LastFailureReason,
+			NonRetryableErrorTypes:                  v.NonRetryableErrorTypes,
+			LastFailure:                             v.LastFailure,
 			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastFailureDetails:                      v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos = append(newInfos, i)
@@ -496,7 +494,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		MaximumInterval:                    info.MaximumInterval,
 		ExpirationTime:                     info.WorkflowExpirationTime,
 		MaximumAttempts:                    info.MaximumAttempts,
-		NonRetriableErrors:                 info.NonRetriableErrors,
+		NonRetryableErrorTypes:             info.NonRetryableErrorTypes,
 		BranchToken:                        info.BranchToken,
 		CronSchedule:                       info.CronSchedule,
 		Memo:                               info.Memo,

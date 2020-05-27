@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -219,12 +220,11 @@ Loop:
 		}
 
 		if timerSequenceID.timerType != timerTypeScheduleToStart {
-			// schedule to start timeout is not retriable
+			// schedule to start timeout is not retryable
 			// customer should set larger schedule to start timeout if necessary
 			if ok, err := mutableState.RetryActivity(
 				activityInfo,
-				timerTypeToReason(timerSequenceID.timerType),
-				nil,
+				failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType)),
 			); err != nil {
 				return err
 			} else if ok {
@@ -480,8 +480,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutReason := timerTypeToReason(timerTypeStartToClose)
-	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutReason)
+	timeoutFailure := failure.NewTimeoutFailure(commonpb.TimeoutType_StartToClose)
+	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutFailure)
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
@@ -517,7 +517,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		BackoffStartIntervalInSeconds: int32(backoffInterval.Seconds()),
 		RetryPolicy:                   startAttributes.RetryPolicy,
 		Initiator:                     continueAsNewInitiator,
-		FailureReason:                 timeoutReason,
+		Failure:                       timeoutFailure,
 		CronSchedule:                  mutableState.GetExecutionInfo().CronSchedule,
 		Header:                        startAttributes.Header,
 		Memo:                          startAttributes.Memo,

@@ -37,12 +37,12 @@ import (
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -218,12 +218,12 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
 	}
 
+	resetFailure := failure.NewResetWorkflowFailure(resetReason, nil)
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow,
-		nil,
+		resetFailure,
 		identityHistoryService,
-		resetReason,
 		"",
 		baseRunID,
 		resetRunID,
@@ -389,11 +389,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 			if _, err := mutableState.AddActivityTaskFailedEvent(
 				ai.ScheduleID,
 				ai.StartedID,
-				&workflowservice.RespondActivityTaskFailedRequest{
-					Reason:   terminateReason,
-					Details:  ai.Details,
-					Identity: ai.StartedIdentity,
-				},
+				getRespondActivityTaskFailedRequestFromActivity(ai, terminateReason),
 			); err != nil {
 				return err
 			}

@@ -32,13 +32,14 @@ import (
 
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
 func Test_NextRetry(t *testing.T) {
 	a := assert.New(t)
 	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
-	reason := "good-reason"
+	reason := failure.NewServerFailure("good-reason", false)
 	identity := "some-worker-identity"
 
 	// no retry without retry policy
@@ -47,7 +48,7 @@ func Test_NextRetry(t *testing.T) {
 		ScheduleToCloseTimeout: 30,
 		StartToCloseTimeout:    25,
 		HasRetryPolicy:         false,
-		NonRetriableErrors:     []string{"bad-reason", "ugly-reason"},
+		NonRetryableErrorTypes: []string{"bad-reason", "ugly-reason"},
 		StartedIdentity:        identity,
 	}
 	a.Equal(backoff.NoBackoff, getBackoffInterval(
@@ -59,7 +60,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// no retry if cancel requested
@@ -74,7 +75,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// no retry if both MaximumAttempts and WorkflowExpirationTime are not set
@@ -88,7 +89,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// no retry if MaximumAttempts is 1 (for initial attempt)
@@ -103,7 +104,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// backoff retry, intervals: 1s, 2s, 4s, 8s.
@@ -118,7 +119,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
@@ -131,7 +132,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
@@ -144,12 +145,12 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
-	// test non-retriable error
-	reason = "bad-reason"
+	// test non-retryable error
+	reason = failure.NewServerFailure("bad-reason", true)
 	a.Equal(backoff.NoBackoff, getBackoffInterval(
 		now,
 		ai.ExpirationTime,
@@ -159,10 +160,10 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
-	reason = "good-reason"
+	reason = failure.NewServerFailure("good-reason", false)
 
 	a.Equal(time.Second*8, getBackoffInterval(
 		now,
@@ -173,7 +174,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
@@ -188,7 +189,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// increase max attempts, with max interval cap at 10s
@@ -203,7 +204,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
@@ -219,7 +220,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 
 	// extend expiration, next interval should be 10s
@@ -233,7 +234,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 
@@ -249,7 +250,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
 		reason,
-		ai.NonRetriableErrors,
+		ai.NonRetryableErrorTypes,
 	))
 	ai.Attempt++
 }

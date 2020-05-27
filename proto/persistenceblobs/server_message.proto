@@ -26,6 +26,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
+import "common/enum.proto";
 import "common/message.proto";
 import "common/server_enum.proto";
 
@@ -36,6 +37,7 @@ import "execution/server_enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
+import "failure/message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -71,14 +73,13 @@ message ActivityInfo {
     int32 retryMaximumAttempts = 25;
     int64 retryExpirationTimeNanos = 26;
     double retryBackoffCoefficient = 27;
-    repeated string retryNonRetryableErrors = 28;
-    string retryLastFailureReason = 29;
+    repeated string retryNonRetryableErrorTypes = 28;
+    failure.Failure retryLastFailure = 29;
     string retryLastWorkerIdentity = 30;
-    common.Payloads retryLastFailureDetails = 31;
-    string namespaceId = 32;
-    int64 scheduleId = 33;
-    common.Payloads lastHeartbeatDetails = 34;
-    google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
+    string namespaceId = 31;
+    int64 scheduleId = 32;
+    common.Payloads lastHeartbeatDetails = 33;
+    google.protobuf.Timestamp lastHeartbeatUpdatedTime = 34;
 }
 
 message ShardInfo {
@@ -270,7 +271,7 @@ message WorkflowExecutionInfo {
     int32 retryMaximumAttempts = 41;
     double retryBackoffCoefficient = 42;
     int64 retryExpirationTimeNanos = 43;
-    repeated string retryNonRetryableErrors = 44;
+    repeated string retryNonRetryableErrorTypes = 44;
     bool hasRetryPolicy = 45;
     string cronSchedule = 46;
     int32 eventStoreVersion = 47;
@@ -307,7 +308,7 @@ message ChildExecutionInfo {
     string createRequestId = 10;
     string namespace = 11;
     string workflowTypeName = 12;
-    int32 parentClosePolicy = 13;
+    common.ParentClosePolicy parentClosePolicy = 13;
     int64 initiatedId = 14;
 }
 

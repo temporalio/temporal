@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
@@ -646,8 +647,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 			{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-					Reason:  "retryable-error",
-					Details: nil,
+					Failure: failure.NewServerFailure("retryable-error", false),
 				}},
 			}}, nil
 	}
@@ -701,7 +701,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	tl := "integration-wf-retry-failures-tasklist"
 	identity := "worker1"
 
-	workflowImpl := func(attempts int, errorReason string, executions *[]*commonpb.WorkflowExecution) decisionTaskHandler {
+	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) decisionTaskHandler {
 		attemptCount := 0
 
 		dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
@@ -722,8 +722,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 					DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 					Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 						//Reason:  "retryable-error",
-						Reason:  errorReason,
-						Details: nil,
+						Failure: failure.NewServerFailure(errorReason, nonRetryable),
 					}},
 				}}, nil
 		}
@@ -757,7 +756,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	var executions []*commonpb.WorkflowExecution
-	dtHandler := workflowImpl(5, "retryable-error", &executions)
+	dtHandler := workflowImpl(5, "retryable-error", false, &executions)
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
@@ -812,7 +811,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	executions = []*commonpb.WorkflowExecution{}
-	dtHandler = workflowImpl(5, "bad-bug", &executions)
+	dtHandler = workflowImpl(5, "bad-bug", true, &executions)
 	poller = &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
@@ -891,8 +890,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 			{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-					Reason:  "cron-test-error",
-					Details: nil,
+					Failure: failure.NewServerFailure("cron-test-error", false),
 				}},
 			}}, nil
 	}
@@ -956,7 +954,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
-	s.Equal("cron-test-error", attributes.GetFailureReason())
+	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
 	s.Nil(attributes.GetLastCompletionResult())
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
@@ -966,7 +964,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
-	s.Equal("", attributes.GetFailureReason())
+	s.Equal("", attributes.GetFailure().GetMessage())
 
 	var r string
 	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
@@ -980,7 +978,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
-	s.Equal("cron-test-error", attributes.GetFailureReason())
+	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
 
 	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
 	s.NoError(err)
@@ -1112,7 +1110,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
-	s.Equal("temporalInternal:Timeout StartToClose", attributes.GetFailureReason())
+	s.Equal(commonpb.TimeoutType_StartToClose, attributes.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
