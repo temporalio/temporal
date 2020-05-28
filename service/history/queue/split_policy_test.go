@@ -272,8 +272,13 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		2: 1000,
 		3: 10000,
 	}
+	lookAheadFunc := func(key task.Key) task.Key {
+		currentID := key.(*testKey).ID
+		return &testKey{ID: currentID + 0}
+	}
 	stuckTaskSplitPolicy := NewStuckTaskSplitPolicy(
 		attemptThreshold,
+		lookAheadFunc,
 		maxNewQueueLevel,
 	)
 
@@ -530,6 +535,104 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 	for _, tc := range testCases {
 		queue := NewProcessingQueue(tc.currentState, nil, nil)
 		splitPolicy := NewSelectedDomainSplitPolicy(tc.domainToSplit, newQueueLevel)
+
+		s.assertQueueStatesEqual(tc.expectedNewStates, splitPolicy.Evaluate(queue))
+	}
+}
+
+func (s *splitPolicySuite) TestRandomSplitPolicy() {
+	maxNewQueueLevel := 3
+	lookAheadFunc := func(key task.Key) task.Key {
+		currentID := key.(*testKey).ID
+		return &testKey{ID: currentID + 10}
+	}
+
+	testCases := []struct {
+		currentState             ProcessingQueueState
+		splitProbability         float64
+		numPendingTasksPerDomain map[string]int //domainID -> number of pending tasks
+		expectedNewStates        []ProcessingQueueState
+	}{
+		{
+			currentState: newProcessingQueueState(
+				0,
+				&testKey{ID: 0},
+				&testKey{ID: 0},
+				&testKey{ID: 10},
+				NewDomainFilter(
+					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
+					false,
+				),
+			),
+			splitProbability:         0,
+			numPendingTasksPerDomain: nil,
+			expectedNewStates:        nil,
+		},
+		{
+			currentState: newProcessingQueueState(
+				3,
+				&testKey{ID: 0},
+				&testKey{ID: 5},
+				&testKey{ID: 10},
+				NewDomainFilter(
+					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
+					false,
+				),
+			),
+			splitProbability: 1,
+			numPendingTasksPerDomain: map[string]int{
+				"testDomain1": 2,
+				"testDomain2": 3,
+			},
+			expectedNewStates: nil,
+		},
+		{
+			currentState: newProcessingQueueState(
+				0,
+				&testKey{ID: 0},
+				&testKey{ID: 5},
+				&testKey{ID: 10},
+				NewDomainFilter(
+					map[string]struct{}{"testDomain1": {}},
+					false,
+				),
+			),
+			splitProbability: 1,
+			numPendingTasksPerDomain: map[string]int{
+				"testDomain1": 5,
+			},
+			expectedNewStates: []ProcessingQueueState{
+				newProcessingQueueState(
+					1,
+					&testKey{ID: 0},
+					&testKey{ID: 5},
+					&testKey{ID: 10},
+					NewDomainFilter(
+						map[string]struct{}{"testDomain1": {}},
+						false,
+					),
+				),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		outstandingTasks := make(map[task.Key]task.Task)
+		for domainID, numPendingTasks := range tc.numPendingTasksPerDomain {
+			for i := 0; i != numPendingTasks; i++ {
+				mockTask := task.NewMockTask(s.controller)
+				mockTask.EXPECT().GetDomainID().Return(domainID).MaxTimes(1)
+				outstandingTasks[task.NewMockKey(s.controller)] = mockTask
+			}
+		}
+
+		queue := newProcessingQueue(
+			tc.currentState,
+			outstandingTasks,
+			nil,
+			nil,
+		)
+		splitPolicy := NewRandomSplitPolicy(tc.splitProbability, maxNewQueueLevel, lookAheadFunc)
 
 		s.assertQueueStatesEqual(tc.expectedNewStates, splitPolicy.Evaluate(queue))
 	}

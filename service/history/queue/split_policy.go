@@ -21,6 +21,8 @@
 package queue
 
 import (
+	"math/rand"
+
 	"github.com/uber/cadence/service/history/task"
 )
 
@@ -29,18 +31,25 @@ type (
 
 	pendingTaskSplitPolicy struct {
 		pendingTaskThreshold map[int]int // queue level -> threshold
-		lookAheadFunc        lookAheadFunc
 		maxNewQueueLevel     int
+		lookAheadFunc        lookAheadFunc
 	}
 
 	stuckTaskSplitPolicy struct {
 		attemptThreshold map[int]int // queue level -> threshold
 		maxNewQueueLevel int
+		lookAheadFunc    lookAheadFunc
 	}
 
 	selectedDomainSplitPolicy struct {
 		domainIDs     map[string]struct{}
 		newQueueLevel int
+	}
+
+	randomSplitPolicy struct {
+		splitProbability float64
+		maxNewQueueLevel int
+		lookAheadFunc    lookAheadFunc
 	}
 
 	aggregatedSplitPolicy struct {
@@ -66,10 +75,12 @@ func NewPendingTaskSplitPolicy(
 // based on the number of task attempts tasks
 func NewStuckTaskSplitPolicy(
 	attemptThreshold map[int]int,
+	lookAheadFunc lookAheadFunc,
 	maxNewQueueLevel int,
 ) ProcessingQueueSplitPolicy {
 	return &stuckTaskSplitPolicy{
 		attemptThreshold: attemptThreshold,
+		lookAheadFunc:    lookAheadFunc,
 		maxNewQueueLevel: maxNewQueueLevel,
 	}
 }
@@ -83,6 +94,18 @@ func NewSelectedDomainSplitPolicy(
 	return &selectedDomainSplitPolicy{
 		domainIDs:     domainIDs,
 		newQueueLevel: newQueueLevel,
+	}
+}
+
+func NewRandomSplitPolicy(
+	splitProbability float64,
+	maxNewQueueLevel int,
+	lookAheadFunc lookAheadFunc,
+) ProcessingQueueSplitPolicy {
+	return &randomSplitPolicy{
+		splitProbability: splitProbability,
+		maxNewQueueLevel: maxNewQueueLevel,
+		lookAheadFunc:    lookAheadFunc,
 	}
 }
 
@@ -126,48 +149,12 @@ func (p *pendingTaskSplitPolicy) Evaluate(
 		}
 	}
 
-	if len(domainToSplit) == 0 {
-		return nil
-	}
-
-	newMaxLevel := p.lookAheadFunc(queueImpl.state.readLevel)
-	if queueImpl.state.maxLevel.Less(newMaxLevel) {
-		newMaxLevel = queueImpl.state.maxLevel
-	}
-
-	newQueueStates := []ProcessingQueueState{
-		newProcessingQueueState(
-			queueImpl.state.level+1, // split stuck tasks to current level + 1
-			queueImpl.state.ackLevel,
-			queueImpl.state.readLevel,
-			newMaxLevel,
-			NewDomainFilter(domainToSplit, false),
-		),
-	}
-
-	excludedDomainFilter := queueImpl.state.domainFilter.Exclude(domainToSplit)
-	if excludedDomainFilter.ReverseMatch || len(excludedDomainFilter.DomainIDs) != 0 {
-		// this means the new domain filter still matches at least one domain
-		newQueueStates = append(newQueueStates, newProcessingQueueState(
-			queueImpl.state.level,
-			queueImpl.state.ackLevel,
-			queueImpl.state.readLevel,
-			newMaxLevel,
-			excludedDomainFilter,
-		))
-	}
-
-	if !taskKeyEquals(newMaxLevel, queueImpl.state.maxLevel) {
-		newQueueStates = append(newQueueStates, newProcessingQueueState(
-			queueImpl.state.level,
-			newMaxLevel,
-			newMaxLevel,
-			queueImpl.state.maxLevel,
-			queueImpl.state.domainFilter.copy(),
-		))
-	}
-
-	return newQueueStates
+	return splitQueueHelper(
+		queueImpl,
+		domainToSplit,
+		queueImpl.state.level+1, // split stuck tasks to current level + 1
+		p.lookAheadFunc,
+	)
 }
 
 func (p *stuckTaskSplitPolicy) Evaluate(
@@ -195,43 +182,12 @@ func (p *stuckTaskSplitPolicy) Evaluate(
 		}
 	}
 
-	if len(domainToSplit) == 0 {
-		return nil
-	}
-
-	newQueueStates := []ProcessingQueueState{
-		newProcessingQueueState(
-			queueImpl.state.level+1, // split stuck tasks to current level + 1
-			queueImpl.state.ackLevel,
-			queueImpl.state.readLevel,
-			queueImpl.state.readLevel, // here we don't do any lookahead, so set the read level to be the new max level
-			NewDomainFilter(domainToSplit, false),
-		),
-	}
-
-	excludedDomainFilter := queueImpl.state.domainFilter.Exclude(domainToSplit)
-	if excludedDomainFilter.ReverseMatch || len(excludedDomainFilter.DomainIDs) != 0 {
-		// this means the new domain filter still matches at least one domain
-		newQueueStates = append(newQueueStates, newProcessingQueueState(
-			queueImpl.state.level,
-			queueImpl.state.ackLevel,
-			queueImpl.state.readLevel,
-			queueImpl.state.readLevel,
-			excludedDomainFilter,
-		))
-	}
-
-	if !taskKeyEquals(queueImpl.state.readLevel, queueImpl.state.maxLevel) {
-		newQueueStates = append(newQueueStates, newProcessingQueueState(
-			queueImpl.state.level,
-			queueImpl.state.readLevel,
-			queueImpl.state.readLevel,
-			queueImpl.state.maxLevel,
-			queueImpl.state.domainFilter.copy(),
-		))
-	}
-
-	return newQueueStates
+	return splitQueueHelper(
+		queueImpl,
+		domainToSplit,
+		queueImpl.state.level+1, // split stuck tasks to current level + 1
+		p.lookAheadFunc,
+	)
 }
 
 func (p *selectedDomainSplitPolicy) Evaluate(
@@ -271,6 +227,47 @@ func (p *selectedDomainSplitPolicy) Evaluate(
 	}
 }
 
+func (p *randomSplitPolicy) Evaluate(
+	queue ProcessingQueue,
+) []ProcessingQueueState {
+	if !shouldSplit(p.splitProbability) {
+		return nil
+	}
+
+	queueImpl := queue.(*processingQueueImpl)
+
+	if queueImpl.state.level == p.maxNewQueueLevel {
+		// already reaches max level, skip splitting
+		return nil
+	}
+
+	domainIDs := make(map[string]struct{})
+	for _, task := range queueImpl.outstandingTasks {
+		domainIDs[task.GetDomainID()] = struct{}{}
+	}
+
+	if len(domainIDs) == 0 {
+		return nil
+	}
+
+	// pick a random set of domains
+	numDomainToSplit := rand.Intn(len(domainIDs)) + 1
+	domainToSplit := make(map[string]struct{})
+	for domainID := range domainIDs {
+		domainToSplit[domainID] = struct{}{}
+		if len(domainToSplit) == numDomainToSplit {
+			break
+		}
+	}
+
+	return splitQueueHelper(
+		queueImpl,
+		domainToSplit,
+		queueImpl.state.level+1,
+		p.lookAheadFunc,
+	)
+}
+
 func (p *aggregatedSplitPolicy) Evaluate(
 	queue ProcessingQueue,
 ) []ProcessingQueueState {
@@ -281,4 +278,67 @@ func (p *aggregatedSplitPolicy) Evaluate(
 		}
 	}
 	return nil
+}
+
+func splitQueueHelper(
+	queueImpl *processingQueueImpl,
+	domainToSplit map[string]struct{},
+	newQueueLevel int,
+	lookAheadFunc lookAheadFunc,
+) []ProcessingQueueState {
+	if len(domainToSplit) == 0 {
+		return nil
+	}
+
+	newMaxLevel := queueImpl.state.readLevel
+	if lookAheadFunc != nil {
+		newMaxLevel = lookAheadFunc(queueImpl.state.readLevel)
+	}
+	if queueImpl.state.maxLevel.Less(newMaxLevel) {
+		newMaxLevel = queueImpl.state.maxLevel
+	}
+
+	newQueueStates := []ProcessingQueueState{
+		newProcessingQueueState(
+			newQueueLevel,
+			queueImpl.state.ackLevel,
+			queueImpl.state.readLevel,
+			newMaxLevel,
+			NewDomainFilter(domainToSplit, false),
+		),
+	}
+
+	excludedDomainFilter := queueImpl.state.domainFilter.Exclude(domainToSplit)
+	if excludedDomainFilter.ReverseMatch || len(excludedDomainFilter.DomainIDs) != 0 {
+		// this means the new domain filter still matches at least one domain
+		newQueueStates = append(newQueueStates, newProcessingQueueState(
+			queueImpl.state.level,
+			queueImpl.state.ackLevel,
+			queueImpl.state.readLevel,
+			newMaxLevel,
+			excludedDomainFilter,
+		))
+	}
+
+	if !taskKeyEquals(newMaxLevel, queueImpl.state.maxLevel) {
+		newQueueStates = append(newQueueStates, newProcessingQueueState(
+			queueImpl.state.level,
+			newMaxLevel,
+			newMaxLevel,
+			queueImpl.state.maxLevel,
+			queueImpl.state.domainFilter.copy(),
+		))
+	}
+
+	return newQueueStates
+}
+
+func shouldSplit(probability float64) bool {
+	if probability <= 0 {
+		return false
+	}
+	if probability >= 1.0 {
+		return true
+	}
+	return rand.Intn(int(1.0/probability)) == 0
 }
