@@ -62,9 +62,10 @@ func (bw *blobstoreWriter) Add(e interface{}) error {
 	return bw.writer.Add(e)
 }
 
-// Flush flushes contents of writer to blobstore
+// Flush flushes contents of writer to blobstore.
+// Only triggers flush if page contains some contents.
 func (bw *blobstoreWriter) Flush() error {
-	return bw.writer.Flush()
+	return bw.writer.FlushIfNotEmpty()
 }
 
 // FlushedKeys returns the keys that have been successfully flushed.

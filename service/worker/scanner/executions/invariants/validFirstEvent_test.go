@@ -58,6 +58,7 @@ func (s *ValidFirstEventSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.ValidFirstEventInvariantType,
 				Info:            "got unexpected first eventID",
 				InfoDetails:     "expected 1 but got 10",
 			},
@@ -69,6 +70,7 @@ func (s *ValidFirstEventSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.ValidFirstEventInvariantType,
 				Info:            "got unexpected first event type",
 				InfoDetails:     "expected WorkflowExecutionStarted but got WorkflowExecutionCanceled",
 			},
@@ -80,6 +82,7 @@ func (s *ValidFirstEventSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.ValidFirstEventInvariantType,
 			},
 		},
 	}

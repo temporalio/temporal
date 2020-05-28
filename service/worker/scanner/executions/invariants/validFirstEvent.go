@@ -50,6 +50,7 @@ func (v *validFirstEvent) Check(_ common.Execution, resources *common.InvariantR
 	if firstEvent.GetEventId() != c.FirstEventID {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeCorrupted,
+			InvariantType:   v.InvariantType(),
 			Info:            "got unexpected first eventID",
 			InfoDetails:     fmt.Sprintf("expected %v but got %v", c.FirstEventID, firstEvent.GetEventId()),
 		}
@@ -57,12 +58,14 @@ func (v *validFirstEvent) Check(_ common.Execution, resources *common.InvariantR
 	if firstEvent.GetEventType() != shared.EventTypeWorkflowExecutionStarted {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeCorrupted,
+			InvariantType:   v.InvariantType(),
 			Info:            "got unexpected first event type",
 			InfoDetails:     fmt.Sprintf("expected %v but got %v", shared.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType()),
 		}
 	}
 	return common.CheckResult{
 		CheckResultType: common.CheckResultTypeHealthy,
+		InvariantType:   v.InvariantType(),
 	}
 }
 
@@ -73,6 +76,7 @@ func (v *validFirstEvent) Fix(execution common.Execution, resources *common.Inva
 	}
 	fixResult = common.DeleteExecution(&execution, v.pr)
 	fixResult.CheckResult = *checkResult
+	fixResult.InvariantType = v.InvariantType()
 	return *fixResult
 }
 

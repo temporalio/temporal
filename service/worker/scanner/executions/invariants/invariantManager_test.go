@@ -25,17 +25,17 @@ package invariants
 import (
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-
-	"github.com/uber/cadence/service/worker/scanner/executions/common"
-
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/uber/cadence/service/worker/scanner/executions/common"
 )
 
 type InvariantManagerSuite struct {
 	*require.Assertions
 	suite.Suite
+	controller *gomock.Controller
 }
 
 func TestInvariantManagerSuite(t *testing.T) {
@@ -44,6 +44,11 @@ func TestInvariantManagerSuite(t *testing.T) {
 
 func (s *InvariantManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.controller = gomock.NewController(s.T())
+}
+
+func (s *InvariantManagerSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *InvariantManagerSuite) TestRunChecks() {
@@ -150,9 +155,9 @@ func (s *InvariantManagerSuite) TestRunChecks() {
 	for _, tc := range testCases {
 		invariants := make([]common.Invariant, len(tc.checkResults), len(tc.checkResults))
 		for i := 0; i < len(tc.checkResults); i++ {
-			invariant := &common.MockInvariant{}
-			invariant.On("Check", mock.Anything, mock.Anything).Return(tc.checkResults[i])
-			invariants[i] = invariant
+			mockInvariant := common.NewMockInvariant(s.controller)
+			mockInvariant.EXPECT().Check(gomock.Any(), gomock.Any()).Return(tc.checkResults[i])
+			invariants[i] = mockInvariant
 		}
 		manager := &invariantManager{
 			invariants: invariants,
@@ -345,9 +350,9 @@ func (s *InvariantManagerSuite) TestRunFixes() {
 	for _, tc := range testCases {
 		invariants := make([]common.Invariant, len(tc.fixResults), len(tc.fixResults))
 		for i := 0; i < len(tc.fixResults); i++ {
-			invariant := &common.MockInvariant{}
-			invariant.On("Fix", mock.Anything, mock.Anything).Return(tc.fixResults[i])
-			invariants[i] = invariant
+			mockInvariant := common.NewMockInvariant(s.controller)
+			mockInvariant.EXPECT().Fix(gomock.Any(), gomock.Any()).Return(tc.fixResults[i])
+			invariants[i] = mockInvariant
 		}
 		manager := &invariantManager{
 			invariants: invariants,
