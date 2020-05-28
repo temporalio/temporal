@@ -47,8 +47,8 @@ const (
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
 	CustomIntField        = "CustomIntField"
-	CustomBoolField       = "CustomBoolField"
 	CustomDoubleField     = "CustomDoubleField"
+	CustomBoolField       = "CustomBoolField"
 	CustomDatetimeField   = "CustomDatetimeField"
 	TemporalChangeVersion = "TemporalChangeVersion"
 )
@@ -69,8 +69,8 @@ func createDefaultIndexedKeys() map[string]interface{} {
 		CustomStringField:     commonpb.IndexedValueType_String,
 		CustomKeywordField:    commonpb.IndexedValueType_Keyword,
 		CustomIntField:        commonpb.IndexedValueType_Int,
-		CustomBoolField:       commonpb.IndexedValueType_Bool,
 		CustomDoubleField:     commonpb.IndexedValueType_Double,
+		CustomBoolField:       commonpb.IndexedValueType_Bool,
 		CustomDatetimeField:   commonpb.IndexedValueType_Datetime,
 		TemporalChangeVersion: commonpb.IndexedValueType_Keyword,
 		BinaryChecksums:       commonpb.IndexedValueType_Keyword,
