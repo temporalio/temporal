@@ -27,14 +27,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/worker/scanner/executions/common"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 type OpenCurrentExecutionSuite struct {
@@ -63,6 +62,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			execution: getClosedExecution(),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 			},
 		},
 		{
@@ -70,6 +70,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getConcreteErr: errors.New("got error checking if concrete is open"),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 				Info:            "failed to check if concrete execution is still open",
 				InfoDetails:     "got error checking if concrete is open",
 			},
@@ -86,6 +87,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getConcreteErr: nil,
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 			},
 		},
 		{
@@ -101,6 +103,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getCurrentErr:  &shared.EntityNotExistsError{},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 				Info:            "execution is open without having current execution",
 				InfoDetails:     "EntityNotExistsError{Message: }",
 			},
@@ -118,6 +121,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			getCurrentErr:  errors.New("error getting current execution"),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 				Info:            "failed to check if current execution exists",
 				InfoDetails:     "error getting current execution",
 			},
@@ -138,6 +142,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 				Info:            "execution is open but current points at a different execution",
 				InfoDetails:     "current points at not-equal",
 			},
@@ -158,6 +163,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.OpenCurrentExecutionInvariantType,
 			},
 		},
 	}

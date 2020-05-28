@@ -35,6 +35,7 @@ func checkBeforeFix(
 	if checkResult.CheckResultType == common.CheckResultTypeHealthy {
 		return &common.FixResult{
 			FixResultType: common.FixResultTypeSkipped,
+			InvariantType: invariant.InvariantType(),
 			CheckResult:   checkResult,
 			Info:          "skipped fix because execution was healthy",
 		}, nil
@@ -42,6 +43,7 @@ func checkBeforeFix(
 	if checkResult.CheckResultType == common.CheckResultTypeFailed {
 		return &common.FixResult{
 			FixResultType: common.FixResultTypeFailed,
+			InvariantType: invariant.InvariantType(),
 			CheckResult:   checkResult,
 			Info:          "failed fix because check failed",
 		}, nil

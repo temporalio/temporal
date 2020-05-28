@@ -66,6 +66,7 @@ type (
 	Writer interface {
 		Add(Entity) error
 		Flush() error
+		FlushIfNotEmpty() error
 		FlushedPages() []PageToken
 		FirstFlushedPage() PageToken
 		LastFlushedPage() PageToken

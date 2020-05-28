@@ -64,6 +64,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getHistoryResp: &persistence.ReadHistoryBranchResponse{},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "failed to check if concrete execution still exists",
 				InfoDetails:     "got error checking workflow exists",
 			},
@@ -74,6 +75,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getHistoryResp: &persistence.ReadHistoryBranchResponse{},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "determined execution was healthy because concrete execution no longer exists",
 			},
 			expectedResourcePopulated: false,
@@ -84,6 +86,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getHistoryErr:  gocql.ErrNotFound,
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "concrete execution exists but history does not exist",
 				InfoDetails:     gocql.ErrNotFound.Error(),
 			},
@@ -95,6 +98,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getHistoryErr:  errors.New("error fetching history"),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "failed to verify if history exists",
 				InfoDetails:     "error fetching history",
 			},
@@ -105,6 +109,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			getHistoryResp: nil,
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "concrete execution exists but got empty history",
 			},
 			expectedResourcePopulated: false,
@@ -118,6 +123,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 			},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
+				InvariantType:   common.HistoryExistsInvariantType,
 			},
 			expectedResourcePopulated: true,
 		},

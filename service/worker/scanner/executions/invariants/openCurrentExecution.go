@@ -49,6 +49,7 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	if !common.Open(execution.State) {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeHealthy,
+			InvariantType:   o.InvariantType(),
 		}
 	}
 	currentExecResp, currentExecErr := o.pr.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
@@ -59,6 +60,7 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	if stillOpenErr != nil {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeFailed,
+			InvariantType:   o.InvariantType(),
 			Info:            "failed to check if concrete execution is still open",
 			InfoDetails:     stillOpenErr.Error(),
 		}
@@ -66,6 +68,7 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	if !stillOpen {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeHealthy,
+			InvariantType:   o.InvariantType(),
 		}
 	}
 	if currentExecErr != nil {
@@ -73,12 +76,14 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 		case *shared.EntityNotExistsError:
 			return common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
+				InvariantType:   o.InvariantType(),
 				Info:            "execution is open without having current execution",
 				InfoDetails:     currentExecErr.Error(),
 			}
 		default:
 			return common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
+				InvariantType:   o.InvariantType(),
 				Info:            "failed to check if current execution exists",
 				InfoDetails:     currentExecErr.Error(),
 			}
@@ -87,12 +92,14 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	if currentExecResp.RunID != execution.RunID {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeCorrupted,
+			InvariantType:   o.InvariantType(),
 			Info:            "execution is open but current points at a different execution",
 			InfoDetails:     fmt.Sprintf("current points at %v", currentExecResp.RunID),
 		}
 	}
 	return common.CheckResult{
 		CheckResultType: common.CheckResultTypeHealthy,
+		InvariantType:   o.InvariantType(),
 	}
 }
 
@@ -103,9 +110,10 @@ func (o *openCurrentExecution) Fix(execution common.Execution, resources *common
 	}
 	fixResult = common.DeleteExecution(&execution, o.pr)
 	fixResult.CheckResult = *checkResult
+	fixResult.InvariantType = o.InvariantType()
 	return *fixResult
 }
 
 func (o *openCurrentExecution) InvariantType() common.InvariantType {
-	return common.OpenCurrentExecution
+	return common.OpenCurrentExecutionInvariantType
 }

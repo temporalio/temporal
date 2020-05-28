@@ -71,6 +71,14 @@ func (w *writer) Flush() error {
 	return nil
 }
 
+// FlushIfNotEmpty flushes the buffer if and only if it is not empty
+func (w *writer) FlushIfNotEmpty() error {
+	if len(w.page.Entities) == 0 {
+		return nil
+	}
+	return w.Flush()
+}
+
 // FlushedPages returns all pages which have been successfully flushed.
 func (w *writer) FlushedPages() []PageToken {
 	return w.flushedPages
