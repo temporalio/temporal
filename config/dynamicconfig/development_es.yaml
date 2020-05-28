@@ -19,8 +19,8 @@ frontend.validSearchAttributes:
       CustomStringField: 0
       CustomKeywordField: 1
       CustomIntField: 2
-      CustomBoolField: 3
-      CustomDoubleField: 4
+      CustomDoubleField: 3
+      CustomBoolField: 4
       CustomDatetimeField: 5
       project: 1
       service: 1
