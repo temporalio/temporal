@@ -26,7 +26,10 @@ package canary
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
@@ -85,8 +88,31 @@ func (r *canaryRunner) Run() error {
 		r.logger.Info("starting canary", zap.String("namespace", d))
 		r.execute(canary, &wg)
 	}
-	wg.Wait()
+
+	awaitWaitGroup(&wg)
 	return nil
+}
+
+func awaitWaitGroup(wg *sync.WaitGroup) {
+	doneC := make(chan struct{})
+
+	go func() {
+		wg.Wait()
+		close(doneC)
+	}()
+
+	select {
+	case <-doneC:
+		return
+	case <-getKillSignal():
+		return
+	}
+}
+
+func getKillSignal() <-chan os.Signal {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	return c
 }
 
 func (r *canaryRunner) execute(task Runnable, wg *sync.WaitGroup) {
