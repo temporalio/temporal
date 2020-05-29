@@ -113,6 +113,7 @@ var (
 	ComponentReplicator               = component("replicator")
 	ComponentReplicationTaskProcessor = component("replication-task-processor")
 	ComponentHistoryReplicator        = component("history-replicator")
+	ComponentHistoryResender          = component("history-resender")
 	ComponentIndexer                  = component("indexer")
 	ComponentIndexerProcessor         = component("indexer-processor")
 	ComponentIndexerESProcessor       = component("indexer-es-processor")

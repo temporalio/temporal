@@ -117,13 +117,7 @@ func newProcessingQueue(
 	if stateImpl, ok := state.(*processingQueueStateImpl); ok {
 		queue.state = stateImpl
 	} else {
-		queue.state = newProcessingQueueState(
-			state.Level(),
-			state.AckLevel(),
-			state.ReadLevel(),
-			state.MaxLevel(),
-			state.DomainFilter(),
-		)
+		queue.state = copyQueueState(state)
 	}
 
 	return queue
@@ -373,4 +367,16 @@ func maxTaskKey(
 		return key2
 	}
 	return key1
+}
+
+func copyQueueState(
+	state ProcessingQueueState,
+) *processingQueueStateImpl {
+	return newProcessingQueueState(
+		state.Level(),
+		state.AckLevel(),
+		state.ReadLevel(),
+		state.MaxLevel(),
+		state.DomainFilter(),
+	)
 }

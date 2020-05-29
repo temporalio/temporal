@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -53,7 +54,7 @@ func newTimerQueueStandbyProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	clusterName string,
-	taskAllocator taskAllocator,
+	taskAllocator queue.TaskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	queueTaskProcessor task.Processor,
@@ -72,7 +73,7 @@ func newTimerQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, timer.DomainID, timer)
+		return taskAllocator.VerifyStandbyTask(clusterName, timer.DomainID, timer)
 	}
 
 	timerGate := NewRemoteTimerGate()

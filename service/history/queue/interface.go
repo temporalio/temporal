@@ -79,12 +79,12 @@ type (
 		// TODO: add Offload() method
 	}
 
-	// ProcessingQueueManager manages a set of ProcessingQueueCollection and
-	// controls the event loop for loading tasks, updating and persisting
-	// ProcessingQueueStates, spliting/merging ProcessingQueue, etc.
-	ProcessingQueueManager interface {
+	// TransferQueueProcessor is the interface for transfer task queue processor
+	TransferQueueProcessor interface {
 		common.Daemon
-
-		NotifyNewTasks([]persistence.Task)
+		FailoverDomain(domainIDs map[string]struct{})
+		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
+		LockTaskProcessing()
+		UnlockTaskProcessing()
 	}
 )

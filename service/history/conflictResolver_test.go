@@ -45,6 +45,7 @@ import (
 	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -55,7 +56,7 @@ type (
 
 		controller               *gomock.Controller
 		mockShard                *shard.TestContext
-		mockTxProcessor          *MocktransferQueueProcessor
+		mockTxProcessor          *queue.MockTransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *events.MockCache
@@ -87,7 +88,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
+	s.mockTxProcessor = queue.NewMockTransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()

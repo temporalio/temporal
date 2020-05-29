@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -59,7 +60,7 @@ func newTransferQueueActiveProcessor(
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
 	historyClient history.Client,
-	taskAllocator taskAllocator,
+	taskAllocator queue.TaskAllocator,
 	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
@@ -87,7 +88,7 @@ func newTransferQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(task.DomainID, task)
+		return taskAllocator.VerifyActiveTask(task.DomainID, task)
 	}
 
 	maxReadAckLevel := func() int64 {
@@ -184,7 +185,7 @@ func newTransferQueueFailoverProcessor(
 	standbyClusterName string,
 	minLevel int64,
 	maxLevel int64,
-	taskAllocator taskAllocator,
+	taskAllocator queue.TaskAllocator,
 	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
@@ -218,7 +219,7 @@ func newTransferQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(domainIDs, task.DomainID, task)
+		return taskAllocator.VerifyFailoverActiveTask(domainIDs, task.DomainID, task)
 	}
 
 	maxReadAckLevel := func() int64 {

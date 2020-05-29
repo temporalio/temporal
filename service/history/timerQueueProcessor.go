@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -57,7 +58,7 @@ type (
 		isGlobalDomainEnabled  bool
 		currentClusterName     string
 		shard                  shard.Context
-		taskAllocator          taskAllocator
+		taskAllocator          queue.TaskAllocator
 		config                 *config.Config
 		metricsClient          metrics.Client
 		historyService         *historyEngineImpl
@@ -83,7 +84,7 @@ func newTimerQueueProcessor(
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
-	taskAllocator := newTaskAllocator(shard)
+	taskAllocator := queue.NewTaskAllocator(shard)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
@@ -250,11 +251,11 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 }
 
 func (t *timerQueueProcessorImpl) LockTaskProcessing() {
-	t.taskAllocator.lock()
+	t.taskAllocator.Lock()
 }
 
 func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
-	t.taskAllocator.unlock()
+	t.taskAllocator.Unlock()
 }
 
 func (t *timerQueueProcessorImpl) completeTimersLoop() {

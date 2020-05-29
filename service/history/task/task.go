@@ -197,7 +197,10 @@ func (t *timerTask) Ack() {
 	if !ok {
 		return
 	}
-	t.ackMgr.CompleteTimerTask(timerTask)
+
+	if t.ackMgr != nil {
+		t.ackMgr.CompleteTimerTask(timerTask)
+	}
 }
 
 func (t *timerTask) Nack() {
@@ -211,7 +214,9 @@ func (t *timerTask) Nack() {
 func (t *transferTask) Ack() {
 	t.taskBase.Ack()
 
-	t.ackMgr.CompleteQueueTask(t.GetTaskID())
+	if t.ackMgr != nil {
+		t.ackMgr.CompleteQueueTask(t.GetTaskID())
+	}
 }
 
 func (t *transferTask) Nack() {

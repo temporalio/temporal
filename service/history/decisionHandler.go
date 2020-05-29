@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -64,7 +65,7 @@ type (
 		historyEngine         *historyEngineImpl
 		domainCache           cache.DomainCache
 		executionCache        *execution.Cache
-		txProcessor           transferQueueProcessor
+		txProcessor           queue.TransferQueueProcessor
 		timerProcessor        timerQueueProcessor
 		tokenSerializer       common.TaskTokenSerializer
 		metricsClient         metrics.Client

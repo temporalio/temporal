@@ -51,6 +51,7 @@ import (
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	test "github.com/uber/cadence/service/history/testing"
 )
@@ -62,7 +63,7 @@ type (
 
 		controller               *gomock.Controller
 		mockShard                *shard.TestContext
-		mockTxProcessor          *MocktransferQueueProcessor
+		mockTxProcessor          *queue.MockTransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *events.MockCache
@@ -95,7 +96,7 @@ func (s *engine2Suite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
+	s.mockTxProcessor = queue.NewMockTransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()

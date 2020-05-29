@@ -58,6 +58,7 @@ import (
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/replication"
 	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
@@ -89,7 +90,7 @@ type (
 		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
-		txProcessor               transferQueueProcessor
+		txProcessor               queue.TransferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		replicator                *historyReplicator
 		nDCReplicator             ndc.HistoryReplicator
@@ -201,14 +202,33 @@ func NewEngineWithShardContext(
 			shard.GetConfig().ArchiveRequestRPS,
 			shard.GetService().GetArchiverProvider(),
 		),
+		workflowResetter: reset.NewWorkflowResetter(
+			shard,
+			executionCache,
+			logger,
+		),
 		publicClient:       publicClient,
 		matchingClient:     matching,
 		rawMatchingClient:  rawMatchingClient,
 		queueTaskProcessor: queueTaskProcessor,
 		clientChecker:      client.NewVersionChecker(),
 	}
+	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
+	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	if config.TransferProcessorEnableMultiCurosrProcessor() {
+		historyEngImpl.txProcessor = queue.NewTransferQueueProcessor(
+			shard,
+			historyEngImpl,
+			queueTaskProcessor,
+			executionCache,
+			historyEngImpl.resetor,
+			historyEngImpl.workflowResetter,
+			historyEngImpl.archivalClient,
+		)
+	} else {
+		historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	}
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
@@ -243,13 +263,6 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
-	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
-	historyEngImpl.workflowResetter = reset.NewWorkflowResetter(
-		shard,
-		executionCache,
-		logger,
-	)
-	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
 		shard.GetDomainCache(),

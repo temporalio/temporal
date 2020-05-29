@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -55,7 +56,7 @@ func newTransferQueueStandbyProcessor(
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
-	taskAllocator taskAllocator,
+	taskAllocator queue.TaskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	queueTaskProcessor task.Processor,
@@ -85,7 +86,7 @@ func newTransferQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, task.DomainID, task)
+		return taskAllocator.VerifyStandbyTask(clusterName, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
