@@ -325,6 +325,58 @@ func (mr *MockExecutionIteratorMockRecorder) HasNext() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasNext", reflect.TypeOf((*MockExecutionIterator)(nil).HasNext))
 }
 
+// MockScanOutputIterator is a mock of ScanOutputIterator interface
+type MockScanOutputIterator struct {
+	ctrl     *gomock.Controller
+	recorder *MockScanOutputIteratorMockRecorder
+}
+
+// MockScanOutputIteratorMockRecorder is the mock recorder for MockScanOutputIterator
+type MockScanOutputIteratorMockRecorder struct {
+	mock *MockScanOutputIterator
+}
+
+// NewMockScanOutputIterator creates a new mock instance
+func NewMockScanOutputIterator(ctrl *gomock.Controller) *MockScanOutputIterator {
+	mock := &MockScanOutputIterator{ctrl: ctrl}
+	mock.recorder = &MockScanOutputIteratorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockScanOutputIterator) EXPECT() *MockScanOutputIteratorMockRecorder {
+	return m.recorder
+}
+
+// Next mocks base method
+func (m *MockScanOutputIterator) Next() (*ScanOutputEntity, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Next")
+	ret0, _ := ret[0].(*ScanOutputEntity)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Next indicates an expected call of Next
+func (mr *MockScanOutputIteratorMockRecorder) Next() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockScanOutputIterator)(nil).Next))
+}
+
+// HasNext mocks base method
+func (m *MockScanOutputIterator) HasNext() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasNext")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasNext indicates an expected call of HasNext
+func (mr *MockScanOutputIteratorMockRecorder) HasNext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasNext", reflect.TypeOf((*MockScanOutputIterator)(nil).HasNext))
+}
+
 // MockExecutionWriter is a mock of ExecutionWriter interface
 type MockExecutionWriter struct {
 	ctrl     *gomock.Controller

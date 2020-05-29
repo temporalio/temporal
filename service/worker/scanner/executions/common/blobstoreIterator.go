@@ -41,22 +41,22 @@ type (
 func NewBlobstoreIterator(
 	client blobstore.Client,
 	keys Keys,
-) ExecutionIterator {
+) ScanOutputIterator {
 	return &blobstoreIterator{
 		itr: pagination.NewIterator(keys.MinPage, getBlobstoreFetchPageFn(client, keys)),
 	}
 }
 
-// Next returns the next Execution
-func (i *blobstoreIterator) Next() (*Execution, error) {
+// Next returns the next ScanOutputEntity
+func (i *blobstoreIterator) Next() (*ScanOutputEntity, error) {
 	exec, err := i.itr.Next()
 	if exec != nil {
-		return exec.(*Execution), err
+		return exec.(*ScanOutputEntity), err
 	}
 	return nil, err
 }
 
-// HasNext returns true if there is a next Execution false otherwise
+// HasNext returns true if there is a next ScanOutputEntity false otherwise
 func (i *blobstoreIterator) HasNext() bool {
 	return i.itr.HasNext()
 }
@@ -90,7 +90,7 @@ func getBlobstoreFetchPageFn(
 			if err := ValidateExecution(&soe.Execution); err != nil {
 				return pagination.Page{}, err
 			}
-			executions = append(executions, &soe.Execution)
+			executions = append(executions, &soe)
 		}
 		var nextPageToken interface{} = index + 1
 		if nextPageToken.(int) > keys.MaxPage {
