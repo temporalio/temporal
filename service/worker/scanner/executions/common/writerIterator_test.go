@@ -62,7 +62,7 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 	pr := NewPersistenceRetryer(getMockExecutionManager(10, 10), nil)
 	pItr := NewPersistenceIterator(pr, executionPageSize, testShardID)
 	uuid := "uuid"
-	extension := "test"
+	extension := Extension("test")
 	outputDir, err := ioutil.TempDir("", "TestWriterIterator")
 	s.NoError(err)
 	defer os.RemoveAll(outputDir)
@@ -72,18 +72,18 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 	blobstore, err := filestore.NewFilestoreClient(cfg)
 	s.NoError(err)
 	blobstoreWriter := NewBlobstoreWriter(uuid, extension, blobstore, 10)
-	var executions []*Execution
+	var outputs []*ScanOutputEntity
 	for pItr.HasNext() {
 		exec, err := pItr.Next()
 		s.NoError(err)
-		executions = append(executions, exec)
-		err = blobstoreWriter.Add(&ScanOutputEntity{
+		soe := &ScanOutputEntity{
 			Execution: *exec,
-		})
-		s.NoError(err)
+		}
+		outputs = append(outputs, soe)
+		s.NoError(blobstoreWriter.Add(soe))
 	}
 	s.NoError(blobstoreWriter.Flush())
-	s.Len(executions, 100)
+	s.Len(outputs, 100)
 	s.False(pItr.HasNext())
 	_, err = pItr.Next()
 	s.Equal(pagination.ErrIteratorFinished, err)
@@ -91,13 +91,13 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 	s.Equal(uuid, flushedKeys.UUID)
 	s.Equal(0, flushedKeys.MinPage)
 	s.Equal(9, flushedKeys.MaxPage)
-	s.Equal("test", flushedKeys.Extension)
+	s.Equal(Extension("test"), flushedKeys.Extension)
 	blobstoreItr := NewBlobstoreIterator(blobstore, *flushedKeys)
 	i := 0
 	for blobstoreItr.HasNext() {
 		exec, err := blobstoreItr.Next()
 		s.NoError(err)
-		s.Equal(*executions[i], *exec)
+		s.Equal(*outputs[i], *exec)
 		i++
 	}
 }

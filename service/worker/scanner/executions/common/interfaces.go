@@ -59,7 +59,17 @@ type (
 		// or converting store entry to Execution will result in an error after which iterator cannot be used.
 		Next() (*Execution, error)
 		// HasNext indicates if the iterator has a next element. If HasNext is true
-		// it is guaranteed that Next will return a nil error and a non-nil ExecutionIteratorResult.
+		// it is guaranteed that Next will return a nil error and a non-nil Execution.
+		HasNext() bool
+	}
+
+	// ScanOutputIterator gets ScanOutputEntities from underlying store
+	ScanOutputIterator interface {
+		// Next returns the next ScanOutputEntity found. Any error reading from underlying store
+		// or converting store entry to ScanOutputEntity will result in an error after which iterator cannot be used.
+		Next() (*ScanOutputEntity, error)
+		// HasNext indicates if the iterator has a next element. If HasNext is true it is
+		// guaranteed that Next will return a nil error and non-nil ScanOutputEntity.
 		HasNext() bool
 	}
 

@@ -52,37 +52,37 @@ const (
 	// CheckResultTypeFailed indicates a failure occurred while attempting to run check
 	CheckResultTypeFailed CheckResultType = "failed"
 	// CheckResultTypeCorrupted indicates check successfully ran and detected a corruption
-	CheckResultTypeCorrupted = "corrupted"
+	CheckResultTypeCorrupted CheckResultType = "corrupted"
 	// CheckResultTypeHealthy indicates check successfully ran and detected no corruption
-	CheckResultTypeHealthy = "healthy"
+	CheckResultTypeHealthy CheckResultType = "healthy"
 
 	// FixResultTypeSkipped indicates that fix skipped execution
 	FixResultTypeSkipped FixResultType = "skipped"
 	// FixResultTypeFixed indicates that fix successfully fixed an execution
-	FixResultTypeFixed = "fixed"
+	FixResultTypeFixed FixResultType = "fixed"
 	// FixResultTypeFailed indicates that fix attempted to fix an execution but failed to do so
-	FixResultTypeFailed = "failed"
+	FixResultTypeFailed FixResultType = "failed"
 
 	// HistoryExistsInvariantType asserts that history must exist if concrete execution exists
 	HistoryExistsInvariantType InvariantType = "history_exists"
 	// ValidFirstEventInvariantType asserts that the first event in a history must be of a specific form
-	ValidFirstEventInvariantType = "valid_first_event"
+	ValidFirstEventInvariantType InvariantType = "valid_first_event"
 	// OpenCurrentExecutionInvariantType asserts that an open concrete execution must have a valid current execution
-	OpenCurrentExecutionInvariantType = "open_current_execution"
+	OpenCurrentExecutionInvariantType InvariantType = "open_current_execution"
 
 	// InvariantCollectionMutableState is the collection of invariants relating to mutable state
-	InvariantCollectionMutableState InvariantCollection = iota
+	InvariantCollectionMutableState InvariantCollection = 0
 	// InvariantCollectionHistory is the collection  of invariants relating to history
-	InvariantCollectionHistory
+	InvariantCollectionHistory InvariantCollection = 1
 
 	// SkippedExtension is the extension for files which contain skips
 	SkippedExtension Extension = "skipped"
 	// FailedExtension is the extension for files which contain failures
-	FailedExtension = "failed"
+	FailedExtension Extension = "failed"
 	// FixedExtension is the extension for files which contain fixes
-	FixedExtension = "fixed"
+	FixedExtension Extension = "fixed"
 	// CorruptedExtension is the extension for files which contain corruptions
-	CorruptedExtension = "corrupted"
+	CorruptedExtension Extension = "corrupted"
 )
 
 // The following are types related to Invariant.
@@ -212,7 +212,7 @@ type (
 		UUID      string
 		MinPage   int
 		MaxPage   int
-		Extension string
+		Extension Extension
 	}
 )
 
