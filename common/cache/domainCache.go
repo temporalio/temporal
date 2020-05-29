@@ -227,6 +227,7 @@ func NewDomainCacheEntryForTest(
 	isGlobalDomain bool,
 	repConfig *persistence.DomainReplicationConfig,
 	failoverVersion int64,
+	failoverEndtime *int64,
 	clusterMetadata cluster.Metadata,
 ) *DomainCacheEntry {
 
@@ -236,6 +237,7 @@ func NewDomainCacheEntryForTest(
 		isGlobalDomain:    isGlobalDomain,
 		replicationConfig: repConfig,
 		failoverVersion:   failoverVersion,
+		failoverEndTime:   failoverEndtime,
 		clusterMetadata:   clusterMetadata,
 	}
 }
@@ -792,6 +794,11 @@ func (entry *DomainCacheEntry) IsDomainPendingActive() bool {
 		return true
 	}
 	return entry.failoverEndTime != nil
+}
+
+// GetDomainFailoverEndTime returns domain failover end time if it exists
+func (entry *DomainCacheEntry) GetDomainFailoverEndTime() *int64 {
+	return entry.failoverEndTime
 }
 
 // GetReplicationPolicy return the derived workflow replication policy

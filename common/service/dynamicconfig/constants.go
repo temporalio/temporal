@@ -62,6 +62,7 @@ var keys = map[Key]string{
 	VisibilityArchivalStatus:            "system.visibilityArchivalStatus",
 	EnableReadFromVisibilityArchival:    "system.enableReadFromVisibilityArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
+	EnableGracefulFailover:              "system.enableGracefulFailover",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
 	MinRetentionDays:                    "system.minRetentionDays",
 	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
@@ -82,32 +83,34 @@ var keys = map[Key]string{
 	MaxIDLengthLimit:       "limit.maxIDLength",
 
 	// frontend settings
-	FrontendPersistenceMaxQPS:             "frontend.persistenceMaxQPS",
-	FrontendPersistenceGlobalMaxQPS:       "frontend.persistenceGlobalMaxQPS",
-	FrontendVisibilityMaxPageSize:         "frontend.visibilityMaxPageSize",
-	FrontendVisibilityListMaxQPS:          "frontend.visibilityListMaxQPS",
-	FrontendESVisibilityListMaxQPS:        "frontend.esVisibilityListMaxQPS",
-	FrontendMaxBadBinaries:                "frontend.maxBadBinaries",
-	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
-	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
-	FrontendRPS:                           "frontend.rps",
-	FrontendMaxDomainRPSPerInstance:       "frontend.domainrps",
-	FrontendGlobalDomainRPS:               "frontend.globalDomainrps",
-	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
-	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
-	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
-	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
-	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
-	ValidSearchAttributes:                 "frontend.validSearchAttributes",
-	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
-	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
-	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
-	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
-	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
-	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
-	VisibilityArchivalQueryMaxPageSize:    "frontend.visibilityArchivalQueryMaxPageSize",
-	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
-	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
+	FrontendPersistenceMaxQPS:                   "frontend.persistenceMaxQPS",
+	FrontendPersistenceGlobalMaxQPS:             "frontend.persistenceGlobalMaxQPS",
+	FrontendVisibilityMaxPageSize:               "frontend.visibilityMaxPageSize",
+	FrontendVisibilityListMaxQPS:                "frontend.visibilityListMaxQPS",
+	FrontendESVisibilityListMaxQPS:              "frontend.esVisibilityListMaxQPS",
+	FrontendMaxBadBinaries:                      "frontend.maxBadBinaries",
+	FrontendESIndexMaxResultWindow:              "frontend.esIndexMaxResultWindow",
+	FrontendHistoryMaxPageSize:                  "frontend.historyMaxPageSize",
+	FrontendRPS:                                 "frontend.rps",
+	FrontendMaxDomainRPSPerInstance:             "frontend.domainrps",
+	FrontendGlobalDomainRPS:                     "frontend.globalDomainrps",
+	FrontendHistoryMgrNumConns:                  "frontend.historyMgrNumConns",
+	FrontendShutdownDrainDuration:               "frontend.shutdownDrainDuration",
+	DisableListVisibilityByFilter:               "frontend.disableListVisibilityByFilter",
+	FrontendThrottledLogRPS:                     "frontend.throttledLogRPS",
+	EnableClientVersionCheck:                    "frontend.enableClientVersionCheck",
+	ValidSearchAttributes:                       "frontend.validSearchAttributes",
+	SendRawWorkflowHistory:                      "frontend.sendRawWorkflowHistory",
+	FrontendEnableRPCReplication:                "frontend.enableRPCReplication",
+	FrontendEnableCleanupReplicationTask:        "frontend.enableCleanupReplicationTask",
+	SearchAttributesNumberOfKeysLimit:           "frontend.searchAttributesNumberOfKeysLimit",
+	SearchAttributesSizeOfValueLimit:            "frontend.searchAttributesSizeOfValueLimit",
+	SearchAttributesTotalSizeLimit:              "frontend.searchAttributesTotalSizeLimit",
+	VisibilityArchivalQueryMaxPageSize:          "frontend.visibilityArchivalQueryMaxPageSize",
+	VisibilityArchivalQueryMaxRangeInDays:       "frontend.visibilityArchivalQueryMaxRangeInDays",
+	VisibilityArchivalQueryMaxQPS:               "frontend.visibilityArchivalQueryMaxQPS",
+	DomainFailoverRefreshInterval:               "frontend.domainFailoverRefreshInterval",
+	DomainFailoverRefreshTimerJitterCoefficient: "frontend.domainFailoverRefreshTimerJitterCoefficient",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -332,6 +335,8 @@ const (
 	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 	// for signal / start / signal with start API if domain is not active
 	EnableDomainNotActiveAutoForwarding
+	// EnableGracefulFailover whether enabling graceful failover
+	EnableGracefulFailover
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for domain
@@ -415,6 +420,11 @@ const (
 	VisibilityArchivalQueryMaxRangeInDays
 	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
 	VisibilityArchivalQueryMaxQPS
+
+	// DomainFailoverRefreshInterval is the domain failover refresh timer
+	DomainFailoverRefreshInterval
+	// DomainFailoverRefreshTimerJitterCoefficient is the jitter for domain failover refresh timer jitter
+	DomainFailoverRefreshTimerJitterCoefficient
 
 	// key for matching
 

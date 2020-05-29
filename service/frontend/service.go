@@ -81,7 +81,10 @@ type Config struct {
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
 
 	// Domain specific config
-	EnableDomainNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithDomainFilter
+	EnableDomainNotActiveAutoForwarding         dynamicconfig.BoolPropertyFnWithDomainFilter
+	EnableGracefulFailover                      dynamicconfig.BoolPropertyFn
+	DomainFailoverRefreshInterval               dynamicconfig.DurationPropertyFn
+	DomainFailoverRefreshTimerJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes             dynamicconfig.MapPropertyFn
@@ -101,42 +104,45 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFromES bool) *Config {
 	return &Config{
-		NumHistoryShards:                    numHistoryShards,
-		PersistenceMaxQPS:                   dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS:             dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
-		VisibilityMaxPageSize:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableVisibilitySampling:            dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2:     dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
-		VisibilityListMaxQPS:                dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
-		EnableReadVisibilityFromES:          dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
-		ESVisibilityListMaxQPS:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
-		ESIndexMaxResultWindow:              dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
-		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		MaxDomainRPSPerInstance:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxDomainRPSPerInstance, 1200),
-		GlobalDomainRPS:                     dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendGlobalDomainRPS, 0),
-		MaxIDLengthLimit:                    dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		HistoryMgrNumConns:                  dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
-		MaxBadBinaries:                      dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxBadBinaries, domain.MaxBadBinaries),
-		EnableAdminProtection:               dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
-		AdminOperationToken:                 dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
-		DisableListVisibilityByFilter:       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
-		BlobSizeLimitError:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
-		ThrottledLogRPS:                     dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
-		ShutdownDrainDuration:               dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
-		EnableDomainNotActiveAutoForwarding: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableDomainNotActiveAutoForwarding, true),
-		EnableClientVersionCheck:            dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, false),
-		ValidSearchAttributes:               dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
-		SearchAttributesNumberOfKeysLimit:   dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
-		SearchAttributesSizeOfValueLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
-		SearchAttributesTotalSizeLimit:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		MinRetentionDays:                    dc.GetIntProperty(dynamicconfig.MinRetentionDays, domain.MinRetentionDays),
-		VisibilityArchivalQueryMaxPageSize:  dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
-		DisallowQuery:                       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisallowQuery, false),
-		SendRawWorkflowHistory:              dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.SendRawWorkflowHistory, false),
-		EnableRPCReplication:                dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
-		EnableCleanupReplicationTask:        dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
+		NumHistoryShards:                            numHistoryShards,
+		PersistenceMaxQPS:                           dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		VisibilityMaxPageSize:                       dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableVisibilitySampling:                    dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
+		EnableReadFromClosedExecutionV2:             dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
+		VisibilityListMaxQPS:                        dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
+		EnableReadVisibilityFromES:                  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
+		ESVisibilityListMaxQPS:                      dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
+		ESIndexMaxResultWindow:                      dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		HistoryMaxPageSize:                          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
+		RPS:                                         dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
+		MaxDomainRPSPerInstance:                     dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxDomainRPSPerInstance, 1200),
+		GlobalDomainRPS:                             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendGlobalDomainRPS, 0),
+		MaxIDLengthLimit:                            dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		HistoryMgrNumConns:                          dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
+		MaxBadBinaries:                              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxBadBinaries, domain.MaxBadBinaries),
+		EnableAdminProtection:                       dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
+		AdminOperationToken:                         dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
+		DisableListVisibilityByFilter:               dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
+		BlobSizeLimitError:                          dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:                           dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
+		ThrottledLogRPS:                             dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
+		ShutdownDrainDuration:                       dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
+		EnableDomainNotActiveAutoForwarding:         dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableDomainNotActiveAutoForwarding, true),
+		EnableGracefulFailover:                      dc.GetBoolProperty(dynamicconfig.EnableGracefulFailover, false),
+		DomainFailoverRefreshInterval:               dc.GetDurationProperty(dynamicconfig.DomainFailoverRefreshInterval, 10*time.Second),
+		DomainFailoverRefreshTimerJitterCoefficient: dc.GetFloat64Property(dynamicconfig.DomainFailoverRefreshTimerJitterCoefficient, 0.1),
+		EnableClientVersionCheck:                    dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, false),
+		ValidSearchAttributes:                       dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
+		SearchAttributesSizeOfValueLimit:            dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
+		SearchAttributesTotalSizeLimit:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
+		MinRetentionDays:                            dc.GetIntProperty(dynamicconfig.MinRetentionDays, domain.MinRetentionDays),
+		VisibilityArchivalQueryMaxPageSize:          dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
+		DisallowQuery:                               dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisallowQuery, false),
+		SendRawWorkflowHistory:                      dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.SendRawWorkflowHistory, false),
+		EnableRPCReplication:                        dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
+		EnableCleanupReplicationTask:                dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
 	}
 }
 

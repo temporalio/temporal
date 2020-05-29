@@ -157,7 +157,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 		HistoryArchivedInline: false,
 	}, nil)
 
-	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
+	domainCacheEntry := cache.NewDomainCacheEntryForTest(
+		&persistence.DomainInfo{},
+		&persistence.DomainConfig{},
+		false,
+		nil,
+		0,
+		nil,
+		nil,
+	)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.NoError(err)
 }
@@ -175,7 +183,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 	})).Return(nil, errors.New("failed to send signal"))
 
-	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
+	domainCacheEntry := cache.NewDomainCacheEntryForTest(
+		&persistence.DomainInfo{},
+		&persistence.DomainConfig{},
+		false,
+		nil,
+		0,
+		nil,
+		nil,
+	)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.Error(err)
 }

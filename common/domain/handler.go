@@ -299,7 +299,7 @@ func (d *HandlerImpl) ListDomains(
 			IsGlobalDomain:  common.BoolPtr(domain.IsGlobalDomain),
 			FailoverVersion: common.Int64Ptr(domain.FailoverVersion),
 		}
-		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(ctx, domain.Info, domain.Config, domain.ReplicationConfig)
+		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(domain.Info, domain.Config, domain.ReplicationConfig)
 		domains = append(domains, desc)
 	}
 
@@ -331,7 +331,7 @@ func (d *HandlerImpl) DescribeDomain(
 		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(resp.Info, resp.Config, resp.ReplicationConfig)
 	return response, nil
 }
 
@@ -529,7 +529,7 @@ func (d *HandlerImpl) UpdateDomain(
 		IsGlobalDomain:  common.BoolPtr(isGlobalDomain),
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, info, config, replicationConfig)
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(info, config, replicationConfig)
 
 	d.logger.Info("Update domain succeeded",
 		tag.WorkflowDomainName(info.Name),
@@ -583,7 +583,6 @@ func (d *HandlerImpl) DeprecateDomain(
 }
 
 func (d *HandlerImpl) createResponse(
-	ctx context.Context,
 	info *persistence.DomainInfo,
 	config *persistence.DomainConfig,
 	replicationConfig *persistence.DomainReplicationConfig,

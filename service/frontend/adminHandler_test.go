@@ -94,6 +94,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	config := &Config{
 		EnableAdminProtection:        dynamicconfig.GetBoolPropertyFn(false),
 		EnableCleanupReplicationTask: dynamicconfig.GetBoolPropertyFn(false),
+		EnableGracefulFailover:       dynamicconfig.GetBoolPropertyFn(false),
 	}
 	s.handler = NewAdminHandler(s.mockResource, params, config)
 	s.handler.Start()
