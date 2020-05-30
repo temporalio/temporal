@@ -249,6 +249,7 @@ var keys = map[Key]string{
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                   "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
+	EnableDropStuckTaskByDomainID:                          "history.DropStuckTaskByDomain",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
