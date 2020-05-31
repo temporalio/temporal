@@ -960,7 +960,7 @@ func (t *timerTaskPageToken) deserialize(payload []byte) error {
 }
 
 func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
-	row, err := m.db.SelectFromTimerTasks(&sqlplugin.TimerTasksFilter{ShardID: int(request.ShardID), TaskID: int64(request.TaskID), VisibilityTimestamp: &request.VisibilityTimestamp})
+	rows, err := m.db.SelectFromTimerTasks(&sqlplugin.TimerTasksFilter{ShardID: int(request.ShardID), TaskID: int64(request.TaskID), VisibilityTimestamp: &request.VisibilityTimestamp})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
@@ -968,7 +968,11 @@ func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequ
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
 	}
 
-	timerRow := row[0]
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	timerRow := rows[0]
 	timerInfo, err := serialization.TimerTaskInfoFromBlob(timerRow.Data, timerRow.DataEncoding)
 	if err != nil {
 		return nil, err
