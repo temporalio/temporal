@@ -153,6 +153,7 @@ const (
 	FlagActiveClusterNameWithAlias        = FlagActiveClusterName + ", ac"
 	FlagClusters                          = "clusters"
 	FlagClustersWithAlias                 = FlagClusters + ", cl"
+	FlagClusterMembershipRole             = "role"
 	FlagIsGlobalNamespace                 = "global_namespace"
 	FlagIsGlobalNamespaceWithAlias        = FlagIsGlobalNamespace + ", gd"
 	FlagNamespaceData                     = "namespace_data"

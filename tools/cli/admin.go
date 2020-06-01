@@ -214,6 +214,38 @@ func newAdminShardManagementCommands() []cli.Command {
 	}
 }
 
+func newAdminMembershipCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "list",
+			Aliases: []string{"ls"},
+			Usage:   "List memberships",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagEarliestTime,
+					Value: "0",
+					Usage: "Last heartbeat lower bound filter. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.IntFlag{
+					Name:  FlagClusterMembershipRole,
+					Value: 0,
+					Usage: "Membership role filter: 0 - All, 1 - Frontend, 2 - History, 3 - Matching, 4 - Worker",
+				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListMembers(c)
+			}},
+	}
+}
+
 func newAdminHistoryHostCommands() []cli.Command {
 	return []cli.Command{
 		{

@@ -148,6 +148,12 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminTaskListCommands(),
 				},
 				{
+					Name:        "members",
+					Aliases:     []string{"memb"},
+					Usage:       "Run admin operation on membership",
+					Subcommands: newAdminMembershipCommands(),
+				},
+				{
 					Name:        "cluster",
 					Aliases:     []string{"cl"},
 					Usage:       "Run admin operation on cluster",

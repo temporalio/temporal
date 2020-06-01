@@ -446,6 +446,28 @@ func AdminShardManagement(c *cli.Context) {
 	}
 }
 
+// AdminListMembers outputs a table of members
+func AdminListMembers(c *cli.Context) {
+	role := persistence.ServiceType(c.Int(FlagClusterMembershipRole))
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	heartbeat := time.Duration(heartbeatFlag)
+
+	pFactory := CreatePersistenceFactory(c)
+	manager, err := pFactory.NewClusterMetadataManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	}
+
+	req := &persistence.GetClusterMembersRequest{
+		RoleEquals:          role,
+		LastHeartbeatWithin: heartbeat,
+	}
+
+	members, err := manager.GetClusterMembers(req)
+
+	prettyPrintJSONObject(members)
+}
+
 // AdminDescribeHistoryHost describes history host
 func AdminDescribeHistoryHost(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
