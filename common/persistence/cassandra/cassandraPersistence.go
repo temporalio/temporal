@@ -560,6 +560,16 @@ workflow_state = ? ` +
 
 	templateRangeCompleteReplicationTaskQuery = templateRangeCompleteTransferTaskQuery
 
+	templateGetTimerTaskQuery = `SELECT timer, timer_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateGetTimerTasksQuery = `SELECT timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -2556,6 +2566,34 @@ func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLes
 		return 0, serviceerror.NewInternal(fmt.Sprintf("CompleteTasksLessThan operation failed. Error: %v", err))
 	}
 	return p.UnknownNumRowsAffected, nil
+}
+
+func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.GetTimerTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	visibilityTs := request.VisibilityTimestamp
+	query := d.session.Query(templateGetTimerTaskQuery,
+		shardID,
+		rowTypeTimerTask,
+		rowTypeTimerNamespaceID,
+		rowTypeTimerWorkflowID,
+		rowTypeTimerRunID,
+		visibilityTs,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetTimerTask", err)
+	}
+
+	info, err := serialization.TimerTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetTimerTask", err)
+	}
+
+	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
 }
 
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
