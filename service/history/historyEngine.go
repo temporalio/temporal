@@ -207,7 +207,12 @@ func NewEngineWithShardContext(
 		queueTaskProcessor: queueTaskProcessor,
 		clientChecker:      client.NewVersionChecker(),
 	}
-
+	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
+	historyEngImpl.workflowResetter = reset.NewWorkflowResetter(
+		shard,
+		executionCache,
+		logger,
+	)
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
@@ -243,12 +248,6 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
-	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
-	historyEngImpl.workflowResetter = reset.NewWorkflowResetter(
-		shard,
-		executionCache,
-		logger,
-	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
