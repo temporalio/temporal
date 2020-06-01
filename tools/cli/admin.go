@@ -234,11 +234,6 @@ func newAdminMembershipCommands() []cli.Command {
 					Value: 0,
 					Usage: "Membership role filter: 0 - All, 1 - Frontend, 2 - History, 3 - Matching, 4 - Worker",
 				},
-				cli.StringFlag{
-					Name:  FlagTargetCluster,
-					Value: "active",
-					Usage: "Temporal cluster to use",
-				},
 			),
 			Action: func(c *cli.Context) {
 				AdminListMembers(c)

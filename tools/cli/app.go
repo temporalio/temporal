@@ -149,7 +149,6 @@ func NewCliApp() *cli.App {
 				},
 				{
 					Name:        "members",
-					Aliases:     []string{"memb"},
 					Usage:       "Run admin operation on membership",
 					Subcommands: newAdminMembershipCommands(),
 				},
