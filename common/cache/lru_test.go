@@ -34,7 +34,7 @@ type keyType struct {
 }
 
 func TestLRU(t *testing.T) {
-	cache := NewLRU(5)
+	cache := New(&Options{MaxCount: 5})
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
@@ -62,6 +62,7 @@ func TestLRU(t *testing.T) {
 	cache.Get("C")
 	cache.Put("F", "Felp")
 	assert.Nil(t, cache.Get("D"))
+	assert.Equal(t, 4, cache.Size())
 
 	cache.Delete("A")
 	assert.Nil(t, cache.Get("A"))
@@ -74,7 +75,7 @@ func TestGenerics(t *testing.T) {
 	}
 	value := "some random value"
 
-	cache := NewLRU(5)
+	cache := New(&Options{MaxCount: 5})
 	cache.Put(key, value)
 
 	assert.Equal(t, value, cache.Get(key))
@@ -89,8 +90,9 @@ func TestGenerics(t *testing.T) {
 }
 
 func TestLRUWithTTL(t *testing.T) {
-	cache := New(5, &Options{
-		TTL: time.Millisecond * 100,
+	cache := New(&Options{
+		MaxCount: 5,
+		TTL:      time.Millisecond * 100,
 	})
 	cache.Put("A", "foo")
 	assert.Equal(t, "foo", cache.Get("A"))
@@ -100,7 +102,7 @@ func TestLRUWithTTL(t *testing.T) {
 }
 
 func TestLRUCacheConcurrentAccess(t *testing.T) {
-	cache := NewLRU(5)
+	cache := New(&Options{MaxCount: 5})
 	values := map[string]string{
 		"A": "foo",
 		"B": "bar",
@@ -154,7 +156,8 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 
 func TestRemoveFunc(t *testing.T) {
 	ch := make(chan bool)
-	cache := New(5, &Options{
+	cache := New(&Options{
+		MaxCount: 5,
 		RemovedFunc: func(i interface{}) {
 			_, ok := i.(*testing.T)
 			assert.True(t, ok)
@@ -177,8 +180,9 @@ func TestRemoveFunc(t *testing.T) {
 
 func TestRemovedFuncWithTTL(t *testing.T) {
 	ch := make(chan bool)
-	cache := New(5, &Options{
-		TTL: time.Millisecond * 50,
+	cache := New(&Options{
+		MaxCount: 5,
+		TTL:      time.Millisecond * 50,
 		RemovedFunc: func(i interface{}) {
 			_, ok := i.(*testing.T)
 			assert.True(t, ok)
@@ -202,9 +206,10 @@ func TestRemovedFuncWithTTL(t *testing.T) {
 
 func TestRemovedFuncWithTTL_Pin(t *testing.T) {
 	ch := make(chan bool)
-	cache := New(5, &Options{
-		TTL: time.Millisecond * 50,
-		Pin: true,
+	cache := New(&Options{
+		MaxCount: 5,
+		TTL:      time.Millisecond * 50,
+		Pin:      true,
 		RemovedFunc: func(i interface{}) {
 			_, ok := i.(*testing.T)
 			assert.True(t, ok)
@@ -240,7 +245,7 @@ func TestIterator(t *testing.T) {
 		"D": "Delta",
 	}
 
-	cache := NewLRU(5)
+	cache := New(&Options{MaxCount: 5})
 
 	for k, v := range expected {
 		cache.Put(k, v)
@@ -263,4 +268,119 @@ func TestIterator(t *testing.T) {
 	}
 	it.Close()
 	assert.Equal(t, expected, actual)
+}
+
+func TestLRU_SizeBased_SizeExceeded(t *testing.T) {
+	valueSize := 5
+	cache := New(&Options{
+		MaxCount: 5,
+		GetCacheItemSizeFunc: func(interface{}) uint64 {
+			return uint64(valueSize)
+		},
+		MaxSize: 15,
+	})
+
+	cache.Put("A", "Foo")
+	assert.Equal(t, "Foo", cache.Get("A"))
+	assert.Nil(t, cache.Get("B"))
+	assert.Equal(t, 1, cache.Size())
+
+	cache.Put("B", "Bar")
+	cache.Put("C", "Cid")
+	cache.Put("D", "Delt")
+	assert.Nil(t, cache.Get("A"))
+	assert.Equal(t, 3, cache.Size())
+
+	assert.Equal(t, "Bar", cache.Get("B"))
+	assert.Equal(t, "Cid", cache.Get("C"))
+	assert.Equal(t, "Delt", cache.Get("D"))
+
+	cache.Put("A", "Foo2")
+	assert.Equal(t, "Foo2", cache.Get("A"))
+	assert.Nil(t, cache.Get("B"))
+	assert.Equal(t, 3, cache.Size())
+
+	valueSize = 15 // put large value to evict the rest in a loop
+	cache.Put("E", "Epsi")
+	assert.Nil(t, cache.Get("C"))
+	assert.Equal(t, "Epsi", cache.Get("E"))
+	assert.Nil(t, cache.Get("A"))
+	assert.Equal(t, 1, cache.Size())
+
+	valueSize = 25 // put large value greater than maxSize to evict everything
+	cache.Put("M", "Mepsi")
+	assert.Nil(t, cache.Get("M"))
+	assert.Equal(t, 0, cache.Size())
+}
+
+func TestLRU_SizeBased_CountExceeded(t *testing.T) {
+	cache := New(&Options{
+		MaxCount: 5,
+		GetCacheItemSizeFunc: func(interface{}) uint64 {
+			return 5
+		},
+		MaxSize: 0,
+	})
+
+	cache.Put("A", "Foo")
+	assert.Equal(t, "Foo", cache.Get("A"))
+	assert.Nil(t, cache.Get("B"))
+	assert.Equal(t, 1, cache.Size())
+
+	cache.Put("B", "Bar")
+	cache.Put("C", "Cid")
+	cache.Put("D", "Delt")
+	assert.Equal(t, 4, cache.Size())
+
+	assert.Equal(t, "Bar", cache.Get("B"))
+	assert.Equal(t, "Cid", cache.Get("C"))
+	assert.Equal(t, "Delt", cache.Get("D"))
+
+	cache.Put("A", "Foo2")
+	assert.Equal(t, "Foo2", cache.Get("A"))
+	assert.Equal(t, 4, cache.Size())
+
+	cache.Put("E", "Epsi")
+	assert.Nil(t, cache.Get("B"))
+	assert.Equal(t, "Epsi", cache.Get("E"))
+	assert.Equal(t, "Foo2", cache.Get("A"))
+	assert.Equal(t, 4, cache.Size())
+}
+
+func TestPanicMaxCountAndSizeNotProvided(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The LRU was initialized without panic")
+		}
+	}()
+
+	New(&Options{
+		TTL: time.Millisecond * 100,
+		GetCacheItemSizeFunc: func(interface{}) uint64 {
+			return 5
+		},
+	})
+}
+
+func TestPanicMaxCountAndSizeFuncNotProvided(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The LRU was initialized without panic")
+		}
+	}()
+
+	New(&Options{
+		TTL:     time.Millisecond * 100,
+		MaxSize: 25,
+	})
+}
+
+func TestPanicOptionsIsNil(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The LRU was initialized without panic")
+		}
+	}()
+
+	New(nil)
 }

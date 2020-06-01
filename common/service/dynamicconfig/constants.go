@@ -147,12 +147,13 @@ var keys = map[Key]string{
 	HistoryCacheMaxSize:                                    "history.cacheMaxSize",
 	HistoryCacheTTL:                                        "history.cacheTTL",
 	HistoryShutdownDrainDuration:                           "history.shutdownDrainDuration",
-	EventsCacheInitialSize:                                 "history.eventsCacheInitialSize",
-	EventsCacheMaxSize:                                     "history.eventsCacheMaxSize",
+	EventsCacheInitialCount:                                "history.eventsCacheInitialSize",
+	EventsCacheMaxCount:                                    "history.eventsCacheMaxSize",
+	EventsCacheMaxSize:                                     "history.eventsCacheMaxSizeInBytes",
 	EventsCacheTTL:                                         "history.eventsCacheTTL",
 	EventsCacheGlobalEnable:                                "history.eventsCacheGlobalEnable",
-	EventsCacheGlobalInitialSize:                           "history.eventsCacheGlobalInitialSize",
-	EventsCacheGlobalMaxSize:                               "history.eventsCacheGlobalMaxSize",
+	EventsCacheGlobalInitialCount:                          "history.eventsCacheGlobalInitialSize",
+	EventsCacheGlobalMaxCount:                              "history.eventsCacheGlobalMaxSize",
 	AcquireShardInterval:                                   "history.acquireShardInterval",
 	AcquireShardConcurrency:                                "history.acquireShardConcurrency",
 	StandbyClusterDelay:                                    "history.standbyClusterDelay",
@@ -493,18 +494,20 @@ const (
 	HistoryCacheTTL
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration
-	// EventsCacheInitialSize is initial size of events cache
-	EventsCacheInitialSize
-	// EventsCacheMaxSize is max size of events cache
+	// EventsCacheInitialCount is initial count of events cache
+	EventsCacheInitialCount
+	// EventsCacheMaxCount is max count of events cache
+	EventsCacheMaxCount
+	// EventsCacheMaxSize is max size of events cache in bytes
 	EventsCacheMaxSize
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL
 	// EventsCacheGlobalEnable enables global cache over all history shards
 	EventsCacheGlobalEnable
-	// EventsCacheGlobalInitialSize is initial size of global events cache
-	EventsCacheGlobalInitialSize
-	// EventsCacheGlobalMaxSize is max size of global events cache
-	EventsCacheGlobalMaxSize
+	// EventsCacheGlobalInitialCount is initial count of global events cache
+	EventsCacheGlobalInitialCount
+	// EventsCacheGlobalMaxCount is max count of global events cache
+	EventsCacheGlobalMaxCount
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.

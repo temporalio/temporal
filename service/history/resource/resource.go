@@ -66,12 +66,13 @@ func New(
 	impl = &Impl{
 		Resource: serviceResource,
 		eventCache: events.NewGlobalCache(
-			config.EventsCacheGlobalInitialSize(),
-			config.EventsCacheGlobalMaxSize(),
+			config.EventsCacheGlobalInitialCount(),
+			config.EventsCacheGlobalMaxCount(),
 			config.EventsCacheTTL(),
 			serviceResource.GetHistoryManager(),
 			params.Logger,
 			params.MetricsClient,
+			uint64(config.EventsCacheMaxSize()),
 		),
 	}
 	return impl, nil

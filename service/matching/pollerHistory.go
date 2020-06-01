@@ -53,10 +53,11 @@ func newPollerHistory() *pollerHistory {
 		InitialCapacity: pollerHistoryInitSize,
 		TTL:             pollerHistoryTTL,
 		Pin:             false,
+		MaxCount:        pollerHistoryInitMaxSize,
 	}
 
 	return &pollerHistory{
-		history: cache.New(pollerHistoryInitMaxSize, opts),
+		history: cache.New(opts),
 	}
 }
 
