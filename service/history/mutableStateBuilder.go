@@ -1110,7 +1110,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	info := e.executionInfo
 	if !info.HasRetryPolicy {
-		return backoff.NoBackoff, commonpb.RetryStatus_RetryDisabled
+		return backoff.NoBackoff, commonpb.RetryStatus_Disabled
 	}
 
 	return getBackoffInterval(
@@ -3802,11 +3802,11 @@ func (e *mutableStateBuilder) RetryActivity(
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := e.checkMutability(opTag); err != nil {
-		return commonpb.RetryStatus_InternalError, err
+		return commonpb.RetryStatus_InternalServerError, err
 	}
 
 	if !ai.HasRetryPolicy {
-		return commonpb.RetryStatus_RetryDisabled, nil
+		return commonpb.RetryStatus_Disabled, nil
 	}
 
 	if ai.CancelRequested {
@@ -3844,7 +3844,7 @@ func (e *mutableStateBuilder) RetryActivity(
 	if err := e.taskGenerator.generateActivityRetryTasks(
 		ai.ScheduleID,
 	); err != nil {
-		return commonpb.RetryStatus_InternalError, err
+		return commonpb.RetryStatus_InternalServerError, err
 	}
 
 	e.updateActivityInfos[ai] = struct{}{}

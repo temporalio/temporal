@@ -46,11 +46,11 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, commonpb.RetryStatus) {
 	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, commonpb.RetryStatus_ErrorIsNonRetryable
+		return backoff.NoBackoff, commonpb.RetryStatus_NonRetryableError
 	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff, commonpb.RetryStatus_RetryDisabled
+		return backoff.NoBackoff, commonpb.RetryStatus_Disabled
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
