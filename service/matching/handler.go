@@ -32,7 +32,6 @@ import (
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/resource"
@@ -148,9 +147,6 @@ func (h *Handler) AddActivityTask(
 	}
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
-	if err != nil {
-		h.GetLogger().Error("AddActivityTask error", tag.Error(err))
-	}
 	if syncMatch {
 		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
 	}
@@ -184,9 +180,6 @@ func (h *Handler) AddDecisionTask(
 	}
 
 	syncMatch, err := h.engine.AddDecisionTask(hCtx, request)
-	if err != nil {
-		h.GetLogger().Error("AddDecisionTask error", tag.Error(err))
-	}
 	if syncMatch {
 		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
 	}
