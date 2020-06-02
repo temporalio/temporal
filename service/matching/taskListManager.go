@@ -23,7 +23,6 @@ package matching
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -118,7 +117,7 @@ const (
 
 var _ taskListManager = (*taskListManagerImpl)(nil)
 
-var errRemoteSyncMatchFailed = errors.New("remote sync match failed")
+var errRemoteSyncMatchFailed = &s.RemoteSyncMatchedError{Message: "remote sync match failed"}
 
 func newTaskListManager(
 	e *matchingEngineImpl,

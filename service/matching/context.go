@@ -113,6 +113,9 @@ func (reqCtx *handlerContext) handleErr(err error) error {
 	case *gen.DomainNotActiveError:
 		scope.IncCounter(metrics.CadenceErrDomainNotActivePerTaskListCounter)
 		return err
+	case *gen.RemoteSyncMatchedError:
+		scope.IncCounter(metrics.CadenceErrRemoteSyncMatchFailedPerTaskListCounter)
+		return err
 	default:
 		scope.IncCounter(metrics.CadenceFailuresPerTaskList)
 		return &gen.InternalServiceError{Message: err.Error()}

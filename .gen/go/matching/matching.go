@@ -3789,14 +3789,14 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "matching",
 	Package:  "github.com/uber/cadence/.gen/go/matching",
 	FilePath: "matching.thrift",
-	SHA1:     "ef49822d034ff558552bac17142e9e158a626cb4",
+	SHA1:     "561cdf2d3cb3071e96c5f238d5f96f999dfe712d",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\n\nnamespace java com.uber.cadence.matching\n\n// TaskSource is the source from which a task was produced\nenum TaskSource {\n    HISTORY,    // Task produced by history service\n    DB_BACKLOG // Task produced from matching db backlog\n}\n\nstruct PollForDecisionTaskRequest {\n  10: optional string domainUUID\n  15: optional string pollerID\n  20: optional shared.PollForDecisionTaskRequest pollRequest\n  30: optional string forwardedFrom\n}\n\nstruct PollForDecisionTaskResponse {\n  10: optional binary taskToken\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional shared.WorkflowType workflowType\n  40: optional i64 (js.type = \"Long\") previousStartedEventId\n  50: optional i64 (js.type = \"Long\") startedEventId\n  51: optional i64 (js.type = \"Long\") attempt\n  60: optional i64 (js.type = \"Long\") nextEventId\n  65: optional i64 (js.type = \"Long\") backlogCountHint\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.WorkflowQuery query\n  90: optional shared.TransientDecisionInfo decisionInfo\n  100: optional shared.TaskList WorkflowExecutionTaskList\n  110: optional i32 eventStoreVersion\n  120: optional binary branchToken\n  130: optional i64 (js.type = \"Long\") scheduledTimestamp\n  140: optional i64 (js.type = \"Long\") startedTimestamp\n  150: optional map<string, shared.WorkflowQuery> queries\n}\n\nstruct PollForActivityTaskRequest {\n  10: optional string domainUUID\n  15: optional string pollerID\n  20: optional shared.PollForActivityTaskRequest pollRequest\n  30: optional string forwardedFrom\n}\n\nstruct AddDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional shared.TaskList taskList\n  40: optional i64 (js.type = \"Long\") scheduleId\n  50: optional i32 scheduleToStartTimeoutSeconds\n  59: optional TaskSource source\n  60: optional string forwardedFrom\n}\n\nstruct AddActivityTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional string sourceDomainUUID\n  40: optional shared.TaskList taskList\n  50: optional i64 (js.type = \"Long\") scheduleId\n  60: optional i32 scheduleToStartTimeoutSeconds\n  69: optional TaskSource source\n  70: optional string forwardedFrom\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.TaskList taskList\n  30: optional shared.QueryWorkflowRequest queryRequest\n  40: optional string forwardedFrom\n}\n\nstruct RespondQueryTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.TaskList taskList\n  30: optional string taskID\n  40: optional shared.RespondQueryTaskCompletedRequest completedRequest\n}\n\nstruct CancelOutstandingPollRequest {\n  10: optional string domainUUID\n  20: optional i32 taskListType\n  30: optional shared.TaskList taskList\n  40: optional string pollerID\n}\n\nstruct DescribeTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeTaskListRequest descRequest\n}\n\nstruct ListTaskListPartitionsRequest {\n  10: optional string domain\n  20: optional shared.TaskList taskList\n}\n\n/**\n* MatchingService API is exposed to provide support for polling from long running applications.\n* Such applications are expected to have a worker which regularly polls for DecisionTask and ActivityTask.  For each\n* DecisionTask, application is expected to process the history of events for that session and respond back with next\n* decisions.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back\n* with completion or failure.\n**/\nservice MatchingService {\n  /**\n  * PollForDecisionTask is called by frontend to process DecisionTask from a specific taskList.  A\n  * DecisionTask is dispatched to callers for active workflow executions, with pending decisions.\n  **/\n  PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * PollForActivityTask is called by frontend to process ActivityTask from a specific taskList.  ActivityTask\n  * is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.\n  **/\n  shared.PollForActivityTaskResponse PollForActivityTask(1: PollForActivityTaskRequest pollRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * AddDecisionTask is called by the history service when a decision task is scheduled, so that it can be dispatched\n  * by the MatchingEngine.\n  **/\n  void AddDecisionTask(1: AddDecisionTaskRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n    )\n\n  /**\n  * AddActivityTask is called by the history service when a decision task is scheduled, so that it can be dispatched\n  * by the MatchingEngine.\n  **/\n  void AddActivityTask(1: AddActivityTaskRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n    )\n\n  /**\n  * QueryWorkflow is called by frontend to query a workflow.\n  **/\n  shared.QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.QueryFailedError queryFailedError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondQueryTaskCompleted is called by frontend to respond query completed.\n  **/\n  void RespondQueryTaskCompleted(1: RespondQueryTaskCompletedRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n    * CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.\n    * Our rpc stack does not support context propagation, so when a client connection goes away frontend sees\n    * cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not\n    * see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks\n    * being dispatched to zombie pollers in this situation.  This API is added so everytime frontend makes a long-poll\n    * api call to matching it passes in a pollerID and then calls this API when it detects client connection is closed\n    * to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.\n    **/\n  void CancelOutstandingPoll(1: CancelOutstandingPollRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeTaskList returns information about the target tasklist, right now this API returns the\n  * pollers which polled this tasklist in last few minutes.\n  **/\n  shared.DescribeTaskListResponse DescribeTaskList(1: DescribeTaskListRequest request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        3: shared.EntityNotExistsError entityNotExistError,\n        4: shared.ServiceBusyError serviceBusyError,\n      )\n\n\n  /**\n  * ListTaskListPartitions returns a map of partitionKey and hostAddress for a taskList\n  **/\n  shared.ListTaskListPartitionsResponse ListTaskListPartitions(1: ListTaskListPartitionsRequest request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        4: shared.ServiceBusyError serviceBusyError,\n    )\n}\n"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\n\nnamespace java com.uber.cadence.matching\n\n// TaskSource is the source from which a task was produced\nenum TaskSource {\n    HISTORY,    // Task produced by history service\n    DB_BACKLOG // Task produced from matching db backlog\n}\n\nstruct PollForDecisionTaskRequest {\n  10: optional string domainUUID\n  15: optional string pollerID\n  20: optional shared.PollForDecisionTaskRequest pollRequest\n  30: optional string forwardedFrom\n}\n\nstruct PollForDecisionTaskResponse {\n  10: optional binary taskToken\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional shared.WorkflowType workflowType\n  40: optional i64 (js.type = \"Long\") previousStartedEventId\n  50: optional i64 (js.type = \"Long\") startedEventId\n  51: optional i64 (js.type = \"Long\") attempt\n  60: optional i64 (js.type = \"Long\") nextEventId\n  65: optional i64 (js.type = \"Long\") backlogCountHint\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.WorkflowQuery query\n  90: optional shared.TransientDecisionInfo decisionInfo\n  100: optional shared.TaskList WorkflowExecutionTaskList\n  110: optional i32 eventStoreVersion\n  120: optional binary branchToken\n  130: optional i64 (js.type = \"Long\") scheduledTimestamp\n  140: optional i64 (js.type = \"Long\") startedTimestamp\n  150: optional map<string, shared.WorkflowQuery> queries\n}\n\nstruct PollForActivityTaskRequest {\n  10: optional string domainUUID\n  15: optional string pollerID\n  20: optional shared.PollForActivityTaskRequest pollRequest\n  30: optional string forwardedFrom\n}\n\nstruct AddDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional shared.TaskList taskList\n  40: optional i64 (js.type = \"Long\") scheduleId\n  50: optional i32 scheduleToStartTimeoutSeconds\n  59: optional TaskSource source\n  60: optional string forwardedFrom\n}\n\nstruct AddActivityTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional string sourceDomainUUID\n  40: optional shared.TaskList taskList\n  50: optional i64 (js.type = \"Long\") scheduleId\n  60: optional i32 scheduleToStartTimeoutSeconds\n  69: optional TaskSource source\n  70: optional string forwardedFrom\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.TaskList taskList\n  30: optional shared.QueryWorkflowRequest queryRequest\n  40: optional string forwardedFrom\n}\n\nstruct RespondQueryTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.TaskList taskList\n  30: optional string taskID\n  40: optional shared.RespondQueryTaskCompletedRequest completedRequest\n}\n\nstruct CancelOutstandingPollRequest {\n  10: optional string domainUUID\n  20: optional i32 taskListType\n  30: optional shared.TaskList taskList\n  40: optional string pollerID\n}\n\nstruct DescribeTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeTaskListRequest descRequest\n}\n\nstruct ListTaskListPartitionsRequest {\n  10: optional string domain\n  20: optional shared.TaskList taskList\n}\n\n/**\n* MatchingService API is exposed to provide support for polling from long running applications.\n* Such applications are expected to have a worker which regularly polls for DecisionTask and ActivityTask.  For each\n* DecisionTask, application is expected to process the history of events for that session and respond back with next\n* decisions.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back\n* with completion or failure.\n**/\nservice MatchingService {\n  /**\n  * PollForDecisionTask is called by frontend to process DecisionTask from a specific taskList.  A\n  * DecisionTask is dispatched to callers for active workflow executions, with pending decisions.\n  **/\n  PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * PollForActivityTask is called by frontend to process ActivityTask from a specific taskList.  ActivityTask\n  * is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.\n  **/\n  shared.PollForActivityTaskResponse PollForActivityTask(1: PollForActivityTaskRequest pollRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * AddDecisionTask is called by the history service when a decision task is scheduled, so that it can be dispatched\n  * by the MatchingEngine.\n  **/\n  void AddDecisionTask(1: AddDecisionTaskRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.RemoteSyncMatchedError remoteSyncMatchedError,\n    )\n\n  /**\n  * AddActivityTask is called by the history service when a decision task is scheduled, so that it can be dispatched\n  * by the MatchingEngine.\n  **/\n  void AddActivityTask(1: AddActivityTaskRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.RemoteSyncMatchedError remoteSyncMatchedError,\n    )\n\n  /**\n  * QueryWorkflow is called by frontend to query a workflow.\n  **/\n  shared.QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.QueryFailedError queryFailedError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondQueryTaskCompleted is called by frontend to respond query completed.\n  **/\n  void RespondQueryTaskCompleted(1: RespondQueryTaskCompletedRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n    * CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.\n    * Our rpc stack does not support context propagation, so when a client connection goes away frontend sees\n    * cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not\n    * see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks\n    * being dispatched to zombie pollers in this situation.  This API is added so everytime frontend makes a long-poll\n    * api call to matching it passes in a pollerID and then calls this API when it detects client connection is closed\n    * to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.\n    **/\n  void CancelOutstandingPoll(1: CancelOutstandingPollRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeTaskList returns information about the target tasklist, right now this API returns the\n  * pollers which polled this tasklist in last few minutes.\n  **/\n  shared.DescribeTaskListResponse DescribeTaskList(1: DescribeTaskListRequest request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        3: shared.EntityNotExistsError entityNotExistError,\n        4: shared.ServiceBusyError serviceBusyError,\n      )\n\n\n  /**\n  * ListTaskListPartitions returns a map of partitionKey and hostAddress for a taskList\n  **/\n  shared.ListTaskListPartitionsResponse ListTaskListPartitions(1: ListTaskListPartitionsRequest request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        4: shared.ServiceBusyError serviceBusyError,\n    )\n}\n"
 
 // MatchingService_AddActivityTask_Args represents the arguments for the MatchingService.AddActivityTask function.
 //
@@ -4025,6 +4025,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.RemoteSyncMatchedError:
+			return true
 		default:
 			return false
 		}
@@ -4061,6 +4063,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddActivityTask_Result.DomainNotActiveError")
 			}
 			return &MatchingService_AddActivityTask_Result{DomainNotActiveError: e}, nil
+		case *shared.RemoteSyncMatchedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddActivityTask_Result.RemoteSyncMatchedError")
+			}
+			return &MatchingService_AddActivityTask_Result{RemoteSyncMatchedError: e}, nil
 		}
 
 		return nil, err
@@ -4086,6 +4093,10 @@ func init() {
 			err = result.DomainNotActiveError
 			return
 		}
+		if result.RemoteSyncMatchedError != nil {
+			err = result.RemoteSyncMatchedError
+			return
+		}
 		return
 	}
 
@@ -4095,11 +4106,12 @@ func init() {
 //
 // The result of a AddActivityTask execution is sent and received over the wire as this struct.
 type MatchingService_AddActivityTask_Result struct {
-	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
-	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
-	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
-	LimitExceededError   *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
-	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
+	BadRequestError        *shared.BadRequestError        `json:"badRequestError,omitempty"`
+	InternalServiceError   *shared.InternalServiceError   `json:"internalServiceError,omitempty"`
+	ServiceBusyError       *shared.ServiceBusyError       `json:"serviceBusyError,omitempty"`
+	LimitExceededError     *shared.LimitExceededError     `json:"limitExceededError,omitempty"`
+	DomainNotActiveError   *shared.DomainNotActiveError   `json:"domainNotActiveError,omitempty"`
+	RemoteSyncMatchedError *shared.RemoteSyncMatchedError `json:"remoteSyncMatchedError,omitempty"`
 }
 
 // ToWire translates a MatchingService_AddActivityTask_Result struct into a Thrift-level intermediate
@@ -4119,7 +4131,7 @@ type MatchingService_AddActivityTask_Result struct {
 //   }
 func (v *MatchingService_AddActivityTask_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -4165,6 +4177,14 @@ func (v *MatchingService_AddActivityTask_Result) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
+	if v.RemoteSyncMatchedError != nil {
+		w, err = v.RemoteSyncMatchedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
 
 	if i > 1 {
 		return wire.Value{}, fmt.Errorf("MatchingService_AddActivityTask_Result should have at most one field: got %v fields", i)
@@ -4199,6 +4219,12 @@ func _LimitExceededError_Read(w wire.Value) (*shared.LimitExceededError, error) 
 
 func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
 	var v shared.DomainNotActiveError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _RemoteSyncMatchedError_Read(w wire.Value) (*shared.RemoteSyncMatchedError, error) {
+	var v shared.RemoteSyncMatchedError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -4265,6 +4291,14 @@ func (v *MatchingService_AddActivityTask_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.RemoteSyncMatchedError, err = _RemoteSyncMatchedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4284,6 +4318,9 @@ func (v *MatchingService_AddActivityTask_Result) FromWire(w wire.Value) error {
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.RemoteSyncMatchedError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("MatchingService_AddActivityTask_Result should have at most one field: got %v fields", count)
 	}
@@ -4298,7 +4335,7 @@ func (v *MatchingService_AddActivityTask_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -4318,6 +4355,10 @@ func (v *MatchingService_AddActivityTask_Result) String() string {
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.RemoteSyncMatchedError != nil {
+		fields[i] = fmt.Sprintf("RemoteSyncMatchedError: %v", v.RemoteSyncMatchedError)
 		i++
 	}
 
@@ -4349,6 +4390,9 @@ func (v *MatchingService_AddActivityTask_Result) Equals(rhs *MatchingService_Add
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
+	if !((v.RemoteSyncMatchedError == nil && rhs.RemoteSyncMatchedError == nil) || (v.RemoteSyncMatchedError != nil && rhs.RemoteSyncMatchedError != nil && v.RemoteSyncMatchedError.Equals(rhs.RemoteSyncMatchedError))) {
+		return false
+	}
 
 	return true
 }
@@ -4373,6 +4417,9 @@ func (v *MatchingService_AddActivityTask_Result) MarshalLogObject(enc zapcore.Ob
 	}
 	if v.DomainNotActiveError != nil {
 		err = multierr.Append(err, enc.AddObject("domainNotActiveError", v.DomainNotActiveError))
+	}
+	if v.RemoteSyncMatchedError != nil {
+		err = multierr.Append(err, enc.AddObject("remoteSyncMatchedError", v.RemoteSyncMatchedError))
 	}
 	return err
 }
@@ -4450,6 +4497,21 @@ func (v *MatchingService_AddActivityTask_Result) GetDomainNotActiveError() (o *s
 // IsSetDomainNotActiveError returns true if DomainNotActiveError is not nil.
 func (v *MatchingService_AddActivityTask_Result) IsSetDomainNotActiveError() bool {
 	return v != nil && v.DomainNotActiveError != nil
+}
+
+// GetRemoteSyncMatchedError returns the value of RemoteSyncMatchedError if it is set or its
+// zero value if it is unset.
+func (v *MatchingService_AddActivityTask_Result) GetRemoteSyncMatchedError() (o *shared.RemoteSyncMatchedError) {
+	if v != nil && v.RemoteSyncMatchedError != nil {
+		return v.RemoteSyncMatchedError
+	}
+
+	return
+}
+
+// IsSetRemoteSyncMatchedError returns true if RemoteSyncMatchedError is not nil.
+func (v *MatchingService_AddActivityTask_Result) IsSetRemoteSyncMatchedError() bool {
+	return v != nil && v.RemoteSyncMatchedError != nil
 }
 
 // MethodName returns the name of the Thrift function as specified in
@@ -4694,6 +4756,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.RemoteSyncMatchedError:
+			return true
 		default:
 			return false
 		}
@@ -4730,6 +4794,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddDecisionTask_Result.DomainNotActiveError")
 			}
 			return &MatchingService_AddDecisionTask_Result{DomainNotActiveError: e}, nil
+		case *shared.RemoteSyncMatchedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddDecisionTask_Result.RemoteSyncMatchedError")
+			}
+			return &MatchingService_AddDecisionTask_Result{RemoteSyncMatchedError: e}, nil
 		}
 
 		return nil, err
@@ -4755,6 +4824,10 @@ func init() {
 			err = result.DomainNotActiveError
 			return
 		}
+		if result.RemoteSyncMatchedError != nil {
+			err = result.RemoteSyncMatchedError
+			return
+		}
 		return
 	}
 
@@ -4764,11 +4837,12 @@ func init() {
 //
 // The result of a AddDecisionTask execution is sent and received over the wire as this struct.
 type MatchingService_AddDecisionTask_Result struct {
-	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
-	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
-	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
-	LimitExceededError   *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
-	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
+	BadRequestError        *shared.BadRequestError        `json:"badRequestError,omitempty"`
+	InternalServiceError   *shared.InternalServiceError   `json:"internalServiceError,omitempty"`
+	ServiceBusyError       *shared.ServiceBusyError       `json:"serviceBusyError,omitempty"`
+	LimitExceededError     *shared.LimitExceededError     `json:"limitExceededError,omitempty"`
+	DomainNotActiveError   *shared.DomainNotActiveError   `json:"domainNotActiveError,omitempty"`
+	RemoteSyncMatchedError *shared.RemoteSyncMatchedError `json:"remoteSyncMatchedError,omitempty"`
 }
 
 // ToWire translates a MatchingService_AddDecisionTask_Result struct into a Thrift-level intermediate
@@ -4788,7 +4862,7 @@ type MatchingService_AddDecisionTask_Result struct {
 //   }
 func (v *MatchingService_AddDecisionTask_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -4832,6 +4906,14 @@ func (v *MatchingService_AddDecisionTask_Result) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.RemoteSyncMatchedError != nil {
+		w, err = v.RemoteSyncMatchedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
@@ -4904,6 +4986,14 @@ func (v *MatchingService_AddDecisionTask_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.RemoteSyncMatchedError, err = _RemoteSyncMatchedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4923,6 +5013,9 @@ func (v *MatchingService_AddDecisionTask_Result) FromWire(w wire.Value) error {
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.RemoteSyncMatchedError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("MatchingService_AddDecisionTask_Result should have at most one field: got %v fields", count)
 	}
@@ -4937,7 +5030,7 @@ func (v *MatchingService_AddDecisionTask_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -4957,6 +5050,10 @@ func (v *MatchingService_AddDecisionTask_Result) String() string {
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.RemoteSyncMatchedError != nil {
+		fields[i] = fmt.Sprintf("RemoteSyncMatchedError: %v", v.RemoteSyncMatchedError)
 		i++
 	}
 
@@ -4988,6 +5085,9 @@ func (v *MatchingService_AddDecisionTask_Result) Equals(rhs *MatchingService_Add
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
+	if !((v.RemoteSyncMatchedError == nil && rhs.RemoteSyncMatchedError == nil) || (v.RemoteSyncMatchedError != nil && rhs.RemoteSyncMatchedError != nil && v.RemoteSyncMatchedError.Equals(rhs.RemoteSyncMatchedError))) {
+		return false
+	}
 
 	return true
 }
@@ -5012,6 +5112,9 @@ func (v *MatchingService_AddDecisionTask_Result) MarshalLogObject(enc zapcore.Ob
 	}
 	if v.DomainNotActiveError != nil {
 		err = multierr.Append(err, enc.AddObject("domainNotActiveError", v.DomainNotActiveError))
+	}
+	if v.RemoteSyncMatchedError != nil {
+		err = multierr.Append(err, enc.AddObject("remoteSyncMatchedError", v.RemoteSyncMatchedError))
 	}
 	return err
 }
@@ -5089,6 +5192,21 @@ func (v *MatchingService_AddDecisionTask_Result) GetDomainNotActiveError() (o *s
 // IsSetDomainNotActiveError returns true if DomainNotActiveError is not nil.
 func (v *MatchingService_AddDecisionTask_Result) IsSetDomainNotActiveError() bool {
 	return v != nil && v.DomainNotActiveError != nil
+}
+
+// GetRemoteSyncMatchedError returns the value of RemoteSyncMatchedError if it is set or its
+// zero value if it is unset.
+func (v *MatchingService_AddDecisionTask_Result) GetRemoteSyncMatchedError() (o *shared.RemoteSyncMatchedError) {
+	if v != nil && v.RemoteSyncMatchedError != nil {
+		return v.RemoteSyncMatchedError
+	}
+
+	return
+}
+
+// IsSetRemoteSyncMatchedError returns true if RemoteSyncMatchedError is not nil.
+func (v *MatchingService_AddDecisionTask_Result) IsSetRemoteSyncMatchedError() bool {
+	return v != nil && v.RemoteSyncMatchedError != nil
 }
 
 // MethodName returns the name of the Thrift function as specified in
