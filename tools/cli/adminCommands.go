@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -448,7 +449,11 @@ func AdminShardManagement(c *cli.Context) {
 
 // AdminListClusterMembership outputs a list of cluster membership items
 func AdminListClusterMembership(c *cli.Context) {
-	role := persistence.ServiceType(c.Int(FlagClusterMembershipRole))
+	roleFlag := c.String(FlagClusterMembershipRole)
+	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
+	if err != nil {
+		ErrorAndExit("Failed to map membership role", err)
+	}
 	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
 	heartbeat := time.Duration(heartbeatFlag)
 
@@ -462,8 +467,10 @@ func AdminListClusterMembership(c *cli.Context) {
 		RoleEquals:          role,
 		LastHeartbeatWithin: heartbeat,
 	}
-
 	members, err := manager.GetClusterMembers(req)
+	if err != nil {
+		ErrorAndExit("Failed to get cluster members", err)
+	}
 
 	prettyPrintJSONObject(members)
 }
