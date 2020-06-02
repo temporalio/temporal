@@ -441,7 +441,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	backoffInterval, retryStatus := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	if attr.GetFailure() != nil {
+		attr.GetFailure().RetryStatus = retryStatus
+	}
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {

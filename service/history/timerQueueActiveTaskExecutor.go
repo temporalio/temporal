@@ -219,18 +219,24 @@ Loop:
 			break Loop
 		}
 
-		if timerSequenceID.timerType != timerTypeScheduleToStart {
-			// schedule to start timeout is not retryable
-			// customer should set larger schedule to start timeout if necessary
-			if ok, err := mutableState.RetryActivity(
-				activityInfo,
-				failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType)),
-			); err != nil {
-				return err
-			} else if ok {
-				updateMutableState = true
-				continue Loop
-			}
+		timeoutFailure := failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType))
+		var retryStatus commonpb.RetryStatus
+		if retryStatus, err = mutableState.RetryActivity(
+			activityInfo,
+			timeoutFailure,
+		); err != nil {
+			return err
+		} else if retryStatus == commonpb.RetryStatus_Retrying {
+			updateMutableState = true
+			continue Loop
+		}
+
+		timeoutFailure.RetryStatus = retryStatus
+		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
+		// If retryStatus is Timeout then it means that expirationTime is expired.
+		// ExpirationTime is expired when ScheduleToClose timeout is expired.
+		if retryStatus == commonpb.RetryStatus_Timeout {
+			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = commonpb.TimeoutType_ScheduleToClose
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
@@ -241,8 +247,7 @@ Loop:
 		if _, err := mutableState.AddActivityTaskTimedOutEvent(
 			activityInfo.ScheduleID,
 			activityInfo.StartedID,
-			timerTypeToProto(timerSequenceID.timerType),
-			activityInfo.Details,
+			timeoutFailure,
 		); err != nil {
 			return err
 		}
@@ -481,7 +486,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
 	timeoutFailure := failure.NewTimeoutFailure(commonpb.TimeoutType_StartToClose)
-	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutFailure)
+	backoffInterval, retryStatus := mutableState.GetRetryBackoffDuration(timeoutFailure)
+	timeoutFailure.RetryStatus = retryStatus
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed

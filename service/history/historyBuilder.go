@@ -169,11 +169,9 @@ func (b *historyBuilder) AddActivityTaskFailedEvent(scheduleEventID, startedEven
 func (b *historyBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID,
 	startedEventID int64,
-	timeoutType commonpb.TimeoutType,
-	lastHeartBeatDetails *commonpb.Payloads,
-	lastFailure *failurepb.Failure,
+	timeoutFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
-	event := b.newActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails, lastFailure)
+	event := b.newActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutFailure)
 
 	return b.addEventToHistory(event)
 }
@@ -623,17 +621,13 @@ func (b *historyBuilder) newActivityTaskCompletedEvent(scheduleEventID, startedE
 
 func (b *historyBuilder) newActivityTaskTimedOutEvent(
 	scheduleEventID, startedEventID int64,
-	timeoutType commonpb.TimeoutType,
-	lastHeartBeatDetails *commonpb.Payloads,
-	lastFailure *failurepb.Failure,
+	timeoutFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskTimedOut)
 	attributes := &eventpb.ActivityTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
-	attributes.TimeoutType = timeoutType
-	attributes.LastHeartbeatDetails = lastHeartBeatDetails
-	attributes.LastFailure = lastFailure
+	attributes.TimeoutFailure = timeoutFailure
 
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: attributes}
 
