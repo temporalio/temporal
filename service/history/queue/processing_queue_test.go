@@ -70,7 +70,7 @@ func (s *processingQueueSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *processingQueueSuite) TestAddTasks_WithMoreTasks() {
+func (s *processingQueueSuite) TestAddTasks() {
 	ackLevel := &testKey{ID: 1}
 	maxLevel := &testKey{ID: 10}
 
@@ -99,51 +99,18 @@ func (s *processingQueueSuite) TestAddTasks_WithMoreTasks() {
 		make(map[task.Key]task.Task),
 	)
 
-	queue.AddTasks(tasks, true)
+	newReadLevel := &testKey{ID: 10}
+	queue.AddTasks(tasks, newReadLevel)
 	s.Len(queue.outstandingTasks, len(taskKeys))
-	s.Equal(taskKeys[len(taskKeys)-1], queue.state.readLevel)
+	s.Equal(newReadLevel, queue.state.readLevel)
 
 	// add the same set of tasks again, should have no effect
-	queue.AddTasks(tasks, true)
+	queue.AddTasks(tasks, newReadLevel)
 	s.Len(queue.outstandingTasks, len(taskKeys))
-	s.Equal(taskKeys[len(taskKeys)-1], queue.state.readLevel)
+	s.Equal(newReadLevel, queue.state.readLevel)
 }
 
-func (s *processingQueueSuite) TestAddTasks_NoMoreTasks() {
-	ackLevel := &testKey{ID: 1}
-	maxLevel := &testKey{ID: 10}
-
-	taskKeys := []task.Key{
-		&testKey{ID: 2},
-		&testKey{ID: 3},
-		&testKey{ID: 5},
-		&testKey{ID: 9},
-	}
-	tasks := make(map[task.Key]task.Task)
-	for _, key := range taskKeys {
-		mockTask := task.NewMockTask(s.controller)
-		mockTask.EXPECT().GetDomainID().Return("some random domainID").AnyTimes()
-		mockTask.EXPECT().GetWorkflowID().Return("some random workflowID").AnyTimes()
-		mockTask.EXPECT().GetRunID().Return("some random runID").AnyTimes()
-		mockTask.EXPECT().GetTaskType().Return(0).AnyTimes()
-		tasks[key] = mockTask
-	}
-
-	queue := s.newTestProcessingQueue(
-		0,
-		ackLevel,
-		ackLevel,
-		maxLevel,
-		NewDomainFilter(nil, true),
-		make(map[task.Key]task.Task),
-	)
-
-	queue.AddTasks(tasks, false)
-	s.Len(queue.outstandingTasks, len(taskKeys))
-	s.Equal(maxLevel, queue.state.readLevel)
-}
-
-func (s *processingQueueSuite) TestUpdateAckLevel_WithMoreTasks() {
+func (s *processingQueueSuite) TestUpdateAckLevel_WithPendingTasks() {
 	ackLevel := &testKey{ID: 1}
 	maxLevel := &testKey{ID: 10}
 
@@ -181,8 +148,9 @@ func (s *processingQueueSuite) TestUpdateAckLevel_WithMoreTasks() {
 	s.Equal(&testKey{ID: 3}, queue.state.ackLevel)
 }
 
-func (s *processingQueueSuite) TestUpdateAckLevel_NoMoreTasks() {
+func (s *processingQueueSuite) TestUpdateAckLevel_NoPendingTasks() {
 	ackLevel := &testKey{ID: 1}
+	readLevel := &testKey{ID: 9}
 	maxLevel := &testKey{ID: 10}
 
 	taskKeys := []task.Key{
@@ -207,14 +175,14 @@ func (s *processingQueueSuite) TestUpdateAckLevel_NoMoreTasks() {
 	queue := s.newTestProcessingQueue(
 		0,
 		ackLevel,
-		maxLevel,
+		readLevel,
 		maxLevel,
 		NewDomainFilter(nil, true),
 		tasks,
 	)
 
 	queue.UpdateAckLevel()
-	s.Equal(maxLevel, queue.state.ackLevel)
+	s.Equal(readLevel, queue.state.ackLevel)
 }
 
 func (s *processingQueueSuite) TestSplit() {

@@ -106,18 +106,20 @@ func (s *processingQueueCollectionSuite) TestNewCollection_OutOfOrderQueues() {
 	s.True(s.isQueuesSorted(queueCollection.queues))
 }
 
-func (s *processingQueueCollectionSuite) TestAddTasks_WithMoreTasks() {
+func (s *processingQueueCollectionSuite) TestAddTasks_ReadNotFinished() {
 	totalQueues := 4
 	currentActiveIdx := 1
+	newReadLevel := &testKey{ID: 9}
+
 	mockQueues := []*MockProcessingQueue{}
 	for i := 0; i != totalQueues; i++ {
 		mockQueues = append(mockQueues, NewMockProcessingQueue(s.controller))
 	}
-	mockQueues[currentActiveIdx].EXPECT().AddTasks(gomock.Any(), true).Times(1)
+	mockQueues[currentActiveIdx].EXPECT().AddTasks(gomock.Any(), newReadLevel).Times(1)
 	mockQueues[currentActiveIdx].EXPECT().State().Return(newProcessingQueueState(
 		s.level,
 		&testKey{ID: 3},
-		&testKey{ID: 10},
+		newReadLevel,
 		&testKey{ID: 10},
 		DomainFilter{},
 	)).AnyTimes()
@@ -125,23 +127,25 @@ func (s *processingQueueCollectionSuite) TestAddTasks_WithMoreTasks() {
 	queueCollection := s.newTestProcessingQueueCollection(s.level, mockQueues)
 	queueCollection.activeQueue = mockQueues[currentActiveIdx]
 
-	queueCollection.AddTasks(map[task.Key]task.Task{}, true)
+	queueCollection.AddTasks(map[task.Key]task.Task{}, newReadLevel)
 	s.Equal(mockQueues[currentActiveIdx].State(), queueCollection.ActiveQueue().State())
 }
 
-func (s *processingQueueCollectionSuite) TestAddTask_NoMoreTasks() {
+func (s *processingQueueCollectionSuite) TestAddTask_ReadFinished() {
 	totalQueues := 4
 	currentActiveIdx := 1
+	newReadLevel := &testKey{ID: 10}
+
 	mockQueues := []*MockProcessingQueue{}
 	for i := 0; i != totalQueues; i++ {
 		mockQueues = append(mockQueues, NewMockProcessingQueue(s.controller))
 	}
-	mockQueues[currentActiveIdx].EXPECT().AddTasks(gomock.Any(), false).Times(1)
+	mockQueues[currentActiveIdx].EXPECT().AddTasks(gomock.Any(), newReadLevel).Times(1)
 	for i := 0; i != totalQueues; i++ {
 		mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 			s.level,
 			&testKey{ID: 3},
-			&testKey{ID: 10},
+			newReadLevel,
 			&testKey{ID: 10},
 			DomainFilter{},
 		)).AnyTimes()
@@ -150,7 +154,7 @@ func (s *processingQueueCollectionSuite) TestAddTask_NoMoreTasks() {
 	queueCollection := s.newTestProcessingQueueCollection(s.level, mockQueues)
 	queueCollection.activeQueue = mockQueues[currentActiveIdx]
 
-	queueCollection.AddTasks(map[task.Key]task.Task{}, false)
+	queueCollection.AddTasks(map[task.Key]task.Task{}, newReadLevel)
 	s.Nil(queueCollection.ActiveQueue())
 }
 

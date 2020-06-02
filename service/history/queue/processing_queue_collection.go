@@ -63,11 +63,12 @@ func (c *processingQueueCollection) ActiveQueue() ProcessingQueue {
 
 func (c *processingQueueCollection) AddTasks(
 	tasks map[task.Key]task.Task,
-	more bool,
+	newReadLevel task.Key,
 ) {
-	c.ActiveQueue().AddTasks(tasks, more)
+	activeQueue := c.ActiveQueue()
+	activeQueue.AddTasks(tasks, newReadLevel)
 
-	if !more {
+	if taskKeyEquals(activeQueue.State().ReadLevel(), activeQueue.State().MaxLevel()) {
 		c.resetActiveQueue()
 	}
 }

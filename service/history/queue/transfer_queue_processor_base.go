@@ -42,6 +42,8 @@ import (
 
 var (
 	loadQueueTaskThrottleRetryDelay = 5 * time.Second
+
+	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 )
 
 type (
@@ -298,13 +300,20 @@ func (t *transferQueueProcessorBase) processBatch() {
 		t.queueCollectionsLock.RLock()
 		activeQueue := queueCollection.ActiveQueue()
 		if activeQueue == nil {
+			t.queueCollectionsLock.RUnlock()
 			continue
 		}
+
 		readLevel := activeQueue.State().ReadLevel()
-		maxLevel := activeQueue.State().MaxLevel()
+		maxReadLevel := activeQueue.State().MaxLevel()
 		t.queueCollectionsLock.RUnlock()
 
-		transferTaskInfos, more, partialRead, err := t.readTasks(readLevel, maxLevel)
+		shardMaxReadLevel := t.maxReadLevel()
+		if shardMaxReadLevel.Less(maxReadLevel) {
+			maxReadLevel = shardMaxReadLevel
+		}
+
+		transferTaskInfos, more, err := t.readTasks(readLevel, maxReadLevel)
 		if err != nil {
 			t.logger.Error("Processor unable to retrieve tasks", tag.Error(err))
 			t.notifyNewTask() // re-enqueue the event
@@ -331,11 +340,19 @@ func (t *transferQueueProcessorBase) processBatch() {
 			}
 		}
 
+		var newReadLevel task.Key
+		if !more {
+			newReadLevel = maxReadLevel
+		} else {
+			newReadLevel = newTransferTaskKey(transferTaskInfos[len(transferTaskInfos)-1].GetTaskID())
+		}
 		t.queueCollectionsLock.Lock()
-		queueCollection.AddTasks(tasks, more || partialRead)
+		queueCollection.AddTasks(tasks, newReadLevel)
+		newActiveQueue := queueCollection.ActiveQueue()
 		t.queueCollectionsLock.Unlock()
 
-		if more {
+		if more || (newActiveQueue != nil && newActiveQueue != activeQueue) {
+			// more tasks for the current active queue or the active queue has changed
 			t.notifyNewTask()
 		}
 	}
@@ -434,25 +451,25 @@ func (t *transferQueueProcessorBase) getProcessingQueueStates() []ProcessingQueu
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel task.Key,
 	maxReadLevel task.Key,
-) ([]*persistence.TransferTaskInfo, bool, bool, error) {
-	shardMaxReadLevel := t.maxReadLevel()
-	partialRead := false
-	if shardMaxReadLevel.Less(maxReadLevel) {
-		partialRead = true
-		maxReadLevel = shardMaxReadLevel
+) ([]*persistence.TransferTaskInfo, bool, error) {
+
+	var response *persistence.GetTransferTasksResponse
+	op := func() error {
+		var err error
+		response, err = t.shard.GetExecutionManager().GetTransferTasks(&persistence.GetTransferTasksRequest{
+			ReadLevel:    readLevel.(*transferTaskKey).taskID,
+			MaxReadLevel: maxReadLevel.(*transferTaskKey).taskID,
+			BatchSize:    t.options.BatchSize(),
+		})
+		return err
 	}
 
-	response, err := t.shard.GetExecutionManager().GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel:    readLevel.(*transferTaskKey).taskID,
-		MaxReadLevel: maxReadLevel.(*transferTaskKey).taskID,
-		BatchSize:    t.options.BatchSize(),
-	})
-
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 
-	return response.Tasks, len(response.NextPageToken) != 0, partialRead, nil
+	return response.Tasks, len(response.NextPageToken) != 0, nil
 }
 
 func (t *transferQueueProcessorBase) submitTask(

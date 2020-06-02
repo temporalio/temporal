@@ -55,7 +55,7 @@ type (
 		State() ProcessingQueueState
 		Split(ProcessingQueueSplitPolicy) []ProcessingQueue
 		Merge(ProcessingQueue) []ProcessingQueue
-		AddTasks(map[task.Key]task.Task, bool)
+		AddTasks(map[task.Key]task.Task, task.Key)
 		UpdateAckLevel()
 		// TODO: add Offload() method
 	}
@@ -72,7 +72,7 @@ type (
 		Level() int
 		Queues() []ProcessingQueue
 		ActiveQueue() ProcessingQueue
-		AddTasks(map[task.Key]task.Task, bool)
+		AddTasks(map[task.Key]task.Task, task.Key)
 		UpdateAckLevels()
 		Split(ProcessingQueueSplitPolicy) []ProcessingQueue
 		Merge([]ProcessingQueue)

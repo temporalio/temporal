@@ -195,7 +195,7 @@ func (mr *MockProcessingQueueMockRecorder) Merge(arg0 interface{}) *gomock.Call 
 }
 
 // AddTasks mocks base method
-func (m *MockProcessingQueue) AddTasks(arg0 map[task.Key]task.Task, arg1 bool) {
+func (m *MockProcessingQueue) AddTasks(arg0 map[task.Key]task.Task, arg1 task.Key) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddTasks", arg0, arg1)
 }
@@ -321,7 +321,7 @@ func (mr *MockProcessingQueueCollectionMockRecorder) ActiveQueue() *gomock.Call 
 }
 
 // AddTasks mocks base method
-func (m *MockProcessingQueueCollection) AddTasks(arg0 map[task.Key]task.Task, arg1 bool) {
+func (m *MockProcessingQueueCollection) AddTasks(arg0 map[task.Key]task.Task, arg1 task.Key) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddTasks", arg0, arg1)
 }
