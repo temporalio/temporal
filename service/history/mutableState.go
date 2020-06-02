@@ -70,7 +70,7 @@ type (
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*eventpb.HistoryEvent, error)
-		AddActivityTaskFailedEvent(int64, int64, *workflowservice.RespondActivityTaskFailedRequest) (*eventpb.HistoryEvent, error)
+		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *decisionpb.ScheduleActivityTaskDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure) (*eventpb.HistoryEvent, error)

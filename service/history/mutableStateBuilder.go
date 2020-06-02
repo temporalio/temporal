@@ -2349,7 +2349,8 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCompletedEvent(
 func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-	request *workflowservice.RespondActivityTaskFailedRequest,
+	failure *failurepb.Failure,
+	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskFailed
@@ -2370,7 +2371,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, request)
+	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, identity)
 	if err := e.ReplicateActivityTaskFailedEvent(event); err != nil {
 		return nil, err
 	}

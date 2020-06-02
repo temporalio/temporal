@@ -201,8 +201,7 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
 		if ai.StartedID != common.EmptyEventID {
 			// this means the activity has started but not completed, we need to fail the activity
-			request := getRespondActivityTaskFailedRequestFromActivity(ai, "workflowReset")
-			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, request); err != nil {
+			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, failure.NewResetWorkflowFailure("reset workflow", ai.Details), ai.StartedIdentity); err != nil {
 				// Unable to add ActivityTaskFailed event to history
 				return serviceerror.NewInternal("Unable to add ActivityTaskFailed event to mutableState.")
 			}
@@ -602,13 +601,6 @@ func (w *workflowResetorImpl) generateTimerTasksForReset(
 	}
 
 	return timerTasks, nil
-}
-
-func getRespondActivityTaskFailedRequestFromActivity(ai *persistence.ActivityInfo, resetReason string) *workflowservice.RespondActivityTaskFailedRequest {
-	return &workflowservice.RespondActivityTaskFailedRequest{
-		Failure:  failure.NewResetWorkflowFailure(resetReason, ai.Details),
-		Identity: ai.StartedIdentity,
-	}
 }
 
 // TODO: @shreyassrivatsan reduce the number of return parameters from this method or return a struct

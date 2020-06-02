@@ -160,8 +160,8 @@ func (b *historyBuilder) AddActivityTaskCompletedEvent(scheduleEventID, startedE
 }
 
 func (b *historyBuilder) AddActivityTaskFailedEvent(scheduleEventID, startedEventID int64,
-	request *workflowservice.RespondActivityTaskFailedRequest) *eventpb.HistoryEvent {
-	event := b.newActivityTaskFailedEvent(scheduleEventID, startedEventID, request)
+	failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
+	event := b.newActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, identity)
 
 	return b.addEventToHistory(event)
 }
@@ -635,13 +635,13 @@ func (b *historyBuilder) newActivityTaskTimedOutEvent(
 }
 
 func (b *historyBuilder) newActivityTaskFailedEvent(scheduleEventID, startedEventID int64,
-	request *workflowservice.RespondActivityTaskFailedRequest) *eventpb.HistoryEvent {
+	failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskFailed)
 	attributes := &eventpb.ActivityTaskFailedEventAttributes{}
-	attributes.Failure = request.GetFailure()
+	attributes.Failure = failure
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
-	attributes.Identity = request.Identity
+	attributes.Identity = identity
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: attributes}
 
 	return historyEvent
