@@ -447,6 +447,35 @@ func AdminShardManagement(c *cli.Context) {
 	}
 }
 
+// AdminListGossipMembers outputs a list of gossip members
+func AdminListGossipMembers(c *cli.Context) {
+	roleFlag := c.String(FlagClusterMembershipRole)
+
+	adminClient := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		ErrorAndExit("Operation DescribeCluster failed.", err)
+	}
+
+	members := response.MembershipInfo.Rings
+
+	if roleFlag != "all" {
+		all := members
+
+		members = members[:0]
+		for _, v := range all {
+			if roleFlag == v.Role {
+				members = append(members, v)
+			}
+		}
+	}
+
+	prettyPrintJSONObject(members)
+}
+
 // AdminListClusterMembership outputs a list of cluster membership items
 func AdminListClusterMembership(c *cli.Context) {
 	roleFlag := c.String(FlagClusterMembershipRole)

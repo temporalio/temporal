@@ -217,8 +217,22 @@ func newAdminShardManagementCommands() []cli.Command {
 func newAdminMembershipCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:  "list_gossip",
+			Usage: "List ringpop membership items",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagClusterMembershipRole,
+					Value: "all",
+					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminListGossipMembers(c)
+			},
+		},
+		{
 			Name:  "list_db",
-			Usage: "List cluster membership heartbeats",
+			Usage: "List cluster membership items",
 			Flags: append(
 				getDBFlags(),
 				cli.StringFlag{
@@ -236,7 +250,8 @@ func newAdminMembershipCommands() []cli.Command {
 			),
 			Action: func(c *cli.Context) {
 				AdminListClusterMembership(c)
-			}},
+			},
+		},
 	}
 }
 
