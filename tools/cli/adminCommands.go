@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -444,6 +445,34 @@ func AdminShardManagement(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Close shard task has failed", err)
 	}
+}
+
+// AdminListClusterMembership outputs a list of cluster membership items
+func AdminListClusterMembership(c *cli.Context) {
+	roleFlag := c.String(FlagClusterMembershipRole)
+	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
+	if err != nil {
+		ErrorAndExit("Failed to map membership role", err)
+	}
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	heartbeat := time.Duration(heartbeatFlag)
+
+	pFactory := CreatePersistenceFactory(c)
+	manager, err := pFactory.NewClusterMetadataManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	}
+
+	req := &persistence.GetClusterMembersRequest{
+		RoleEquals:          role,
+		LastHeartbeatWithin: heartbeat,
+	}
+	members, err := manager.GetClusterMembers(req)
+	if err != nil {
+		ErrorAndExit("Failed to get cluster members", err)
+	}
+
+	prettyPrintJSONObject(members)
 }
 
 // AdminDescribeHistoryHost describes history host

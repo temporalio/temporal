@@ -214,6 +214,32 @@ func newAdminShardManagementCommands() []cli.Command {
 	}
 }
 
+func newAdminMembershipCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "list_db",
+			Usage: "List cluster membership heartbeats",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagHeartbeatedWithin,
+					Value: "15m",
+					Usage: "Filter by last heartbeat date time. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.StringFlag{
+					Name:  FlagClusterMembershipRole,
+					Value: "all",
+					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListClusterMembership(c)
+			}},
+	}
+}
+
 func newAdminHistoryHostCommands() []cli.Command {
 	return []cli.Command{
 		{
