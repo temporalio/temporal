@@ -132,6 +132,7 @@ const (
 	FlagHistoryArchivalStatusWithAlias    = FlagHistoryArchivalStatus + ", has"
 	FlagHistoryArchivalURI                = "history_uri"
 	FlagHistoryArchivalURIWithAlias       = FlagHistoryArchivalURI + ", huri"
+	FlagHeartbeatedWithin                 = "heartbeated_within"
 	FlagVisibilityArchivalStatus          = "visibility_archival_status"
 	FlagVisibilityArchivalStatusWithAlias = FlagVisibilityArchivalStatus + ", vas"
 	FlagVisibilityArchivalURI             = "visibility_uri"

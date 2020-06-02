@@ -446,8 +446,8 @@ func AdminShardManagement(c *cli.Context) {
 	}
 }
 
-// AdminListMembers outputs a table of members
-func AdminListMembers(c *cli.Context) {
+// AdminListClusterMembership outputs a list of cluster membership items
+func AdminListClusterMembership(c *cli.Context) {
 	role := persistence.ServiceType(c.Int(FlagClusterMembershipRole))
 	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
 	heartbeat := time.Duration(heartbeatFlag)
