@@ -217,9 +217,8 @@ func newAdminShardManagementCommands() []cli.Command {
 func newAdminMembershipCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:    "db_heartbeats",
-			Aliases: []string{"h"},
-			Usage:   "List cluster membership heartbeats",
+			Name:  "list_db",
+			Usage: "List cluster membership heartbeats",
 			Flags: append(
 				getDBFlags(),
 				cli.StringFlag{

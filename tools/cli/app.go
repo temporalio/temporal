@@ -148,7 +148,7 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminTaskListCommands(),
 				},
 				{
-					Name:        "members",
+					Name:        "membership",
 					Usage:       "Run admin operation on membership",
 					Subcommands: newAdminMembershipCommands(),
 				},
