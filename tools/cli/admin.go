@@ -138,6 +138,40 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "describe-task",
+			Aliases: []string{"dt"},
+			Usage:   "Describe a task based on task Id, task type, shard Id and task visibility timestamp",
+			Flags: append(
+				getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The ID of the shard",
+				},
+				cli.IntFlag{
+					Name:  FlagTaskID,
+					Usage: "The ID of the timer task to describe",
+				},
+				cli.IntFlag{
+					Name:  FlagTaskType,
+					Value: 2,
+					Usage: "Task type: 2 - transfer task, 3 - timer task, 4 - replication task",
+				},
+				cli.Int64Flag{
+					Name:  FlagTaskVisibilityTimestamp,
+					Usage: "Task visibility timestamp in nano",
+				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminDescribeTask(c)
+			},
+		},
+
+		{
 			Name:    "closeShard",
 			Aliases: []string{"clsh"},
 			Usage:   "close a shard given a shard id",
