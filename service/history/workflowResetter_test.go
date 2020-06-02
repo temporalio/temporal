@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -291,10 +290,8 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	mutableState.EXPECT().AddActivityTaskFailedEvent(
 		activity1.ScheduleID,
 		activity1.StartedID,
-		&workflowservice.RespondActivityTaskFailedRequest{
-			Failure:  failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
-			Identity: activity1.StartedIdentity,
-		},
+		failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
+		activity1.StartedIdentity,
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
 	err := s.workflowResetter.failInflightActivity(mutableState, terminateReason)

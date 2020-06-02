@@ -870,10 +870,7 @@ func (s *historyBuilderSuite) addActivityTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID int64, failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
-	event, err := s.msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
-		Failure:  failure,
-		Identity: identity,
-	})
+	event, err := s.msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, identity)
 	s.Nil(err)
 	return event
 }

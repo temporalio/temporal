@@ -4927,11 +4927,7 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 }
 
 func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
-	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
-		Failure:  failure,
-		Identity: identity,
-	})
-
+	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, identity)
 	return event
 }
 
