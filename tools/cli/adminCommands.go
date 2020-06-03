@@ -408,6 +408,48 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 }
 
+// AdminListTasks outputs a list of a tasks for given Shard and Task Type
+func AdminListTasks(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	category := commongenpb.TaskCategory(c.Int(FlagTaskType))
+
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager(sid)
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
+
+	if category == commongenpb.TaskCategory_TaskCategory_Transfer {
+		req := &persistence.GetTransferTasksRequest{}
+		tasks, err := executionManager.GetTransferTasks(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Transfer Tasks", err)
+		}
+		prettyPrintJSONObject(tasks)
+	} else if category == commongenpb.TaskCategory_TaskCategory_Timer {
+		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
+		minVis := time.Unix(0, minVisFlag)
+		maxVisFlag := parseTime(c.String(FlagMaxVisibilityTimestamp), 0, time.Now())
+		maxVis := time.Unix(0, maxVisFlag)
+
+		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
+		tasks, err := executionManager.GetTimerIndexTasks(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Timer Tasks", err)
+		}
+		prettyPrintJSONObject(tasks)
+	} else if category == commongenpb.TaskCategory_TaskCategory_Replication {
+		req := &persistence.GetReplicationTasksRequest{}
+		task, err := executionManager.GetReplicationTasks(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Replication Tasks", err)
+		}
+		prettyPrintJSONObject(task)
+	} else {
+		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+	}
+}
+
 // AdminRemoveTask describes history host
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
