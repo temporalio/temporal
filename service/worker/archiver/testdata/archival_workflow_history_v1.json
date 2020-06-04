@@ -85,7 +85,10 @@
       "taskId": 6291599,
       "markerRecordedEventAttributes": {
         "markerName": "SideEffect",
-        "details": null,
+        "details": {
+          "side-effect-id": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"NQ=="}]},
+          "data": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"NQ=="}]}
+        },
         "decisionTaskCompletedEventId": 5
       }
     },
