@@ -55,17 +55,17 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/streadway/quantile v0.0.0-20150917103942-b0c588724d25 // indirect
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.0
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
-	github.com/uber-go/tally v3.3.16+incompatible
+	github.com/uber-go/tally v3.3.17+incompatible
 	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.18.0
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.23.2
-	go.temporal.io/temporal-proto v0.23.2
+	go.temporal.io/temporal-proto v0.23.3
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
@@ -84,3 +84,5 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
+
+replace go.temporal.io/temporal v0.23.2 => ../temporal-go-sdk
