@@ -26,7 +26,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -83,12 +82,12 @@ func (s *HistoryExistsSuite) TestCheck() {
 		{
 			getExecResp:    &persistence.GetWorkflowExecutionResponse{},
 			getHistoryResp: nil,
-			getHistoryErr:  gocql.ErrNotFound,
+			getHistoryErr:  &shared.EntityNotExistsError{Message: "got entity not exists error"},
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeCorrupted,
 				InvariantType:   common.HistoryExistsInvariantType,
 				Info:            "concrete execution exists but history does not exist",
-				InfoDetails:     gocql.ErrNotFound.Error(),
+				InfoDetails:     "EntityNotExistsError{Message: got entity not exists error}",
 			},
 			expectedResourcePopulated: false,
 		},

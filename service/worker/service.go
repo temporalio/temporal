@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/service/worker/parentclosepolicy"
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/scanner"
+	"github.com/uber/cadence/service/worker/scanner/executions"
 )
 
 type (
@@ -133,6 +134,16 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			TaskListScannerEnabled:   dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
+			ExecutionScannerConfig: &executions.ScannerWorkflowDynamicConfig{
+				Enabled:                 dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
+				Concurrency:             dc.GetIntProperty(dynamicconfig.ExecutionsScannerConcurrency, 25),
+				ExecutionsPageSize:      dc.GetIntProperty(dynamicconfig.ExecutionsScannerPersistencePageSize, 1000),
+				BlobstoreFlushThreshold: dc.GetIntProperty(dynamicconfig.ExecutionsScannerBlobstoreFlushThreshold, 100),
+				DynamicConfigInvariantCollections: executions.DynamicConfigInvariantCollections{
+					InvariantCollectionMutableState: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionMutableState, false),
+					InvariantCollectionHistory:      dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionHistory, false),
+				},
+			},
 		},
 		BatcherCfg: &batcher.Config{
 			AdminOperationToken: dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,3 +21,45 @@
 // SOFTWARE.
 
 package executions
+
+import "github.com/uber/cadence/common"
+
+func (s *workflowsSuite) TestFlattenShards() {
+	testCases := []struct {
+		input    Shards
+		expected []int
+	}{
+		{
+			input: Shards{
+				List: []int{1, 2, 3},
+			},
+			expected: []int{1, 2, 3},
+		},
+		{
+			input: Shards{
+				Range: &ShardRange{
+					Min: 5,
+					Max: 10,
+				},
+			},
+			expected: []int{5, 6, 7, 8, 9},
+		},
+	}
+	for _, tc := range testCases {
+		s.Equal(tc.expected, flattenShards(tc.input))
+	}
+}
+
+func (s *workflowsSuite) TestResolveFixerConfig() {
+	result := resolveFixerConfig(FixerWorkflowConfigOverwrites{
+		Concurrency: common.IntPtr(1000),
+	})
+	s.Equal(ResolvedFixerWorkflowConfig{
+		Concurrency:             1000,
+		BlobstoreFlushThreshold: 1000,
+		InvariantCollections: InvariantCollections{
+			InvariantCollectionMutableState: true,
+			InvariantCollectionHistory:      true,
+		},
+	}, result)
+}

@@ -30,27 +30,20 @@ import (
 	"go.uber.org/cadence/worker"
 	"go.uber.org/zap"
 
-	"github.com/uber/cadence/service/worker/scanner/executions"
-
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/worker/scanner/executions"
 )
 
 const (
 	// scannerStartUpDelay is to let services warm up
 	scannerStartUpDelay = time.Second * 4
-)
-
-var (
-	defaultExecutionsScannerParams = executions.ScannerWorkflowParams{
-		// fullExecutionsScanDefaultQuery indicates the visibility scanner should scan through all open workflows
-		VisibilityQuery: "SELECT * from elasticSearch.executions WHERE state IS open", // TODO: depending on if we go straight to ES or through frontend this query will look different
-	}
 )
 
 type (
@@ -68,6 +61,8 @@ type (
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
 		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
+		// ExecutionScannerConfig is the config for execution scanner
+		ExecutionScannerConfig *executions.ScannerWorkflowDynamicConfig
 	}
 
 	// BootstrapParams contains the set of params needed to bootstrap
@@ -123,25 +118,42 @@ func New(
 
 // Start starts the scanner
 func (s *Scanner) Start() error {
+	backgroundActivityContext := context.WithValue(context.Background(), scannerContextKey, s.context)
+	backgroundActivityContext = context.WithValue(backgroundActivityContext, executions.ScannerContextKey, executions.ScannerContext{
+		Resource:                     s.context.Resource,
+		Scope:                        s.context.Resource.GetMetricsClient().Scope(metrics.ExecutionsScannerScope),
+		ScannerWorkflowDynamicConfig: s.context.cfg.ExecutionScannerConfig,
+	})
+	backgroundActivityContext = context.WithValue(backgroundActivityContext, executions.FixerContextKey, executions.FixerContext{
+		Resource: s.context.Resource,
+		Scope:    s.context.Resource.GetMetricsClient().Scope(metrics.ExecutionsFixerScope),
+	})
 	workerOpts := worker.Options{
 		Logger:                                 s.context.zapLogger,
 		MetricsScope:                           s.context.tallyScope,
 		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
 		MaxConcurrentDecisionTaskExecutionSize: maxConcurrentDecisionTaskExecutionSize,
-		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
+		BackgroundActivityContext:              backgroundActivityContext,
 	}
 
-	var workerTaskListNames []string
+	workerTaskListNames := []string{executionsFixerTaskListName}
 	if s.context.cfg.ExecutionsScannerEnabled() {
 		workerTaskListNames = append(workerTaskListNames, executionsScannerTaskListName)
-		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, defaultExecutionsScannerParams)
+		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, executions.ScannerWorkflowParams{
+			Shards: executions.Shards{
+				Range: &executions.ShardRange{
+					Min: 0,
+					Max: s.context.cfg.Persistence.NumHistoryShards,
+				},
+			},
+		})
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskListScannerEnabled() {
-		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
+		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName, nil)
 		workerTaskListNames = append(workerTaskListNames, tlScannerTaskListName)
 	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra && s.context.cfg.HistoryScannerEnabled() {
-		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
+		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName, nil)
 		workerTaskListNames = append(workerTaskListNames, historyScannerTaskListName)
 	}
 
@@ -156,7 +168,7 @@ func (s *Scanner) Start() error {
 func (s *Scanner) startWorkflowWithRetry(
 	options cclient.StartWorkflowOptions,
 	workflowType string,
-	workflowArgs ...interface{},
+	workflowArg interface{},
 ) {
 
 	// let history / matching service warm up
@@ -167,7 +179,7 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	err := backoff.Retry(func() error {
-		return s.startWorkflow(sdkClient, options, workflowType, workflowArgs)
+		return s.startWorkflow(sdkClient, options, workflowType, workflowArg)
 	}, policy, func(err error) bool {
 		return true
 	})
@@ -180,11 +192,17 @@ func (s *Scanner) startWorkflow(
 	client cclient.Client,
 	options cclient.StartWorkflowOptions,
 	workflowType string,
-	workflowArgs ...interface{},
+	workflowArg interface{},
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.StartWorkflow(ctx, options, workflowType, workflowArgs)
+	var err error
+	if workflowArg != nil {
+		_, err = client.StartWorkflow(ctx, options, workflowType, workflowArg)
+	} else {
+		_, err = client.StartWorkflow(ctx, options, workflowType)
+	}
+
 	cancel()
 	if err != nil {
 		if _, ok := err.(*shared.WorkflowExecutionAlreadyStartedError); ok {
