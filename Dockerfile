@@ -6,7 +6,7 @@ ARG GOPROXY
 # Build Temporal binaries
 FROM golang:1.14-alpine AS builder
 
-RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr protobuf
+RUN apk add --update --no-cache ca-certificates make curl git mercurial protobuf
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
