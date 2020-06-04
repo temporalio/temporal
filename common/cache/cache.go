@@ -22,6 +22,8 @@ package cache
 
 import (
 	"time"
+
+	"github.com/uber/cadence/common/metrics"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -121,3 +123,11 @@ type Entry interface {
 
 // GetCacheItemSizeFunc returns the cache item size in bytes
 type GetCacheItemSizeFunc func(interface{}) uint64
+
+// DomainMetricsScopeCache represents a interface for mapping domainID and scopeIdx to metricsScope
+type DomainMetricsScopeCache interface {
+	// Get retrieves metrics scope for a domainID and scopeIdx
+	Get(domainID string, scopeIdx int) (metrics.Scope, bool)
+	// Put adds metrics scope for a domainID and scopeIdx
+	Put(domainID string, scopeIdx int, metricsScope metrics.Scope)
+}
