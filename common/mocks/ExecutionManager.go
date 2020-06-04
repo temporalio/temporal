@@ -285,6 +285,29 @@ func (_m *ExecutionManager) RangeCompleteTransferTask(request *persistence.Range
 	return r0
 }
 
+// GetReplicationTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetReplicationTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetReplicationTaskRequest) *persistence.GetReplicationTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetReplicationTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetReplicationTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetReplicationTasks provides a mock function with given fields: request
 func (_m *ExecutionManager) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.GetReplicationTasksResponse, error) {
 	ret := _m.Called(request)

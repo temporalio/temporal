@@ -821,6 +821,12 @@ func (m *executionManagerImpl) RangeCompleteTransferTask(
 }
 
 // Replication task related methods
+func (m *executionManagerImpl) GetReplicationTask(
+	request *GetReplicationTaskRequest,
+) (*GetReplicationTaskResponse, error) {
+	return m.persistence.GetReplicationTask(request)
+}
+
 func (m *executionManagerImpl) GetReplicationTasks(
 	request *GetReplicationTasksRequest,
 ) (*GetReplicationTasksResponse, error) {
