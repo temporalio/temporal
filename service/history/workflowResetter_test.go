@@ -32,6 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -291,6 +292,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		activity1.ScheduleID,
 		activity1.StartedID,
 		failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
+		commonpb.RetryStatus_NonRetryableError,
 		activity1.StartedIdentity,
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 

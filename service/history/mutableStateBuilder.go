@@ -2350,6 +2350,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	failure *failurepb.Failure,
+	retryStatus commonpb.RetryStatus,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2371,7 +2372,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, identity)
+	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, retryStatus, identity)
 	if err := e.ReplicateActivityTaskFailedEvent(event); err != nil {
 		return nil, err
 	}
@@ -2393,6 +2394,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	timeoutFailure *failurepb.Failure,
+	retryStatus commonpb.RetryStatus,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskTimedOut
@@ -2419,7 +2421,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutFailure)
+	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutFailure, retryStatus)
 	if err := e.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 		return nil, err
 	}
@@ -2608,6 +2610,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 
 func (e *mutableStateBuilder) AddFailWorkflowEvent(
 	decisionCompletedEventID int64,
+	retryStatus commonpb.RetryStatus,
 	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2616,7 +2619,7 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, attributes)
+	event := e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, retryStatus, attributes)
 	if err := e.ReplicateWorkflowExecutionFailedEvent(decisionCompletedEventID, event); err != nil {
 		return nil, err
 	}
@@ -2648,6 +2651,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 
 func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 	firstEventID int64,
+	retryStatus commonpb.RetryStatus,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTimeout
@@ -2655,7 +2659,7 @@ func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddTimeoutWorkflowEvent()
+	event := e.hBuilder.AddTimeoutWorkflowEvent(retryStatus)
 	if err := e.ReplicateWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
 		return nil, err
 	}

@@ -201,7 +201,13 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
 		if ai.StartedID != common.EmptyEventID {
 			// this means the activity has started but not completed, we need to fail the activity
-			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, failure.NewResetWorkflowFailure("reset workflow", ai.Details), ai.StartedIdentity); err != nil {
+			if _, err := msBuilder.AddActivityTaskFailedEvent(
+				ai.ScheduleID,
+				ai.StartedID,
+				failure.NewResetWorkflowFailure("reset workflow", ai.Details),
+				commonpb.RetryStatus_NonRetryableError,
+				ai.StartedIdentity,
+			); err != nil {
 				// Unable to add ActivityTaskFailed event to history
 				return serviceerror.NewInternal("Unable to add ActivityTaskFailed event to mutableState.")
 			}
@@ -476,7 +482,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			Identity:   se.GetWorkflowExecutionSignaledEventAttributes().Identity,
 			Input:      se.GetWorkflowExecutionSignaledEventAttributes().Input,
 		}
-		newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+		newMutableState.AddWorkflowExecutionSignaled( // nolint:errcheck
 			sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 	}
 	for {
@@ -533,7 +539,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 							Identity:   e.GetWorkflowExecutionSignaledEventAttributes().Identity,
 							Input:      e.GetWorkflowExecutionSignaledEventAttributes().Input,
 						}
-						newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+						newMutableState.AddWorkflowExecutionSignaled( // nolint:errcheck
 							sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 					} else if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()

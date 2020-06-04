@@ -231,7 +231,6 @@ Loop:
 			continue Loop
 		}
 
-		timeoutFailure.RetryStatus = retryStatus
 		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
 		// If retryStatus is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
@@ -248,6 +247,7 @@ Loop:
 			activityInfo.ScheduleID,
 			activityInfo.StartedID,
 			timeoutFailure,
+			retryStatus,
 		); err != nil {
 			return err
 		}
@@ -487,7 +487,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	timeoutFailure := failure.NewTimeoutFailure(commonpb.TimeoutType_StartToClose)
 	backoffInterval, retryStatus := mutableState.GetRetryBackoffDuration(timeoutFailure)
-	timeoutFailure.RetryStatus = retryStatus
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
@@ -498,7 +497,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		continueAsNewInitiator = commonpb.ContinueAsNewInitiator_CronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {
-		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID); err != nil {
+		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryStatus); err != nil {
 			return err
 		}
 

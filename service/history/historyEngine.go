@@ -1612,17 +1612,14 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			postActions := &updateWorkflowAction{}
-			retryStatus, err := mutableState.RetryActivity(ai, req.FailedRequest.GetFailure())
+			failure := request.GetFailure()
+			retryStatus, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
 			}
 			if retryStatus != commonpb.RetryStatus_Retrying {
 				// no more retry, and we want to record the failure event
-				failure := request.GetFailure()
-				if failure != nil {
-					failure.RetryStatus = retryStatus
-				}
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, request.GetIdentity()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryStatus, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
 				}
