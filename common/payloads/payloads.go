@@ -38,13 +38,19 @@ var (
 )
 
 func EncodeString(str string) *commonpb.Payloads {
-	// Error can be safely ignored here becase string always can be converted to JSON
+	// Error can be safely ignored here becase string always can be converted to JSON.
 	ps, _ := dataConverter.ToData(str)
 	return ps
 }
 
+func EncodeInt(i int) *commonpb.Payloads {
+	// Error can be safely ignored here becase int always can be converted to JSON.
+	ps, _ := dataConverter.ToData(i)
+	return ps
+}
+
 func EncodeBytes(bytes []byte) *commonpb.Payloads {
-	// Error can be safely ignored here becase []byte always can be raw encoded
+	// Error can be safely ignored here becase []byte always can be raw encoded.
 	ps, _ := dataConverter.ToData(bytes)
 	return ps
 }

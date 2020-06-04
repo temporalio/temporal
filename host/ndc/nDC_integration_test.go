@@ -443,8 +443,10 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -747,8 +749,10 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -1214,8 +1218,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
