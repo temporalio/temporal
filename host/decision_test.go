@@ -216,9 +216,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity1",
-					Details:    payloads.EncodeString("abc"),
-				},
-				},
+					Details: map[string]*commonpb.Payloads{
+						"data":   payloads.EncodeString("local activity marker"),
+						"result": payloads.EncodeString("local activity result"),
+					}}},
 			}},
 		StickyAttributes: &decisionpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
@@ -236,9 +237,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity2",
-					Details:    payloads.EncodeString("abc"),
-				},
-				},
+					Details: map[string]*commonpb.Payloads{
+						"data":   payloads.EncodeString("local activity marker"),
+						"result": payloads.EncodeString("local activity result"),
+					}}},
 			}},
 		StickyAttributes: &decisionpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,

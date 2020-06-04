@@ -333,8 +333,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1013,8 +1016,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1608,8 +1614,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2310,8 +2319,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2908,8 +2920,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3583,8 +3598,11 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},

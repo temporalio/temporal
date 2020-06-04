@@ -298,15 +298,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Len(historyEvents, 14)
 	s.validateActivityTaskStartedEvent(historyEvents[12], 13, 7, identity, 1, activity3Failure)
 
-	markerDetails := payloads.EncodeString("dynamic-historybuilder-success-marker-details")
+	markerDetails := map[string]*commonpb.Payloads{
+		"data": payloads.EncodeString("dynamic-historybuilder-success-marker-details"),
+	}
 	markerHeaderField1 := payload.EncodeString("dynamic-historybuilder-success-marker-header1")
 	markerHeaderField2 := payload.EncodeString("dynamic-historybuilder-success-marker-header2")
 	markerHeader := map[string]*commonpb.Payload{
 		"name1": markerHeaderField1,
 		"name2": markerHeaderField2,
 	}
-	markerEvent := s.addMarkerRecordedEvent(4, "testMarker", markerDetails,
-		&markerHeader)
+	markerEvent := s.addMarkerRecordedEvent(4, "testMarker", markerDetails, &markerHeader)
 	s.validateMarkerRecordedEvent(markerEvent, 15, 4, "testMarker", markerDetails, &markerHeader)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.Equal(int64(16), s.getNextEventID())
@@ -878,7 +879,7 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	return event
 }
 
-func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payload) *eventpb.HistoryEvent {
+func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details map[string]*commonpb.Payloads, header *map[string]*commonpb.Payload) *eventpb.HistoryEvent {
 	fields := make(map[string]*commonpb.Payload)
 	if header != nil {
 		for name, value := range *header {
@@ -1047,7 +1048,7 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *eventpb.His
 
 func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
-	markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payload) {
+	markerName string, details map[string]*commonpb.Payloads, header *map[string]*commonpb.Payload) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_MarkerRecorded, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -1055,7 +1056,7 @@ func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 	s.NotNil(attributes)
 	s.Equal(decisionTaskCompletedEventID, attributes.DecisionTaskCompletedEventId)
 	s.Equal(markerName, attributes.GetMarkerName())
-	s.Equal(details, attributes.Details)
+	s.Equal(details, attributes.GetDetails())
 	if header != nil {
 		for name, value := range attributes.Header.Fields {
 			s.Equal((*header)[name], value)

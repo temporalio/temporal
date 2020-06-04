@@ -105,7 +105,7 @@ func (s *clientIntegrationSuite) SetupSuite() {
 }
 
 func (s *clientIntegrationSuite) TearDownSuite() {
-	s.sdkClient.CloseConnection()
+	s.sdkClient.Close()
 	s.tearDownSuite()
 }
 
@@ -224,7 +224,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, dc)
 	defer func() {
 		worker.Stop()
-		sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-workflow"
@@ -258,7 +258,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
 	defer func() {
 		worker.Stop()
-		sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-failed-workflow"
@@ -364,7 +364,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	sdkClient, worker := s.startWorkerWithDataConverter(childTaskList, dc)
 	defer func() {
 		worker.Stop()
-		sdkClient.CloseConnection()
+		sdkClient.Close()
 	}()
 
 	id := "client-integration-data-converter-with-child-workflow"

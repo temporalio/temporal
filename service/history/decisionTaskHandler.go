@@ -617,7 +617,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_RecordMarker.String()),
-		attr.GetDetails().Size(),
+		common.GetPayloadsMapSize(attr.GetDetails()),
 		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
