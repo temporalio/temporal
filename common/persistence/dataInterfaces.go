@@ -790,6 +790,17 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetReplicationTaskRequest is the request for GetReplicationTask
+	GetReplicationTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetReplicationTaskResponse is the response to GetReplicationTask
+	GetReplicationTaskResponse struct {
+		ReplicationTaskInfo *persistenceblobs.ReplicationTaskInfo
+	}
+
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
 		ReadLevel     int64
@@ -1345,6 +1356,7 @@ type (
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
+		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error

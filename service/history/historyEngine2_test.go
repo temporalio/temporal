@@ -869,7 +869,9 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		DecisionType: decisionpb.DecisionType_RecordMarker,
 		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 			MarkerName: markerName,
-			Details:    markerDetails,
+			Details: map[string]*commonpb.Payloads{
+				"data": markerDetails,
+			},
 		}},
 	}}
 

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -63,7 +64,7 @@ func timeoutWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace s
 
 	activityErr := activityFuture.Get(ctx, nil)
 	if activityErr != nil {
-		if _, ok := activityErr.(*workflow.TimeoutError); !ok {
+		if _, ok := activityErr.(*temporal.TimeoutError); !ok {
 			workflow.GetLogger(ctx).Info("activity timeout failed", zap.Error(activityErr))
 		} else {
 			activityErr = nil

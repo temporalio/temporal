@@ -128,8 +128,10 @@ func (rpo *ringpopMonitor) Start() {
 	}
 }
 
-func serviceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) {
+func ServiceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) {
 	switch name {
+	case primitives.AllServices:
+		return persistence.All, nil
 	case primitives.FrontendService:
 		return persistence.Frontend, nil
 	case primitives.HistoryService:
@@ -185,7 +187,7 @@ func (rpo *ringpopMonitor) startHeartbeatAndFetchBootstrapHosts(broadcastHostpor
 	}
 
 	// Parse and validate existing service name
-	role, err := serviceNameToServiceTypeEnum(rpo.serviceName)
+	role, err := ServiceNameToServiceTypeEnum(rpo.serviceName)
 	if err != nil {
 		return nil, err
 	}
