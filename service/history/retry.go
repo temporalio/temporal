@@ -46,17 +46,17 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, commonpb.RetryStatus) {
 	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, commonpb.RetryStatus_NonRetryableError
+		return backoff.NoBackoff, commonpb.RetryStatus_NonRetryableFailure
 	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff, commonpb.RetryStatus_Disabled
+		return backoff.NoBackoff, commonpb.RetryStatus_RetryPolicyNotSet
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return backoff.NoBackoff, commonpb.RetryStatus_MaximumAttemptsExceeded
+		return backoff.NoBackoff, commonpb.RetryStatus_MaximumAttemptsReached
 	}
 
 	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
@@ -80,7 +80,7 @@ func getBackoffInterval(
 		return backoff.NoBackoff, commonpb.RetryStatus_Timeout
 	}
 
-	return backoffInterval, commonpb.RetryStatus_Retrying
+	return backoffInterval, commonpb.RetryStatus_InProgress
 }
 
 func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {

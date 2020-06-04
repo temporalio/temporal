@@ -572,7 +572,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
-	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", true), commonpb.RetryStatus_NonRetryableError)
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", true), commonpb.RetryStatus_NonRetryableFailure)
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -3043,7 +3043,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, commonpb.RetryStatus_NonRetryableError, identity)
+	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, commonpb.RetryStatus_NonRetryableFailure, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)

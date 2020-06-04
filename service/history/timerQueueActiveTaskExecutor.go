@@ -226,7 +226,7 @@ Loop:
 			timeoutFailure,
 		); err != nil {
 			return err
-		} else if retryStatus == commonpb.RetryStatus_Retrying {
+		} else if retryStatus == commonpb.RetryStatus_InProgress {
 			updateMutableState = true
 			continue Loop
 		}

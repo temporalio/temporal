@@ -1617,7 +1617,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			if err != nil {
 				return nil, err
 			}
-			if retryStatus != commonpb.RetryStatus_Retrying {
+			if retryStatus != commonpb.RetryStatus_InProgress {
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryStatus, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history

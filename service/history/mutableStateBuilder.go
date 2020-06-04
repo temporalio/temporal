@@ -1110,7 +1110,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	info := e.executionInfo
 	if !info.HasRetryPolicy {
-		return backoff.NoBackoff, commonpb.RetryStatus_Disabled
+		return backoff.NoBackoff, commonpb.RetryStatus_RetryPolicyNotSet
 	}
 
 	return getBackoffInterval(
@@ -3810,7 +3810,7 @@ func (e *mutableStateBuilder) RetryActivity(
 	}
 
 	if !ai.HasRetryPolicy {
-		return commonpb.RetryStatus_Disabled, nil
+		return commonpb.RetryStatus_RetryPolicyNotSet, nil
 	}
 
 	if ai.CancelRequested {
@@ -3830,7 +3830,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		failure,
 		ai.NonRetryableErrorTypes,
 	)
-	if retryStatus != commonpb.RetryStatus_Retrying {
+	if retryStatus != commonpb.RetryStatus_InProgress {
 		return retryStatus, nil
 	}
 
@@ -3853,7 +3853,7 @@ func (e *mutableStateBuilder) RetryActivity(
 
 	e.updateActivityInfos[ai] = struct{}{}
 	e.syncActivityTasks[ai.ScheduleID] = struct{}{}
-	return commonpb.RetryStatus_Retrying, nil
+	return commonpb.RetryStatus_InProgress, nil
 }
 
 // TODO mutable state should generate corresponding transfer / timer tasks according to

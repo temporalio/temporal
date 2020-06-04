@@ -390,7 +390,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				failure.NewResetWorkflowFailure(terminateReason, ai.Details),
-				commonpb.RetryStatus_NonRetryableError,
+				commonpb.RetryStatus_NonRetryableFailure,
 				ai.StartedIdentity,
 			); err != nil {
 				return err

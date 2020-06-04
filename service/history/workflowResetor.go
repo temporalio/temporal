@@ -205,7 +205,7 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 				ai.ScheduleID,
 				ai.StartedID,
 				failure.NewResetWorkflowFailure("reset workflow", ai.Details),
-				commonpb.RetryStatus_NonRetryableError,
+				commonpb.RetryStatus_NonRetryableFailure,
 				ai.StartedIdentity,
 			); err != nil {
 				// Unable to add ActivityTaskFailed event to history
