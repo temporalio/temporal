@@ -74,7 +74,7 @@ func newAdminWorkflowCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "refresh-tasks",
+			Name:    "refresh_tasks",
 			Aliases: []string{"rt"},
 			Usage:   "Refreshes all the tasks of a workflow",
 			Flags: []cli.Flag{
@@ -138,7 +138,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "describe-task",
+			Name:    "describe_task",
 			Aliases: []string{"dt"},
 			Usage:   "Describe a task based on task Id, task type, shard Id and task visibility timestamp",
 			Flags: append(
@@ -172,7 +172,7 @@ func newAdminShardManagementCommands() []cli.Command {
 		},
 
 		{
-			Name:    "closeShard",
+			Name:    "close_shard",
 			Aliases: []string{"clsh"},
 			Usage:   "close a shard given a shard id",
 			Flags: []cli.Flag{
@@ -186,7 +186,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "removeTask",
+			Name:    "remove_task",
 			Aliases: []string{"rmtk"},
 			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
@@ -284,7 +284,7 @@ func newAdminHistoryHostCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "getshard",
+			Name:    "get_shardid",
 			Aliases: []string{"gsh"},
 			Usage:   "Get shardId for a workflowId",
 			Flags: []cli.Flag{
@@ -334,7 +334,7 @@ func newAdminNamespaceCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "getnamespaceidorname",
+			Name:    "get_namespaceidorname",
 			Aliases: []string{"getdn"},
 			Usage:   "Get namespaceId or namespace",
 			Flags: append(getDBFlags(),
@@ -395,7 +395,7 @@ func newAdminKafkaCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "purgeTopic",
+			Name:    "purge_topic",
 			Aliases: []string{"purge"},
 			Usage:   "purge Kafka topic by consumer group",
 			Flags: []cli.Flag{
@@ -431,7 +431,7 @@ clusters:
 			},
 		},
 		{
-			Name:    "mergeDLQ",
+			Name:    "merge_dlq",
 			Aliases: []string{"mgdlq"},
 			Usage:   "Merge replication tasks to target topic(from input file or DLQ topic)",
 			Flags: []cli.Flag{
@@ -689,7 +689,7 @@ func newAdminTaskListCommands() []cli.Command {
 func newAdminClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:    "add-search-attr",
+			Name:    "add_search_attr",
 			Aliases: []string{"asa"},
 			Usage:   "whitelist search attribute",
 			Flags: []cli.Flag{
