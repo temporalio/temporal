@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 )
@@ -445,6 +446,33 @@ func AdminShardManagement(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Close shard task has failed", err)
 	}
+}
+
+// AdminListGossipMembers outputs a list of gossip members
+func AdminListGossipMembers(c *cli.Context) {
+	roleFlag := c.String(FlagClusterMembershipRole)
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		ErrorAndExit("Operation DescribeCluster failed.", err)
+	}
+
+	members := response.MembershipInfo.Rings
+	if roleFlag != primitives.AllServices {
+		all := members
+
+		members = members[:0]
+		for _, v := range all {
+			if roleFlag == v.Role {
+				members = append(members, v)
+			}
+		}
+	}
+
+	prettyPrintJSONObject(members)
 }
 
 // AdminListClusterMembership outputs a list of cluster membership items
