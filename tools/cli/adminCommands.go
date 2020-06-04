@@ -374,6 +374,7 @@ func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
 	vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+	category := commongenpb.TaskCategory(c.Int(FlagTaskType))
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -381,10 +382,23 @@ func AdminDescribeTask(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
-	timerTask, err := executionManager.GetTimerTask(req)
-
-	prettyPrintJSONObject(timerTask)
+	if category == commongenpb.TaskCategory_TaskCategory_Timer {
+		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
+		task, err := executionManager.GetTimerTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Timer Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else if category == commongenpb.TaskCategory_TaskCategory_Replication {
+		req := &persistence.GetReplicationTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
+		task, err := executionManager.GetReplicationTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Replication Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else {
+		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+	}
 }
 
 // AdminRemoveTask describes history host
