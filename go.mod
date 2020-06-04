@@ -66,7 +66,7 @@ require (
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.23.5
-	go.temporal.io/temporal-proto v0.23.3
+	go.temporal.io/temporal-proto v0.23.4
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
@@ -75,7 +75,6 @@ require (
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	golang.org/x/tools v0.0.0-20200604183345-4d5ea46c79fe // indirect
 	google.golang.org/api v0.26.0
-	google.golang.org/genproto v0.0.0-20200604104852-0b0486081ffb // indirect
 	google.golang.org/grpc v1.29.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/validator.v2 v2.0.0-20191107172027-c3144fdedc21
@@ -86,5 +85,3 @@ require (
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
 
 replace go.temporal.io/temporal v0.23.2 => ../temporal-go-sdk
-
-replace go.temporal.io/temporal-proto v0.23.2 => ../temporal-proto-go
