@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 )
@@ -452,7 +453,6 @@ func AdminListGossipMembers(c *cli.Context) {
 	roleFlag := c.String(FlagClusterMembershipRole)
 
 	adminClient := cFactory.AdminClient(c)
-
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
@@ -461,8 +461,7 @@ func AdminListGossipMembers(c *cli.Context) {
 	}
 
 	members := response.MembershipInfo.Rings
-
-	if roleFlag != "all" {
+	if roleFlag != primitives.AllServices {
 		all := members
 
 		members = members[:0]
