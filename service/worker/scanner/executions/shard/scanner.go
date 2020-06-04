@@ -39,6 +39,7 @@ type (
 		failedWriter     common.ExecutionWriter
 		corruptedWriter  common.ExecutionWriter
 		invariantManager common.InvariantManager
+		progressReportFn func()
 	}
 )
 
@@ -50,6 +51,7 @@ func NewScanner(
 	blobstoreClient blobstore.Client,
 	blobstoreFlushThreshold int,
 	invariantCollections []common.InvariantCollection,
+	progressReportFn func(),
 ) common.Scanner {
 	id := uuid.New()
 	return &scanner{
@@ -58,6 +60,7 @@ func NewScanner(
 		failedWriter:     common.NewBlobstoreWriter(id, common.FailedExtension, blobstoreClient, blobstoreFlushThreshold),
 		corruptedWriter:  common.NewBlobstoreWriter(id, common.CorruptedExtension, blobstoreClient, blobstoreFlushThreshold),
 		invariantManager: invariants.NewInvariantManager(invariantCollections, pr),
+		progressReportFn: progressReportFn,
 	}
 }
 
@@ -71,6 +74,7 @@ func (s *scanner) Scan() common.ShardScanReport {
 	}
 
 	for s.itr.HasNext() {
+		s.progressReportFn()
 		exec, err := s.itr.Next()
 		if err != nil {
 			result.Result.ControlFlowFailure = &common.ControlFlowFailure{

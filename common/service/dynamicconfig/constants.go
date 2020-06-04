@@ -258,36 +258,41 @@ var keys = map[Key]string{
 	MutableStateChecksumInvalidateBefore:                   "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
 
-	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
-	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
-	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
-	WorkerReplicatorTaskConcurrency:                 "worker.replicatorTaskConcurrency",
-	WorkerReplicatorMessageConcurrency:              "worker.replicatorMessageConcurrency",
-	WorkerReplicatorActivityBufferRetryCount:        "worker.replicatorActivityBufferRetryCount",
-	WorkerReplicatorHistoryBufferRetryCount:         "worker.replicatorHistoryBufferRetryCount",
-	WorkerReplicationTaskMaxRetryCount:              "worker.replicationTaskMaxRetryCount",
-	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
-	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
-	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
-	WorkerEnableRPCReplication:                      "worker.enableWorkerRPCReplication",
-	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
-	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
-	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
-	WorkerESProcessorBulkSize:                       "worker.ESProcessorBulkSize",
-	WorkerESProcessorFlushInterval:                  "worker.ESProcessorFlushInterval",
-	EnableArchivalCompression:                       "worker.EnableArchivalCompression",
-	WorkerHistoryPageSize:                           "worker.WorkerHistoryPageSize",
-	WorkerTargetArchivalBlobSize:                    "worker.WorkerTargetArchivalBlobSize",
-	WorkerArchiverConcurrency:                       "worker.ArchiverConcurrency",
-	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
-	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
-	WorkerBlobIntegrityCheckProbability:             "worker.BlobIntegrityCheckProbability",
-	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
-	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
-	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
-	TaskListScannerEnabled:                          "worker.taskListScannerEnabled",
-	HistoryScannerEnabled:                           "worker.historyScannerEnabled",
-	ExecutionsScannerEnabled:                        "worker.executionsScannerEnabled",
+	WorkerPersistenceMaxQPS:                          "worker.persistenceMaxQPS",
+	WorkerPersistenceGlobalMaxQPS:                    "worker.persistenceGlobalMaxQPS",
+	WorkerReplicatorMetaTaskConcurrency:              "worker.replicatorMetaTaskConcurrency",
+	WorkerReplicatorTaskConcurrency:                  "worker.replicatorTaskConcurrency",
+	WorkerReplicatorMessageConcurrency:               "worker.replicatorMessageConcurrency",
+	WorkerReplicatorActivityBufferRetryCount:         "worker.replicatorActivityBufferRetryCount",
+	WorkerReplicatorHistoryBufferRetryCount:          "worker.replicatorHistoryBufferRetryCount",
+	WorkerReplicationTaskMaxRetryCount:               "worker.replicationTaskMaxRetryCount",
+	WorkerReplicationTaskMaxRetryDuration:            "worker.replicationTaskMaxRetryDuration",
+	WorkerReplicationTaskContextDuration:             "worker.replicationTaskContextDuration",
+	WorkerReReplicationContextTimeout:                "worker.workerReReplicationContextTimeout",
+	WorkerEnableRPCReplication:                       "worker.enableWorkerRPCReplication",
+	WorkerIndexerConcurrency:                         "worker.indexerConcurrency",
+	WorkerESProcessorNumOfWorkers:                    "worker.ESProcessorNumOfWorkers",
+	WorkerESProcessorBulkActions:                     "worker.ESProcessorBulkActions",
+	WorkerESProcessorBulkSize:                        "worker.ESProcessorBulkSize",
+	WorkerESProcessorFlushInterval:                   "worker.ESProcessorFlushInterval",
+	EnableArchivalCompression:                        "worker.EnableArchivalCompression",
+	WorkerHistoryPageSize:                            "worker.WorkerHistoryPageSize",
+	WorkerTargetArchivalBlobSize:                     "worker.WorkerTargetArchivalBlobSize",
+	WorkerArchiverConcurrency:                        "worker.ArchiverConcurrency",
+	WorkerArchivalsPerIteration:                      "worker.ArchivalsPerIteration",
+	WorkerDeterministicConstructionCheckProbability:  "worker.DeterministicConstructionCheckProbability",
+	WorkerBlobIntegrityCheckProbability:              "worker.BlobIntegrityCheckProbability",
+	WorkerTimeLimitPerArchivalIteration:              "worker.TimeLimitPerArchivalIteration",
+	WorkerThrottledLogRPS:                            "worker.throttledLogRPS",
+	ScannerPersistenceMaxQPS:                         "worker.scannerPersistenceMaxQPS",
+	TaskListScannerEnabled:                           "worker.taskListScannerEnabled",
+	HistoryScannerEnabled:                            "worker.historyScannerEnabled",
+	ExecutionsScannerEnabled:                         "worker.executionsScannerEnabled",
+	ExecutionsScannerBlobstoreFlushThreshold:         "worker.executionsScannerBlobstoreFlushThreshold",
+	ExecutionsScannerConcurrency:                     "worker.executionsScannerConcurrency",
+	ExecutionsScannerPersistencePageSize:             "worker.executionsScannerPersistencePageSize",
+	ExecutionsScannerInvariantCollectionHistory:      "worker.executionsScannerInvariantCollectionHistory",
+	ExecutionsScannerInvariantCollectionMutableState: "worker.executionsScannerInvariantCollectionMutableState",
 }
 
 const (
@@ -745,6 +750,16 @@ const (
 	HistoryScannerEnabled
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled
+	// ExecutionsScannerConcurrency indicates the concurrency of execution scanner
+	ExecutionsScannerConcurrency
+	// ExecutionsScannerBlobstoreFlushThreshold indicates the flush threshold of blobstore in execution scanner
+	ExecutionsScannerBlobstoreFlushThreshold
+	// ExecutionsScannerPersistencePageSize indicates the page size of execution persistence fetches in execution scanner
+	ExecutionsScannerPersistencePageSize
+	// ExecutionsScannerInvariantCollectionMutableState indicates if mutable state invariant checks should be run
+	ExecutionsScannerInvariantCollectionMutableState
+	// ExecutionsScannerInvariantCollectionHistory indicates if history invariant checks should be run
+	ExecutionsScannerInvariantCollectionHistory
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task

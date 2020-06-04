@@ -40,6 +40,7 @@ type (
 		failedWriter     common.ExecutionWriter
 		fixedWriter      common.ExecutionWriter
 		invariantManager common.InvariantManager
+		progressReportFn func()
 	}
 )
 
@@ -51,6 +52,7 @@ func NewFixer(
 	keys common.Keys,
 	blobstoreFlushThreshold int,
 	invariantCollections []common.InvariantCollection,
+	progressReportFn func(),
 ) common.Fixer {
 	id := uuid.New()
 	return &fixer{
@@ -60,6 +62,7 @@ func NewFixer(
 		failedWriter:     common.NewBlobstoreWriter(id, common.FailedExtension, blobstoreClient, blobstoreFlushThreshold),
 		fixedWriter:      common.NewBlobstoreWriter(id, common.FixedExtension, blobstoreClient, blobstoreFlushThreshold),
 		invariantManager: invariants.NewInvariantManager(invariantCollections, pr),
+		progressReportFn: progressReportFn,
 	}
 }
 
@@ -69,6 +72,7 @@ func (f *fixer) Fix() common.ShardFixReport {
 		ShardID: f.shardID,
 	}
 	for f.itr.HasNext() {
+		f.progressReportFn()
 		soe, err := f.itr.Next()
 		if err != nil {
 			result.Result.ControlFlowFailure = &common.ControlFlowFailure{

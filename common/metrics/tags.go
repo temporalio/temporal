@@ -34,6 +34,7 @@ const (
 	workflowType  = "workflowType"
 	activityType  = "activityType"
 	decisionType  = "decisionType"
+	invariantType = "invariantType"
 
 	domainAllValue = "all"
 	unknownValue   = "_unknown_"
@@ -75,6 +76,10 @@ type (
 	}
 
 	decisionTypeTag struct {
+		value string
+	}
+
+	invariantTypeTag struct {
 		value string
 	}
 )
@@ -231,5 +236,23 @@ func (d decisionTypeTag) Key() string {
 
 // Value returns the value of the decision type tag
 func (d decisionTypeTag) Value() string {
+	return d.value
+}
+
+// InvariantTypeTag returns a new invariant type tag.
+func InvariantTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return invariantTypeTag{value}
+}
+
+// Key returns the key of invariant type tag
+func (d invariantTypeTag) Key() string {
+	return invariantType
+}
+
+// Value returns the value of invariant type tag
+func (d invariantTypeTag) Value() string {
 	return d.value
 }
