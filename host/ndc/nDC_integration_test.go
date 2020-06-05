@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	failurepb "go.temporal.io/temporal-proto/failure"
 	replicationpb "go.temporal.io/temporal-proto/replication"
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
@@ -590,7 +591,11 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      commonpb.TimeoutType_StartToClose,
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: commonpb.TimeoutType_StartToClose,
+						}},
+					},
 				}},
 			},
 			{
@@ -1383,7 +1388,11 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      commonpb.TimeoutType_StartToClose,
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: commonpb.TimeoutType_StartToClose,
+						}},
+					},
 				}},
 			},
 			{
