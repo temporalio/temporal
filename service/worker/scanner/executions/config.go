@@ -31,6 +31,7 @@ type (
 		Concurrency                       dynamicconfig.IntPropertyFn
 		ExecutionsPageSize                dynamicconfig.IntPropertyFn
 		BlobstoreFlushThreshold           dynamicconfig.IntPropertyFn
+		ActivityBatchSize                 dynamicconfig.IntPropertyFn
 		DynamicConfigInvariantCollections DynamicConfigInvariantCollections
 	}
 
@@ -49,6 +50,7 @@ type (
 		Concurrency             *int
 		ExecutionsPageSize      *int
 		BlobstoreFlushThreshold *int
+		ActivityBatchSize       *int
 		InvariantCollections    *InvariantCollections
 	}
 
@@ -59,6 +61,7 @@ type (
 		Concurrency             int
 		ExecutionsPageSize      int
 		BlobstoreFlushThreshold int
+		ActivityBatchSize       int
 		InvariantCollections    InvariantCollections
 	}
 
@@ -75,6 +78,7 @@ type (
 	FixerWorkflowConfigOverwrites struct {
 		Concurrency             *int
 		BlobstoreFlushThreshold *int
+		ActivityBatchSize       *int
 		InvariantCollections    *InvariantCollections
 	}
 
@@ -82,6 +86,7 @@ type (
 	ResolvedFixerWorkflowConfig struct {
 		Concurrency             int
 		BlobstoreFlushThreshold int
+		ActivityBatchSize       int
 		InvariantCollections    InvariantCollections
 	}
 )

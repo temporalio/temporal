@@ -74,6 +74,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 				Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 				Concurrency:             dynamicconfig.GetIntPropertyFn(10),
 				ExecutionsPageSize:      dynamicconfig.GetIntPropertyFn(100),
+				ActivityBatchSize:       dynamicconfig.GetIntPropertyFn(10),
 				BlobstoreFlushThreshold: dynamicconfig.GetIntPropertyFn(1000),
 				DynamicConfigInvariantCollections: DynamicConfigInvariantCollections{
 					InvariantCollectionMutableState: dynamicconfig.GetBoolPropertyFn(true),
@@ -86,6 +87,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 			resolved: ResolvedScannerWorkflowConfig{
 				Enabled:                 true,
 				Concurrency:             10,
+				ActivityBatchSize:       10,
 				ExecutionsPageSize:      100,
 				BlobstoreFlushThreshold: 1000,
 				InvariantCollections: InvariantCollections{
@@ -98,6 +100,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 			scannerWorkflowDynamicConfig: &ScannerWorkflowDynamicConfig{
 				Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 				Concurrency:             dynamicconfig.GetIntPropertyFn(10),
+				ActivityBatchSize:       dynamicconfig.GetIntPropertyFn(100),
 				ExecutionsPageSize:      dynamicconfig.GetIntPropertyFn(100),
 				BlobstoreFlushThreshold: dynamicconfig.GetIntPropertyFn(1000),
 				DynamicConfigInvariantCollections: DynamicConfigInvariantCollections{
@@ -107,7 +110,8 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 			},
 			params: ScannerConfigActivityParams{
 				Overwrites: ScannerWorkflowConfigOverwrites{
-					Enabled: common.BoolPtr(false),
+					Enabled:           common.BoolPtr(false),
+					ActivityBatchSize: common.IntPtr(1),
 					InvariantCollections: &InvariantCollections{
 						InvariantCollectionMutableState: false,
 						InvariantCollectionHistory:      true,
@@ -117,6 +121,7 @@ func (s *activitiesSuite) TestScannerConfigActivity() {
 			resolved: ResolvedScannerWorkflowConfig{
 				Enabled:                 false,
 				Concurrency:             10,
+				ActivityBatchSize:       1,
 				ExecutionsPageSize:      100,
 				BlobstoreFlushThreshold: 1000,
 				InvariantCollections: InvariantCollections{
@@ -148,21 +153,27 @@ func (s *activitiesSuite) TestFixerCorruptedKeysActivity() {
 			CloseStatus: shared.WorkflowExecutionCloseStatusCompleted.Ptr(),
 		},
 	}, nil)
-	corruptKeys := map[int]c.Keys{
-		1: {
-			UUID: "first",
+	queryResult := &ShardCorruptKeysQueryResult{
+		Result: map[int]c.Keys{
+			1: {
+				UUID: "first",
+			},
+			2: {
+				UUID: "second",
+			},
+			3: {
+				UUID: "third",
+			},
 		},
-		2: {
-			UUID: "second",
-		},
-		3: {
-			UUID: "third",
+		ShardQueryPaginationToken: ShardQueryPaginationToken{
+			NextShardID: common.IntPtr(4),
+			IsDone:      false,
 		},
 	}
-	queryResult, err := json.Marshal(corruptKeys)
+	queryResultData, err := json.Marshal(queryResult)
 	s.NoError(err)
 	s.mockResource.SDKClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&shared.QueryWorkflowResponse{
-		QueryResult: queryResult,
+		QueryResult: queryResultData,
 	}, nil)
 	env := s.NewTestActivityEnvironment()
 	env.SetWorkerOptions(worker.Options{
@@ -174,9 +185,12 @@ func (s *activitiesSuite) TestFixerCorruptedKeysActivity() {
 	s.NoError(err)
 	fixerResult := &FixerCorruptedKeysActivityResult{}
 	s.NoError(fixerResultValue.Get(&fixerResult))
-	s.Contains(fixerResult.Shards, 1)
-	s.Contains(fixerResult.Shards, 2)
-	s.Contains(fixerResult.Shards, 3)
+	s.Equal(1, *fixerResult.MinShard)
+	s.Equal(3, *fixerResult.MaxShard)
+	s.Equal(ShardQueryPaginationToken{
+		NextShardID: common.IntPtr(4),
+		IsDone:      false,
+	}, fixerResult.ShardQueryPaginationToken)
 	s.Contains(fixerResult.CorruptedKeys, CorruptedKeysEntry{
 		ShardID: 1,
 		CorruptedKeys: c.Keys{

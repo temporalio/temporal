@@ -128,17 +128,17 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			TimeLimitPerArchivalIteration: dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
 		ScannerCfg: &scanner.Config{
-			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
-			Persistence:              &params.PersistenceConfig,
-			ClusterMetadata:          params.ClusterMetadata,
-			TaskListScannerEnabled:   dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
-			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
-			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
+			PersistenceMaxQPS:      dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
+			Persistence:            &params.PersistenceConfig,
+			ClusterMetadata:        params.ClusterMetadata,
+			TaskListScannerEnabled: dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
+			HistoryScannerEnabled:  dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionScannerConfig: &executions.ScannerWorkflowDynamicConfig{
 				Enabled:                 dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 				Concurrency:             dc.GetIntProperty(dynamicconfig.ExecutionsScannerConcurrency, 25),
 				ExecutionsPageSize:      dc.GetIntProperty(dynamicconfig.ExecutionsScannerPersistencePageSize, 1000),
 				BlobstoreFlushThreshold: dc.GetIntProperty(dynamicconfig.ExecutionsScannerBlobstoreFlushThreshold, 100),
+				ActivityBatchSize:       dc.GetIntProperty(dynamicconfig.ExecutionsScannerActivityBatchSize, 200),
 				DynamicConfigInvariantCollections: executions.DynamicConfigInvariantCollections{
 					InvariantCollectionMutableState: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionMutableState, false),
 					InvariantCollectionHistory:      dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionHistory, false),
