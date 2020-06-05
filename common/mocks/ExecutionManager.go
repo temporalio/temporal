@@ -234,6 +234,29 @@ func (_m *ExecutionManager) ListConcreteExecutions(request *persistence.ListConc
 	return r0, r1
 }
 
+// GetTransferTask provides a mock function with given fields: request
+func (_m *ExecutionManager) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetTransferTaskResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetTransferTaskRequest) *persistence.GetTransferTaskResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetTransferTaskResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetTransferTaskRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetTransferTasks provides a mock function with given fields: request
 func (_m *ExecutionManager) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
 	ret := _m.Called(request)

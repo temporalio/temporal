@@ -373,7 +373,6 @@ func AdminGetShardID(c *cli.Context) {
 func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
-	vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	category := commongenpb.TaskCategory(c.Int(FlagTaskType))
 
 	pFactory := CreatePersistenceFactory(c)
@@ -383,6 +382,7 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 
 	if category == commongenpb.TaskCategory_TaskCategory_Timer {
+		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
 		task, err := executionManager.GetTimerTask(req)
 		if err != nil {
@@ -394,6 +394,13 @@ func AdminDescribeTask(c *cli.Context) {
 		task, err := executionManager.GetReplicationTask(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Replication Task", err)
+		}
+		prettyPrintJSONObject(task)
+	} else if category == commongenpb.TaskCategory_TaskCategory_Transfer {
+		req := &persistence.GetTransferTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
+		task, err := executionManager.GetTransferTask(req)
+		if err != nil {
+			ErrorAndExit("Failed to get Transfer Task", err)
 		}
 		prettyPrintJSONObject(task)
 	} else {

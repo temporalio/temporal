@@ -802,6 +802,12 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 }
 
 // Transfer task related methods
+func (m *executionManagerImpl) GetTransferTask(
+	request *GetTransferTaskRequest,
+) (*GetTransferTaskResponse, error) {
+	return m.persistence.GetTransferTask(request)
+}
+
 func (m *executionManagerImpl) GetTransferTasks(
 	request *GetTransferTasksRequest,
 ) (*GetTransferTasksResponse, error) {
