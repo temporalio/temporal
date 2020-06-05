@@ -31,7 +31,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -116,51 +115,66 @@ func (s *clientIntegrationSuite) SetupTest() {
 
 // testDataConverter implements encoded.DataConverter using gob
 type testDataConverter struct {
-	NumOfCallToData   int // for testing to know testDataConverter is called as expected
-	NumOfCallFromData int
+	NumOfCallToPayloads   int // for testing to know testDataConverter is called as expected
+	NumOfCallFromPayloads int
 }
 
-func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payloads, error) {
+func (tdc *testDataConverter) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
 	result := &commonpb.Payloads{}
 
-	tdc.NumOfCallToData++
-	for i, obj := range value {
-		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		if err := enc.Encode(obj); err != nil {
+	tdc.NumOfCallToPayloads++
+	for i, value := range values {
+		p, err := tdc.ToPayload(value)
+		if err != nil {
 			return nil, fmt.Errorf(
-				"unable to encode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
+				"args[%d], %T: %w", i, value, err)
 		}
-		payloadItem := &commonpb.Payload{
-			Metadata: map[string][]byte{
-				"encoding": []byte("gob"),
-				"name":     []byte(fmt.Sprintf("args[%d]", i)),
-			},
-			Data: buf.Bytes(),
-		}
-		result.Payloads = append(result.Payloads, payloadItem)
+		result.Payloads = append(result.Payloads, p)
 	}
 	return result, nil
 }
 
-func (tdc *testDataConverter) FromData(payloads *commonpb.Payloads, valuePtr ...interface{}) error {
-	tdc.NumOfCallFromData++
-	for i, payload := range payloads.GetPayloads() {
-		encoding, ok := payload.GetMetadata()["encoding"]
-		if !ok {
-			return fmt.Errorf("args[%d]: %w", i, ErrEncodingIsNotSet)
+func (tdc *testDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...interface{}) error {
+	tdc.NumOfCallFromPayloads++
+	for i, p := range payloads.GetPayloads() {
+		err := tdc.FromPayload(p, valuePtrs[i])
+		if err != nil {
+			return fmt.Errorf("args[%d]: %w", i, err)
 		}
+	}
+	return nil
+}
 
-		e := string(encoding)
-		if e == "gob" {
-			dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
-			if err := dec.Decode(valuePtr[i]); err != nil {
-				return fmt.Errorf(
-					"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(valuePtr[i]), err)
-			}
-		} else {
-			return fmt.Errorf("args[%d], encoding %q: %w", i, e, ErrEncodingIsNotSupported)
+func (tdc *testDataConverter) ToPayload(value interface{}) (*commonpb.Payload, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	p := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding": []byte("gob"),
+		},
+		Data: buf.Bytes(),
+	}
+	return p, nil
+}
+
+func (tdc *testDataConverter) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
+	tdc.NumOfCallFromPayloads++
+	encoding, ok := payload.GetMetadata()["encoding"]
+	if !ok {
+		return ErrEncodingIsNotSet
+	}
+
+	e := string(encoding)
+	if e == "gob" {
+		dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
+		if err := dec.Decode(valuePtr); err != nil {
+			return err
 		}
+	} else {
+		return ErrEncodingIsNotSupported
 	}
 	return nil
 }
@@ -249,8 +263,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 
 	// to ensure custom data converter is used, this number might be different if client changed.
 	d := dc.(*testDataConverter)
-	s.Equal(1, d.NumOfCallToData)
-	s.Equal(1, d.NumOfCallFromData)
+	s.Equal(1, d.NumOfCallToPayloads)
+	s.Equal(1, d.NumOfCallFromPayloads)
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
@@ -389,6 +403,6 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 
 	// to ensure custom data converter is used, this number might be different if client changed.
 	d := dc.(*testDataConverter)
-	s.Equal(3, d.NumOfCallToData)
-	s.Equal(2, d.NumOfCallFromData)
+	s.Equal(3, d.NumOfCallToPayloads)
+	s.Equal(2, d.NumOfCallFromPayloads)
 }
