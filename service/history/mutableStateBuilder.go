@@ -2857,7 +2857,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 	namespace string,
 	workflowID string,
 	runID string,
-	cause eventpb.WorkflowExecutionFailedCause,
+	cause eventpb.CancelExternalWorkflowExecutionFailedCause,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelFailed
@@ -3031,7 +3031,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	workflowID string,
 	runID string,
 	control string,
-	cause eventpb.WorkflowExecutionFailedCause,
+	cause eventpb.SignalExternalWorkflowExecutionFailedCause,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalFailed
@@ -3548,7 +3548,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
 
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	cause eventpb.WorkflowExecutionFailedCause,
+	cause eventpb.StartChildWorkflowExecutionFailedCause,
 	initiatedEventAttributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 

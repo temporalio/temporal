@@ -2109,8 +2109,6 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 
-		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}

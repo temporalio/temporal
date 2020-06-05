@@ -46,9 +46,9 @@ const (
 )
 
 var (
-	errUploadNonRetryable            = temporal.NewNonRetryableApplicationError("upload non-retryable error")
-	errDeleteNonRetryable            = temporal.NewNonRetryableApplicationError("delete non-retryable error")
-	errArchiveVisibilityNonRetryable = temporal.NewNonRetryableApplicationError("archive visibility non-retryable error")
+	errUploadNonRetryable            = temporal.NewNonRetryableApplicationError("upload non-retryable error", nil)
+	errDeleteNonRetryable            = temporal.NewNonRetryableApplicationError("delete non-retryable error", nil)
+	errArchiveVisibilityNonRetryable = temporal.NewNonRetryableApplicationError("archive visibility non-retryable error", nil)
 )
 
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
@@ -61,7 +61,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if err.Error() == errUploadNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewNonRetryableApplicationError(err.Error())
+			err = temporal.NewNonRetryableApplicationError(err.Error(), nil)
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
@@ -106,7 +106,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if err.Error() == errDeleteNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewNonRetryableApplicationError(err.Error())
+			err = temporal.NewNonRetryableApplicationError(err.Error(), nil)
 		}
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
@@ -134,7 +134,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 			if err.Error() == errArchiveVisibilityNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewNonRetryableApplicationError(err.Error())
+			err = temporal.NewNonRetryableApplicationError(err.Error(), nil)
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
