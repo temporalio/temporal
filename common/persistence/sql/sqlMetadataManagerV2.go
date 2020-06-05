@@ -117,6 +117,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(metadata.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(persistence.InitialFailoverNotificationVersion),
+		PreviousFailoverVersion:     common.Int64Ptr(persistence.InitialPreviousFailoverVersion),
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
@@ -249,6 +250,7 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.Domai
 		ConfigVersion:               domainInfo.GetConfigVersion(),
 		NotificationVersion:         domainInfo.GetNotificationVersion(),
 		FailoverNotificationVersion: domainInfo.GetFailoverNotificationVersion(),
+		PreviousFailoverVersion:     domainInfo.GetPreviousFailoverVersion(),
 		FailoverEndTime:             failoverEndTime,
 	}, nil
 }
@@ -293,6 +295,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(request.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(request.FailoverNotificationVersion),
+		PreviousFailoverVersion:     common.Int64Ptr(request.PreviousFailoverVersion),
 		FailoverEndTime:             failoverEndTime,
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,

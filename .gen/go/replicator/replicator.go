@@ -383,13 +383,14 @@ func (v *DomainOperation) UnmarshalJSON(text []byte) error {
 }
 
 type DomainTaskAttributes struct {
-	DomainOperation   *DomainOperation                       `json:"domainOperation,omitempty"`
-	ID                *string                                `json:"id,omitempty"`
-	Info              *shared.DomainInfo                     `json:"info,omitempty"`
-	Config            *shared.DomainConfiguration            `json:"config,omitempty"`
-	ReplicationConfig *shared.DomainReplicationConfiguration `json:"replicationConfig,omitempty"`
-	ConfigVersion     *int64                                 `json:"configVersion,omitempty"`
-	FailoverVersion   *int64                                 `json:"failoverVersion,omitempty"`
+	DomainOperation         *DomainOperation                       `json:"domainOperation,omitempty"`
+	ID                      *string                                `json:"id,omitempty"`
+	Info                    *shared.DomainInfo                     `json:"info,omitempty"`
+	Config                  *shared.DomainConfiguration            `json:"config,omitempty"`
+	ReplicationConfig       *shared.DomainReplicationConfiguration `json:"replicationConfig,omitempty"`
+	ConfigVersion           *int64                                 `json:"configVersion,omitempty"`
+	FailoverVersion         *int64                                 `json:"failoverVersion,omitempty"`
+	PreviousFailoverVersion *int64                                 `json:"previousFailoverVersion,omitempty"`
 }
 
 // ToWire translates a DomainTaskAttributes struct into a Thrift-level intermediate
@@ -409,7 +410,7 @@ type DomainTaskAttributes struct {
 //   }
 func (v *DomainTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -469,6 +470,14 @@ func (v *DomainTaskAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.PreviousFailoverVersion != nil {
+		w, err = wire.NewValueI64(*(v.PreviousFailoverVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -585,6 +594,16 @@ func (v *DomainTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 70:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.PreviousFailoverVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -598,7 +617,7 @@ func (v *DomainTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.DomainOperation != nil {
 		fields[i] = fmt.Sprintf("DomainOperation: %v", *(v.DomainOperation))
@@ -626,6 +645,10 @@ func (v *DomainTaskAttributes) String() string {
 	}
 	if v.FailoverVersion != nil {
 		fields[i] = fmt.Sprintf("FailoverVersion: %v", *(v.FailoverVersion))
+		i++
+	}
+	if v.PreviousFailoverVersion != nil {
+		fields[i] = fmt.Sprintf("PreviousFailoverVersion: %v", *(v.PreviousFailoverVersion))
 		i++
 	}
 
@@ -693,6 +716,9 @@ func (v *DomainTaskAttributes) Equals(rhs *DomainTaskAttributes) bool {
 	if !_I64_EqualsPtr(v.FailoverVersion, rhs.FailoverVersion) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.PreviousFailoverVersion, rhs.PreviousFailoverVersion) {
+		return false
+	}
 
 	return true
 }
@@ -723,6 +749,9 @@ func (v *DomainTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err 
 	}
 	if v.FailoverVersion != nil {
 		enc.AddInt64("failoverVersion", *v.FailoverVersion)
+	}
+	if v.PreviousFailoverVersion != nil {
+		enc.AddInt64("previousFailoverVersion", *v.PreviousFailoverVersion)
 	}
 	return err
 }
@@ -830,6 +859,21 @@ func (v *DomainTaskAttributes) GetFailoverVersion() (o int64) {
 // IsSetFailoverVersion returns true if FailoverVersion is not nil.
 func (v *DomainTaskAttributes) IsSetFailoverVersion() bool {
 	return v != nil && v.FailoverVersion != nil
+}
+
+// GetPreviousFailoverVersion returns the value of PreviousFailoverVersion if it is set or its
+// zero value if it is unset.
+func (v *DomainTaskAttributes) GetPreviousFailoverVersion() (o int64) {
+	if v != nil && v.PreviousFailoverVersion != nil {
+		return *v.PreviousFailoverVersion
+	}
+
+	return
+}
+
+// IsSetPreviousFailoverVersion returns true if PreviousFailoverVersion is not nil.
+func (v *DomainTaskAttributes) IsSetPreviousFailoverVersion() bool {
+	return v != nil && v.PreviousFailoverVersion != nil
 }
 
 type FailoverMarkerAttributes struct {

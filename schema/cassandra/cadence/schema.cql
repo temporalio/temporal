@@ -405,6 +405,7 @@ CREATE TABLE domains_by_name_v2 (
   config_version                bigint, -- indicating the version of domain config, excluding the failover / change of active cluster name
   failover_version              bigint, -- indicating the version of active domain only, used for domain failover
   failover_notification_version bigint, -- indicating the last change related to domain failover
+  previous_failover_version     bigint,
   failover_end_time             bigint, -- indicating domain failover state
   notification_version          bigint,
   PRIMARY KEY (domains_partition, name)

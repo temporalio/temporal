@@ -82,8 +82,8 @@ const (
 		`WHERE id = ?`
 
 	templateCreateDomainByNameQueryWithinBatchV2 = `INSERT INTO domains_by_name_v2 (` +
-		`domains_partition, name, domain, config, replication_config, is_global_domain, config_version, failover_version, failover_notification_version, failover_end_time, notification_version) ` +
-		`VALUES(?, ?, ` + templateDomainInfoType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+		`domains_partition, name, domain, config, replication_config, is_global_domain, config_version, failover_version, failover_notification_version, previous_failover_version, failover_end_time, notification_version) ` +
+		`VALUES(?, ?, ` + templateDomainInfoType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetDomainByNameQueryV2 = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
@@ -96,6 +96,7 @@ const (
 		`config_version, ` +
 		`failover_version, ` +
 		`failover_notification_version, ` +
+		`previous_failover_version, ` +
 		`failover_end_time, ` +
 		`notification_version ` +
 		`FROM domains_by_name_v2 ` +
@@ -109,6 +110,7 @@ const (
 		`config_version = ? ,` +
 		`failover_version = ? ,` +
 		`failover_notification_version = ? , ` +
+		`previous_failover_version = ? , ` +
 		`failover_end_time = ?,` +
 		`notification_version = ? ` +
 		`WHERE domains_partition = ? ` +
@@ -140,6 +142,7 @@ const (
 		`config_version, ` +
 		`failover_version, ` +
 		`failover_notification_version, ` +
+		`previous_failover_version, ` +
 		`failover_end_time, ` +
 		`notification_version ` +
 		`FROM domains_by_name_v2 ` +
@@ -234,6 +237,7 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 		request.ConfigVersion,
 		request.FailoverVersion,
 		p.InitialFailoverNotificationVersion,
+		p.InitialPreviousFailoverVersion,
 		emptyFailoverEndTime,
 		metadata.NotificationVersion,
 	)
@@ -306,6 +310,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(
 		request.ConfigVersion,
 		request.FailoverVersion,
 		request.FailoverNotificationVersion,
+		request.PreviousFailoverVersion,
 		failoverEndTime,
 		request.NotificationVersion,
 		constDomainPartition,
@@ -345,6 +350,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	var failoverNotificationVersion int64
 	var notificationVersion int64
 	var failoverVersion int64
+	var previousFailoverVersion int64
 	var failoverEndTime int64
 	var configVersion int64
 	var isGlobalDomain bool
@@ -410,6 +416,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		&configVersion,
 		&failoverVersion,
 		&failoverNotificationVersion,
+		&previousFailoverVersion,
 		&failoverEndTime,
 		&notificationVersion,
 	)
@@ -439,6 +446,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		ConfigVersion:               configVersion,
 		FailoverVersion:             failoverVersion,
 		FailoverNotificationVersion: failoverNotificationVersion,
+		PreviousFailoverVersion:     previousFailoverVersion,
 		FailoverEndTime:             responseFailoverEndTime,
 		NotificationVersion:         notificationVersion,
 	}, nil
@@ -490,6 +498,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 		&domain.ConfigVersion,
 		&domain.FailoverVersion,
 		&domain.FailoverNotificationVersion,
+		&domain.PreviousFailoverVersion,
 		&failoverEndTime,
 		&domain.NotificationVersion,
 	) {
@@ -546,7 +555,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *p.DeleteDomainReq
 func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil

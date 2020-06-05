@@ -157,6 +157,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
 	m.Equal(configVersion, resp1.ConfigVersion)
 	m.Equal(failoverVersion, resp1.FailoverVersion)
+	m.Equal(p.InitialPreviousFailoverVersion, resp1.PreviousFailoverVersion)
 	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.FailoverNotificationVersion)
 	m.Nil(resp1.FailoverEndTime)
@@ -285,6 +286,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(isGlobalDomain, resp2.IsGlobalDomain)
 	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp2.FailoverVersion)
+	m.Equal(p.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.FailoverNotificationVersion)
 	m.Nil(resp2.FailoverEndTime)
 
@@ -311,6 +313,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
+	m.Equal(p.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp3.FailoverNotificationVersion)
 
 	resp4, err4 := m.GetDomain(id, name)
@@ -425,6 +428,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	m.Equal(isGlobalDomain, resp.IsGlobalDomain)
 	m.Equal(configVersion, resp.ConfigVersion)
 	m.Equal(failoverVersion, resp.FailoverVersion)
+	m.Equal(p.InitialPreviousFailoverVersion, resp.PreviousFailoverVersion)
 
 	//check domain data
 	ss := strings.Split(resp.Info.Data["k0"], "-")
@@ -541,6 +545,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 				resp2.ConfigVersion,
 				resp2.FailoverVersion,
 				resp2.FailoverNotificationVersion,
+				resp2.PreviousFailoverVersion,
 				nil,
 				notificationVersion,
 			)
@@ -578,6 +583,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
+	m.Equal(p.InitialPreviousFailoverVersion, resp3.PreviousFailoverVersion)
 
 	//check domain data
 	ss := strings.Split(resp3.Info.Data["k0"], "-")
@@ -668,6 +674,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := int64(12)
 	updateFailoverVersion := int64(28)
+	updatePreviousFailoverVersion := int64(20)
 	updateFailoverNotificationVersion := int64(14)
 	updateClusters := []*p.ClusterReplicationConfig{
 		{
@@ -712,6 +719,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
+		updatePreviousFailoverVersion,
 		&failoverEndTime,
 		notificationVersion,
 	)
@@ -741,6 +749,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	}
 	m.Equal(updateConfigVersion, resp4.ConfigVersion)
 	m.Equal(updateFailoverVersion, resp4.FailoverVersion)
+	m.Equal(updatePreviousFailoverVersion, resp4.PreviousFailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp4.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp4.NotificationVersion)
 	m.Equal(&failoverEndTime, resp4.FailoverEndTime)
@@ -768,6 +777,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	}
 	m.Equal(updateConfigVersion, resp5.ConfigVersion)
 	m.Equal(updateFailoverVersion, resp5.FailoverVersion)
+	m.Equal(updatePreviousFailoverVersion, resp4.PreviousFailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp5.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp5.NotificationVersion)
 	m.Equal(&failoverEndTime, resp4.FailoverEndTime)
@@ -798,6 +808,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
+		updatePreviousFailoverVersion,
 		nil,
 		notificationVersion,
 	)
@@ -827,6 +838,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	}
 	m.Equal(updateConfigVersion, resp6.ConfigVersion)
 	m.Equal(updateFailoverVersion, resp6.FailoverVersion)
+	m.Equal(updatePreviousFailoverVersion, resp4.PreviousFailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp6.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp6.NotificationVersion)
 	m.Nil(resp6.FailoverEndTime)
@@ -1015,9 +1027,10 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 				ActiveClusterName: clusterActive1,
 				Clusters:          clusters1,
 			},
-			IsGlobalDomain:  true,
-			ConfigVersion:   133,
-			FailoverVersion: 266,
+			IsGlobalDomain:          true,
+			ConfigVersion:           133,
+			FailoverVersion:         266,
+			PreviousFailoverVersion: -1,
 		},
 		{
 			Info: &p.DomainInfo{
@@ -1041,9 +1054,10 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 				ActiveClusterName: clusterActive2,
 				Clusters:          clusters2,
 			},
-			IsGlobalDomain:  false,
-			ConfigVersion:   400,
-			FailoverVersion: 667,
+			IsGlobalDomain:          false,
+			ConfigVersion:           400,
+			FailoverVersion:         667,
+			PreviousFailoverVersion: -1,
 		},
 	}
 	for _, domain := range inputDomains {
@@ -1084,8 +1098,15 @@ ListLoop:
 }
 
 // CreateDomain helper method
-func (m *MetadataPersistenceSuiteV2) CreateDomain(info *p.DomainInfo, config *p.DomainConfig,
-	replicationConfig *p.DomainReplicationConfig, isGlobaldomain bool, configVersion int64, failoverVersion int64) (*p.CreateDomainResponse, error) {
+func (m *MetadataPersistenceSuiteV2) CreateDomain(
+	info *p.DomainInfo,
+	config *p.DomainConfig,
+	replicationConfig *p.DomainReplicationConfig,
+	isGlobaldomain bool,
+	configVersion int64,
+	failoverVersion int64,
+) (*p.CreateDomainResponse, error) {
+
 	return m.MetadataManager.CreateDomain(&p.CreateDomainRequest{
 		Info:              info,
 		Config:            config,
@@ -1112,6 +1133,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateDomain(
 	configVersion int64,
 	failoverVersion int64,
 	failoverNotificationVersion int64,
+	PreviousFailoverVersion int64,
 	failoverEndTime *int64,
 	notificationVersion int64,
 ) error {
@@ -1124,6 +1146,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateDomain(
 		ConfigVersion:               configVersion,
 		FailoverVersion:             failoverVersion,
 		FailoverNotificationVersion: failoverNotificationVersion,
+		PreviousFailoverVersion:     PreviousFailoverVersion,
 		NotificationVersion:         notificationVersion,
 	})
 }

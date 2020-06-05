@@ -3,6 +3,7 @@
   "MinCompatibleVersion": "0.27",
   "Description": "Add creation timestamp in replication task type",
   "SchemaUpdateCqlFiles": [
-    "replication_task_creation_time.cql"
+    "replication_task_creation_time.cql",
+    "previous_failover_version.cql"
   ]
 }
