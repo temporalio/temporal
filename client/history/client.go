@@ -914,6 +914,58 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	return err
 }
 
+func (c *clientImpl) NotifyFailoverMarkers(
+	ctx context.Context,
+	request *h.NotifyFailoverMarkersRequest,
+	opts ...yarpc.CallOption,
+) error {
+	requestsByClient := make(map[historyserviceclient.Interface]*h.NotifyFailoverMarkersRequest)
+
+	for _, token := range request.GetFailoverMarkerTokens() {
+		marker := token.GetFailoverMarker()
+		client, err := c.getClientForDomainID(marker.GetDomainID())
+		if err != nil {
+			return err
+		}
+		if _, ok := requestsByClient[client]; !ok {
+			requestsByClient[client] = &h.NotifyFailoverMarkersRequest{
+				FailoverMarkerTokens: []*h.FailoverMarkerToken{},
+			}
+		}
+
+		req := requestsByClient[client]
+		req.FailoverMarkerTokens = append(req.FailoverMarkerTokens, token)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(requestsByClient))
+	respChan := make(chan error, len(requestsByClient))
+	for client, req := range requestsByClient {
+		go func(client historyserviceclient.Interface, request *h.NotifyFailoverMarkersRequest) {
+			defer wg.Done()
+
+			ctx, cancel := c.createContext(ctx)
+			defer cancel()
+			err := client.NotifyFailoverMarkers(
+				ctx,
+				request,
+				opts...,
+			)
+			respChan <- err
+		}(client, req)
+	}
+
+	wg.Wait()
+	close(respChan)
+
+	for err := range respChan {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)
@@ -923,6 +975,11 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 
 func (c *clientImpl) getClientForWorkflowID(workflowID string) (historyserviceclient.Interface, error) {
 	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+	return c.getClientForShardID(key)
+}
+
+func (c *clientImpl) getClientForDomainID(domainID string) (historyserviceclient.Interface, error) {
+	key := common.DomainIDToHistoryShard(domainID, c.numberOfShards)
 	return c.getClientForShardID(key)
 }
 

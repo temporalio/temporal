@@ -98,7 +98,7 @@ func NewTransferActiveTaskExecutor(
 			shard.GetService().GetSDKClient(),
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		workflowResetor: workflowResetor,
+		workflowResetor:  workflowResetor,
 		workflowResetter: workflowResetter,
 	}
 }

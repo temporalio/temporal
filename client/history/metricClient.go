@@ -662,3 +662,20 @@ func (c *metricClient) RefreshWorkflowTasks(
 	}
 	return err
 }
+
+func (c *metricClient) NotifyFailoverMarkers(
+	ctx context.Context,
+	request *h.NotifyFailoverMarkersRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.HistoryClientNotifyFailoverMarkersScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientNotifyFailoverMarkersScope, metrics.CadenceClientLatency)
+	err := c.client.NotifyFailoverMarkers(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientNotifyFailoverMarkersScope, metrics.CadenceClientFailures)
+	}
+	return err
+}

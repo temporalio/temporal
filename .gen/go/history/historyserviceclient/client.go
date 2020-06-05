@@ -87,6 +87,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*replicator.MergeDLQMessagesResponse, error)
 
+	NotifyFailoverMarkers(
+		ctx context.Context,
+		Request *history.NotifyFailoverMarkersRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	PollMutableState(
 		ctx context.Context,
 		PollRequest *history.PollMutableStateRequest,
@@ -473,6 +479,29 @@ func (c client) MergeDLQMessages(
 	}
 
 	success, err = history.HistoryService_MergeDLQMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) NotifyFailoverMarkers(
+	ctx context.Context,
+	_Request *history.NotifyFailoverMarkersRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_NotifyFailoverMarkers_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_NotifyFailoverMarkers_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_NotifyFailoverMarkers_Helper.UnwrapResponse(&result)
 	return
 }
 

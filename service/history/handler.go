@@ -1877,6 +1877,22 @@ func (h *Handler) RefreshWorkflowTasks(
 	return nil
 }
 
+// NotifyFailoverMarkers sends the failover markers to failover coordinator.
+// The coordinator decides when the failover finishes based on received failover marker.
+func (h *Handler) NotifyFailoverMarkers(
+	ctx context.Context,
+	request *hist.NotifyFailoverMarkersRequest,
+) (retError error) {
+
+	scope := metrics.HistoryNotifyFailoverMarkersScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	//TODO: wire up the function with failover coordinator
+	return &gen.BadRequestError{Message: "This method has not been implemented."}
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

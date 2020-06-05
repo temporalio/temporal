@@ -77,6 +77,11 @@ type Interface interface {
 		Request *replicator.MergeDLQMessagesRequest,
 	) (*replicator.MergeDLQMessagesResponse, error)
 
+	NotifyFailoverMarkers(
+		ctx context.Context,
+		Request *history.NotifyFailoverMarkersRequest,
+	) error
+
 	PollMutableState(
 		ctx context.Context,
 		PollRequest *history.PollMutableStateRequest,
@@ -324,6 +329,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.MergeDLQMessages),
 				},
 				Signature:    "MergeDLQMessages(Request *replicator.MergeDLQMessagesRequest) (*replicator.MergeDLQMessagesResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "NotifyFailoverMarkers",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.NotifyFailoverMarkers),
+				},
+				Signature:    "NotifyFailoverMarkers(Request *history.NotifyFailoverMarkersRequest)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -659,7 +675,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 38)
+	procedures := make([]transport.Procedure, 0, 39)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -809,6 +825,25 @@ func (h handler) MergeDLQMessages(ctx context.Context, body wire.Value) (thrift.
 
 	hadError := err != nil
 	result, err := history.HistoryService_MergeDLQMessages_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) NotifyFailoverMarkers(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_NotifyFailoverMarkers_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.NotifyFailoverMarkers(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_NotifyFailoverMarkers_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {
