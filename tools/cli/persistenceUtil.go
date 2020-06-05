@@ -76,11 +76,11 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 
 	if engine == cassandraDBType {
 		defaultConfig := &config.Cassandra{
-			Hosts:    getRequiredOption(c, FlagDBAddress),
+			Hosts:    c.String(FlagDBAddress),
 			Port:     c.Int(FlagDBPort),
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
-			Keyspace: getRequiredOption(c, FlagKeyspace),
+			Keyspace: c.String(FlagKeyspace),
 		}
 
 		if c.Bool(FlagEnableTLS) {
