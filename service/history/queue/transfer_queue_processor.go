@@ -267,7 +267,7 @@ func (t *transferQueueProcessor) FailoverDomain(
 
 	maxReadLevel := int64(0)
 	for _, queueState := range t.activeQueueProcessor.getProcessingQueueStates() {
-		queueReadLevel := queueState.ReadLevel().(*transferTaskKey).taskID
+		queueReadLevel := queueState.ReadLevel().(transferTaskKey).taskID
 		if maxReadLevel < queueReadLevel {
 			maxReadLevel = queueReadLevel
 		}
@@ -295,7 +295,7 @@ func (t *transferQueueProcessor) FailoverDomain(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerDomainFailoverCallback function
-	err := updateShardAckLevel(minLevel)
+	err := updateShardAckLevel(newTransferTaskKey(minLevel))
 	if err != nil {
 		t.logger.Error("Error update shard ack level", tag.Error(err))
 	}
@@ -376,7 +376,7 @@ func (t *transferQueueProcessor) completeTransfer() error {
 		}
 	}
 
-	newAckLevelTaskID := newAckLevel.(*transferTaskKey).taskID
+	newAckLevelTaskID := newAckLevel.(transferTaskKey).taskID
 	t.logger.Debug(fmt.Sprintf("Start completing transfer task from: %v, to %v.", t.ackLevel, newAckLevelTaskID))
 	if t.ackLevel >= newAckLevelTaskID {
 		return nil
@@ -437,8 +437,9 @@ func newTransferQueueActiveProcessor(
 		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
 	}
 
-	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(currentClusterName, ackLevel)
+	updateTransferAckLevel := func(ackLevel task.Key) error {
+		taskID := ackLevel.(transferTaskKey).taskID
+		return shard.UpdateTransferClusterAckLevel(currentClusterName, taskID)
 	}
 
 	transferQueueShutdown := func() error {
@@ -534,8 +535,9 @@ func newTransferQueueStandbyProcessor(
 		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
 	}
 
-	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(clusterName, ackLevel)
+	updateTransferAckLevel := func(ackLevel task.Key) error {
+		taskID := ackLevel.(transferTaskKey).taskID
+		return shard.UpdateTransferClusterAckLevel(clusterName, taskID)
 	}
 
 	transferQueueShutdown := func() error {
@@ -599,7 +601,7 @@ func newTransferQueueFailoverProcessor(
 	minLevel, maxLevel int64,
 	domainIDs map[string]struct{},
 	standbyClusterName string,
-) (updateTransferAckLevel, *transferQueueProcessorBase) {
+) (updateClusterAckLevelFn, *transferQueueProcessorBase) {
 	config := shard.GetConfig()
 	options := &queueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
@@ -638,13 +640,14 @@ func newTransferQueueFailoverProcessor(
 		return maxReadLevelTaskKey // this is a const
 	}
 
-	updateTransferAckLevel := func(ackLevel int64) error {
+	updateTransferAckLevel := func(ackLevel task.Key) error {
+		taskID := ackLevel.(transferTaskKey).taskID
 		return shard.UpdateTransferFailoverLevel(
 			failoverUUID,
 			persistence.TransferFailoverLevel{
 				StartTime:    shard.GetTimeSource().Now(),
 				MinLevel:     minLevel,
-				CurrentLevel: ackLevel,
+				CurrentLevel: taskID,
 				MaxLevel:     maxLevel,
 				DomainIDs:    domainIDs,
 			},

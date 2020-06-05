@@ -72,30 +72,30 @@ func (s *processingQueueCollectionSuite) TestNewCollection_OutOfOrderQueues() {
 	}
 	mockQueues[0].(*MockProcessingQueue).EXPECT().State().Return(newProcessingQueueState(
 		s.level,
-		&testKey{ID: 20},
-		&testKey{ID: 25},
-		&testKey{ID: 30},
+		testKey{ID: 20},
+		testKey{ID: 25},
+		testKey{ID: 30},
 		DomainFilter{},
 	)).AnyTimes()
 	mockQueues[1].(*MockProcessingQueue).EXPECT().State().Return(newProcessingQueueState(
 		s.level,
-		&testKey{ID: 3},
-		&testKey{ID: 10},
-		&testKey{ID: 10},
+		testKey{ID: 3},
+		testKey{ID: 10},
+		testKey{ID: 10},
 		DomainFilter{},
 	)).AnyTimes()
 	mockQueues[2].(*MockProcessingQueue).EXPECT().State().Return(newProcessingQueueState(
 		s.level,
-		&testKey{ID: 30},
-		&testKey{ID: 30},
-		&testKey{ID: 40},
+		testKey{ID: 30},
+		testKey{ID: 30},
+		testKey{ID: 40},
 		DomainFilter{},
 	)).AnyTimes()
 	mockQueues[3].(*MockProcessingQueue).EXPECT().State().Return(newProcessingQueueState(
 		s.level,
-		&testKey{ID: 10},
-		&testKey{ID: 20},
-		&testKey{ID: 20},
+		testKey{ID: 10},
+		testKey{ID: 20},
+		testKey{ID: 20},
 		DomainFilter{},
 	)).AnyTimes()
 	expectedActiveQueue := mockQueues[0]
@@ -109,7 +109,7 @@ func (s *processingQueueCollectionSuite) TestNewCollection_OutOfOrderQueues() {
 func (s *processingQueueCollectionSuite) TestAddTasks_ReadNotFinished() {
 	totalQueues := 4
 	currentActiveIdx := 1
-	newReadLevel := &testKey{ID: 9}
+	newReadLevel := testKey{ID: 9}
 
 	mockQueues := []*MockProcessingQueue{}
 	for i := 0; i != totalQueues; i++ {
@@ -118,9 +118,9 @@ func (s *processingQueueCollectionSuite) TestAddTasks_ReadNotFinished() {
 	mockQueues[currentActiveIdx].EXPECT().AddTasks(gomock.Any(), newReadLevel).Times(1)
 	mockQueues[currentActiveIdx].EXPECT().State().Return(newProcessingQueueState(
 		s.level,
-		&testKey{ID: 3},
+		testKey{ID: 3},
 		newReadLevel,
-		&testKey{ID: 10},
+		testKey{ID: 10},
 		DomainFilter{},
 	)).AnyTimes()
 
@@ -134,7 +134,7 @@ func (s *processingQueueCollectionSuite) TestAddTasks_ReadNotFinished() {
 func (s *processingQueueCollectionSuite) TestAddTask_ReadFinished() {
 	totalQueues := 4
 	currentActiveIdx := 1
-	newReadLevel := &testKey{ID: 10}
+	newReadLevel := testKey{ID: 10}
 
 	mockQueues := []*MockProcessingQueue{}
 	for i := 0; i != totalQueues; i++ {
@@ -144,9 +144,9 @@ func (s *processingQueueCollectionSuite) TestAddTask_ReadFinished() {
 	for i := 0; i != totalQueues; i++ {
 		mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 			s.level,
-			&testKey{ID: 3},
+			testKey{ID: 3},
 			newReadLevel,
-			&testKey{ID: 10},
+			testKey{ID: 10},
 			DomainFilter{},
 		)).AnyTimes()
 	}
@@ -173,17 +173,17 @@ func (s *processingQueueCollectionSuite) TestUpdateAckLevels() {
 		if _, ok := finishedQueueIdx[i]; ok {
 			mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 				s.level,
-				&testKey{ID: i},
-				&testKey{ID: i},
-				&testKey{ID: i},
+				testKey{ID: i},
+				testKey{ID: i},
+				testKey{ID: i},
 				DomainFilter{},
 			)).AnyTimes()
 		} else {
 			mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 				s.level,
-				&testKey{ID: i - 1},
-				&testKey{ID: i},
-				&testKey{ID: i},
+				testKey{ID: i - 1},
+				testKey{ID: i},
+				testKey{ID: i},
 				DomainFilter{},
 			)).AnyTimes()
 		}
@@ -212,9 +212,9 @@ func (s *processingQueueCollectionSuite) TestSplit() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 				),
 			},
@@ -222,42 +222,42 @@ func (s *processingQueueCollectionSuite) TestSplit() {
 				{
 					newProcessingQueueState(
 						s.level,
-						&testKey{ID: 0},
-						&testKey{ID: 5},
-						&testKey{ID: 10},
+						testKey{ID: 0},
+						testKey{ID: 5},
+						testKey{ID: 10},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 					),
 					newProcessingQueueState(
 						s.level+1,
-						&testKey{ID: 0},
-						&testKey{ID: 5},
-						&testKey{ID: 10},
+						testKey{ID: 0},
+						testKey{ID: 5},
+						testKey{ID: 10},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 					),
 				},
 			},
 			expectedActiveQueueState: newProcessingQueueState(
 				s.level,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 10},
 				DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 			),
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
 			expectedNextLevelQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level+1,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
@@ -266,16 +266,16 @@ func (s *processingQueueCollectionSuite) TestSplit() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 10},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 10},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 15},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 15},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}, "domain3": {}}},
 				),
 			},
@@ -283,72 +283,72 @@ func (s *processingQueueCollectionSuite) TestSplit() {
 				{
 					newProcessingQueueState(
 						s.level+1,
-						&testKey{ID: 0},
-						&testKey{ID: 5},
-						&testKey{ID: 5},
+						testKey{ID: 0},
+						testKey{ID: 5},
+						testKey{ID: 5},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 					),
 					newProcessingQueueState(
 						s.level,
-						&testKey{ID: 5},
-						&testKey{ID: 10},
-						&testKey{ID: 10},
+						testKey{ID: 5},
+						testKey{ID: 10},
+						testKey{ID: 10},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 					),
 					newProcessingQueueState(
 						s.level,
-						&testKey{ID: 0},
-						&testKey{ID: 5},
-						&testKey{ID: 5},
+						testKey{ID: 0},
+						testKey{ID: 5},
+						testKey{ID: 5},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 					),
 				},
 				{
 					newProcessingQueueState(
 						s.level,
-						&testKey{ID: 10},
-						&testKey{ID: 15},
-						&testKey{ID: 20},
+						testKey{ID: 10},
+						testKey{ID: 15},
+						testKey{ID: 20},
 						DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}, "domain3": {}}},
 					),
 				},
 			},
 			expectedActiveQueueState: newProcessingQueueState(
 				s.level,
-				&testKey{ID: 10},
-				&testKey{ID: 15},
-				&testKey{ID: 20},
+				testKey{ID: 10},
+				testKey{ID: 15},
+				testKey{ID: 20},
 				DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}, "domain3": {}}},
 			),
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 5},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 5},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 5},
-					&testKey{ID: 10},
-					&testKey{ID: 10},
+					testKey{ID: 5},
+					testKey{ID: 10},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 15},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 15},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}, "domain3": {}}},
 				),
 			},
 			expectedNextLevelQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level+1,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 5},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 5},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
@@ -400,9 +400,9 @@ func (s *processingQueueCollectionSuite) TestMerge() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
@@ -411,9 +411,9 @@ func (s *processingQueueCollectionSuite) TestMerge() {
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
@@ -422,41 +422,41 @@ func (s *processingQueueCollectionSuite) TestMerge() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 20},
-					&testKey{ID: 25},
-					&testKey{ID: 30},
+					testKey{ID: 20},
+					testKey{ID: 25},
+					testKey{ID: 30},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
 			incomingQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
 			expectedActiveQueueState: newProcessingQueueState(
 				s.level,
-				&testKey{ID: 20},
-				&testKey{ID: 25},
-				&testKey{ID: 30},
+				testKey{ID: 20},
+				testKey{ID: 25},
+				testKey{ID: 30},
 				DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 			),
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 20},
-					&testKey{ID: 25},
-					&testKey{ID: 30},
+					testKey{ID: 20},
+					testKey{ID: 25},
+					testKey{ID: 30},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
@@ -465,48 +465,48 @@ func (s *processingQueueCollectionSuite) TestMerge() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 10},
-					&testKey{ID: 50},
+					testKey{ID: 0},
+					testKey{ID: 10},
+					testKey{ID: 50},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
 			incomingQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
 			expectedActiveQueueState: newProcessingQueueState(
 				s.level,
-				&testKey{ID: 10},
-				&testKey{ID: 10},
-				&testKey{ID: 20},
+				testKey{ID: 10},
+				testKey{ID: 10},
+				testKey{ID: 20},
 				DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 			),
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 10},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 10},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 10},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 10},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain2": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 20},
-					&testKey{ID: 20},
-					&testKey{ID: 50},
+					testKey{ID: 20},
+					testKey{ID: 20},
+					testKey{ID: 50},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 			},
@@ -515,97 +515,97 @@ func (s *processingQueueCollectionSuite) TestMerge() {
 			currentQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 20},
-					&testKey{ID: 20},
-					&testKey{ID: 30},
+					testKey{ID: 20},
+					testKey{ID: 20},
+					testKey{ID: 30},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 60},
-					&testKey{ID: 75},
-					&testKey{ID: 70},
+					testKey{ID: 60},
+					testKey{ID: 75},
+					testKey{ID: 70},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 			},
 			incomingQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 8},
-					&testKey{ID: 35},
-					&testKey{ID: 50},
+					testKey{ID: 8},
+					testKey{ID: 35},
+					testKey{ID: 50},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain3": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 80},
-					&testKey{ID: 90},
-					&testKey{ID: 100},
+					testKey{ID: 80},
+					testKey{ID: 90},
+					testKey{ID: 100},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain3": {}}},
 				),
 			},
 			expectedActiveQueueState: newProcessingQueueState(
 				s.level,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 8},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 8},
 				DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 			),
 			expectedNewQueueStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 8},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 8},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 8},
-					&testKey{ID: 8},
-					&testKey{ID: 10},
+					testKey{ID: 8},
+					testKey{ID: 8},
+					testKey{ID: 10},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain1": {}, "domain3": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 10},
-					&testKey{ID: 20},
-					&testKey{ID: 20},
+					testKey{ID: 10},
+					testKey{ID: 20},
+					testKey{ID: 20},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain3": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 20},
-					&testKey{ID: 20},
-					&testKey{ID: 30},
+					testKey{ID: 20},
+					testKey{ID: 20},
+					testKey{ID: 30},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}, "domain3": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 30},
-					&testKey{ID: 35},
-					&testKey{ID: 50},
+					testKey{ID: 30},
+					testKey{ID: 35},
+					testKey{ID: 50},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain3": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 60},
-					&testKey{ID: 75},
-					&testKey{ID: 70},
+					testKey{ID: 60},
+					testKey{ID: 75},
+					testKey{ID: 70},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain2": {}}},
 				),
 				newProcessingQueueState(
 					s.level,
-					&testKey{ID: 80},
-					&testKey{ID: 90},
-					&testKey{ID: 100},
+					testKey{ID: 80},
+					testKey{ID: 90},
+					testKey{ID: 100},
 					DomainFilter{DomainIDs: map[string]struct{}{"domain3": {}}},
 				),
 			},

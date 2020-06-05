@@ -85,7 +85,7 @@ func newTimerQueueActiveProcessor(
 		currentClusterName,
 	)
 
-	timerGate := NewLocalTimerGate(shard.GetTimeSource())
+	timerGate := queue.NewLocalTimerGate(shard.GetTimeSource())
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
@@ -202,7 +202,7 @@ func newTimerQueueFailoverProcessor(
 		logger,
 	)
 
-	timerGate := NewLocalTimerGate(shard.GetTimeSource())
+	timerGate := queue.NewLocalTimerGate(shard.GetTimeSource())
 
 	redispatchQueue := collection.NewConcurrentQueue()
 

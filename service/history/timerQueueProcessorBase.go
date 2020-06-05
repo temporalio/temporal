@@ -37,7 +37,6 @@ import (
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
-	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
@@ -54,9 +53,6 @@ type (
 	timerQueueProcessorBase struct {
 		scope                int
 		shard                shard.Context
-		historyService       *historyEngineImpl
-		cache                *execution.Cache
-		executionManager     persistence.ExecutionManager
 		status               int32
 		shutdownWG           sync.WaitGroup
 		shutdownCh           chan struct{}
@@ -67,10 +63,9 @@ type (
 		timerFiredCount      uint64
 		timerProcessor       timerProcessor
 		timerQueueAckMgr     timerQueueAckMgr
-		timerGate            TimerGate
+		timerGate            queue.TimerGate
 		timeSource           clock.TimeSource
 		rateLimiter          quotas.Limiter
-		retryPolicy          backoff.RetryPolicy
 		lastPollTime         time.Time
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   task.Processor
@@ -93,7 +88,7 @@ func newTimerQueueProcessorBase(
 	timerQueueAckMgr timerQueueAckMgr,
 	redispatchQueue collection.Queue,
 	queueTaskInitializer task.Initializer,
-	timerGate TimerGate,
+	timerGate queue.TimerGate,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 	metricsScope metrics.Scope,
@@ -114,15 +109,12 @@ func newTimerQueueProcessorBase(
 	base := &timerQueueProcessorBase{
 		scope:                scope,
 		shard:                shard,
-		historyService:       historyService,
 		timerProcessor:       timerProcessor,
-		cache:                historyService.executionCache,
-		executionManager:     shard.GetExecutionManager(),
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
 		config:               config,
 		logger:               logger,
-		metricsClient:        historyService.metricsClient,
+		metricsClient:        shard.GetMetricsClient(),
 		metricsScope:         metricsScope,
 		timerQueueAckMgr:     timerQueueAckMgr,
 		timerGate:            timerGate,
@@ -138,7 +130,6 @@ func newTimerQueueProcessorBase(
 				return float64(maxPollRPS())
 			},
 		),
-		retryPolicy: common.CreatePersistanceRetryPolicy(),
 	}
 
 	return base
@@ -324,7 +315,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			t.newTime = emptyTime
 			t.newTimeLock.Unlock()
 			// New Timer has arrived.
-			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
+			t.metricsScope.IncCounter(metrics.NewTimerNotifyCounter)
 			t.timerGate.Update(newTime)
 		case <-redispatchTimer.C:
 			redispatchTimer.Reset(backoff.JitDuration(

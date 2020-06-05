@@ -65,8 +65,8 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 	}
 	lookAheadTasks := 5
 	lookAheadFunc := func(key task.Key) task.Key {
-		currentID := key.(*testKey).ID
-		return &testKey{ID: currentID + lookAheadTasks}
+		currentID := key.(testKey).ID
+		return testKey{ID: currentID + lookAheadTasks}
 	}
 	pendingTaskSplitPolicy := NewPendingTaskSplitPolicy(
 		pendingTaskThreshold,
@@ -82,9 +82,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				101, // a level which has no threshold specified
-				&testKey{ID: 0},
-				&testKey{ID: 1000},
-				&testKey{ID: 10000},
+				testKey{ID: 0},
+				testKey{ID: 1000},
+				testKey{ID: 10000},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -98,9 +98,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				3, // maxNewQueueLevel
-				&testKey{ID: 0},
-				&testKey{ID: 100000},
-				&testKey{ID: 1000000},
+				testKey{ID: 0},
+				testKey{ID: 100000},
+				testKey{ID: 1000000},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -114,9 +114,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				1,
-				&testKey{ID: 0},
-				&testKey{ID: 198},
-				&testKey{ID: 200},
+				testKey{ID: 0},
+				testKey{ID: 198},
+				testKey{ID: 200},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -131,9 +131,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				2,
-				&testKey{ID: 0},
-				&testKey{ID: 2002},
-				&testKey{ID: 2002 + lookAheadTasks + 10},
+				testKey{ID: 0},
+				testKey{ID: 2002},
+				testKey{ID: 2002 + lookAheadTasks + 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -146,9 +146,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					3,
-					&testKey{ID: 0},
-					&testKey{ID: 2002},
-					&testKey{ID: 2002 + lookAheadTasks},
+					testKey{ID: 0},
+					testKey{ID: 2002},
+					testKey{ID: 2002 + lookAheadTasks},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 						false,
@@ -156,9 +156,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					2,
-					&testKey{ID: 2002 + lookAheadTasks},
-					&testKey{ID: 2002 + lookAheadTasks},
-					&testKey{ID: 2002 + lookAheadTasks + 10},
+					testKey{ID: 2002 + lookAheadTasks},
+					testKey{ID: 2002 + lookAheadTasks},
+					testKey{ID: 2002 + lookAheadTasks + 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 						false,
@@ -169,9 +169,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				2,
-				&testKey{ID: 0},
-				&testKey{ID: 1001},
-				&testKey{ID: 1001 + lookAheadTasks},
+				testKey{ID: 0},
+				testKey{ID: 1001},
+				testKey{ID: 1001 + lookAheadTasks},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}},
 					false,
@@ -183,9 +183,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					3,
-					&testKey{ID: 0},
-					&testKey{ID: 1001},
-					&testKey{ID: 1001 + lookAheadTasks},
+					testKey{ID: 0},
+					testKey{ID: 1001},
+					testKey{ID: 1001 + lookAheadTasks},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}},
 						false,
@@ -196,9 +196,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 109},
-				&testKey{ID: 109 + lookAheadTasks + 100},
+				testKey{ID: 0},
+				testKey{ID: 109},
+				testKey{ID: 109 + lookAheadTasks + 100},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}},
 					true,
@@ -211,9 +211,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					0,
-					&testKey{ID: 0},
-					&testKey{ID: 109},
-					&testKey{ID: 109 + lookAheadTasks},
+					testKey{ID: 0},
+					testKey{ID: 109},
+					testKey{ID: 109 + lookAheadTasks},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain3": {}},
 						true,
@@ -221,9 +221,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					0,
-					&testKey{ID: 109 + lookAheadTasks},
-					&testKey{ID: 109 + lookAheadTasks},
-					&testKey{ID: 109 + lookAheadTasks + 100},
+					testKey{ID: 109 + lookAheadTasks},
+					testKey{ID: 109 + lookAheadTasks},
+					testKey{ID: 109 + lookAheadTasks + 100},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}},
 						true,
@@ -231,9 +231,9 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					1,
-					&testKey{ID: 0},
-					&testKey{ID: 109},
-					&testKey{ID: 109 + lookAheadTasks},
+					testKey{ID: 0},
+					testKey{ID: 109},
+					testKey{ID: 109 + lookAheadTasks},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain3": {}},
 						false,
@@ -273,8 +273,8 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		3: 10000,
 	}
 	lookAheadFunc := func(key task.Key) task.Key {
-		currentID := key.(*testKey).ID
-		return &testKey{ID: currentID + 0}
+		currentID := key.(testKey).ID
+		return testKey{ID: currentID + 0}
 	}
 	stuckTaskSplitPolicy := NewStuckTaskSplitPolicy(
 		attemptThreshold,
@@ -290,9 +290,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				101, // a level which has no threshold specified
-				&testKey{ID: 0},
-				&testKey{ID: 3},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 3},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -306,9 +306,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				3, // maxNewQueueLevel
-				&testKey{ID: 0},
-				&testKey{ID: 1},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 1},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -322,9 +322,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				1,
-				&testKey{ID: 0},
-				&testKey{ID: 4},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 4},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -339,9 +339,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				2,
-				&testKey{ID: 0},
-				&testKey{ID: 4},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 4},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -354,9 +354,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					3,
-					&testKey{ID: 0},
-					&testKey{ID: 4},
-					&testKey{ID: 4},
+					testKey{ID: 0},
+					testKey{ID: 4},
+					testKey{ID: 4},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 						false,
@@ -364,9 +364,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					2,
-					&testKey{ID: 4},
-					&testKey{ID: 4},
-					&testKey{ID: 10},
+					testKey{ID: 4},
+					testKey{ID: 4},
+					testKey{ID: 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 						false,
@@ -377,9 +377,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				2,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 5},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 5},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}},
 					false,
@@ -391,9 +391,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					3,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 5},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 5},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}},
 						false,
@@ -404,9 +404,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}},
 					true,
@@ -419,9 +419,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					0,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 5},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 5},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain3": {}},
 						true,
@@ -429,9 +429,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					0,
-					&testKey{ID: 5},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 5},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}},
 						true,
@@ -439,9 +439,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 				),
 				newProcessingQueueState(
 					1,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 5},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 5},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain3": {}},
 						false,
@@ -484,9 +484,9 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 0},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 0},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -498,9 +498,9 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					true,
@@ -510,9 +510,9 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					0,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}, "testDomain2": {}, "testDomain3": {}},
 						true,
@@ -520,9 +520,9 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 				),
 				newProcessingQueueState(
 					newQueueLevel,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain3": {}},
 						false,
@@ -543,8 +543,8 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 func (s *splitPolicySuite) TestRandomSplitPolicy() {
 	maxNewQueueLevel := 3
 	lookAheadFunc := func(key task.Key) task.Key {
-		currentID := key.(*testKey).ID
-		return &testKey{ID: currentID + 10}
+		currentID := key.(testKey).ID
+		return testKey{ID: currentID + 10}
 	}
 
 	testCases := []struct {
@@ -556,9 +556,9 @@ func (s *splitPolicySuite) TestRandomSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 0},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 0},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -571,9 +571,9 @@ func (s *splitPolicySuite) TestRandomSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				3,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 					false,
@@ -589,9 +589,9 @@ func (s *splitPolicySuite) TestRandomSplitPolicy() {
 		{
 			currentState: newProcessingQueueState(
 				0,
-				&testKey{ID: 0},
-				&testKey{ID: 5},
-				&testKey{ID: 10},
+				testKey{ID: 0},
+				testKey{ID: 5},
+				testKey{ID: 10},
 				NewDomainFilter(
 					map[string]struct{}{"testDomain1": {}},
 					false,
@@ -604,9 +604,9 @@ func (s *splitPolicySuite) TestRandomSplitPolicy() {
 			expectedNewStates: []ProcessingQueueState{
 				newProcessingQueueState(
 					1,
-					&testKey{ID: 0},
-					&testKey{ID: 5},
-					&testKey{ID: 10},
+					testKey{ID: 0},
+					testKey{ID: 5},
+					testKey{ID: 10},
 					NewDomainFilter(
 						map[string]struct{}{"testDomain1": {}},
 						false,

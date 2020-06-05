@@ -44,7 +44,7 @@ type (
 		timerTaskFilter         task.Filter
 		logger                  log.Logger
 		metricsClient           metrics.Client
-		timerGate               RemoteTimerGate
+		timerGate               queue.RemoteTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		taskExecutor            task.Executor
 	}
@@ -76,7 +76,7 @@ func newTimerQueueStandbyProcessor(
 		return taskAllocator.VerifyStandbyTask(clusterName, timer.DomainID, timer)
 	}
 
-	timerGate := NewRemoteTimerGate()
+	timerGate := queue.NewRemoteTimerGate()
 	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerStandbyQueueProcessorScope,
