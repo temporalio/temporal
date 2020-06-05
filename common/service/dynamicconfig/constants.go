@@ -289,6 +289,7 @@ var keys = map[Key]string{
 	HistoryScannerEnabled:                            "worker.historyScannerEnabled",
 	ExecutionsScannerEnabled:                         "worker.executionsScannerEnabled",
 	ExecutionsScannerBlobstoreFlushThreshold:         "worker.executionsScannerBlobstoreFlushThreshold",
+	ExecutionsScannerActivityBatchSize:               "worker.executionsScannerActivityBatchSize",
 	ExecutionsScannerConcurrency:                     "worker.executionsScannerConcurrency",
 	ExecutionsScannerPersistencePageSize:             "worker.executionsScannerPersistencePageSize",
 	ExecutionsScannerInvariantCollectionHistory:      "worker.executionsScannerInvariantCollectionHistory",
@@ -754,6 +755,8 @@ const (
 	ExecutionsScannerConcurrency
 	// ExecutionsScannerBlobstoreFlushThreshold indicates the flush threshold of blobstore in execution scanner
 	ExecutionsScannerBlobstoreFlushThreshold
+	// ExecutionsScannerActivityBatchSize indicates the batch size of scanner activities
+	ExecutionsScannerActivityBatchSize
 	// ExecutionsScannerPersistencePageSize indicates the page size of execution persistence fetches in execution scanner
 	ExecutionsScannerPersistencePageSize
 	// ExecutionsScannerInvariantCollectionMutableState indicates if mutable state invariant checks should be run

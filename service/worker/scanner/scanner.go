@@ -59,8 +59,6 @@ type (
 		TaskListScannerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
-		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
-		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionScannerConfig is the config for execution scanner
 		ExecutionScannerConfig *executions.ScannerWorkflowDynamicConfig
 	}
@@ -119,11 +117,13 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	backgroundActivityContext := context.WithValue(context.Background(), scannerContextKey, s.context)
-	backgroundActivityContext = context.WithValue(backgroundActivityContext, executions.ScannerContextKey, executions.ScannerContext{
-		Resource:                     s.context.Resource,
-		Scope:                        s.context.Resource.GetMetricsClient().Scope(metrics.ExecutionsScannerScope),
-		ScannerWorkflowDynamicConfig: s.context.cfg.ExecutionScannerConfig,
-	})
+	if s.context.cfg.ExecutionScannerConfig.Enabled() {
+		backgroundActivityContext = context.WithValue(backgroundActivityContext, executions.ScannerContextKey, executions.ScannerContext{
+			Resource:                     s.context.Resource,
+			Scope:                        s.context.Resource.GetMetricsClient().Scope(metrics.ExecutionsScannerScope),
+			ScannerWorkflowDynamicConfig: s.context.cfg.ExecutionScannerConfig,
+		})
+	}
 	backgroundActivityContext = context.WithValue(backgroundActivityContext, executions.FixerContextKey, executions.FixerContext{
 		Resource: s.context.Resource,
 		Scope:    s.context.Resource.GetMetricsClient().Scope(metrics.ExecutionsFixerScope),
@@ -137,7 +137,7 @@ func (s *Scanner) Start() error {
 	}
 
 	workerTaskListNames := []string{executionsFixerTaskListName}
-	if s.context.cfg.ExecutionsScannerEnabled() {
+	if s.context.cfg.ExecutionScannerConfig.Enabled() {
 		workerTaskListNames = append(workerTaskListNames, executionsScannerTaskListName)
 		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, executions.ScannerWorkflowParams{
 			Shards: executions.Shards{
