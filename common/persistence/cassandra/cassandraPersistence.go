@@ -506,6 +506,16 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
+	templateGetTransferTaskQuery = `SELECT transfer, transfer_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateGetTransferTasksQuery = `SELECT transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -1930,6 +1940,33 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	return response, nil
+}
+
+func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest) (*p.GetTransferTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	query := d.session.Query(templateGetTransferTaskQuery,
+		shardID,
+		rowTypeTransferTask,
+		rowTypeTransferNamespaceID,
+		rowTypeTransferWorkflowID,
+		rowTypeTransferRunID,
+		defaultVisibilityTimestamp,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetTransferTask", err)
+	}
+
+	info, err := serialization.TransferTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetTransferTask", err)
+	}
+
+	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
 }
 
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
