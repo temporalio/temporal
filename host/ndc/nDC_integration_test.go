@@ -566,7 +566,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   31,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: commonpb.TimeoutType_StartToClose,
+					RetryStatus: commonpb.RetryStatus_Timeout,
 				}},
 			},
 		}},
@@ -1448,7 +1448,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   32,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: commonpb.TimeoutType_StartToClose,
+					RetryStatus: commonpb.RetryStatus_Timeout,
 				}},
 			},
 		}},
