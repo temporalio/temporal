@@ -750,7 +750,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 		RunId:      "some random target run ID",
 	}
 	cancellationChildWorkflowOnly := true
-	cancellationFailedCause := eventpb.WorkflowExecutionFailedCause(59)
+	cancellationFailedCause := eventpb.CancelExternalWorkflowExecutionFailedCause(59)
 	cancellationInitiatedEvent := s.addRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		4, targetNamespace, targetExecution, cancellationChildWorkflowOnly,
 	)
@@ -922,7 +922,7 @@ func (s *historyBuilderSuite) addExternalWorkflowExecutionCancelRequested(
 
 func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEvent(
 	decisionTaskCompletedEventID, initiatedID int64,
-	namespace, workflowID, runID string, cause eventpb.WorkflowExecutionFailedCause) *eventpb.HistoryEvent {
+	namespace, workflowID, runID string, cause eventpb.CancelExternalWorkflowExecutionFailedCause) *eventpb.HistoryEvent {
 
 	event, err := s.msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 		decisionTaskCompletedEventID, initiatedID, namespace, workflowID, runID, cause,
@@ -1094,7 +1094,7 @@ func (s *historyBuilderSuite) validateExternalWorkflowExecutionCancelRequested(
 
 func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionFailedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID, initiatedEventID int64,
-	namespace string, execution commonpb.WorkflowExecution, cause eventpb.WorkflowExecutionFailedCause) {
+	namespace string, execution commonpb.WorkflowExecution, cause eventpb.CancelExternalWorkflowExecutionFailedCause) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed, event.EventType)
 	s.Equal(eventID, event.EventId)
