@@ -70,10 +70,10 @@ type (
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*eventpb.HistoryEvent, error)
-		AddActivityTaskFailedEvent(int64, int64, *workflowservice.RespondActivityTaskFailedRequest) (*eventpb.HistoryEvent, error)
+		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, commonpb.RetryStatus, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *decisionpb.ScheduleActivityTaskDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*eventpb.HistoryEvent, error)
-		AddActivityTaskTimedOutEvent(int64, int64, commonpb.TimeoutType, *commonpb.Payloads) (*eventpb.HistoryEvent, error)
+		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, commonpb.RetryStatus) (*eventpb.HistoryEvent, error)
 		AddCancelTimerFailedEvent(int64, *decisionpb.CancelTimerDecisionAttributes, string) (*eventpb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *eventpb.WorkflowExecutionCanceledEventAttributes) (*eventpb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *eventpb.WorkflowExecutionCompletedEventAttributes) (*eventpb.HistoryEvent, error)
@@ -93,7 +93,7 @@ type (
 		AddDecisionTaskTimedOutEvent(int64, int64) (*eventpb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*eventpb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, string, string, string, string) (*eventpb.HistoryEvent, error)
-		AddFailWorkflowEvent(int64, *decisionpb.FailWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
+		AddFailWorkflowEvent(int64, commonpb.RetryStatus, *decisionpb.FailWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
 		AddRecordMarkerEvent(int64, *decisionpb.RecordMarkerDecisionAttributes) (*eventpb.HistoryEvent, error)
 		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, eventpb.WorkflowExecutionFailedCause) (*eventpb.HistoryEvent, error)
 		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error)
@@ -102,7 +102,7 @@ type (
 		AddSignalRequested(requestID string)
 		AddStartChildWorkflowExecutionFailedEvent(int64, eventpb.WorkflowExecutionFailedCause, *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes) (*eventpb.HistoryEvent, error)
 		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.StartChildWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ChildExecutionInfo, error)
-		AddTimeoutWorkflowEvent(int64) (*eventpb.HistoryEvent, error)
+		AddTimeoutWorkflowEvent(int64, commonpb.RetryStatus) (*eventpb.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *decisionpb.CancelTimerDecisionAttributes, string) (*eventpb.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*eventpb.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *decisionpb.StartTimerDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.TimerInfo, error)
@@ -115,7 +115,7 @@ type (
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		RetryActivity(ai *persistence.ActivityInfo, failure *failurepb.Failure) (bool, error)
+		RetryActivity(ai *persistence.ActivityInfo, failure *failurepb.Failure) (commonpb.RetryStatus, error)
 		CreateNewHistoryEvent(eventType eventpb.EventType) *eventpb.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType eventpb.EventType, timestamp int64) *eventpb.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent)
@@ -150,7 +150,7 @@ type (
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistenceblobs.RequestCancelInfo, bool)
-		GetRetryBackoffDuration(failure *failurepb.Failure) time.Duration
+		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, commonpb.RetryStatus)
 		GetCronBackoffDuration() (time.Duration, error)
 		GetSignalInfo(int64) (*persistenceblobs.SignalInfo, bool)
 		GetStartVersion() (int64, error)
