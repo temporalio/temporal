@@ -1106,7 +1106,7 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
 	case eventpb.EventType_WorkflowExecutionTimedOut:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Timeout Type: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetTimeoutType())
+		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryStatus())
 	case eventpb.EventType_WorkflowExecutionCanceled:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string
