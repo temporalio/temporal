@@ -56,7 +56,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/streadway/quantile v0.0.0-20150917103942-b0c588724d25 // indirect
-	github.com/stretchr/testify v1.6.0
+	github.com/stretchr/testify v1.6.1
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.17+incompatible
@@ -66,14 +66,13 @@ require (
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.23.6
-	go.temporal.io/temporal-proto v0.23.4
+	go.temporal.io/temporal-proto v0.23.5
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
-	golang.org/x/tools v0.0.0-20200604183345-4d5ea46c79fe // indirect
 	google.golang.org/api v0.26.0
 	google.golang.org/grpc v1.29.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -85,5 +84,3 @@ require (
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
 
 replace go.temporal.io/temporal v0.23.6 => ../temporal-go-sdk
-
-replace go.temporal.io/temporal-proto v0.23.4 => ../temporal-proto-go
