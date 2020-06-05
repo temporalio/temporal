@@ -137,7 +137,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() 
 	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
-		return temporal.NewNonRetryableApplicationError(errDeleteNonRetryable.Error())
+		return temporal.NewNonRetryableApplicationError(errDeleteNonRetryable.Error(), nil)
 	})
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 

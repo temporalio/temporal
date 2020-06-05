@@ -362,7 +362,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_WorkflowExecutionTimedOut
 		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-			TimeoutType: commonpb.TimeoutType_StartToClose,
+			RetryStatus: commonpb.RetryStatus_Timeout,
 		}}
 		return historyEvent
 	})
@@ -631,7 +631,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:                    namespace,
 			WorkflowId:                   childWorkflowID,
 			WorkflowType:                 &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			Cause:                        eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyRunning,
+			Cause:                        eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyStarted,
 			InitiatedEventId:             lastEvent.EventId,
 			DecisionTaskCompletedEventId: lastEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 		}}
@@ -753,7 +753,7 @@ func InitializeHistoryEventGenerator(
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
 			StartedEventId: lastEvent.EventId,
-			TimeoutType:    commonpb.TimeoutType_ScheduleToClose,
+			RetryStatus:    commonpb.RetryStatus_Timeout,
 		}}
 		return historyEvent
 	})

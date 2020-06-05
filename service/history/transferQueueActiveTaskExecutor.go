@@ -887,7 +887,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
-				eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyRunning, initiatedAttributes)
+				eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyStarted, initiatedAttributes)
 
 			return err
 		})

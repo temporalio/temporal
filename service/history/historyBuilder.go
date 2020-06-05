@@ -677,7 +677,6 @@ func (b *historyBuilder) newFailWorkflowExecutionEvent(decisionTaskCompletedEven
 func (b *historyBuilder) newTimeoutWorkflowExecutionEvent(retryStatus commonpb.RetryStatus) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionTimedOut)
 	attributes := &eventpb.WorkflowExecutionTimedOutEventAttributes{}
-	attributes.TimeoutType = commonpb.TimeoutType_StartToClose
 	attributes.RetryStatus = retryStatus
 	historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: attributes}
 
@@ -1013,7 +1012,6 @@ func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ChildWorkflowExecutionTimedOut)
 	attributes := &eventpb.ChildWorkflowExecutionTimedOutEventAttributes{}
 	attributes.Namespace = namespace
-	attributes.TimeoutType = timedOutAttributes.TimeoutType
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
