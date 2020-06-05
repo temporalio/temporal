@@ -150,13 +150,62 @@ func (s *InvariantManagerSuite) TestRunChecks() {
 				},
 			},
 		},
+		{
+			checkResults: []common.CheckResult{
+				{
+					CheckResultType: common.CheckResultTypeHealthy,
+					Info:            "invariant 1 info",
+					InfoDetails:     "invariant 1 info details",
+				},
+				{
+					CheckResultType: common.CheckResultTypeCorrupted,
+					Info:            "invariant 2 info",
+					InfoDetails:     "invariant 2 info details",
+				},
+				{
+					CheckResultType: common.CheckResultTypeFailed,
+					Info:            "invariant 3 info",
+					InfoDetails:     "invariant 3 info details",
+				},
+				{
+					CheckResultType: common.CheckResultTypeHealthy,
+					Info:            "invariant 4 info",
+					InfoDetails:     "invariant 4 info details",
+				},
+			},
+			expected: common.ManagerCheckResult{
+				CheckResultType: common.CheckResultTypeFailed,
+				CheckResults: []common.CheckResult{
+					{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 1 info",
+						InfoDetails:     "invariant 1 info details",
+					},
+					{
+						CheckResultType: common.CheckResultTypeCorrupted,
+						Info:            "invariant 2 info",
+						InfoDetails:     "invariant 2 info details",
+					},
+					{
+						CheckResultType: common.CheckResultTypeFailed,
+						Info:            "invariant 3 info",
+						InfoDetails:     "invariant 3 info details",
+					},
+					{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 4 info",
+						InfoDetails:     "invariant 4 info details",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		invariants := make([]common.Invariant, len(tc.checkResults), len(tc.checkResults))
 		for i := 0; i < len(tc.checkResults); i++ {
 			mockInvariant := common.NewMockInvariant(s.controller)
-			mockInvariant.EXPECT().Check(gomock.Any(), gomock.Any()).Return(tc.checkResults[i])
+			mockInvariant.EXPECT().Check(gomock.Any()).Return(tc.checkResults[i])
 			invariants[i] = mockInvariant
 		}
 		manager := &invariantManager{
@@ -345,13 +394,192 @@ func (s *InvariantManagerSuite) TestRunFixes() {
 				},
 			},
 		},
+		{
+			fixResults: []common.FixResult{
+				{
+					FixResultType: common.FixResultTypeSkipped,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 1 check info",
+						InfoDetails:     "invariant 1 check info details",
+					},
+					Info:        "invariant 1 info",
+					InfoDetails: "invariant 1 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeFixed,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeCorrupted,
+						Info:            "invariant 2 check info",
+						InfoDetails:     "invariant 2 check info details",
+					},
+					Info:        "invariant 2 info",
+					InfoDetails: "invariant 2 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeSkipped,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 3 check info",
+						InfoDetails:     "invariant 3 check info details",
+					},
+					Info:        "invariant 3 info",
+					InfoDetails: "invariant 3 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeFailed,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeCorrupted,
+						Info:            "invariant 4 check info",
+						InfoDetails:     "invariant 2 check info details",
+					},
+					Info:        "invariant 4 info",
+					InfoDetails: "invariant 4 info details",
+				},
+			},
+			expected: common.ManagerFixResult{
+				FixResultType: common.FixResultTypeFailed,
+				FixResults: []common.FixResult{
+					{
+						FixResultType: common.FixResultTypeSkipped,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeHealthy,
+							Info:            "invariant 1 check info",
+							InfoDetails:     "invariant 1 check info details",
+						},
+						Info:        "invariant 1 info",
+						InfoDetails: "invariant 1 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeFixed,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeCorrupted,
+							Info:            "invariant 2 check info",
+							InfoDetails:     "invariant 2 check info details",
+						},
+						Info:        "invariant 2 info",
+						InfoDetails: "invariant 2 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeSkipped,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeHealthy,
+							Info:            "invariant 3 check info",
+							InfoDetails:     "invariant 3 check info details",
+						},
+						Info:        "invariant 3 info",
+						InfoDetails: "invariant 3 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeFailed,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeCorrupted,
+							Info:            "invariant 4 check info",
+							InfoDetails:     "invariant 2 check info details",
+						},
+						Info:        "invariant 4 info",
+						InfoDetails: "invariant 4 info details",
+					},
+				},
+			},
+		},
+
+		{
+			fixResults: []common.FixResult{
+				{
+					FixResultType: common.FixResultTypeSkipped,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 1 check info",
+						InfoDetails:     "invariant 1 check info details",
+					},
+					Info:        "invariant 1 info",
+					InfoDetails: "invariant 1 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeFailed,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeCorrupted,
+						Info:            "invariant 4 check info",
+						InfoDetails:     "invariant 2 check info details",
+					},
+					Info:        "invariant 4 info",
+					InfoDetails: "invariant 4 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeFixed,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeCorrupted,
+						Info:            "invariant 2 check info",
+						InfoDetails:     "invariant 2 check info details",
+					},
+					Info:        "invariant 2 info",
+					InfoDetails: "invariant 2 info details",
+				},
+				{
+					FixResultType: common.FixResultTypeSkipped,
+					CheckResult: common.CheckResult{
+						CheckResultType: common.CheckResultTypeHealthy,
+						Info:            "invariant 3 check info",
+						InfoDetails:     "invariant 3 check info details",
+					},
+					Info:        "invariant 3 info",
+					InfoDetails: "invariant 3 info details",
+				},
+			},
+			expected: common.ManagerFixResult{
+				FixResultType: common.FixResultTypeFailed,
+				FixResults: []common.FixResult{
+					{
+						FixResultType: common.FixResultTypeSkipped,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeHealthy,
+							Info:            "invariant 1 check info",
+							InfoDetails:     "invariant 1 check info details",
+						},
+						Info:        "invariant 1 info",
+						InfoDetails: "invariant 1 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeFailed,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeCorrupted,
+							Info:            "invariant 4 check info",
+							InfoDetails:     "invariant 2 check info details",
+						},
+						Info:        "invariant 4 info",
+						InfoDetails: "invariant 4 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeFixed,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeCorrupted,
+							Info:            "invariant 2 check info",
+							InfoDetails:     "invariant 2 check info details",
+						},
+						Info:        "invariant 2 info",
+						InfoDetails: "invariant 2 info details",
+					},
+					{
+						FixResultType: common.FixResultTypeSkipped,
+						CheckResult: common.CheckResult{
+							CheckResultType: common.CheckResultTypeHealthy,
+							Info:            "invariant 3 check info",
+							InfoDetails:     "invariant 3 check info details",
+						},
+						Info:        "invariant 3 info",
+						InfoDetails: "invariant 3 info details",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		invariants := make([]common.Invariant, len(tc.fixResults), len(tc.fixResults))
 		for i := 0; i < len(tc.fixResults); i++ {
 			mockInvariant := common.NewMockInvariant(s.controller)
-			mockInvariant.EXPECT().Fix(gomock.Any(), gomock.Any()).Return(tc.fixResults[i])
+			mockInvariant.EXPECT().Fix(gomock.Any()).Return(tc.fixResults[i])
 			invariants[i] = mockInvariant
 		}
 		manager := &invariantManager{

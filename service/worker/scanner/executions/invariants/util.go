@@ -29,9 +29,8 @@ import (
 func checkBeforeFix(
 	invariant common.Invariant,
 	execution common.Execution,
-	resources *common.InvariantResourceBag,
 ) (*common.FixResult, *common.CheckResult) {
-	checkResult := invariant.Check(execution, resources)
+	checkResult := invariant.Check(execution)
 	if checkResult.CheckResultType == common.CheckResultTypeHealthy {
 		return &common.FixResult{
 			FixResultType: common.FixResultTypeSkipped,

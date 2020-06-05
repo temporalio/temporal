@@ -173,6 +173,6 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getConcreteResp, tc.getConcreteErr)
 		execManager.On("GetCurrentExecution", mock.Anything).Return(tc.getCurrentResp, tc.getCurrentErr)
 		o := NewOpenCurrentExecution(common.NewPersistenceRetryer(execManager, nil))
-		s.Equal(tc.expectedResult, o.Check(tc.execution, nil))
+		s.Equal(tc.expectedResult, o.Check(tc.execution))
 	}
 }

@@ -49,7 +49,7 @@ func NewHistoryExists(
 	}
 }
 
-func (h *historyExists) Check(execution common.Execution, resources *common.InvariantResourceBag) common.CheckResult {
+func (h *historyExists) Check(execution common.Execution) common.CheckResult {
 	readHistoryBranchReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   execution.BranchToken,
 		MinEventID:    c.FirstEventID,
@@ -100,15 +100,14 @@ func (h *historyExists) Check(execution common.Execution, resources *common.Inva
 			Info:            "concrete execution exists but got empty history",
 		}
 	}
-	resources.History = readHistoryBranchResp
 	return common.CheckResult{
 		CheckResultType: common.CheckResultTypeHealthy,
 		InvariantType:   h.InvariantType(),
 	}
 }
 
-func (h *historyExists) Fix(execution common.Execution, resources *common.InvariantResourceBag) common.FixResult {
-	fixResult, checkResult := checkBeforeFix(h, execution, resources)
+func (h *historyExists) Fix(execution common.Execution) common.FixResult {
+	fixResult, checkResult := checkBeforeFix(h, execution)
 	if fixResult != nil {
 		return *fixResult
 	}
