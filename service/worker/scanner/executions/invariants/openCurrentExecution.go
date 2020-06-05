@@ -45,7 +45,7 @@ func NewOpenCurrentExecution(
 	}
 }
 
-func (o *openCurrentExecution) Check(execution common.Execution, _ *common.InvariantResourceBag) common.CheckResult {
+func (o *openCurrentExecution) Check(execution common.Execution) common.CheckResult {
 	if !common.Open(execution.State) {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeHealthy,
@@ -103,8 +103,8 @@ func (o *openCurrentExecution) Check(execution common.Execution, _ *common.Invar
 	}
 }
 
-func (o *openCurrentExecution) Fix(execution common.Execution, resources *common.InvariantResourceBag) common.FixResult {
-	fixResult, checkResult := checkBeforeFix(o, execution, resources)
+func (o *openCurrentExecution) Fix(execution common.Execution) common.FixResult {
+	fixResult, checkResult := checkBeforeFix(o, execution)
 	if fixResult != nil {
 		return *fixResult
 	}

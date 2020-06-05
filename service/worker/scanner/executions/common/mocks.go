@@ -232,31 +232,31 @@ func (m *MockInvariant) EXPECT() *MockInvariantMockRecorder {
 }
 
 // Check mocks base method
-func (m *MockInvariant) Check(arg0 Execution, arg1 *InvariantResourceBag) CheckResult {
+func (m *MockInvariant) Check(arg0 Execution) CheckResult {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Check", arg0, arg1)
+	ret := m.ctrl.Call(m, "Check", arg0)
 	ret0, _ := ret[0].(CheckResult)
 	return ret0
 }
 
 // Check indicates an expected call of Check
-func (mr *MockInvariantMockRecorder) Check(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockInvariantMockRecorder) Check(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*MockInvariant)(nil).Check), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*MockInvariant)(nil).Check), arg0)
 }
 
 // Fix mocks base method
-func (m *MockInvariant) Fix(arg0 Execution, arg1 *InvariantResourceBag) FixResult {
+func (m *MockInvariant) Fix(arg0 Execution) FixResult {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Fix", arg0, arg1)
+	ret := m.ctrl.Call(m, "Fix", arg0)
 	ret0, _ := ret[0].(FixResult)
 	return ret0
 }
 
 // Fix indicates an expected call of Fix
-func (mr *MockInvariantMockRecorder) Fix(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockInvariantMockRecorder) Fix(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fix", reflect.TypeOf((*MockInvariant)(nil).Fix), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fix", reflect.TypeOf((*MockInvariant)(nil).Fix), arg0)
 }
 
 // InvariantType mocks base method

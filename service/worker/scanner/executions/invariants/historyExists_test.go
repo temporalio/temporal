@@ -134,13 +134,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getExecResp, tc.getExecErr)
 		historyManager.On("ReadHistoryBranch", mock.Anything).Return(tc.getHistoryResp, tc.getHistoryErr)
 		i := NewHistoryExists(common.NewPersistenceRetryer(execManager, historyManager))
-		resources := &common.InvariantResourceBag{}
-		result := i.Check(getOpenExecution(), resources)
+		result := i.Check(getOpenExecution())
 		s.Equal(tc.expectedResult, result)
-		if tc.expectedResourcePopulated {
-			s.NotNil(resources.History)
-		} else {
-			s.Nil(resources.History)
-		}
 	}
 }
