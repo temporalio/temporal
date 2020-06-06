@@ -120,9 +120,8 @@ type testDataConverter struct {
 }
 
 func (tdc *testDataConverter) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
-	result := &commonpb.Payloads{}
-
 	tdc.NumOfCallToPayloads++
+	result := &commonpb.Payloads{}
 	for i, value := range values {
 		p, err := tdc.ToPayload(value)
 		if err != nil {
@@ -161,7 +160,6 @@ func (tdc *testDataConverter) ToPayload(value interface{}) (*commonpb.Payload, e
 }
 
 func (tdc *testDataConverter) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
-	tdc.NumOfCallFromPayloads++
 	encoding, ok := payload.GetMetadata()["encoding"]
 	if !ok {
 		return ErrEncodingIsNotSet
