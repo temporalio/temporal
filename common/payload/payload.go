@@ -30,27 +30,27 @@ import (
 )
 
 var (
-	payloadConverter = encoded.GetDefaultPayloadConverter()
+	payloadConverter = encoded.GetDefaultDataConverter()
 )
 
 func EncodeString(str string) *commonpb.Payload {
 	// Error can be safely ignored here becase string always can be converted to JSON
-	p, _ := payloadConverter.ToData(str)
+	p, _ := payloadConverter.ToPayload(str)
 	return p
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payload {
 	// Error can be safely ignored here becase []byte always can be raw encoded
-	p, _ := payloadConverter.ToData(bytes)
+	p, _ := payloadConverter.ToPayload(bytes)
 	return p
 }
 
 func Encode(value interface{}) (*commonpb.Payload, error) {
-	return payloadConverter.ToData(value)
+	return payloadConverter.ToPayload(value)
 }
 
 func Decode(p *commonpb.Payload, valuePtr interface{}) error {
-	return payloadConverter.FromData(p, valuePtr)
+	return payloadConverter.FromPayload(p, valuePtr)
 }
 
 func ToString(p *commonpb.Payload) string {
