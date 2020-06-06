@@ -1,6 +1,8 @@
 canary:
   namespaces: ["canary"]
   excludes: ["workflow.searchAttributes", "workflow.batch", "workflow.visibility", "workflow.cancellation" ]
+  pprof:
+    port: 6060
 
 temporal:
   service: "frontend"

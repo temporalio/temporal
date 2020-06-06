@@ -68,6 +68,12 @@ type (
 	Canary struct {
 		Namespaces []string `yaml:"namespaces"`
 		Excludes   []string `yaml:"excludes"`
+		PProf      PProf    `yaml:"pprof"`
+	}
+
+	// PProf contains the config items for the pprof utility
+	PProf struct {
+		Port int `yaml:"port"`
 	}
 
 	// Cadence contains the configuration for cadence service

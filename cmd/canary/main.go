@@ -54,6 +54,10 @@ func startHandler(c *cli.Context) {
 		log.Fatal("Invalid config: ", err)
 	}
 
+	if cfg.Canary.PProf.Port != 0 {
+		canary.StartPProf(cfg.Canary.PProf.Port)
+	}
+
 	canary, err := canary.NewCanaryRunner(&cfg)
 	if err != nil {
 		log.Fatal("Failed to initialize canary: ", err)
