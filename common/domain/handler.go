@@ -258,6 +258,7 @@ func (d *HandlerImpl) RegisterDomain(
 			domainRequest.ReplicationConfig,
 			domainRequest.ConfigVersion,
 			domainRequest.FailoverVersion,
+			common.InitialPreviousFailoverVersion,
 			domainRequest.IsGlobalDomain,
 		)
 		if err != nil {
@@ -364,6 +365,7 @@ func (d *HandlerImpl) UpdateDomain(
 	isGlobalDomain := getResponse.IsGlobalDomain
 	gracefulFailoverEndTime := getResponse.FailoverEndTime
 	currentActiveCluster := replicationConfig.ActiveClusterName
+	previousFailoverVersion := getResponse.PreviousFailoverVersion
 
 	// whether history archival config changed
 	historyArchivalConfigChanged := false
@@ -493,6 +495,7 @@ func (d *HandlerImpl) UpdateDomain(
 				// force failover cleanup graceful failover state
 				gracefulFailoverEndTime = nil
 			}
+			previousFailoverVersion = failoverVersion
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
 				failoverVersion,
@@ -508,6 +511,7 @@ func (d *HandlerImpl) UpdateDomain(
 			FailoverVersion:             failoverVersion,
 			FailoverNotificationVersion: failoverNotificationVersion,
 			FailoverEndTime:             gracefulFailoverEndTime,
+			PreviousFailoverVersion:     previousFailoverVersion,
 			NotificationVersion:         notificationVersion,
 		}
 		err = d.metadataMgr.UpdateDomain(updateReq)
@@ -517,10 +521,16 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 
 	if isGlobalDomain {
-		// TODO: add failover endtime to replication task
-		err = d.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
-			info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
-		if err != nil {
+		if err := d.domainReplicator.HandleTransmissionTask(
+			replicator.DomainOperationUpdate,
+			info,
+			config,
+			replicationConfig,
+			configVersion,
+			failoverVersion,
+			previousFailoverVersion,
+			isGlobalDomain,
+		); err != nil {
 			return nil, err
 		}
 	}

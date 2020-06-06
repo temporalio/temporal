@@ -131,6 +131,7 @@ type (
 		failoverVersion             int64
 		isGlobalDomain              bool
 		failoverNotificationVersion int64
+		previousFailoverVersion     int64
 		failoverEndTime             *int64
 		notificationVersion         int64
 		initialized                 bool
@@ -549,6 +550,7 @@ func (c *domainCache) updateIDToDomainCache(
 	entry.failoverVersion = record.failoverVersion
 	entry.isGlobalDomain = record.isGlobalDomain
 	entry.failoverNotificationVersion = record.failoverNotificationVersion
+	entry.previousFailoverVersion = record.previousFailoverVersion
 	entry.failoverEndTime = record.failoverEndTime
 	entry.notificationVersion = record.notificationVersion
 	entry.initialized = record.initialized
@@ -678,6 +680,7 @@ func (c *domainCache) buildEntryFromRecord(
 	newEntry.failoverVersion = record.FailoverVersion
 	newEntry.isGlobalDomain = record.IsGlobalDomain
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
+	newEntry.previousFailoverVersion = record.PreviousFailoverVersion
 	newEntry.failoverEndTime = record.FailoverEndTime
 	newEntry.notificationVersion = record.NotificationVersion
 	newEntry.initialized = true
@@ -727,6 +730,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalDomain = entry.isGlobalDomain
 	result.failoverNotificationVersion = entry.failoverNotificationVersion
+	result.previousFailoverVersion = entry.previousFailoverVersion
 	result.failoverEndTime = entry.failoverEndTime
 	result.notificationVersion = entry.notificationVersion
 	result.initialized = entry.initialized
@@ -771,6 +775,11 @@ func (entry *DomainCacheEntry) GetFailoverNotificationVersion() int64 {
 // GetNotificationVersion return the global notification version of when domain changed
 func (entry *DomainCacheEntry) GetNotificationVersion() int64 {
 	return entry.notificationVersion
+}
+
+// GetPreviousFailoverVersion return the last domain failover version
+func (entry *DomainCacheEntry) GetPreviousFailoverVersion() int64 {
+	return entry.previousFailoverVersion
 }
 
 // GetFailoverEndTime return the failover end time

@@ -439,7 +439,8 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_Success() {
 	resp1, _ := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
 		Name: domain,
 	})
-	s.Equal(resp1.ReplicationConfig.ActiveClusterName, "standby")
+	s.Equal("standby", resp1.ReplicationConfig.ActiveClusterName)
+	s.Equal(cluster.TestAlternativeClusterInitialFailoverVersion, resp1.FailoverVersion)
 
 	updateRequest := &workflow.UpdateDomainRequest{
 		Name: common.StringPtr(domain),
@@ -455,6 +456,8 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_Success() {
 	})
 	s.NoError(err)
 	s.NotNil(resp2.FailoverEndTime)
+	s.Equal(cluster.TestFailoverVersionIncrement, resp2.FailoverVersion)
+	s.Equal(cluster.TestAlternativeClusterInitialFailoverVersion, resp2.PreviousFailoverVersion)
 }
 
 func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_NotCurrentActiveCluster() {

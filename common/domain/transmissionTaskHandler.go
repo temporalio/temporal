@@ -35,9 +35,16 @@ import (
 type (
 	// Replicator is the interface which can replicate the domain
 	Replicator interface {
-		HandleTransmissionTask(domainOperation replicator.DomainOperation, info *persistence.DomainInfo,
-			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
+		HandleTransmissionTask(
+			domainOperation replicator.DomainOperation,
+			info *persistence.DomainInfo,
+			config *persistence.DomainConfig,
+			replicationConfig *persistence.DomainReplicationConfig,
+			configVersion int64,
+			failoverVersion int64,
+			previousFailoverVersion int64,
+			isGlobalDomainEnabled bool,
+		) error
 	}
 
 	domainReplicatorImpl struct {
@@ -55,9 +62,16 @@ func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.L
 }
 
 // HandleTransmissionTask handle transmission of the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOperation replicator.DomainOperation,
-	info *persistence.DomainInfo, config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-	configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error {
+func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(
+	domainOperation replicator.DomainOperation,
+	info *persistence.DomainInfo,
+	config *persistence.DomainConfig,
+	replicationConfig *persistence.DomainReplicationConfig,
+	configVersion int64,
+	failoverVersion int64,
+	previousFailoverVersion int64,
+	isGlobalDomainEnabled bool,
+) error {
 
 	if !isGlobalDomainEnabled {
 		domainReplicator.logger.Warn("Should not replicate non global domain", tag.WorkflowDomainID(info.ID))
@@ -93,8 +107,9 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 			ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
 			Clusters:          domainReplicator.convertClusterReplicationConfigToThrift(replicationConfig.Clusters),
 		},
-		ConfigVersion:   common.Int64Ptr(configVersion),
-		FailoverVersion: common.Int64Ptr(failoverVersion),
+		ConfigVersion:           common.Int64Ptr(configVersion),
+		FailoverVersion:         common.Int64Ptr(failoverVersion),
+		PreviousFailoverVersion: common.Int64Ptr(previousFailoverVersion),
 	}
 
 	return domainReplicator.replicationMessageSink.Publish(

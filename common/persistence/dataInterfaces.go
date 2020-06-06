@@ -179,8 +179,6 @@ const (
 const (
 	// InitialFailoverNotificationVersion is the initial failover version for a domain
 	InitialFailoverNotificationVersion int64 = 0
-	// InitialPreviousFailoverVersion is the initial failover version for a domain
-	InitialPreviousFailoverVersion int64 = -1
 
 	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
 	// that do not have a target workflow

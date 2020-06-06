@@ -459,6 +459,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVersion := int64(55)
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterActive),
@@ -543,8 +544,9 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			ActiveClusterName: common.StringPtr(updateClusterActive),
 			Clusters:          updateClusters,
 		},
-		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
-		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
+		ConfigVersion:           common.Int64Ptr(updateConfigVersion),
+		FailoverVersion:         common.Int64Ptr(updateFailoverVersion),
+		PreviousFailoverVersion: common.Int64Ptr(previousFailoverVersion),
 	}
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
@@ -570,6 +572,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
+	s.Equal(common.InitialPreviousFailoverVersion, resp.PreviousFailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
@@ -592,6 +595,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVersion := int64(55)
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterActive),
@@ -623,12 +627,33 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ActiveClusterName: common.StringPtr(clusterActive),
 			Clusters:          clusters,
 		},
-		ConfigVersion:   common.Int64Ptr(configVersion),
-		FailoverVersion: common.Int64Ptr(failoverVersion),
+		ConfigVersion:           common.Int64Ptr(configVersion),
+		FailoverVersion:         common.Int64Ptr(failoverVersion),
+		PreviousFailoverVersion: common.Int64Ptr(previousFailoverVersion),
 	}
 
 	err := s.domainReplicator.Execute(createTask)
 	s.Nil(err)
+	resp1, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	s.Nil(err)
+	s.NotNil(resp1)
+	s.Equal(id, resp1.Info.ID)
+	s.Equal(name, resp1.Info.Name)
+	s.Equal(persistence.DomainStatusRegistered, resp1.Info.Status)
+	s.Equal(description, resp1.Info.Description)
+	s.Equal(ownerEmail, resp1.Info.OwnerEmail)
+	s.Equal(data, resp1.Info.Data)
+	s.Equal(retention, resp1.Config.Retention)
+	s.Equal(emitMetric, resp1.Config.EmitMetric)
+	s.Equal(historyArchivalStatus, resp1.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp1.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp1.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp1.Config.VisibilityArchivalURI)
+	s.Equal(clusterActive, resp1.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp1.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp1.ConfigVersion)
+	s.Equal(failoverVersion, resp1.FailoverVersion)
+	s.Equal(common.InitialPreviousFailoverVersion, resp1.PreviousFailoverVersion)
 
 	// success update case
 	updateOperation := replicator.DomainOperationUpdate
@@ -672,8 +697,9 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ActiveClusterName: common.StringPtr(updateClusterActive),
 			Clusters:          updateClusters,
 		},
-		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
-		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
+		ConfigVersion:           common.Int64Ptr(updateConfigVersion),
+		FailoverVersion:         common.Int64Ptr(updateFailoverVersion),
+		PreviousFailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
@@ -701,6 +727,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	s.Equal(updateFailoverVersion, resp.FailoverVersion)
 	s.Equal(notificationVersion, resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
+	s.Equal(failoverVersion, resp.PreviousFailoverVersion)
 }
 
 func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
@@ -721,6 +748,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVersion := int64(55)
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterActive),
@@ -803,8 +831,9 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ActiveClusterName: common.StringPtr(updateClusterActive),
 			Clusters:          updateClusters,
 		},
-		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
-		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
+		ConfigVersion:           common.Int64Ptr(updateConfigVersion),
+		FailoverVersion:         common.Int64Ptr(updateFailoverVersion),
+		PreviousFailoverVersion: common.Int64Ptr(previousFailoverVersion),
 	}
 	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
@@ -827,6 +856,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
+	s.Equal(common.InitialPreviousFailoverVersion, resp.PreviousFailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }

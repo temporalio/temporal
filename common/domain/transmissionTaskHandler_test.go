@@ -84,6 +84,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVerison := int64(55)
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -142,12 +143,22 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 				ActiveClusterName: common.StringPtr(clusterActive),
 				Clusters:          s.domainReplicator.convertClusterReplicationConfigToThrift(clusters),
 			},
-			ConfigVersion:   common.Int64Ptr(configVersion),
-			FailoverVersion: common.Int64Ptr(failoverVersion),
+			ConfigVersion:           common.Int64Ptr(configVersion),
+			FailoverVersion:         common.Int64Ptr(failoverVersion),
+			PreviousFailoverVersion: common.Int64Ptr(previousFailoverVerison),
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.domainReplicator.HandleTransmissionTask(
+		domainOperation,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		previousFailoverVerison,
+		isGlobalDomain,
+	)
 	s.Nil(err)
 }
 
@@ -167,6 +178,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVerison := int64(55)
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -200,7 +212,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	}
 	isGlobalDomain := false
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.domainReplicator.HandleTransmissionTask(
+		domainOperation,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		previousFailoverVerison,
+		isGlobalDomain,
+	)
 	s.Nil(err)
 }
 
@@ -222,6 +243,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVerison := int64(55)
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -280,12 +302,22 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 				ActiveClusterName: common.StringPtr(clusterActive),
 				Clusters:          s.domainReplicator.convertClusterReplicationConfigToThrift(clusters),
 			},
-			ConfigVersion:   common.Int64Ptr(configVersion),
-			FailoverVersion: common.Int64Ptr(failoverVersion),
+			ConfigVersion:           common.Int64Ptr(configVersion),
+			FailoverVersion:         common.Int64Ptr(failoverVersion),
+			PreviousFailoverVersion: common.Int64Ptr(previousFailoverVerison),
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.domainReplicator.HandleTransmissionTask(
+		domainOperation,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		previousFailoverVerison,
+		isGlobalDomain,
+	)
 	s.Nil(err)
 }
 
@@ -305,6 +337,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	previousFailoverVerison := int64(55)
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -337,6 +370,15 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	}
 	isGlobalDomain := false
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.domainReplicator.HandleTransmissionTask(
+		domainOperation,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		previousFailoverVerison,
+		isGlobalDomain,
+	)
 	s.Nil(err)
 }

@@ -47,6 +47,8 @@ const (
 	EndMessageID int64 = 1<<63 - 1
 	// EmptyMessageID is the default start message ID for replication level
 	EmptyMessageID = -1
+	// InitialPreviousFailoverVersion is the initial previous failover version
+	InitialPreviousFailoverVersion int64 = -1
 )
 
 const (

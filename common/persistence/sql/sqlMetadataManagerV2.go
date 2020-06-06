@@ -117,7 +117,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(metadata.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(persistence.InitialFailoverNotificationVersion),
-		PreviousFailoverVersion:     common.Int64Ptr(persistence.InitialPreviousFailoverVersion),
+		PreviousFailoverVersion:     common.Int64Ptr(common.InitialPreviousFailoverVersion),
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,
 	}

@@ -214,6 +214,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 		ConfigVersion:               resp.ConfigVersion,
 		FailoverVersion:             resp.FailoverVersion,
 		FailoverNotificationVersion: resp.FailoverNotificationVersion,
+		PreviousFailoverVersion:     resp.PreviousFailoverVersion,
 		NotificationVersion:         notificationVersion,
 	}
 
@@ -246,6 +247,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 		request.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.FailoverVersion = task.GetFailoverVersion()
 		request.FailoverNotificationVersion = notificationVersion
+		request.PreviousFailoverVersion = task.GetPreviousFailoverVersion()
 	}
 
 	if !recordUpdated {

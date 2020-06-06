@@ -157,7 +157,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
 	m.Equal(configVersion, resp1.ConfigVersion)
 	m.Equal(failoverVersion, resp1.FailoverVersion)
-	m.Equal(p.InitialPreviousFailoverVersion, resp1.PreviousFailoverVersion)
+	m.Equal(common.InitialPreviousFailoverVersion, resp1.PreviousFailoverVersion)
 	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.FailoverNotificationVersion)
 	m.Nil(resp1.FailoverEndTime)
@@ -286,7 +286,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(isGlobalDomain, resp2.IsGlobalDomain)
 	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp2.FailoverVersion)
-	m.Equal(p.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
+	m.Equal(common.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.FailoverNotificationVersion)
 	m.Nil(resp2.FailoverEndTime)
 
@@ -313,7 +313,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
-	m.Equal(p.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
+	m.Equal(common.InitialPreviousFailoverVersion, resp2.PreviousFailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp3.FailoverNotificationVersion)
 
 	resp4, err4 := m.GetDomain(id, name)
@@ -428,7 +428,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	m.Equal(isGlobalDomain, resp.IsGlobalDomain)
 	m.Equal(configVersion, resp.ConfigVersion)
 	m.Equal(failoverVersion, resp.FailoverVersion)
-	m.Equal(p.InitialPreviousFailoverVersion, resp.PreviousFailoverVersion)
+	m.Equal(common.InitialPreviousFailoverVersion, resp.PreviousFailoverVersion)
 
 	//check domain data
 	ss := strings.Split(resp.Info.Data["k0"], "-")
@@ -583,7 +583,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
-	m.Equal(p.InitialPreviousFailoverVersion, resp3.PreviousFailoverVersion)
+	m.Equal(common.InitialPreviousFailoverVersion, resp3.PreviousFailoverVersion)
 
 	//check domain data
 	ss := strings.Split(resp3.Info.Data["k0"], "-")
