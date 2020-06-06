@@ -34,10 +34,12 @@ import (
 	"testing"
 	"time"
 
+	failurepb "go.temporal.io/temporal-proto/failure"
 	replicationpb "go.temporal.io/temporal-proto/replication"
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -442,8 +444,10 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -562,7 +566,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   31,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: commonpb.TimeoutType_StartToClose,
+					RetryStatus: commonpb.RetryStatus_Timeout,
 				}},
 			},
 		}},
@@ -587,7 +591,11 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      commonpb.TimeoutType_StartToClose,
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: commonpb.TimeoutType_StartToClose,
+						}},
+					},
 				}},
 			},
 			{
@@ -630,8 +638,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},
@@ -747,8 +754,10 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -1214,8 +1223,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-					MarkerName:                   "some marker name",
-					Details:                      payloads.EncodeString("some marker details"),
+					MarkerName: "some marker name",
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					},
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -1377,7 +1388,11 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      commonpb.TimeoutType_StartToClose,
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: commonpb.TimeoutType_StartToClose,
+						}},
+					},
 				}},
 			},
 			{
@@ -1420,8 +1435,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},
@@ -1434,7 +1448,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   32,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: commonpb.TimeoutType_StartToClose,
+					RetryStatus: commonpb.RetryStatus_Timeout,
 				}},
 			},
 		}},

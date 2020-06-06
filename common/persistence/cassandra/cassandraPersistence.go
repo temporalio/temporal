@@ -506,6 +506,16 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
+	templateGetTransferTaskQuery = `SELECT transfer, transfer_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateGetTransferTasksQuery = `SELECT transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -516,6 +526,16 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
+
+	templateGetReplicationTaskQuery = `SELECT replication, replication_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
 
 	templateGetReplicationTasksQuery = `SELECT replication, replication_encoding ` +
 		`FROM executions ` +
@@ -559,6 +579,16 @@ workflow_state = ? ` +
 	templateCompleteReplicationTaskQuery = templateCompleteTransferTaskQuery
 
 	templateRangeCompleteReplicationTaskQuery = templateRangeCompleteTransferTaskQuery
+
+	templateGetTimerTaskQuery = `SELECT timer, timer_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
 
 	templateGetTimerTasksQuery = `SELECT timer, timer_encoding ` +
 		`FROM executions ` +
@@ -1912,6 +1942,33 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	return response, nil
 }
 
+func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest) (*p.GetTransferTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	query := d.session.Query(templateGetTransferTaskQuery,
+		shardID,
+		rowTypeTransferTask,
+		rowTypeTransferNamespaceID,
+		rowTypeTransferWorkflowID,
+		rowTypeTransferRunID,
+		defaultVisibilityTimestamp,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetTransferTask", err)
+	}
+
+	info, err := serialization.TransferTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetTransferTask", err)
+	}
+
+	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
+}
+
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
@@ -1952,6 +2009,33 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	}
 
 	return response, nil
+}
+
+func (d *cassandraPersistence) GetReplicationTask(request *p.GetReplicationTaskRequest) (*p.GetReplicationTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	query := d.session.Query(templateGetReplicationTaskQuery,
+		shardID,
+		rowTypeReplicationTask,
+		rowTypeReplicationNamespaceID,
+		rowTypeReplicationWorkflowID,
+		rowTypeReplicationRunID,
+		defaultVisibilityTimestamp,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetReplicationTask", err)
+	}
+
+	info, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetReplicationTask", err)
+	}
+
+	return &p.GetReplicationTaskResponse{ReplicationTaskInfo: info}, nil
 }
 
 func (d *cassandraPersistence) GetReplicationTasks(
@@ -2556,6 +2640,34 @@ func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLes
 		return 0, serviceerror.NewInternal(fmt.Sprintf("CompleteTasksLessThan operation failed. Error: %v", err))
 	}
 	return p.UnknownNumRowsAffected, nil
+}
+
+func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.GetTimerTaskResponse, error) {
+	shardID := d.shardID
+	taskID := request.TaskID
+	visibilityTs := request.VisibilityTimestamp
+	query := d.session.Query(templateGetTimerTaskQuery,
+		shardID,
+		rowTypeTimerTask,
+		rowTypeTimerNamespaceID,
+		rowTypeTimerWorkflowID,
+		rowTypeTimerRunID,
+		visibilityTs,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetTimerTask", err)
+	}
+
+	info, err := serialization.TimerTaskInfoFromBlob(data, encoding)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetTimerTask", err)
+	}
+
+	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
 }
 
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,

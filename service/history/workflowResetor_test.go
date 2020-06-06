@@ -53,6 +53,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
@@ -332,8 +333,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.EmptyVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1012,8 +1016,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1607,8 +1614,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2309,8 +2319,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2907,8 +2920,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3582,8 +3598,11 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   beforeResetVersion,
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
-							MarkerName:                   "Version",
-							Details:                      payloads.EncodeString("details"),
+							MarkerName: "Version",
+							Details: map[string]*commonpb.Payloads{
+								"change-id": payloads.EncodeString("32283"),
+								"version":   payloads.EncodeInt(22),
+							},
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3930,9 +3949,8 @@ func (s *resetorSuite) TestApplyReset() {
 					ScheduledEventId: int64(28),
 					StartedEventId:   int64(29),
 					Cause:            eventpb.DecisionTaskFailedCause_ResetWorkflow,
-					Details:          nil,
 					Identity:         identityHistoryService,
-					Reason:           "resetWFtest",
+					Failure:          failure.NewResetWorkflowFailure("resetWFtest", nil),
 					BaseRunId:        forkRunID,
 					NewRunId:         newRunID,
 					ForkEventVersion: beforeResetVersion,
@@ -3943,7 +3961,7 @@ func (s *resetorSuite) TestApplyReset() {
 				Version:   afterResetVersion,
 				EventType: eventpb.EventType_ActivityTaskFailed,
 				Attributes: &eventpb.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: &eventpb.ActivityTaskFailedEventAttributes{
-					Reason:           "resetWF",
+					Failure:          failure.NewResetWorkflowFailure("resetWF", nil),
 					ScheduledEventId: 22,
 					StartedEventId:   26,
 					Identity:         identityHistoryService,

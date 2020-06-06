@@ -28,29 +28,26 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common/primitives/timestamp"
 
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 )
 
 type (
-	//////////////////////////////////////////////////////////////////////
+	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization, and only ExecutionManager/HistoryManager need it.
 	// ShardManager/TaskManager/MetadataManager are the same.
-	//////////////////////////////////////////////////////////////////////
+	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
 	ShardStore = ShardManager
@@ -89,7 +86,7 @@ type (
 		Closeable
 		GetName() string
 		GetShardID() int
-		//The below three APIs are related to serialization/deserialization
+		// The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
@@ -101,11 +98,13 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
+		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
@@ -115,6 +114,7 @@ type (
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
@@ -249,18 +249,18 @@ type (
 		ClientImpl                         string
 		AutoResetPoints                    *serialization.DataBlob
 		// for retry
-		Attempt            int32
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		BranchToken        []byte
-		CronSchedule       string
-		Memo               map[string]*commonpb.Payload
-		SearchAttributes   map[string]*commonpb.Payload
+		Attempt                int32
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+		BranchToken            []byte
+		CronSchedule           string
+		Memo                   map[string]*commonpb.Payload
+		SearchAttributes       map[string]*commonpb.Payload
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64
@@ -305,20 +305,19 @@ type (
 		LastHeartBeatUpdatedTime time.Time
 		TimerTaskStatus          int32
 		// For retry
-		Attempt            int32
-		NamespaceID        string
-		StartedIdentity    string
-		TaskList           string
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		LastFailureReason  string
-		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payloads
+		Attempt                int32
+		NamespaceID            string
+		StartedIdentity        string
+		TaskList               string
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+		LastFailure            *failurepb.Failure
+		LastWorkerIdentity     string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -776,7 +775,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
-		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
+		RetryNonRetryableErrorTypes:             executionInfo.NonRetryableErrorTypes,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
 		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
@@ -867,7 +866,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
 		BranchToken:                        info.GetEventBranchToken(),
-		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
+		NonRetryableErrorTypes:             info.GetRetryNonRetryableErrorTypes(),
 		SearchAttributes:                   info.GetSearchAttributes(),
 		Memo:                               info.GetMemo(),
 	}
@@ -934,10 +933,9 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
 		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
-		NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
-		LastFailureReason:        decoded.GetRetryLastFailureReason(),
+		NonRetryableErrorTypes:   decoded.GetRetryNonRetryableErrorTypes(),
+		LastFailure:              decoded.GetRetryLastFailure(),
 		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
-		LastFailureDetails:       decoded.GetRetryLastFailureDetails(),
 	}
 	if decoded.GetRetryExpirationTimeNanos() != 0 {
 		info.ExpirationTime = time.Unix(0, decoded.GetRetryExpirationTimeNanos())
@@ -983,10 +981,9 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		RetryBackoffCoefficient:       v.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:   v.MaximumInterval,
 		RetryMaximumAttempts:          v.MaximumAttempts,
-		RetryNonRetryableErrors:       v.NonRetriableErrors,
-		RetryLastFailureReason:        v.LastFailureReason,
+		RetryNonRetryableErrorTypes:   v.NonRetryableErrorTypes,
+		RetryLastFailure:              v.LastFailure,
 		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
-		RetryLastFailureDetails:       v.LastFailureDetails,
 	}
 	if !v.ExpirationTime.IsZero() {
 		info.RetryExpirationTimeNanos = v.ExpirationTime.UnixNano()
@@ -1012,7 +1009,7 @@ func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionI
 		CreateRequestId:        v.CreateRequestID,
 		Namespace:              v.Namespace,
 		WorkflowTypeName:       v.WorkflowTypeName,
-		ParentClosePolicy:      int32(v.ParentClosePolicy),
+		ParentClosePolicy:      v.ParentClosePolicy,
 	}
 	return info
 }

@@ -61,9 +61,8 @@ message PendingActivityInfo {
     int32 maximumAttempts = 8;
     string scheduledTimestamp = 9;
     string expirationTimestamp = 10;
-    string lastFailureReason = 11;
+    string lastFailure = 11;
     string lastWorkerIdentity = 12;
-    string lastFailureDetails = 13;
 }
 
 message SearchAttributes {

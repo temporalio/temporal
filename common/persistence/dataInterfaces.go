@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
@@ -46,13 +47,6 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
-)
-
-// Namespace status
-const (
-	NamespaceStatusRegistered = iota
-	NamespaceStatusDeprecated
-	NamespaceStatusDeleted
 )
 
 const (
@@ -266,7 +260,7 @@ type (
 		MaximumInterval        int32
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
-		NonRetriableErrors     []string
+		NonRetryableErrorTypes []string
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
@@ -535,19 +529,18 @@ type (
 		LastHeartBeatUpdatedTime time.Time
 		TimerTaskStatus          int32
 		// For retry
-		Attempt            int32
-		StartedIdentity    string
-		TaskList           string
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		LastFailureReason  string
-		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payloads
+		Attempt                int32
+		StartedIdentity        string
+		TaskList               string
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		ExpirationTime         time.Time
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+		LastFailure            *failurepb.Failure
+		LastWorkerIdentity     string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -783,6 +776,17 @@ type (
 		RunID       string
 	}
 
+	// GetTransferTaskRequest is the request for GetTransferTask
+	GetTransferTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetTransferTaskResponse is the response to GetTransferTask
+	GetTransferTaskResponse struct {
+		TransferTaskInfo *persistenceblobs.TransferTaskInfo
+	}
+
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
 		ReadLevel     int64
@@ -795,6 +799,17 @@ type (
 	GetTransferTasksResponse struct {
 		Tasks         []*persistenceblobs.TransferTaskInfo
 		NextPageToken []byte
+	}
+
+	// GetReplicationTaskRequest is the request for GetReplicationTask
+	GetReplicationTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetReplicationTaskResponse is the response to GetReplicationTask
+	GetReplicationTaskResponse struct {
+		ReplicationTaskInfo *persistenceblobs.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
@@ -957,6 +972,18 @@ type (
 		TaskType     tasklistpb.TaskListType
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
 		Limit        int   // Limit on the max number of tasks that can be completed. Required param
+	}
+
+	// GetTimerTaskRequest is the request for GetTimerTask
+	GetTimerTaskRequest struct {
+		ShardID             int32
+		TaskID              int64
+		VisibilityTimestamp time.Time
+	}
+
+	// GetTimerTaskResponse is the response to GetTimerTask
+	GetTimerTaskResponse struct {
+		TimerTaskInfo *persistenceblobs.TimerTaskInfo
 	}
 
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
@@ -1335,11 +1362,13 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
+		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
@@ -1349,6 +1378,7 @@ type (
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error

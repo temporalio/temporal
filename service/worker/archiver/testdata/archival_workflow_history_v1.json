@@ -85,7 +85,10 @@
       "taskId": 6291599,
       "markerRecordedEventAttributes": {
         "markerName": "SideEffect",
-        "details": null,
+        "details": {
+          "side-effect-id": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"NQ=="}]},
+          "data": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"NQ=="}]}
+        },
         "decisionTaskCompletedEventId": 5
       }
     },
@@ -128,7 +131,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -288,7 +291,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -472,7 +475,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -505,7 +508,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -538,7 +541,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -772,7 +775,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -932,7 +935,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -1092,7 +1095,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -1252,7 +1255,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -1412,7 +1415,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}
@@ -1572,7 +1575,7 @@
           "maximumAttempts": 0,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
-            "upload non-retriable error"
+            "upload non-retryable error"
           ]
         },
         "header": {}

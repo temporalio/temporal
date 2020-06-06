@@ -154,12 +154,16 @@ const (
 	PersistenceGetCurrentExecutionScope
 	// PersistenceListConcreteExecutionsScope tracks ListConcreteExecutions calls made by service to persistence layer
 	PersistenceListConcreteExecutionsScope
+	// PersistenceGetTransferTaskScope tracks GetTransferTask calls made by service to persistence layer
+	PersistenceGetTransferTaskScope
 	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
 	PersistenceGetTransferTasksScope
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope
 	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceRangeCompleteTransferTaskScope
+	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
+	PersistenceGetReplicationTaskScope
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
 	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer
@@ -174,6 +178,8 @@ const (
 	PersistenceDeleteReplicationTaskFromDLQScope
 	// PersistenceRangeDeleteReplicationTaskFromDLQScope tracks PersistenceRangeDeleteReplicationTaskFromDLQScope calls made by service to persistence layer
 	PersistenceRangeDeleteReplicationTaskFromDLQScope
+	// PersistenceGetTimerTaskScope tracks GetTimerTask calls made by service to persistence layer
+	PersistenceGetTimerTaskScope
 	// PersistenceGetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
 	PersistenceGetTimerIndexTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
@@ -1069,9 +1075,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteCurrentWorkflowExecutionScope:           {operation: "DeleteCurrentWorkflowExecution"},
 		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
 		PersistenceListConcreteExecutionsScope:                   {operation: "ListConcreteExecutions"},
+		PersistenceGetTransferTaskScope:                          {operation: "GetTransferTask"},
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
 		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
 		PersistenceRangeCompleteTransferTaskScope:                {operation: "RangeCompleteTransferTask"},
+		PersistenceGetReplicationTaskScope:                       {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:                  {operation: "CompleteReplicationTask"},
 		PersistenceRangeCompleteReplicationTaskScope:             {operation: "RangeCompleteReplicationTask"},
@@ -1079,6 +1087,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetReplicationTasksFromDLQScope:               {operation: "GetReplicationTasksFromDLQ"},
 		PersistenceDeleteReplicationTaskFromDLQScope:             {operation: "DeleteReplicationTaskFromDLQ"},
 		PersistenceRangeDeleteReplicationTaskFromDLQScope:        {operation: "RangeDeleteReplicationTaskFromDLQ"},
+		PersistenceGetTimerTaskScope:                             {operation: "GetTimerTask"},
 		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
 		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
 		PersistenceRangeCompleteTimerTaskScope:                   {operation: "RangeCompleteTimerTask"},

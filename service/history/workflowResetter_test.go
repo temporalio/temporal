@@ -32,13 +32,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
@@ -290,11 +291,9 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	mutableState.EXPECT().AddActivityTaskFailedEvent(
 		activity1.ScheduleID,
 		activity1.StartedID,
-		&workflowservice.RespondActivityTaskFailedRequest{
-			Reason:   terminateReason,
-			Details:  activity1.Details,
-			Identity: activity1.StartedIdentity,
-		},
+		failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
+		commonpb.RetryStatus_NonRetryableFailure,
+		activity1.StartedIdentity,
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
 	err := s.workflowResetter.failInflightActivity(mutableState, terminateReason)
@@ -341,7 +340,6 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		nil,
 		identityHistoryService,
-		"",
 		"",
 		"",
 		"",

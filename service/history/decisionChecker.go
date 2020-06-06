@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/temporalio/temporal/common/convert"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -39,11 +38,12 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -145,11 +145,10 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 	}
 
 	attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
-		Reason:  common.FailureReasonDecisionBlobSizeExceedsLimit,
-		Details: payloads.EncodeString(message),
+		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RetryStatus_NonRetryableFailure, attributes); err != nil {
 		return false, err
 	}
 
@@ -170,11 +169,10 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowEventCount(historyCount))
 
 		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
-			Reason:  common.FailureReasonSizeExceedsLimit,
-			Details: payloads.EncodeString("Workflow history size / count exceeds limit."),
+			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, false),
 		}
 
-		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RetryStatus_NonRetryableFailure, attributes); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -377,8 +375,8 @@ func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
 	if attributes == nil {
 		return serviceerror.NewInvalidArgument("FailWorkflowExecutionDecisionAttributes is not set on decision.")
 	}
-	if attributes.GetReason() == "" {
-		return serviceerror.NewInvalidArgument("Reason is not set on decision.")
+	if attributes.GetFailure() == nil {
+		return serviceerror.NewInvalidArgument("Failure is not set on decision.")
 	}
 	return nil
 }

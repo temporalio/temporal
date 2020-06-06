@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -200,8 +201,13 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
 		if ai.StartedID != common.EmptyEventID {
 			// this means the activity has started but not completed, we need to fail the activity
-			request := getRespondActivityTaskFailedRequestFromActivity(ai, "workflowReset")
-			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, request); err != nil {
+			if _, err := msBuilder.AddActivityTaskFailedEvent(
+				ai.ScheduleID,
+				ai.StartedID,
+				failure.NewResetWorkflowFailure("reset workflow", ai.Details),
+				commonpb.RetryStatus_NonRetryableFailure,
+				ai.StartedIdentity,
+			); err != nil {
 				// Unable to add ActivityTaskFailed event to history
 				return serviceerror.NewInternal("Unable to add ActivityTaskFailed event to mutableState.")
 			}
@@ -284,7 +290,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	decision, _ := newMutableState.GetInFlightDecision()
 
 	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow, nil,
-		identityHistoryService, resetReason, "", baseRunID, newRunID, forkEventVersion)
+		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision failed event.")
 		return
@@ -476,7 +482,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			Identity:   se.GetWorkflowExecutionSignaledEventAttributes().Identity,
 			Input:      se.GetWorkflowExecutionSignaledEventAttributes().Input,
 		}
-		newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+		newMutableState.AddWorkflowExecutionSignaled( // nolint:errcheck
 			sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 	}
 	for {
@@ -533,7 +539,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 							Identity:   e.GetWorkflowExecutionSignaledEventAttributes().Identity,
 							Input:      e.GetWorkflowExecutionSignaledEventAttributes().Input,
 						}
-						newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+						newMutableState.AddWorkflowExecutionSignaled( // nolint:errcheck
 							sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 					} else if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -601,14 +607,6 @@ func (w *workflowResetorImpl) generateTimerTasksForReset(
 	}
 
 	return timerTasks, nil
-}
-
-func getRespondActivityTaskFailedRequestFromActivity(ai *persistence.ActivityInfo, resetReason string) *workflowservice.RespondActivityTaskFailedRequest {
-	return &workflowservice.RespondActivityTaskFailedRequest{
-		Reason:   resetReason,
-		Details:  ai.Details,
-		Identity: ai.StartedIdentity,
-	}
 }
 
 // TODO: @shreyassrivatsan reduce the number of return parameters from this method or return a struct

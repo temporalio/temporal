@@ -116,9 +116,9 @@ func (v *visibilityArchiver) Archive(
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
 				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
-				logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
-				if featureCatalog.NonRetriableError != nil {
-					err = featureCatalog.NonRetriableError()
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
+				if featureCatalog.NonRetryableError != nil {
+					err = featureCatalog.NonRetryableError()
 				}
 			}
 		}

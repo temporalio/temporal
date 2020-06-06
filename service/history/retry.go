@@ -28,7 +28,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	failurepb "go.temporal.io/temporal-proto/failure"
+
 	"github.com/temporalio/temporal/common/backoff"
 )
 
@@ -40,18 +42,21 @@ func getBackoffInterval(
 	initInterval int32,
 	maxInterval int32,
 	backoffCoefficient float64,
-	failureReason string,
-	nonRetriableErrors []string,
-) time.Duration {
+	failure *failurepb.Failure,
+	nonRetryableTypes []string,
+) (time.Duration, commonpb.RetryStatus) {
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff, commonpb.RetryStatus_NonRetryableFailure
+	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, commonpb.RetryStatus_RetryPolicyNotSet
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return backoff.NoBackoff
+		return backoff.NoBackoff, commonpb.RetryStatus_MaximumAttemptsReached
 	}
 
 	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
@@ -60,7 +65,7 @@ func getBackoffInterval(
 		if maxInterval > 0 {
 			nextInterval = int64(maxInterval)
 		} else {
-			return backoff.NoBackoff
+			return backoff.NoBackoff, commonpb.RetryStatus_Timeout
 		}
 	}
 
@@ -72,23 +77,48 @@ func getBackoffInterval(
 	backoffInterval := time.Duration(nextInterval) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, commonpb.RetryStatus_Timeout
 	}
 
-	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
-	if failureReason == common.FailureReasonCancelDetailsExceedsLimit ||
-		failureReason == common.FailureReasonCompleteResultExceedsLimit ||
-		failureReason == common.FailureReasonHeartbeatExceedsLimit ||
-		failureReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
-		return backoff.NoBackoff
+	return backoffInterval, commonpb.RetryStatus_InProgress
+}
+
+func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	if failure == nil {
+		return true
 	}
 
-	// check if error is non-retriable
-	for _, er := range nonRetriableErrors {
-		if er == failureReason {
-			return backoff.NoBackoff
+	failure = getCauseFailure(failure)
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
+	}
+
+	if failure.GetApplicationFailureInfo().GetNonRetryable() || failure.GetServerFailureInfo().GetNonRetryable() {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		if failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_StartToClose &&
+			failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_Heartbeat {
+			return false
 		}
 	}
 
-	return backoffInterval
+	if failure.GetApplicationFailureInfo() != nil {
+		failureType := failure.GetApplicationFailureInfo().GetType()
+		for _, nrt := range nonRetryableTypes {
+			if nrt == failureType {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func getCauseFailure(failure *failurepb.Failure) *failurepb.Failure {
+	for ; failure.GetCause() != nil; failure = failure.GetCause() {
+	}
+
+	return failure
 }

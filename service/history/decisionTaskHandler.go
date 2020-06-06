@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -388,7 +389,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		startAttributes,
 		int32(cronBackoff.Seconds()),
 		commonpb.ContinueAsNewInitiator_CronSchedule,
-		"",
 		nil,
 		attr.Result,
 	)
@@ -418,8 +418,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_FailWorkflowExecution.String()),
-		attr.GetDetails().Size(),
-		"FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.",
+		attr.GetFailure().Size(),
+		"FailWorkflowExecutionDecisionAttributes.Failure exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -441,7 +441,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetReason())
+	backoffInterval, retryStatus := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
@@ -456,7 +456,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
 		// no retry or cron
-		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
+		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, retryStatus, attr); err != nil {
 			return err
 		}
 		return nil
@@ -472,8 +472,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		startAttributes,
 		int32(backoffInterval.Seconds()),
 		continueAsNewInitiator,
-		attr.Reason,
-		attr.Details,
+		attr.GetFailure(),
 		startAttributes.LastCompletionResult,
 	)
 }
@@ -618,7 +617,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_RecordMarker.String()),
-		attr.GetDetails().Size(),
+		common.GetPayloadsMapSize(attr.GetDetails()),
 		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -671,7 +670,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		// TODO(maxim): is decisionTaskCompletedID the correct id?
 		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
 		handler.stopProcessing = true
-		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID)
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID, commonpb.RetryStatus_Timeout)
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",
@@ -884,8 +883,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	attr *eventpb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
-	failureReason string,
-	failureDetails *commonpb.Payloads,
+	failure *failurepb.Failure,
 	lastCompletionResult *commonpb.Payloads,
 ) error {
 
@@ -899,8 +897,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		CronSchedule:                  attr.CronSchedule,
 		BackoffStartIntervalInSeconds: backoffInterval,
 		Initiator:                     continueAsNewIter,
-		FailureReason:                 failureReason,
-		FailureDetails:                failureDetails,
+		Failure:                       failure,
 		LastCompletionResult:          lastCompletionResult,
 		Header:                        attr.Header,
 		Memo:                          attr.Memo,
