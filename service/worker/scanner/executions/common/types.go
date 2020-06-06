@@ -63,8 +63,6 @@ const (
 
 	// HistoryExistsInvariantType asserts that history must exist if concrete execution exists
 	HistoryExistsInvariantType InvariantType = "history_exists"
-	// ValidFirstEventInvariantType asserts that the first event in a history must be of a specific form
-	ValidFirstEventInvariantType InvariantType = "valid_first_event"
 	// OpenCurrentExecutionInvariantType asserts that an open concrete execution must have a valid current execution
 	OpenCurrentExecutionInvariantType InvariantType = "open_current_execution"
 
@@ -116,14 +114,16 @@ type (
 
 	// ManagerCheckResult is the result of running a list of checks
 	ManagerCheckResult struct {
-		CheckResultType CheckResultType
-		CheckResults    []CheckResult
+		CheckResultType          CheckResultType
+		DeterminingInvariantType *InvariantType
+		CheckResults             []CheckResult
 	}
 
 	// ManagerFixResult is the result of running a list of fixes
 	ManagerFixResult struct {
-		FixResultType FixResultType
-		FixResults    []FixResult
+		FixResultType            FixResultType
+		DeterminingInvariantType *InvariantType
+		FixResults               []FixResult
 	}
 )
 

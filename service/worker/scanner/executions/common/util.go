@@ -167,3 +167,8 @@ func DeleteExecution(
 		FixResultType: FixResultTypeFixed,
 	}
 }
+
+// InvariantTypePtr returns a pointer to InvariantType
+func InvariantTypePtr(t InvariantType) *InvariantType {
+	return &t
+}

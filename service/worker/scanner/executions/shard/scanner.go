@@ -100,8 +100,7 @@ func (s *scanner) Scan() common.ShardScanReport {
 				return result
 			}
 			result.Stats.CorruptedCount++
-			lastInvariant := checkResult.CheckResults[len(checkResult.CheckResults)-1]
-			result.Stats.CorruptionByType[lastInvariant.InvariantType]++
+			result.Stats.CorruptionByType[*checkResult.DeterminingInvariantType]++
 			if common.Open(exec.State) {
 				result.Stats.CorruptedOpenExecutionCount++
 			}

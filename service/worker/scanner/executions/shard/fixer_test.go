@@ -350,7 +350,6 @@ func (s *FixerSuite) TestFix_Success() {
 			},
 			{
 				FixResultType: common.FixResultTypeSkipped,
-				InvariantType: common.ValidFirstEventInvariantType,
 			},
 			{
 				FixResultType: common.FixResultTypeSkipped,
@@ -381,7 +380,6 @@ func (s *FixerSuite) TestFix_Success() {
 			},
 			{
 				FixResultType: common.FixResultTypeFixed,
-				InvariantType: common.ValidFirstEventInvariantType,
 				Info:          "first event is not valid",
 			},
 		},
@@ -398,7 +396,6 @@ func (s *FixerSuite) TestFix_Success() {
 			},
 			{
 				FixResultType: common.FixResultTypeSkipped,
-				InvariantType: common.ValidFirstEventInvariantType,
 			},
 			{
 				FixResultType: common.FixResultTypeFixed,
@@ -459,7 +456,6 @@ func (s *FixerSuite) TestFix_Success() {
 				},
 				{
 					FixResultType: common.FixResultTypeFixed,
-					InvariantType: common.ValidFirstEventInvariantType,
 					Info:          "first event is not valid",
 				},
 			},
@@ -483,7 +479,6 @@ func (s *FixerSuite) TestFix_Success() {
 				},
 				{
 					FixResultType: common.FixResultTypeSkipped,
-					InvariantType: common.ValidFirstEventInvariantType,
 				},
 				{
 					FixResultType: common.FixResultTypeFixed,
@@ -533,7 +528,6 @@ func (s *FixerSuite) TestFix_Success() {
 				},
 				{
 					FixResultType: common.FixResultTypeSkipped,
-					InvariantType: common.ValidFirstEventInvariantType,
 				},
 				{
 					FixResultType: common.FixResultTypeSkipped,
