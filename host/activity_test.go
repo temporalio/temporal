@@ -464,7 +464,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry")
 		} else if activityExecutedCount == 1 {
-			err = temporal.NewApplicationError("bad-bug", true)
+			err = temporal.NewNonRetryableApplicationError("bad-bug", nil)
 		}
 		activityExecutedCount++
 		return nil, false, err
@@ -764,7 +764,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 						}}, nil
 					}
 
-					switch timeoutEvent.GetTimeoutType() {
+					switch timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetTimeoutType() {
 					case commonpb.TimeoutType_ScheduleToStart:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "A" {
 							activityATimedout = true
@@ -975,12 +975,12 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						break ProcessLoop
 					}
 
-					switch timeoutEvent.GetTimeoutType() {
+					switch timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetTimeoutType() {
 					case commonpb.TimeoutType_Heartbeat:
 						activitiesTimedout++
 						scheduleID := timeoutEvent.GetScheduledEventId()
 						var details string
-						err := payloads.Decode(timeoutEvent.GetLastHeartbeatDetails(), &details)
+						err := payloads.Decode(timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetLastHeartbeatDetails(), &details)
 						s.NoError(err)
 						lastHeartbeat, _ := strconv.Atoi(details)
 						lastHeartbeatMap[scheduleID] = lastHeartbeat

@@ -899,20 +899,20 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
-		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
-		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
-		es.TaskList:      {Type: es.FieldTypeString, StringData: taskList},
+		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.TaskList:      {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskList}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: string(encoding)}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: data}}
 	}
 
 	msg := &indexergenpb.Message{
@@ -933,23 +933,23 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, StringData: workflowTypeName},
-		es.StartTime:       {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
-		es.CloseTime:       {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, IntData: int64(status)},
-		es.HistoryLength:   {Type: es.FieldTypeInt, IntData: historyLength},
-		es.TaskList:        {Type: es.FieldTypeString, StringData: taskList},
+		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: endTimeUnixNano}},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: int64(status)}},
+		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: historyLength}},
+		es.TaskList:        {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskList}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: string(encoding)}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: data}}
 	}
 
 	msg := &indexergenpb.Message{

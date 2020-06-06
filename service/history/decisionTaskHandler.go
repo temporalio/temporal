@@ -441,7 +441,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	backoffInterval, retryStatus := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
@@ -456,7 +456,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
 		// no retry or cron
-		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
+		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, retryStatus, attr); err != nil {
 			return err
 		}
 		return nil
@@ -617,7 +617,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_RecordMarker.String()),
-		attr.GetDetails().Size(),
+		common.GetPayloadsMapSize(attr.GetDetails()),
 		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -670,7 +670,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		// TODO(maxim): is decisionTaskCompletedID the correct id?
 		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
 		handler.stopProcessing = true
-		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID)
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID, commonpb.RetryStatus_Timeout)
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",

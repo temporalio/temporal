@@ -389,7 +389,9 @@ func (r *workflowResetterImpl) failInflightActivity(
 			if _, err := mutableState.AddActivityTaskFailedEvent(
 				ai.ScheduleID,
 				ai.StartedID,
-				getRespondActivityTaskFailedRequestFromActivity(ai, terminateReason),
+				failure.NewResetWorkflowFailure(terminateReason, ai.Details),
+				commonpb.RetryStatus_NonRetryableFailure,
+				ai.StartedIdentity,
 			); err != nil {
 				return err
 			}

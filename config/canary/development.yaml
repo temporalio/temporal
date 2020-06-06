@@ -1,12 +1,7 @@
 canary:
   namespaces: ["canary"]
-  excludes: [
-    "workflow.archival.history", # known to timeout sanity workflow
-    "workflow.archival.visibility", # does not record success?
-    "workflow.cancellation", # known to fail
-    "workflow.batch", # known to fail    "workflow.searchAttributes", # known to fail
-    "workflow.reset" # known to fail
-  ]
+  excludes: ["workflow.searchAttributes", "workflow.batch", "workflow.visibility", "workflow.cancellation" ]
+
 temporal:
   service: "frontend"
   host: "127.0.0.1:7233"

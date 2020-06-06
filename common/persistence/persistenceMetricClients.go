@@ -365,6 +365,20 @@ func (p *workflowExecutionPersistenceClient) ListConcreteExecutions(request *Lis
 	return response, err
 }
 
+func (p *workflowExecutionPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetTransferTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+	}
+
+	return response, err
+}
+
 func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceRequests)
 
@@ -374,6 +388,20 @@ func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransf
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceGetTransferTasksScope, err)
+	}
+
+	return response, err
+}
+
+func (p *workflowExecutionPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetReplicationTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetReplicationTaskScope, err)
 	}
 
 	return response, err
@@ -511,6 +539,20 @@ func (p *workflowExecutionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	}
 
 	return nil
+}
+
+func (p *workflowExecutionPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetTimerTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetTimerTaskScope, err)
+	}
+
+	return response, err
 }
 
 func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {

@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
@@ -727,6 +728,30 @@ func (m *sqlExecutionManager) ListConcreteExecutions(
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
+func (m *sqlExecutionManager) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+	rows, err := m.db.SelectFromTransferTasks(&sqlplugin.TransferTasksFilter{ShardID: int(request.ShardID), TaskID: &request.TaskID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTransferTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	transferRow := rows[0]
+	transferInfo, err := serialization.TransferTaskInfoFromBlob(transferRow.Data, transferRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetTransferTaskResponse{TransferTaskInfo: transferInfo}
+
+	return resp, nil
+}
+
 func (m *sqlExecutionManager) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
@@ -774,6 +799,30 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
+}
+
+func (m *sqlExecutionManager) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+	rows, err := m.db.SelectFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{ShardID: int(request.ShardID), TaskID: request.TaskID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	replicationRow := rows[0]
+	replicationInfo, err := serialization.ReplicationTaskInfoFromBlob(replicationRow.Data, replicationRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetReplicationTaskResponse{ReplicationTaskInfo: replicationInfo}
+
+	return resp, nil
 }
 
 func (m *sqlExecutionManager) GetReplicationTasks(
@@ -956,6 +1005,30 @@ func (t *timerTaskPageToken) serialize() ([]byte, error) {
 
 func (t *timerTaskPageToken) deserialize(payload []byte) error {
 	return json.Unmarshal(payload, t)
+}
+
+func (m *sqlExecutionManager) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
+	rows, err := m.db.SelectFromTimerTasks(&sqlplugin.TimerTasksFilter{ShardID: int(request.ShardID), TaskID: int64(request.TaskID), VisibilityTimestamp: &request.VisibilityTimestamp})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	timerRow := rows[0]
+	timerInfo, err := serialization.TimerTaskInfoFromBlob(timerRow.Data, timerRow.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &persistence.GetTimerTaskResponse{TimerTaskInfo: timerInfo}
+
+	return resp, nil
 }
 
 func (m *sqlExecutionManager) GetTimerIndexTasks(

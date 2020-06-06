@@ -572,7 +572,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
-	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", false))
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", true), commonpb.RetryStatus_NonRetryableFailure)
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -3032,7 +3032,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("fail reason", false)
+	failure := failure.NewServerFailure("fail reason", true)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -3043,7 +3043,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, identity)
+	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, commonpb.RetryStatus_NonRetryableFailure, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -4926,12 +4926,8 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	return event
 }
 
-func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
-	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
-		Failure:  failure,
-		Identity: identity,
-	})
-
+func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, retryStatus commonpb.RetryStatus, identity string) *eventpb.HistoryEvent {
+	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, retryStatus, identity)
 	return event
 }
 
@@ -5042,10 +5038,15 @@ func addFailWorkflowEvent(
 	builder mutableState,
 	decisionCompletedEventID int64,
 	failure *failurepb.Failure,
+	retryStatus commonpb.RetryStatus,
 ) *eventpb.HistoryEvent {
-	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &decisionpb.FailWorkflowExecutionDecisionAttributes{
-		Failure: failure,
-	})
+	event, _ := builder.AddFailWorkflowEvent(
+		decisionCompletedEventID,
+		retryStatus,
+		&decisionpb.FailWorkflowExecutionDecisionAttributes{
+			Failure: failure,
+		},
+	)
 	return event
 }
 

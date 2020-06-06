@@ -30,6 +30,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/common/failure"
@@ -361,7 +362,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_WorkflowExecutionTimedOut
 		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-			TimeoutType: commonpb.TimeoutType_StartToClose,
+			RetryStatus: commonpb.RetryStatus_Timeout,
 		}}
 		return historyEvent
 	})
@@ -463,7 +464,11 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			TimeoutType:      commonpb.TimeoutType_ScheduleToClose,
+			Failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: commonpb.TimeoutType_ScheduleToClose,
+				}},
+			},
 		}}
 		return historyEvent
 	})
@@ -626,7 +631,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:                    namespace,
 			WorkflowId:                   childWorkflowID,
 			WorkflowType:                 &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			Cause:                        eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyRunning,
+			Cause:                        eventpb.StartChildWorkflowExecutionFailedCause_WorkflowAlreadyExists,
 			InitiatedEventId:             lastEvent.EventId,
 			DecisionTaskCompletedEventId: lastEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 		}}
@@ -748,7 +753,7 @@ func InitializeHistoryEventGenerator(
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
 			StartedEventId: lastEvent.EventId,
-			TimeoutType:    commonpb.TimeoutType_ScheduleToClose,
+			RetryStatus:    commonpb.RetryStatus_Timeout,
 		}}
 		return historyEvent
 	})
@@ -809,7 +814,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_SignalExternalWorkflowExecutionFailed
 		historyEvent.Attributes = &eventpb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: &eventpb.SignalExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
+			Cause:                        eventpb.SignalExternalWorkflowExecutionFailedCause_ExternalWorkflowExecutionNotFound2,
 			DecisionTaskCompletedEventId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -867,7 +872,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed
 		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
+			Cause:                        eventpb.CancelExternalWorkflowExecutionFailedCause_ExternalWorkflowExecutionNotFound1,
 			DecisionTaskCompletedEventId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{

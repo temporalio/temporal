@@ -802,6 +802,12 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 }
 
 // Transfer task related methods
+func (m *executionManagerImpl) GetTransferTask(
+	request *GetTransferTaskRequest,
+) (*GetTransferTaskResponse, error) {
+	return m.persistence.GetTransferTask(request)
+}
+
 func (m *executionManagerImpl) GetTransferTasks(
 	request *GetTransferTasksRequest,
 ) (*GetTransferTasksResponse, error) {
@@ -821,6 +827,12 @@ func (m *executionManagerImpl) RangeCompleteTransferTask(
 }
 
 // Replication task related methods
+func (m *executionManagerImpl) GetReplicationTask(
+	request *GetReplicationTaskRequest,
+) (*GetReplicationTaskResponse, error) {
+	return m.persistence.GetReplicationTask(request)
+}
+
 func (m *executionManagerImpl) GetReplicationTasks(
 	request *GetReplicationTasksRequest,
 ) (*GetReplicationTasksResponse, error) {
@@ -864,6 +876,12 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 }
 
 // Timer related methods.
+func (m *executionManagerImpl) GetTimerTask(
+	request *GetTimerTaskRequest,
+) (*GetTimerTaskResponse, error) {
+	return m.persistence.GetTimerTask(request)
+}
+
 func (m *executionManagerImpl) GetTimerIndexTasks(
 	request *GetTimerIndexTasksRequest,
 ) (*GetTimerIndexTasksResponse, error) {

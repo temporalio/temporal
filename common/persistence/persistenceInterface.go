@@ -98,11 +98,13 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods
+		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
+		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
@@ -112,6 +114,7 @@ type (
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
+		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error

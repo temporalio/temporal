@@ -2109,8 +2109,6 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 
-		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -2892,8 +2890,10 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    payloads.EncodeString("local activity data"),
-				}},
+					Details: map[string]*commonpb.Payloads{
+						"data":   payloads.EncodeString("local activity marker"),
+						"result": payloads.EncodeString("local activity result"),
+					}}},
 			}}, nil
 		}
 
@@ -3060,8 +3060,10 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    payloads.EncodeString("local activity data"),
-				}},
+					Details: map[string]*commonpb.Payloads{
+						"data":   payloads.EncodeString("local activity marker"),
+						"result": payloads.EncodeString("local activity result"),
+					}}},
 			}}, nil
 		}
 
@@ -3219,8 +3221,9 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    payloads.EncodeString("some random marker details"),
-				}},
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					}}},
 			}, {
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -3243,8 +3246,9 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    payloads.EncodeString("some random marker details"),
-				}},
+					Details: map[string]*commonpb.Payloads{
+						"data": payloads.EncodeString("some random data"),
+					}}},
 			}}, nil
 		}
 

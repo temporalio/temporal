@@ -565,3 +565,13 @@ func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) stri
 	}
 	return AdvancedVisibilityWritingModeOff
 }
+
+func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
+	size := 0
+	for key, payloads := range data {
+		size += len(key)
+		size += payloads.Size()
+	}
+
+	return size
+}
