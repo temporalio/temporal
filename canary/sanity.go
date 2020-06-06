@@ -42,8 +42,8 @@ var sanityChildWFList = []string{
 	wfTypeCancellation,
 	wfTypeRetry,
 	wfTypeReset,
-	wfTypeHistoryArchival,
-	wfTypeVisibilityArchival,
+	//wfTypeHistoryArchival,
+	//wfTypeVisibilityArchival,
 	wfTypeBatch,
 }
 
