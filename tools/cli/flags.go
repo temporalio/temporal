@@ -197,6 +197,8 @@ const (
 	FlagTaskID                            = "task_id"
 	FlagTaskType                          = "task_type"
 	FlagTaskVisibilityTimestamp           = "task_timestamp"
+	FlagMinVisibilityTimestamp            = "min_visibility_ts"
+	FlagMaxVisibilityTimestamp            = "max_visibility_ts"
 	FlagStartingRPS                       = "starting_rps"
 	FlagRPS                               = "rps"
 	FlagRPSScaleUpSeconds                 = "rps_scale_up_seconds"
