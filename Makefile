@@ -191,30 +191,34 @@ temporal-canary: proto
 ##### Checks #####
 copyright:
 	@printf $(COLOR) "Check license header..."
-	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	@GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
-	golint ./...
+	@golint ./...
+
+vet:
+	@printf $(COLOR) "Run go vet..."
+	@go vet ./... || true
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
 # Use $(ALL_SRC) here to avoid checking generated files.
-	@goimports -l $(ALL_SRC)
+	@goimports -l $(ALL_SRC) || true
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	goimports -w $(ALL_SRC)
+	@goimports -w $(ALL_SRC)
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	staticcheck -fail none ./...
+	@staticcheck -fail none ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
-	errcheck ./... || true
+	@errcheck ./... || true
 
-check: copyright goimports-check lint staticcheck errcheck
+check: copyright goimports-check lint vet staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
