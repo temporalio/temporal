@@ -28,6 +28,8 @@ import (
 	"log"
 	"os"
 	"path"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/urfave/cli"
@@ -52,6 +54,10 @@ func startHandler(c *cli.Context) {
 		log.Fatal("Invalid config: ", err)
 	}
 
+	if cfg.Canary.PProf.Port != 0 {
+		canary.StartPProf(cfg.Canary.PProf.Port)
+	}
+
 	canary, err := canary.NewCanaryRunner(&cfg)
 	if err != nil {
 		log.Fatal("Failed to initialize canary: ", err)
@@ -59,6 +65,26 @@ func startHandler(c *cli.Context) {
 
 	if err := canary.Run(); err != nil {
 		log.Fatal("Failed to run canary: ", err)
+	}
+
+	dumpMemoryProfile(c)
+}
+
+func dumpMemoryProfile(c *cli.Context) {
+	if !c.GlobalIsSet("memprofile") {
+		return
+	}
+
+	memprofile := c.GlobalString("memprofile")
+	log.Printf("Writing memory profile to: %s\n", memprofile)
+	f, err := os.Create(memprofile)
+	if err != nil {
+		log.Fatal("could not create memory profile: ", err)
+	}
+	defer f.Close() // error handling omitted for example
+	runtime.GC()    // get up-to-date statistics
+	if err = pprof.WriteHeapProfile(f); err != nil {
+		log.Fatal("could not write memory profile: ", err)
 	}
 }
 
@@ -117,6 +143,11 @@ func buildCLI() *cli.App {
 			Value:  "",
 			Usage:  "availability zone",
 			EnvVar: canary.EnvKeyAvailabilityZone,
+		},
+		cli.StringFlag{
+			Name:  "memprofile, mp",
+			Value: "",
+			Usage: "memprofile",
 		},
 	}
 
