@@ -234,7 +234,7 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 }
 
 var (
-	eventType = eventpb.EventType_WorkflowExecutionStarted
+	eventType = eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 
 	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History: &eventpb.History{
@@ -399,7 +399,7 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 }
 
 var (
-	status = executionpb.WorkflowExecutionStatus_Completed
+	status = executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions: []*executionpb.WorkflowExecutionInfo{
@@ -714,8 +714,8 @@ func (s *cliAppSuite) TestAnyToString() {
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
 	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(8, len(ss))
-	s.Equal(120, l)
+	s.Equal(6, len(ss))
+	s.Equal(131, l)
 }
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
@@ -723,7 +723,7 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		"TestKey": payload.EncodeString("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{
-		Status: executionpb.WorkflowExecutionStatus_Running,
+		Status: executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
 	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:\"testValue\"}}}", anyToString(execution, true, 0))
@@ -743,7 +743,7 @@ func (s *cliAppSuite) TestIsAttributeName() {
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
 	res := getWorkflowIDReusePolicy(2)
-	s.Equal(res.String(), commonpb.WorkflowIdReusePolicy_RejectDuplicate.String())
+	s.Equal(res.String(), commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE.String())
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {

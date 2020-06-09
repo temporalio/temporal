@@ -205,10 +205,10 @@ var (
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]bool{
-		executionpb.WorkflowExecutionStatus_Failed:     true,
-		executionpb.WorkflowExecutionStatus_Canceled:   true,
-		executionpb.WorkflowExecutionStatus_Terminated: true,
-		executionpb.WorkflowExecutionStatus_TimedOut:   true,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED:     true,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED:   true,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED: true,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:   true,
 	}
 )
 
@@ -796,7 +796,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			case event := <-channel:
 				response.LastFirstEventId = event.lastFirstEventID
 				response.NextEventId = event.nextEventID
-				response.IsWorkflowRunning = event.workflowStatus == executionpb.WorkflowExecutionStatus_Running
+				response.IsWorkflowRunning = event.workflowStatus == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING
 				response.PreviousStartedEventId = event.previousStartedEventID
 				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
@@ -825,7 +825,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
 	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByNamespace(request.GetRequest().GetNamespace())
-	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Strong && !consistentQueryEnabled {
+	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QUERY_CONSISTENCY_LEVEL_STRONG && !consistentQueryEnabled {
 		return nil, ErrConsistentQueryNotEnabled
 	}
 
@@ -834,10 +834,10 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	req := request.GetRequest()
-	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != querypb.QueryRejectCondition_None {
-		notOpenReject := req.GetQueryRejectCondition() == querypb.QueryRejectCondition_NotOpen
+	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != querypb.QUERY_REJECT_CONDITION_NONE {
+		notOpenReject := req.GetQueryRejectCondition() == querypb.QUERY_REJECT_CONDITION_NOT_OPEN
 		status := mutableStateResp.GetWorkflowStatus()
-		notCompletedCleanlyReject := req.GetQueryRejectCondition() == querypb.QueryRejectCondition_NotCompletedCleanly && status != executionpb.WorkflowExecutionStatus_Completed
+		notCompletedCleanlyReject := req.GetQueryRejectCondition() == querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && status != executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		if notOpenReject || notCompletedCleanlyReject {
 			return &historyservice.QueryWorkflowResponse{
 				Response: &workflowservice.QueryWorkflowResponse{
@@ -849,7 +849,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual {
+	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
 		// query cannot be processed unless at least one decision task has finished
 		// if first decision task has not finished wait for up to a second for it to complete
 		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
@@ -903,7 +903,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		req.GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual ||
+		req.GetQueryConsistencyLevel() == querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)
@@ -938,13 +938,13 @@ func (e *historyEngineImpl) QueryWorkflow(
 		case queryTerminationTypeCompleted:
 			result := state.queryResult
 			switch result.GetResultType() {
-			case querypb.QueryResultType_Answered:
+			case querypb.QUERY_RESULT_TYPE_ANSWERED:
 				return &historyservice.QueryWorkflowResponse{
 					Response: &workflowservice.QueryWorkflowResponse{
 						QueryResult: result.GetAnswer(),
 					},
 				}, nil
-			case querypb.QueryResultType_Failed:
+			case querypb.QUERY_RESULT_TYPE_FAILED:
 				return nil, serviceerror.NewQueryFailed(result.GetErrorMessage())
 			default:
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
@@ -1290,7 +1290,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
-	if executionInfo.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if executionInfo.State == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
@@ -1306,11 +1306,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				ActivityId: ai.ActivityID,
 			}
 			if ai.CancelRequested {
-				p.State = executionpb.PendingActivityState_CancelRequested
+				p.State = executionpb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
 			} else if ai.StartedID != common.EmptyEventID {
-				p.State = executionpb.PendingActivityState_Started
+				p.State = executionpb.PENDING_ACTIVITY_STATE_STARTED
 			} else {
-				p.State = executionpb.PendingActivityState_Scheduled
+				p.State = executionpb.PENDING_ACTIVITY_STATE_SCHEDULED
 			}
 			lastHeartbeatUnixNano := ai.LastHeartBeatUpdatedTime.UnixNano()
 			if lastHeartbeatUnixNano > 0 {
@@ -1323,7 +1323,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				return nil, err
 			}
 			p.ActivityType = scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType
-			if p.State == executionpb.PendingActivityState_Scheduled {
+			if p.State == executionpb.PENDING_ACTIVITY_STATE_SCHEDULED {
 				p.ScheduledTimestamp = ai.ScheduledTime.UnixNano()
 			} else {
 				p.LastStartedTimestamp = ai.StartedTime.UnixNano()
@@ -1404,7 +1404,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			if !isRunning {
 				// Looks like ActivityTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 				return ErrActivityTaskNotFound
 			}
 
@@ -1425,7 +1425,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
 			}
 
@@ -1617,7 +1617,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			if err != nil {
 				return nil, err
 			}
-			if retryStatus != commonpb.RetryStatus_InProgress {
+			if retryStatus != commonpb.RETRY_STATUS_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryStatus, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
@@ -2237,19 +2237,19 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			}
 
 			switch completionEvent.GetEventType() {
-			case eventpb.EventType_WorkflowExecutionCompleted:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(initiatedID, completedExecution, attributes)
-			case eventpb.EventType_WorkflowExecutionFailed:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 				attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionFailedEvent(initiatedID, completedExecution, attributes)
-			case eventpb.EventType_WorkflowExecutionCanceled:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(initiatedID, completedExecution, attributes)
-			case eventpb.EventType_WorkflowExecutionTerminated:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
-			case eventpb.EventType_WorkflowExecutionTimedOut:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 				attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(initiatedID, completedExecution, attributes)
 			}
@@ -2859,11 +2859,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
 	switch prevState {
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type
@@ -2871,14 +2871,14 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	}
 
 	switch wfIDReusePolicy {
-	case commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly:
+	case commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
 		if _, ok := FailedWorkflowStatuses[prevStatus]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}
-	case commonpb.WorkflowIdReusePolicy_AllowDuplicate:
+	case commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE:
 		// as long as workflow not running, so this case has no check
-	case commonpb.WorkflowIdReusePolicy_RejectDuplicate:
+	case commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 	default:

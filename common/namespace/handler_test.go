@@ -343,7 +343,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace1: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace1,
-				Status:      namespacepb.NamespaceStatus_Registered,
+				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
@@ -352,9 +352,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
-				HistoryArchivalStatus:                  namespacepb.ArchivalStatus_Disabled,
+				HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
@@ -368,7 +368,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace2: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace2,
-				Status:      namespacepb.NamespaceStatus_Registered,
+				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
@@ -377,9 +377,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
-				HistoryArchivalStatus:                  namespacepb.ArchivalStatus_Disabled,
+				HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},

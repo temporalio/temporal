@@ -104,7 +104,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
 
 	for sid, tlName := range tasks {
-		resp, err := s.GetTasks(namespaceID, tlName, tasklistpb.TaskListType_Activity, 100)
+		resp, err := s.GetTasks(namespaceID, tlName, tasklistpb.TASK_LIST_TYPE_ACTIVITY, 100)
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
 		s.EqualValues(namespaceID, resp.Tasks[0].Data.GetNamespaceId())
@@ -134,7 +134,7 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(namespaceID, taskList, tasklistpb.TaskListType_Decision, 1)
+	tasks1Response, err1 := s.GetTasks(namespaceID, taskList, tasklistpb.TASK_LIST_TYPE_DECISION, 1)
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
@@ -177,7 +177,7 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 			response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 				NamespaceID: namespaceID,
 				TaskList:    taskList,
-				TaskType:    tasklistpb.TaskListType_Activity,
+				TaskType:    tasklistpb.TASK_LIST_TYPE_ACTIVITY,
 				BatchSize:   tc.batchSz,
 				ReadLevel:   tc.readLevel,
 			})
@@ -210,7 +210,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasksWithID1Response, err1 := s.GetTasks(namespaceID, taskList, tasklistpb.TaskListType_Activity, 5)
+	tasksWithID1Response, err1 := s.GetTasks(namespaceID, taskList, tasklistpb.TASK_LIST_TYPE_ACTIVITY, 5)
 
 	s.NoError(err1)
 	tasksWithID1 := tasksWithID1Response.Tasks
@@ -223,7 +223,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.EqualValues(workflowExecution.RunId, t.Data.GetRunId())
 		s.True(t.GetTaskId() > 0)
 
-		err2 := s.CompleteTask(namespaceID, taskList, tasklistpb.TaskListType_Activity, t.GetTaskId())
+		err2 := s.CompleteTask(namespaceID, taskList, tasklistpb.TASK_LIST_TYPE_ACTIVITY, t.GetTaskId())
 		s.NoError(err2)
 	}
 }
@@ -246,7 +246,7 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	})
 	s.NoError(err)
 
-	resp, err := s.GetTasks(namespaceID, taskList, tasklistpb.TaskListType_Activity, 10)
+	resp, err := s.GetTasks(namespaceID, taskList, tasklistpb.TASK_LIST_TYPE_ACTIVITY, 10)
 	s.NoError(err)
 	s.NotNil(resp.Tasks)
 	s.Equal(6, len(resp.Tasks), "getTasks returned wrong number of tasks")
@@ -276,14 +276,14 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	}
 
 	remaining := len(resp.Tasks)
-	req := &p.CompleteTasksLessThanRequest{NamespaceID: namespaceID, TaskListName: taskList, TaskType: tasklistpb.TaskListType_Activity, Limit: 1}
+	req := &p.CompleteTasksLessThanRequest{NamespaceID: namespaceID, TaskListName: taskList, TaskType: tasklistpb.TASK_LIST_TYPE_ACTIVITY, Limit: 1}
 
 	for _, tc := range testCases {
 		req.TaskID = tc.taskID
 		req.Limit = tc.limit
 		nRows, err := s.TaskMgr.CompleteTasksLessThan(req)
 		s.NoError(err)
-		resp, err := s.GetTasks(namespaceID, taskList, tasklistpb.TaskListType_Activity, 10)
+		resp, err := s.GetTasks(namespaceID, taskList, tasklistpb.TASK_LIST_TYPE_ACTIVITY, 10)
 		s.NoError(err)
 		if nRows == p.UnknownNumRowsAffected {
 			s.Equal(0, len(resp.Tasks), "expected all tasks to be deleted")
@@ -306,7 +306,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID: namespaceID,
 		TaskList:    taskList,
-		TaskType:    tasklistpb.TaskListType_Activity,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_ACTIVITY,
 	})
 	s.NoError(err)
 	tli := response.TaskListInfo
@@ -320,7 +320,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID: namespaceID,
 		TaskList:    taskList,
-		TaskType:    tasklistpb.TaskListType_Activity,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_ACTIVITY,
 	})
 	s.NoError(err)
 	tli = response.TaskListInfo
@@ -334,7 +334,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID: namespaceID,
 		TaskList:    taskList,
-		TaskType:    tasklistpb.TaskListType_Activity,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_ACTIVITY,
 		RangeID:     1,
 	})
 	s.Error(err)
@@ -344,9 +344,9 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	taskListInfo := &persistenceblobs.TaskListInfo{
 		NamespaceId: namespaceID,
 		Name:        taskList,
-		TaskType:    tasklistpb.TaskListType_Activity,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_ACTIVITY,
 		AckLevel:    0,
-		Kind:        tasklistpb.TaskListKind_Normal,
+		Kind:        tasklistpb.TASK_LIST_KIND_NORMAL,
 	}
 
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
@@ -369,21 +369,21 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
 	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID:  namespaceID,
 		TaskList:     taskList,
-		TaskType:     tasklistpb.TaskListType_Decision,
-		TaskListKind: tasklistpb.TaskListKind_Sticky,
+		TaskType:     tasklistpb.TASK_LIST_TYPE_DECISION,
+		TaskListKind: tasklistpb.TASK_LIST_KIND_STICKY,
 	})
 	s.NoError(err)
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	s.EqualValues(tasklistpb.TaskListKind_Sticky, tli.Data.Kind)
+	s.EqualValues(tasklistpb.TASK_LIST_KIND_STICKY, tli.Data.Kind)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
 		NamespaceId: namespaceID,
 		Name:        taskList,
-		TaskType:    tasklistpb.TaskListType_Decision,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_DECISION,
 		AckLevel:    0,
-		Kind:        tasklistpb.TaskListKind_Sticky,
+		Kind:        tasklistpb.TASK_LIST_KIND_STICKY,
 	}
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
 		TaskListInfo: taskListInfo,
@@ -436,8 +436,8 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 			NamespaceID:  namespaceID,
 			TaskList:     "list-task-list-test-tl0",
-			TaskType:     tasklistpb.TaskListType_Activity,
-			TaskListKind: tasklistpb.TaskListKind_Sticky,
+			TaskType:     tasklistpb.TASK_LIST_TYPE_ACTIVITY,
+			TaskListKind: tasklistpb.TASK_LIST_KIND_STICKY,
 		})
 		s.NoError(err)
 
@@ -447,8 +447,8 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.Equal(1, len(resp.Items))
 		s.EqualValues(namespaceID, resp.Items[0].Data.GetNamespaceId())
 		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
-		s.Equal(tasklistpb.TaskListType_Activity, resp.Items[0].Data.TaskType)
-		s.EqualValues(tasklistpb.TaskListKind_Sticky, resp.Items[0].Data.Kind)
+		s.Equal(tasklistpb.TASK_LIST_TYPE_ACTIVITY, resp.Items[0].Data.TaskType)
+		s.EqualValues(tasklistpb.TASK_LIST_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
 		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
@@ -489,8 +489,8 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 			NamespaceID:  namespaceID,
 			TaskList:     name,
-			TaskType:     tasklistpb.TaskListType_Activity,
-			TaskListKind: tasklistpb.TaskListKind_Normal,
+			TaskType:     tasklistpb.TASK_LIST_TYPE_ACTIVITY,
+			TaskListKind: tasklistpb.TASK_LIST_KIND_NORMAL,
 		})
 		s.NoError(err)
 		tlNames[name] = struct{}{}
@@ -502,8 +502,8 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 			for _, i := range resp.Items {
 				it := i.Data
 				s.EqualValues(namespaceID, it.GetNamespaceId())
-				s.Equal(tasklistpb.TaskListType_Activity, it.TaskType)
-				s.Equal(tasklistpb.TaskListKind_Normal, it.Kind)
+				s.Equal(tasklistpb.TASK_LIST_TYPE_ACTIVITY, it.TaskType)
+				s.Equal(tasklistpb.TASK_LIST_KIND_NORMAL, it.Kind)
 				_, ok := listedNames[it.Name]
 				s.False(ok, "list API returns duplicate entries - have: %+v got:%v", listedNames, it.Name)
 				listedNames[it.Name] = struct{}{}

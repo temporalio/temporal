@@ -61,10 +61,10 @@ func (s *validateOperationWorkflowModeStateSuite) TearDownTest() {
 func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent() {
 
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 
 	creatModes := []CreateWorkflowMode{
@@ -89,10 +89,10 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_BypassCurrent() {
 
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 
 	for state, expectError := range stateToError {
@@ -110,10 +110,10 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 
 	// only current workflow
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for state, expectError := range stateToError {
 		testCurrentMutation := s.newTestWorkflowMutation(state)
@@ -131,16 +131,16 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 
 	// current workflow & new workflow
 	currentStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	newStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for currentState, currentExpectError := range currentStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -164,10 +164,10 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 
 	// only current workflow
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for state, expectError := range stateToError {
 		testMutation := s.newTestWorkflowMutation(state)
@@ -185,16 +185,16 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 
 	// current workflow & new workflow
 	currentStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	newStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for currentState, currentExpectError := range currentStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -218,10 +218,10 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 
 	// only reset workflow
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for state, expectError := range stateToError {
 		testSnapshot := s.newTestWorkflowSnapshot(state)
@@ -240,16 +240,16 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 
 	// reset workflow & new workflow
 	resetStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	newStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -271,16 +271,16 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 
 	// reset workflow & current workflow
 	resetStateToError = map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	currentStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for currentState, currentExpectError := range currentStateToError {
@@ -302,22 +302,22 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 
 	// reset workflow & new workflow & current workflow
 	resetStateToError = map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	newStateToError = map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	currentStateToError = map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -345,10 +345,10 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 
 	// only reset workflow
 	stateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for state, expectError := range stateToError {
 		testSnapshot := s.newTestWorkflowSnapshot(state)
@@ -367,16 +367,16 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 
 	// reset workflow & new workflow
 	resetStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: false,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	newStateToError := map[executiongenpb.WorkflowExecutionState]bool{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: true,
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    false,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {

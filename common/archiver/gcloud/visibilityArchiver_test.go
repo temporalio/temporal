@@ -66,7 +66,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1580896574804475000,
 			CloseTimestamp:   1580896575946478000,
-			Status:           executionpb.WorkflowExecutionStatus_Completed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			HistoryLength:    36,
 		},
 	}
@@ -189,7 +189,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 	}
 

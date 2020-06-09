@@ -117,27 +117,27 @@ func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
 		expected string
 	}{
 		{
-			input:    commonpb.IndexedValueType_String,
+			input:    commonpb.INDEXED_VALUE_TYPE_STRING,
 			expected: "text",
 		},
 		{
-			input:    commonpb.IndexedValueType_Keyword,
+			input:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 			expected: "keyword",
 		},
 		{
-			input:    commonpb.IndexedValueType_Int,
+			input:    commonpb.INDEXED_VALUE_TYPE_INT,
 			expected: "long",
 		},
 		{
-			input:    commonpb.IndexedValueType_Double,
+			input:    commonpb.INDEXED_VALUE_TYPE_DOUBLE,
 			expected: "double",
 		},
 		{
-			input:    commonpb.IndexedValueType_Bool,
+			input:    commonpb.INDEXED_VALUE_TYPE_BOOL,
 			expected: "boolean",
 		},
 		{
-			input:    commonpb.IndexedValueType_Datetime,
+			input:    commonpb.INDEXED_VALUE_TYPE_DATETIME,
 			expected: "date",
 		},
 		{
@@ -487,7 +487,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
-		"testkey": commonpb.IndexedValueType_Keyword,
+		"testkey": commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
 		Return(mockValidAttr, nil).AnyTimes()
@@ -528,7 +528,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
 	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
-		"testkey":  commonpb.IndexedValueType_Keyword,
+		"testkey":  commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 		"testkey2": 1,
 	}).Return(errors.New("error"))
 

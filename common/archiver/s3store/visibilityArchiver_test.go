@@ -166,7 +166,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -205,7 +205,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
@@ -437,7 +437,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
 			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		}
 		err := visibilityArchiver.Archive(context.Background(), URI, &record)
@@ -574,7 +574,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1 * time.Hour),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
@@ -585,7 +585,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
@@ -596,7 +596,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(3 * time.Hour),
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 	}

@@ -384,7 +384,7 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 
 	req := &workflowservice.QueryWorkflowRequest{
 		Namespace:             s.namespace,
-		QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
+		QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)

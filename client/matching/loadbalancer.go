@@ -113,7 +113,7 @@ func (lb *defaultLoadBalancer) pickPartition(
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TaskListKind_Sticky {
+	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TASK_LIST_KIND_STICKY {
 		return taskList.GetName()
 	}
 

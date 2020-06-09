@@ -299,10 +299,10 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	for iter.HasNext() {
 		event, err := iter.Next()
 		s.NoError(err)
-		if event.GetEventType() == eventpb.EventType_ActivityTaskCompleted {
+		if event.GetEventType() == eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 			completedAct++
 		}
-		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
+		if event.GetEventType() == eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
 			failedAct++
 			s.NotNil(event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
 			s.True(strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))

@@ -61,68 +61,68 @@ func (s *workflowStateStatusSuite) TearDownTest() {
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCreated() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRunning() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCompleted() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Running,
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZombie() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }
 
@@ -130,68 +130,68 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZo
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCreated() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRunning() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCompleted() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, executionpb.WorkflowExecutionStatus_Running))
+	s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, status))
+		s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZombie() {
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatus_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
-		executionpb.WorkflowExecutionStatus_Canceled,
-		executionpb.WorkflowExecutionStatus_Terminated,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }

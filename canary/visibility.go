@@ -133,7 +133,7 @@ func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally
 	defer sw.Stop()
 
 	var events []*eventpb.HistoryEvent
-	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, filterpb.HistoryEventFilterType_AllEvent)
+	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
 	for iter.HasNext() {
 		event, err := iter.Next()

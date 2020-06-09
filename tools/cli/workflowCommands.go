@@ -109,7 +109,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	if printFully { // dump everything
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+				if prevEvent.GetEventType() != eventpb.EVENT_TYPE_DECISION_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -130,7 +130,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		table.SetColumnSeparator("")
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+				if prevEvent.GetEventType() != eventpb.EVENT_TYPE_DECISION_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -390,7 +390,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	}
 
 	go func() {
-		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, filterpb.HistoryEventFilterType_AllEvent)
+		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for iter.HasNext() {
 			event, err := iter.Next()
 			if err != nil {
@@ -536,9 +536,9 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		var rejectCondition querypb.QueryRejectCondition
 		switch c.String(FlagQueryRejectCondition) {
 		case "not_open":
-			rejectCondition = querypb.QueryRejectCondition_NotOpen
+			rejectCondition = querypb.QUERY_REJECT_CONDITION_NOT_OPEN
 		case "not_completed_cleanly":
-			rejectCondition = querypb.QueryRejectCondition_NotCompletedCleanly
+			rejectCondition = querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY
 		default:
 			ErrorAndExit(fmt.Sprintf("invalid reject condition %v, valid values are \"not_open\" and \"not_completed_cleanly\"", c.String(FlagQueryRejectCondition)), nil)
 		}
@@ -548,9 +548,9 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		var consistencyLevel querypb.QueryConsistencyLevel
 		switch c.String(FlagQueryConsistencyLevel) {
 		case "eventual":
-			consistencyLevel = querypb.QueryConsistencyLevel_Eventual
+			consistencyLevel = querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL
 		case "strong":
-			consistencyLevel = querypb.QueryConsistencyLevel_Strong
+			consistencyLevel = querypb.QUERY_CONSISTENCY_LEVEL_STRONG
 		default:
 			ErrorAndExit(fmt.Sprintf("invalid query consistency level %v, valid values are \"eventual\" and \"strong\"", c.String(FlagQueryConsistencyLevel)), nil)
 		}
@@ -1093,7 +1093,7 @@ func appendWorkflowExecutionsToTable(
 
 func printRunStatus(event *eventpb.HistoryEvent) {
 	switch event.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionCompleted:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
 		var result string
 		err := payloads.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
@@ -1101,13 +1101,13 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 			ErrorAndExit("Unable ot decode WorkflowExecutionCompletedEventAttributes.Result.", err)
 		}
 		fmt.Printf("  Output: %s\n", result)
-	case eventpb.EventType_WorkflowExecutionFailed:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
 		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
-	case eventpb.EventType_WorkflowExecutionTimedOut:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
 		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryStatus())
-	case eventpb.EventType_WorkflowExecutionCanceled:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string
 		err := payloads.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
@@ -1337,7 +1337,7 @@ func getWorkflowIDReusePolicy(value int) commonpb.WorkflowIdReusePolicy {
 	}
 	// At this point, the policy should return if the value is valid
 	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
-	return commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly //doesn't really matter
+	return commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY //doesn't really matter
 }
 
 // default will print decoded raw
@@ -1639,7 +1639,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 		rid = currentRunID
 	}
 
-	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatus_Running || resp.WorkflowExecutionInfo.CloseTime == nil {
+	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
 			//skip and not terminate current if open
@@ -1708,9 +1708,9 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 			if firstEvent == nil {
 				firstEvent = e
 			}
-			if e.GetEventType() == eventpb.EventType_DecisionTaskFailed {
+			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_FAILED {
 				decisionFailed = e
-			} else if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
+			} else if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED {
 				decisionFailed = nil
 			}
 		}
@@ -1724,7 +1724,7 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 	if decisionFailed != nil {
 		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
 
-		if attr.GetCause() == eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure ||
+		if attr.GetCause() == eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
 			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
 			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
 			return true, nil
@@ -1782,7 +1782,7 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
+			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 			}
 		}
@@ -1844,7 +1844,7 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
+			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 				return resetBaseRunID, decisionFinishID, nil
 			}
@@ -1897,7 +1897,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
+			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 			}
 		}

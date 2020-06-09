@@ -262,7 +262,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -281,7 +281,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			expectedActivityID = int32(1)
 			runCounter++
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
+				DecisionType: decisionpb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
 					TaskList:                   &tasklistpb.TaskList{Name: tl},
@@ -294,7 +294,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 
 		workflowComplete = true
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},

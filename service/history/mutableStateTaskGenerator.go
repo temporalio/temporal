@@ -199,10 +199,10 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 	var firstDecisionDelayType int
 	switch startAttr.GetInitiator() {
-	case commonpb.ContinueAsNewInitiator_Retry:
+	case commonpb.CONTINUE_AS_NEW_INITIATOR_RETRY:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeRetry
-	case commonpb.ContinueAsNewInitiator_CronSchedule,
-		commonpb.ContinueAsNewInitiator_Decider:
+	case commonpb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+		commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))

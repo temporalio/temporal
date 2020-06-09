@@ -78,18 +78,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -147,18 +147,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -210,7 +210,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_REGISTERED, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
@@ -233,17 +233,17 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
-	operation := replicationgenpb.NamespaceOperation_Update
+	operation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -296,7 +296,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_REGISTERED, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(namespaceData, resp.Namespace.Info.Data)
@@ -315,18 +315,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -371,16 +371,16 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := replicationgenpb.NamespaceOperation_Update
-	updateStatus := namespacepb.NamespaceStatus_Deprecated
+	updateOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
+	updateStatus := namespacepb.NAMESPACE_STATUS_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v1"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
-	updateHistoryArchivalStatus := namespacepb.ArchivalStatus_Disabled
+	updateHistoryArchivalStatus := namespacepb.ARCHIVAL_STATUS_DISABLED
 	updateHistoryArchivalURI := "some updated history archival uri"
-	updateVisibilityArchivalStatus := namespacepb.ArchivalStatus_Disabled
+	updateVisibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_DISABLED
 	updateVisibilityArchivalURI := "some updated visibility archival uri"
 	updateClusterActive := "other random active cluster name"
 	updateClusterStandby := "other random standby cluster name"
@@ -429,7 +429,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_DEPRECATED, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updatedData, resp.Namespace.Info.Data)
@@ -448,18 +448,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Disabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_DISABLED
 	historyArchivalURI := ""
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Disabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_DISABLED
 	visibilityArchivalURI := ""
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -504,16 +504,16 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := replicationgenpb.NamespaceOperation_Update
-	updateStatus := namespacepb.NamespaceStatus_Deprecated
+	updateOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
+	updateStatus := namespacepb.NAMESPACE_STATUS_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
 	updateData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
-	updateHistoryArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	updateHistoryArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	updateHistoryArchivalURI := "some updated history archival uri"
-	updateVisibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	updateVisibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	updateVisibilityArchivalURI := "some updated visibility archival uri"
 	updateClusterActive := "other random active cluster name"
 	updateClusterStandby := "other random standby cluster name"
@@ -562,7 +562,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_DEPRECATED, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updateData, resp.Namespace.Info.Data)
@@ -581,18 +581,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -637,8 +637,8 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := replicationgenpb.NamespaceOperation_Update
-	updateStatus := namespacepb.NamespaceStatus_Deprecated
+	updateOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
+	updateStatus := namespacepb.NAMESPACE_STATUS_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v2"}
@@ -691,7 +691,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_REGISTERED, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
@@ -710,18 +710,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_NoUpdateActiveCluster() {
-	operation := replicationgenpb.NamespaceOperation_Create
+	operation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	id := uuid.New()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -768,8 +768,8 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := replicationgenpb.NamespaceOperation_Update
-	updateStatus := namespacepb.NamespaceStatus_Deprecated
+	updateOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
+	updateStatus := namespacepb.NAMESPACE_STATUS_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v2"}
@@ -819,7 +819,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NAMESPACE_STATUS_REGISTERED, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)

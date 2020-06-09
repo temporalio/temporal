@@ -512,7 +512,7 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 // unmarshal the value into a concrete type and return the value
 func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb.IndexedValueType) (interface{}, error) {
 	switch valueType {
-	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
+	case commonpb.INDEXED_VALUE_TYPE_STRING, commonpb.INDEXED_VALUE_TYPE_KEYWORD:
 		var val string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
@@ -520,7 +520,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Int:
+	case commonpb.INDEXED_VALUE_TYPE_INT:
 		var val int64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
@@ -528,7 +528,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Double:
+	case commonpb.INDEXED_VALUE_TYPE_DOUBLE:
 		var val float64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
@@ -536,7 +536,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Bool:
+	case commonpb.INDEXED_VALUE_TYPE_BOOL:
 		var val bool
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
@@ -544,7 +544,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.IndexedValueType_Datetime:
+	case commonpb.INDEXED_VALUE_TYPE_DATETIME:
 		var val time.Time
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time

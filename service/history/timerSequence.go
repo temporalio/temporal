@@ -44,10 +44,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(commonpb.TimeoutType_StartToClose)
-	timerTypeScheduleToStart = timerType(commonpb.TimeoutType_ScheduleToStart)
-	timerTypeScheduleToClose = timerType(commonpb.TimeoutType_ScheduleToClose)
-	timerTypeHeartbeat       = timerType(commonpb.TimeoutType_Heartbeat)
+	timerTypeStartToClose    = timerType(commonpb.TIMEOUT_TYPE_START_TO_CLOSE)
+	timerTypeScheduleToStart = timerType(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	timerTypeScheduleToClose = timerType(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	timerTypeHeartbeat       = timerType(commonpb.TIMEOUT_TYPE_HEARTBEAT)
 )
 
 const (
@@ -392,13 +392,13 @@ func timerTypeToProto(
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return commonpb.TimeoutType_StartToClose
+		return commonpb.TIMEOUT_TYPE_START_TO_CLOSE
 	case timerTypeScheduleToStart:
-		return commonpb.TimeoutType_ScheduleToStart
+		return commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	case timerTypeScheduleToClose:
-		return commonpb.TimeoutType_ScheduleToClose
+		return commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	case timerTypeHeartbeat:
-		return commonpb.TimeoutType_Heartbeat
+		return commonpb.TIMEOUT_TYPE_HEARTBEAT
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
@@ -409,13 +409,13 @@ func timerTypeFromProto(
 ) timerType {
 
 	switch timerType {
-	case commonpb.TimeoutType_StartToClose:
+	case commonpb.TIMEOUT_TYPE_START_TO_CLOSE:
 		return timerTypeStartToClose
-	case commonpb.TimeoutType_ScheduleToStart:
+	case commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		return timerTypeScheduleToStart
-	case commonpb.TimeoutType_ScheduleToClose:
+	case commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 		return timerTypeScheduleToClose
-	case commonpb.TimeoutType_Heartbeat:
+	case commonpb.TIMEOUT_TYPE_HEARTBEAT:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))

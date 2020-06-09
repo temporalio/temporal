@@ -75,7 +75,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultType_Answered,
+					ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 				},
 			},
 			expectErr: true,
@@ -84,7 +84,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType:   querypb.QueryResultType_Answered,
+					ResultType:   querypb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:       payloads.EncodeBytes([]byte{1, 2, 3}),
 					ErrorMessage: "err",
 				},
@@ -95,7 +95,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultType_Failed,
+					ResultType: querypb.QUERY_RESULT_TYPE_FAILED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 				},
 			},
@@ -105,7 +105,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType:   querypb.QueryResultType_Failed,
+					ResultType:   querypb.QUERY_RESULT_TYPE_FAILED,
 					ErrorMessage: "err",
 				},
 			},
@@ -115,7 +115,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultType_Answered,
+					ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 				},
 			},
@@ -185,7 +185,7 @@ func (s *QuerySuite) TestTerminationState_Completed() {
 	answeredTerminationState := &queryTerminationState{
 		queryTerminationType: queryTerminationTypeCompleted,
 		queryResult: &querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultType_Answered,
+			ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 		},
 	}

@@ -380,7 +380,7 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matc
 
 func (c *taskListManagerImpl) String() string {
 	buf := new(bytes.Buffer)
-	if c.taskListID.taskType == tasklistpb.TaskListType_Activity {
+	if c.taskListID.taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
 	} else {
 		buf.WriteString("Decision")
@@ -537,7 +537,7 @@ func (c *taskListManagerImpl) newChildContext(
 }
 
 func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind tasklistpb.TaskListKind) bool {
-	return !taskList.IsRoot() && kind != tasklistpb.TaskListKind_Sticky
+	return !taskList.IsRoot() && kind != tasklistpb.TASK_LIST_KIND_STICKY
 }
 
 func (c *taskListManagerImpl) metricScope() metrics.Scope {

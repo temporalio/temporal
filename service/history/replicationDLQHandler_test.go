@@ -206,7 +206,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:     replicationgenpb.ReplicationTaskType_HistoryTask,
+		TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: lastMessageID,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
 			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{},

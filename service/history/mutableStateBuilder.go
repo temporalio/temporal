@@ -205,7 +205,7 @@ func newMutableStateBuilder(
 
 		currentVersion:        namespaceEntry.GetFailoverVersion(),
 		hasBufferedEventsInDB: false,
-		stateInDB:             executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Void,
+		stateInDB:             executiongenpb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:       0,
 		namespaceEntry:        namespaceEntry,
 		appliedEvents:         make(map[string]struct{}),
@@ -228,8 +228,8 @@ func newMutableStateBuilder(
 		DecisionTimeout:    0,
 
 		NextEventID:        common.FirstEventID,
-		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
-		Status:             executionpb.WorkflowExecutionStatus_Running,
+		State:              executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -422,16 +422,16 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	reorderFunc := func(bufferedEvents []*eventpb.HistoryEvent) {
 		for _, event := range bufferedEvents {
 			switch event.GetEventType() {
-			case eventpb.EventType_ActivityTaskCompleted,
-				eventpb.EventType_ActivityTaskFailed,
-				eventpb.EventType_ActivityTaskCanceled,
-				eventpb.EventType_ActivityTaskTimedOut:
+			case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+				eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+				eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+				eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 				reorderedEvents = append(reorderedEvents, event)
-			case eventpb.EventType_ChildWorkflowExecutionCompleted,
-				eventpb.EventType_ChildWorkflowExecutionFailed,
-				eventpb.EventType_ChildWorkflowExecutionCanceled,
-				eventpb.EventType_ChildWorkflowExecutionTimedOut,
-				eventpb.EventType_ChildWorkflowExecutionTerminated:
+			case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+				eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+				eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+				eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+				eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 				reorderedEvents = append(reorderedEvents, event)
 			default:
 				newCommittedEvents = append(newCommittedEvents, event)
@@ -486,7 +486,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := e.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if state, _ := e.GetWorkflowStateStatus(); state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// do not update current version only when workflow is completed
 		return nil
 	}
@@ -641,22 +641,22 @@ func scanForBufferedActivityCompletion(
 ) *eventpb.HistoryEvent {
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_ActivityTaskCompleted:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			if event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId() == scheduleID {
 				return event
 			}
 
-		case eventpb.EventType_ActivityTaskFailed:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			if event.GetActivityTaskFailedEventAttributes().GetScheduledEventId() == scheduleID {
 				return event
 			}
 
-		case eventpb.EventType_ActivityTaskTimedOut:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			if event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId() == scheduleID {
 				return event
 			}
 
-		case eventpb.EventType_ActivityTaskCanceled:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			if event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId() == scheduleID {
 				return event
 			}
@@ -693,7 +693,7 @@ func checkAndClearTimerFiredEvent(
 	// timerID, clear it
 	timerFiredIdx := -1
 	for idx, event := range events {
-		if event.GetEventType() == eventpb.EventType_TimerFired &&
+		if event.GetEventType() == eventpb.EVENT_TYPE_TIMER_FIRED &&
 			event.GetTimerFiredEventAttributes().GetTimerId() == timerID {
 			timerFiredIdx = idx
 			break
@@ -722,12 +722,12 @@ loop:
 		nextIndex++
 
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionCompleted,
-			eventpb.EventType_WorkflowExecutionFailed,
-			eventpb.EventType_WorkflowExecutionTimedOut,
-			eventpb.EventType_WorkflowExecutionTerminated,
-			eventpb.EventType_WorkflowExecutionContinuedAsNew,
-			eventpb.EventType_WorkflowExecutionCanceled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+			eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+			eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+			eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 
 			break loop
 		}
@@ -750,7 +750,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 		e.executionInfo.IncreaseNextEventID()
 
 		switch event.GetEventType() {
-		case eventpb.EventType_ActivityTaskStarted:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 			attributes := event.GetActivityTaskStartedEventAttributes()
 			scheduledID := attributes.GetScheduledEventId()
 			scheduledIDToStartedID[scheduledID] = eventID
@@ -758,7 +758,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 				ai.StartedID = eventID
 				e.updateActivityInfos[ai] = struct{}{}
 			}
-		case eventpb.EventType_ChildWorkflowExecutionStarted:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
 			initiatedID := attributes.GetInitiatedEventId()
 			scheduledIDToStartedID[initiatedID] = eventID
@@ -766,47 +766,47 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 				ci.StartedID = eventID
 				e.updateChildExecutionInfos[ci] = struct{}{}
 			}
-		case eventpb.EventType_ActivityTaskCompleted:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			attributes := event.GetActivityTaskCompletedEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ActivityTaskFailed:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			attributes := event.GetActivityTaskFailedEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ActivityTaskTimedOut:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			attributes := event.GetActivityTaskTimedOutEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ActivityTaskCanceled:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			attributes := event.GetActivityTaskCanceledEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ChildWorkflowExecutionCompleted:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			attributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ChildWorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 			attributes := event.GetChildWorkflowExecutionFailedEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ChildWorkflowExecutionTimedOut:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 			attributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ChildWorkflowExecutionCanceled:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 			attributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedID
 			}
-		case eventpb.EventType_ChildWorkflowExecutionTerminated:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 			attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
 			if startedID, ok := scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedID
@@ -865,17 +865,17 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	// 4. stateInDB cannot be void, void is only possible when mutable state is just initialized
 
 	switch e.stateInDB {
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Void:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_VOID:
 		return false
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:
 		return true
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return true
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return false
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		return false
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -933,20 +933,20 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 
 	switch eventType {
 	case // do not buffer for workflow state change
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_WorkflowExecutionCompleted,
-		eventpb.EventType_WorkflowExecutionFailed,
-		eventpb.EventType_WorkflowExecutionTimedOut,
-		eventpb.EventType_WorkflowExecutionTerminated,
-		eventpb.EventType_WorkflowExecutionContinuedAsNew,
-		eventpb.EventType_WorkflowExecutionCanceled:
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		return false
 	case // decision event should not be buffered
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskCompleted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_DecisionTaskTimedOut:
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
 		return false
 	case // events generated directly from decisions should not be buffered
 		// workflow complete, failed, cancelled and continue-as-new events are duplication of above
@@ -955,19 +955,19 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		// workflow.EventTypeWorkflowExecutionFailed,
 		// workflow.EventTypeWorkflowExecutionCanceled,
 		// workflow.EventTypeWorkflowExecutionContinuedAsNew,
-		eventpb.EventType_ActivityTaskScheduled,
-		eventpb.EventType_ActivityTaskCancelRequested,
-		eventpb.EventType_TimerStarted,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
+		eventpb.EVENT_TYPE_TIMER_STARTED,
 		// DecisionTypeCancelTimer is an exception. This decision will be mapped
 		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
 		// So both should not be buffered. Ref: historyEngine, search for "workflow.DecisionTypeCancelTimer"
-		eventpb.EventType_TimerCanceled,
-		eventpb.EventType_CancelTimerFailed,
-		eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
-		eventpb.EventType_MarkerRecorded,
-		eventpb.EventType_StartChildWorkflowExecutionInitiated,
-		eventpb.EventType_SignalExternalWorkflowExecutionInitiated,
-		eventpb.EventType_UpsertWorkflowSearchAttributes:
+		eventpb.EVENT_TYPE_TIMER_CANCELED,
+		eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED,
+		eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+		eventpb.EVENT_TYPE_MARKER_RECORDED,
+		eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+		eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+		eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		// do not buffer event if event is directly generated from a corresponding decision
 
 		// sanity check there is no decision on the fly
@@ -1110,7 +1110,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	info := e.executionInfo
 	if !info.HasRetryPolicy {
-		return backoff.NoBackoff, commonpb.RetryStatus_RetryPolicyNotSet
+		return backoff.NoBackoff, commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET
 	}
 
 	return getBackoffInterval(
@@ -1156,7 +1156,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*eventpb.HistoryEvent, error) {
-	if e.executionInfo.State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if e.executionInfo.State != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
@@ -1603,15 +1603,15 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	switch e.executionInfo.State {
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:
 		return true
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return true
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return false
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		return false
-	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
+	case executiongenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -1718,7 +1718,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinueAsNewInitiator:          attributes.Initiator,
 		FirstDecisionTaskBackoffSeconds: attributes.BackoffStartIntervalInSeconds,
 	}
-	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_Retry {
+	if attributes.GetInitiator() == commonpb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
 	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
@@ -1836,8 +1836,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
-		executionpb.WorkflowExecutionStatus_Running,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	); err != nil {
 		return err
 	}
@@ -2404,8 +2404,8 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	timeoutType := timeoutFailure.GetTimeoutFailureInfo().GetTimeoutType()
 
 	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedID != startedEventID || ((timeoutType == commonpb.TimeoutType_StartToClose ||
-		timeoutType == commonpb.TimeoutType_Heartbeat) && ai.StartedID == common.EmptyEventID) {
+	if !ok || ai.StartedID != startedEventID || ((timeoutType == commonpb.TIMEOUT_TYPE_START_TO_CLOSE ||
+		timeoutType == commonpb.TIMEOUT_TYPE_HEARTBEAT) && ai.StartedID == common.EmptyEventID) {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -2597,8 +2597,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_Completed,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	); err != nil {
 		return err
 	}
@@ -2638,8 +2638,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_Failed,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	); err != nil {
 		return err
 	}
@@ -2678,8 +2678,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_TimedOut,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	); err != nil {
 		return err
 	}
@@ -2756,8 +2756,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	event *eventpb.HistoryEvent,
 ) error {
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_Canceled,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 	); err != nil {
 		return err
 	}
@@ -3272,8 +3272,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_Terminated,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 	); err != nil {
 		return err
 	}
@@ -3434,8 +3434,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 	); err != nil {
 		return err
 	}
@@ -3806,15 +3806,15 @@ func (e *mutableStateBuilder) RetryActivity(
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := e.checkMutability(opTag); err != nil {
-		return commonpb.RetryStatus_InternalServerError, err
+		return commonpb.RETRY_STATUS_INTERNAL_SERVER_ERROR, err
 	}
 
 	if !ai.HasRetryPolicy {
-		return commonpb.RetryStatus_RetryPolicyNotSet, nil
+		return commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET, nil
 	}
 
 	if ai.CancelRequested {
-		return commonpb.RetryStatus_CancelRequested, nil
+		return commonpb.RETRY_STATUS_CANCEL_REQUESTED, nil
 	}
 
 	now := e.timeSource.Now()
@@ -3830,7 +3830,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		failure,
 		ai.NonRetryableErrorTypes,
 	)
-	if retryStatus != commonpb.RetryStatus_InProgress {
+	if retryStatus != commonpb.RETRY_STATUS_IN_PROGRESS {
 		return retryStatus, nil
 	}
 
@@ -3848,12 +3848,12 @@ func (e *mutableStateBuilder) RetryActivity(
 	if err := e.taskGenerator.generateActivityRetryTasks(
 		ai.ScheduleID,
 	); err != nil {
-		return commonpb.RetryStatus_InternalServerError, err
+		return commonpb.RETRY_STATUS_INTERNAL_SERVER_ERROR, err
 	}
 
 	e.updateActivityInfos[ai] = struct{}{}
 	e.syncActivityTasks[ai.ScheduleID] = struct{}{}
-	return commonpb.RetryStatus_InProgress, nil
+	return commonpb.RETRY_STATUS_IN_PROGRESS, nil
 }
 
 // TODO mutable state should generate corresponding transfer / timer tasks according to
@@ -4359,7 +4359,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 
 	// only do check if workflow is finished
-	if e.GetExecutionInfo().State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if e.GetExecutionInfo().State != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
 
@@ -4369,12 +4369,12 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	// decision && workflow finish will be broken (the first batch)
 	lastEvent := events[len(events)-1]
 	switch lastEvent.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionCompleted,
-		eventpb.EventType_WorkflowExecutionFailed,
-		eventpb.EventType_WorkflowExecutionTimedOut,
-		eventpb.EventType_WorkflowExecutionTerminated,
-		eventpb.EventType_WorkflowExecutionContinuedAsNew,
-		eventpb.EventType_WorkflowExecutionCanceled:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		return nil
 
 	default:
@@ -4468,7 +4468,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover(
 	if err := failDecision(
 		e,
 		decision,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 	); err != nil {
 		return false, err
 	}
@@ -4518,7 +4518,7 @@ func (e *mutableStateBuilder) closeTransactionHandleBufferedEventsLimit(
 		if err := failDecision(
 			e,
 			decision,
-			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
+			eventpb.DECISION_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
 		); err != nil {
 			return err
 		}

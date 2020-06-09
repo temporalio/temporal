@@ -235,7 +235,7 @@ func (e *matchingEngineImpl) AddDecisionTask(
 			addRequest.Execution.GetRunId(),
 			addRequest.GetScheduleToStartTimeoutSeconds()))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return false, err
 	}
@@ -283,7 +283,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
@@ -333,7 +333,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +422,7 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
+		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 		if err != nil {
 			return nil, err
 		}
@@ -483,7 +483,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	namespaceID := queryRequest.GetNamespaceId()
 	taskListName := queryRequest.TaskList.GetName()
 	taskListKind := queryRequest.TaskList.GetKind()
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
@@ -515,9 +515,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 		workerResponse := result.workerResponse
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
-		case querypb.QueryResultType_Answered:
+		case querypb.QUERY_RESULT_TYPE_ANSWERED:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
-		case querypb.QueryResultType_Failed:
+		case querypb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
@@ -575,9 +575,9 @@ func (e *matchingEngineImpl) DescribeTaskList(
 	request *matchingservice.DescribeTaskListRequest,
 ) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := tasklistpb.TaskListType_Decision
-	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
-		taskListType = tasklistpb.TaskListType_Activity
+	taskListType := tasklistpb.TASK_LIST_TYPE_DECISION
+	if request.DescRequest.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
+		taskListType = tasklistpb.TASK_LIST_TYPE_ACTIVITY
 	}
 	taskListName := request.DescRequest.TaskList.GetName()
 	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
@@ -597,11 +597,11 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	hCtx *handlerContext,
 	request *matchingservice.ListTaskListPartitionsRequest,
 ) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	activityTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Activity)
+	activityTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Decision)
+	decisionTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +656,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), tasklistpb.TaskListType_Decision)
+	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), tasklistpb.TASK_LIST_TYPE_DECISION)
 	rootPartition := taskListID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)

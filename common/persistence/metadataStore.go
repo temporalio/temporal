@@ -153,14 +153,14 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:          common.SystemNamespaceID,
 				Name:        common.SystemLocalNamespace,
-				Status:      namespacepb.NamespaceStatus_Registered,
+				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:            common.SystemNamespaceRetentionDays,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
-				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
+				HistoryArchivalStatus:    namespacepb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalStatus: namespacepb.ARCHIVAL_STATUS_DISABLED,
 				EmitMetric:               true,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{

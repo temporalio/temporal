@@ -471,7 +471,7 @@ message ReapplyEventsResponse {
 }
 
 message ReadDLQMessagesRequest {
-    common.DLQType type = 1;
+    common.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -480,13 +480,13 @@ message ReadDLQMessagesRequest {
 }
 
 message ReadDLQMessagesResponse {
-    common.DLQType type = 1;
+    common.DeadLetterQueueType type = 1;
     repeated replication.ReplicationTask replicationTasks = 2;
     bytes nextPageToken = 3;
 }
 
 message PurgeDLQMessagesRequest {
-    common.DLQType type = 1;
+    common.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -496,7 +496,7 @@ message PurgeDLQMessagesResponse {
 }
 
 message MergeDLQMessagesRequest {
-    common.DLQType type = 1;
+    common.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;

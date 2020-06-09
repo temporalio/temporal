@@ -205,7 +205,7 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 				ai.ScheduleID,
 				ai.StartedID,
 				failure.NewResetWorkflowFailure("reset workflow", ai.Details),
-				commonpb.RetryStatus_NonRetryableFailure,
+				commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
 			); err != nil {
 				// Unable to add ActivityTaskFailed event to history
@@ -289,7 +289,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// Note that we need to ensure DecisionTaskFailed event is appended right after DecisionTaskStarted event
 	decision, _ := newMutableState.GetInFlightDecision()
 
-	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow, nil,
+	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, eventpb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision failed event.")
@@ -533,7 +533,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			for _, batch := range readResp.History {
 				for _, event := range batch.Events {
 					e := event
-					if e.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+					if e.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 						sigReq := &workflowservice.SignalWorkflowExecutionRequest{
 							SignalName: e.GetWorkflowExecutionSignaledEventAttributes().SignalName,
 							Identity:   e.GetWorkflowExecutionSignaledEventAttributes().Identity,
@@ -541,7 +541,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 						}
 						newMutableState.AddWorkflowExecutionSignaled( // nolint:errcheck
 							sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
-					} else if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
+					} else if e.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 						continueRunID = attr.GetNewExecutionRunId()
 					}
@@ -656,10 +656,10 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			// for saving received signals only
 			if firstEvent.GetEventId() >= decisionFinishEventID {
 				for _, e := range history {
-					if e.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+					if e.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 						receivedSignalsAfterReset = append(receivedSignalsAfterReset, e)
 					}
-					if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
+					if e.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 						continueRunID = attr.GetNewExecutionRunId()
 					}
@@ -669,7 +669,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 
 			lastBatch = history
 			if firstEvent.GetEventId() == common.FirstEventID {
-				if firstEvent.GetEventType() != eventpb.EventType_WorkflowExecutionStarted {
+				if firstEvent.GetEventType() != eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not WorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
@@ -703,7 +703,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			}
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
-			if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 				retError = serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"))
 				return
 			}
@@ -743,7 +743,7 @@ func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishE
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be DecisionTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
-	if lastEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+	if lastEvent.GetEventType() != eventpb.EVENT_TYPE_DECISION_TASK_STARTED {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include DecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
@@ -752,11 +752,11 @@ func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishE
 
 func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*eventpb.DecisionTaskFailedEventAttributes, error) {
 	historyAfterReset := request.History.Events
-	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != eventpb.EventType_DecisionTaskFailed {
+	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != eventpb.EVENT_TYPE_DECISION_TASK_FAILED {
 		return nil, errUnknownReplicationTask
 	}
 	firstEvent := historyAfterReset[0]
-	if firstEvent.GetDecisionTaskFailedEventAttributes().GetCause() != eventpb.DecisionTaskFailedCause_ResetWorkflow {
+	if firstEvent.GetDecisionTaskFailedEventAttributes().GetCause() != eventpb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW {
 		return nil, errUnknownReplicationTask
 	}
 	attr := firstEvent.GetDecisionTaskFailedEventAttributes()

@@ -131,21 +131,21 @@ func (r *nDCWorkflowImpl) happensAfter(
 func (r *nDCWorkflowImpl) revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
-	if state != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+	if state != executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
-	} else if state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	} else if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// workflow already finished
 		return nil
 	}
 
 	// workflow is in zombie state, need to set the state correctly accordingly
-	state = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
+	state = executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED
 	if r.mutableState.HasProcessedOrPendingDecision() {
-		state = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+		state = executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		executionpb.WorkflowExecutionStatus_Running,
+		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 
@@ -233,7 +233,7 @@ func (r *nDCWorkflowImpl) failDecision(
 	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil,
 		identityHistoryService,
 		"",
@@ -275,8 +275,8 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie,
-		executionpb.WorkflowExecutionStatus_Running,
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 

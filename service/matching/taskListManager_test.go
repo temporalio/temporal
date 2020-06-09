@@ -164,8 +164,8 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 	)
 	tl := "tl"
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
-	tlID := newTestTaskListID(dID, tl, tasklistpb.TaskListType_Activity)
-	tlKind := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(dID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlKind := tasklistpb.TASK_LIST_KIND_NORMAL
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {
 		logger.Fatal("error when createTestTaskListManager", tag.Error(err))

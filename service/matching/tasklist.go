@@ -149,7 +149,7 @@ func (tid *taskListID) String() string {
 	b.WriteString("name=")
 	b.WriteString(tid.name)
 	b.WriteString("type=")
-	if tid.taskType == tasklistpb.TaskListType_Activity {
+	if tid.taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
 		b.WriteString("activity")
 	} else {
 		b.WriteString("decision")

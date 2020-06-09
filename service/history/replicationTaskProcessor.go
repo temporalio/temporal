@@ -421,7 +421,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 	replicationTask *replicationgenpb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
-	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -430,12 +430,12 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:  taskAttributes.GetWorkflowId(),
 				RunId:       taskAttributes.GetRunId(),
 				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+				TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
 
-	case replicationgenpb.ReplicationTaskType_HistoryTask:
+	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -444,7 +444,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:          taskAttributes.GetWorkflowId(),
 				RunId:               taskAttributes.GetRunId(),
 				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            commongenpb.TaskType_ReplicationHistory,
+				TaskType:            commongenpb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId:        taskAttributes.GetFirstEventId(),
 				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
@@ -452,7 +452,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
-	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
 		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())
@@ -473,7 +473,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:   taskAttributes.GetWorkflowId(),
 				RunId:        taskAttributes.GetRunId(),
 				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     commongenpb.TaskType_ReplicationHistory,
+				TaskType:     commongenpb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId: events[0].GetEventId(),
 				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),

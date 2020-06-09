@@ -232,7 +232,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	}()
 
 	switch task.getFirstEvent().GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		return r.applyStartEvents(ctx, context, releaseFn, task)
 
 	default:

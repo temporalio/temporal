@@ -79,7 +79,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	serializer := NewPayloadSerializer()
 
-	eventType := eventpb.EventType_ActivityTaskCompleted
+	eventType := eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &eventpb.HistoryEvent{
 		EventId:   999,
 		Timestamp: time.Now().UnixNano(),

@@ -449,19 +449,19 @@ func (t *timerQueueProcessorBase) getTimerTaskType(
 ) string {
 
 	switch taskType {
-	case commongenpb.TaskType_UserTimer:
+	case commongenpb.TASK_TYPE_USER_TIMER:
 		return "UserTimer"
-	case commongenpb.TaskType_ActivityTimeout:
+	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return "ActivityTimeout"
-	case commongenpb.TaskType_DecisionTimeout:
+	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
 		return "DecisionTimeout"
-	case commongenpb.TaskType_WorkflowRunTimeout:
+	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
-	case commongenpb.TaskType_DeleteHistoryEvent:
+	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
-	case commongenpb.TaskType_ActivityRetryTimer:
+	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimerTask"
-	case commongenpb.TaskType_WorkflowBackoffTimer:
+	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
@@ -472,37 +472,37 @@ func getTimerTaskMetricScope(
 	isActive bool,
 ) int {
 	switch taskType {
-	case commongenpb.TaskType_DecisionTimeout:
+	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskDecisionTimeoutScope
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope
-	case commongenpb.TaskType_ActivityTimeout:
+	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case commongenpb.TaskType_UserTimer:
+	case commongenpb.TASK_TYPE_USER_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case commongenpb.TaskType_WorkflowRunTimeout:
+	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case commongenpb.TaskType_DeleteHistoryEvent:
+	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		if isActive {
 			return metrics.TimerActiveTaskDeleteHistoryEventScope
 		}
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case commongenpb.TaskType_ActivityRetryTimer:
+	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskActivityRetryTimerScope
 		}
 		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case commongenpb.TaskType_WorkflowBackoffTimer:
+	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
 		}

@@ -98,27 +98,27 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicationgenpb.Replicat
 	}
 
 	switch task.GetTaskType() {
-	case replicationgenpb.ReplicationTaskType_HistoryTask:
+	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
+	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
+	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
 		// the messaging layer perspective
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
-		replicationgenpb.ReplicationTaskType_NamespaceTask,
-		replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
+	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		replicationgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		return nil
 	default:
 		panic(fmt.Sprintf("encounter unsupported replication task type: %v", task.GetTaskType()))

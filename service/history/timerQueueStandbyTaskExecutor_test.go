@@ -232,8 +232,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_UserTimer,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_USER_TIMER,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -306,8 +306,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_UserTimer,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_USER_TIMER,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -373,8 +373,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_UserTimer,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_USER_TIMER,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -440,8 +440,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_ActivityTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
+		TaskType:            commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -519,8 +519,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_ActivityTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
+		TaskType:            commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.GetEventId(),
 	}
@@ -588,8 +588,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_ActivityTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_Heartbeat),
+		TaskType:            commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_HEARTBEAT),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             scheduledEvent.GetEventId(),
 	}
@@ -663,8 +663,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_ActivityTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_Heartbeat),
+		TaskType:            commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_HEARTBEAT),
 		VisibilityTimestamp: protoTime,
 		EventId:             scheduledEvent2.GetEventId(),
 	}
@@ -752,8 +752,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_DecisionTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_DECISION_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -796,8 +796,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_DecisionTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToStart),
+		TaskType:            commongenpb.TASK_TYPE_DECISION_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             decisionScheduleID,
 	}
@@ -844,8 +844,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_DecisionTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_DECISION_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -891,7 +891,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_WorkflowBackoffTimer,
+		TaskType:            commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -950,7 +950,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_WorkflowBackoffTimer,
+		TaskType:            commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1000,8 +1000,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_WorkflowRunTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1064,8 +1064,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_WorkflowRunTimeout,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1109,8 +1109,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
-		TaskType:            commongenpb.TaskType_ActivityRetryTimer,
-		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
+		TaskType:            commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		TimeoutType:         int32(commonpb.TIMEOUT_TYPE_START_TO_CLOSE),
 		VisibilityTimestamp: protoTaskTime,
 	}
 

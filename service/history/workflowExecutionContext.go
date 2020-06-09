@@ -788,7 +788,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if currentWorkflow.ExecutionInfo.State == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)
@@ -814,7 +814,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -1270,7 +1270,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case eventpb.EventType_WorkflowExecutionSignaled:
+			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

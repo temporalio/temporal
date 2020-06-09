@@ -798,7 +798,7 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		LastWorkerIdentity: "some random worker identity",
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
@@ -832,7 +832,7 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationge
 		ResetWorkflow: true,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskType_HistoryTask,
+		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
@@ -848,7 +848,7 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		NextEventId:    1015,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
+		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask

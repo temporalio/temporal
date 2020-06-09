@@ -197,7 +197,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
@@ -284,7 +284,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if state, _ := mutableState.GetWorkflowStateStatus(); state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {

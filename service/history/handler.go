@@ -590,7 +590,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCause_UnhandledDecision {
+	if failedRequest != nil && failedRequest.GetCause() == eventpb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
@@ -694,16 +694,16 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	}
 
 	switch request.GetCategory() {
-	case commongenpb.TaskCategory_TaskCategory_Transfer:
+	case commongenpb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case commongenpb.TaskCategory_TaskCategory_Timer:
+	case commongenpb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
 			TaskID:              request.GetTaskId(),
 		})
-	case commongenpb.TaskCategory_TaskCategory_Replication:
+	case commongenpb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})

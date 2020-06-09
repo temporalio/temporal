@@ -114,47 +114,47 @@ func getTransferTaskMetricsScope(
 	isActive bool,
 ) int {
 	switch taskType {
-	case commongenpb.TaskType_TransferActivityTask:
+	case commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		if isActive {
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case commongenpb.TaskType_TransferDecisionTask:
+	case commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 		if isActive {
 			return metrics.TransferActiveTaskDecisionScope
 		}
 		return metrics.TransferStandbyTaskDecisionScope
-	case commongenpb.TaskType_TransferCloseExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope
 		}
 		return metrics.TransferStandbyTaskCloseExecutionScope
-	case commongenpb.TaskType_TransferCancelExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCancelExecutionScope
 		}
 		return metrics.TransferStandbyTaskCancelExecutionScope
-	case commongenpb.TaskType_TransferSignalExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskSignalExecutionScope
 		}
 		return metrics.TransferStandbyTaskSignalExecutionScope
-	case commongenpb.TaskType_TransferStartChildExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case commongenpb.TaskType_TransferRecordWorkflowStarted:
+	case commongenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		if isActive {
 			return metrics.TransferActiveTaskRecordWorkflowStartedScope
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
-	case commongenpb.TaskType_TransferResetWorkflow:
+	case commongenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
+	case commongenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		if isActive {
 			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
 		}

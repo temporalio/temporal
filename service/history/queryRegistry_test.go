@@ -64,7 +64,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		err := qr.setTerminationState(ids[i], &queryTerminationState{
 			queryTerminationType: queryTerminationTypeCompleted,
 			queryResult: &querypb.WorkflowQueryResult{
-				ResultType: querypb.QueryResultType_Answered,
+				ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 				Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 			},
 		})

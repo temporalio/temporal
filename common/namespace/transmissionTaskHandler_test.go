@@ -72,18 +72,18 @@ func (s *transmissionTaskSuite) TearDownTest() {
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	id := primitives.NewUUID().String()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Registered
+	status := namespacepb.NAMESPACE_STATUS_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -91,11 +91,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := replicationgenpb.NamespaceOperation_Create
+	namespaceOperation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
-		Status:      namespacepb.NamespaceStatus_Registered,
+		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
@@ -159,9 +159,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -169,11 +169,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := replicationgenpb.NamespaceOperation_Create
+	namespaceOperation := replicationgenpb.NAMESPACE_OPERATION_CREATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
-		Status:      namespacepb.NamespaceStatus_Registered,
+		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
@@ -198,18 +198,18 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	id := primitives.NewUUID().String()
 	name := "some random namespace test name"
-	status := namespacepb.NamespaceStatus_Deprecated
+	status := namespacepb.NAMESPACE_STATUS_DEPRECATED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -217,11 +217,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := replicationgenpb.NamespaceOperation_Update
+	namespaceOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
-		Status:      namespacepb.NamespaceStatus_Deprecated,
+		Status:      namespacepb.NAMESPACE_STATUS_DEPRECATED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
@@ -284,9 +284,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	historyArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
+	visibilityArchivalStatus := namespacepb.ARCHIVAL_STATUS_ENABLED
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -294,11 +294,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := replicationgenpb.NamespaceOperation_Update
+	namespaceOperation := replicationgenpb.NAMESPACE_OPERATION_UPDATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
-		Status:      namespacepb.NamespaceStatus_Deprecated,
+		Status:      namespacepb.NAMESPACE_STATUS_DEPRECATED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,

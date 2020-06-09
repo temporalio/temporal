@@ -118,7 +118,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultType_Answered,
+			ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeBytes(make([]byte, resultSize, resultSize)),
 		}
 	}

@@ -74,7 +74,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	var reappliedEvents []*eventpb.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 			if msBuilder.IsResourceDuplicated(dedupResource) {
 				// skip already applied event

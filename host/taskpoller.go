@@ -219,11 +219,11 @@ Loop:
 
 			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
 			if err != nil {
-				completeType := querypb.QueryResultType_Failed
+				completeType := querypb.QUERY_RESULT_TYPE_FAILED
 				completeRequest.CompletedType = completeType
 				completeRequest.ErrorMessage = err.Error()
 			} else {
-				completeType := querypb.QueryResultType_Answered
+				completeType := querypb.QUERY_RESULT_TYPE_ANSWERED
 				completeRequest.CompletedType = completeType
 				completeRequest.QueryResult = blob
 			}
@@ -235,7 +235,7 @@ Loop:
 		// handle normal decision task / non query task response
 		var lastDecisionScheduleEvent *eventpb.HistoryEvent
 		for _, e := range events {
-			if e.GetEventType() == eventpb.EventType_DecisionTaskScheduled {
+			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED {
 				lastDecisionScheduleEvent = e
 			}
 		}
@@ -248,7 +248,7 @@ Loop:
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
+				Cause:     eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
@@ -316,7 +316,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
-			Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
+			Cause:     eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(err, false, nil),
 			Identity:  p.Identity,
 		})

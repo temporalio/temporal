@@ -197,7 +197,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
 		decisionInfo.ScheduleID,
 		decisionInfo.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil,
 		identityHistoryService,
 		"",

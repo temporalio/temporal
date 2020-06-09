@@ -266,7 +266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferActivityTask,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -320,7 +320,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferActivityTask,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -369,7 +369,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferDecisionTask,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -422,7 +422,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferDecisionTask,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -481,7 +481,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    stickyTaskListName,
-		TaskType:    commongenpb.TaskType_TransferDecisionTask,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -540,7 +540,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferDecisionTask,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -589,7 +589,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferDecisionTask,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -653,7 +653,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferCloseExecution,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -712,7 +712,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferCloseExecution,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -754,10 +754,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy1 := commonpb.ParentClosePolicy_Abandon
-	parentClosePolicy2 := commonpb.ParentClosePolicy_Terminate
-	parentClosePolicy3 := commonpb.ParentClosePolicy_RequestCancel
+	dt := decisionpb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy1 := commonpb.PARENT_CLOSE_POLICY_ABANDON
+	parentClosePolicy2 := commonpb.PARENT_CLOSE_POLICY_TERMINATE
+	parentClosePolicy3 := commonpb.PARENT_CLOSE_POLICY_REQUEST_CANCEL
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
 		Identity: "some random identity",
@@ -844,7 +844,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferCloseExecution,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -887,8 +887,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicy_Terminate
+	dt := decisionpb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy := commonpb.PARENT_CLOSE_POLICY_TERMINATE
 	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
 		decisions = append(decisions, &decisionpb.Decision{
@@ -935,7 +935,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferCloseExecution,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -977,8 +977,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionType_StartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicy_Abandon
+	dt := decisionpb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy := commonpb.PARENT_CLOSE_POLICY_ABANDON
 	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
 		decisions = append(decisions, &decisionpb.Decision{
@@ -1025,7 +1025,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferCloseExecution,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1085,7 +1085,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferCancelExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1147,7 +1147,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferCancelExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1209,7 +1209,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferCancelExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1273,7 +1273,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferSignalExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1348,7 +1348,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferSignalExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1414,7 +1414,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferSignalExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1476,7 +1476,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1564,7 +1564,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1645,7 +1645,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1729,7 +1729,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
+		TaskType:          commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1786,7 +1786,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferRecordWorkflowStarted,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1833,7 +1833,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes,
+		TaskType:    commongenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1890,7 +1890,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowRunTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
-		taskList.Kind = tasklistpb.TaskListKind_Sticky
+		taskList.Kind = tasklistpb.TASK_LIST_KIND_STICKY
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 

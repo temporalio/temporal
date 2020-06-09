@@ -103,7 +103,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != commongenpb.TaskType_TransferActivityTask {
+	if task.TaskType != commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
@@ -131,7 +131,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != commongenpb.TaskType_TransferDecisionTask {
+	if task.TaskType != commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 
@@ -279,7 +279,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == namespacepb.ArchivalStatus_Enabled
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == namespacepb.ARCHIVAL_STATUS_ENABLED
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
