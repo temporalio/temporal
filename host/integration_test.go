@@ -4031,7 +4031,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// verify closed visibility
-	var closdExecutionInfo *workflow.WorkflowExecutionInfo
+	var closedExecutionInfo *workflow.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err1 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
 			Domain:          common.StringPtr(s.domainName),
@@ -4046,14 +4046,14 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		})
 		s.Nil(err1)
 		if len(resp.Executions) == 1 {
-			closdExecutionInfo = resp.Executions[0]
+			closedExecutionInfo = resp.Executions[0]
 			break
 		}
 		s.Logger.Info("Closed WorkflowExecution is not yet visible")
 		time.Sleep(100 * time.Millisecond)
 	}
-	s.NotNil(closdExecutionInfo)
-	s.Equal(memo, closdExecutionInfo.Memo)
+	s.NotNil(closedExecutionInfo)
+	s.Equal(memo, closedExecutionInfo.Memo)
 }
 
 func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,

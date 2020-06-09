@@ -371,6 +371,9 @@ func (t *transferQueueProcessorBase) updateAckLevel() (bool, error) {
 }
 
 func (t *transferQueueProcessorBase) splitQueue() {
+	t.queueCollectionsLock.Lock()
+	defer t.queueCollectionsLock.Unlock()
+
 	t.processingQueueCollections = splitProcessingQueueCollection(
 		t.processingQueueCollections,
 		t.options.QueueSplitPolicy,

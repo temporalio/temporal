@@ -140,7 +140,6 @@ func (s *timerActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard,
 		nil,
 		s.executionCache,
-		nil,
 		s.logger,
 		s.mockShard.GetMetricsClient(),
 		config,

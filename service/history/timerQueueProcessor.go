@@ -30,7 +30,6 @@ import (
 
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -43,14 +42,6 @@ import (
 )
 
 type (
-	timerQueueProcessor interface {
-		common.Daemon
-		FailoverDomain(domainIDs map[string]struct{})
-		NotifyNewTimers(clusterName string, timerTask []persistence.Task)
-		LockTaskProcessing()
-		UnlockTaskProcessing()
-	}
-
 	timeNow                 func() time.Time
 	updateTimerAckLevel     func(timerKey) error
 	timerQueueShutdown      func() error
@@ -80,7 +71,7 @@ func newTimerQueueProcessor(
 	matchingClient matching.Client,
 	queueTaskProcessor task.Processor,
 	logger log.Logger,
-) timerQueueProcessor {
+) queue.Processor {
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
@@ -181,7 +172,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimers(
+func (t *timerQueueProcessorImpl) NotifyNewTask(
 	clusterName string,
 	timerTasks []persistence.Task,
 ) {

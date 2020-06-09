@@ -183,6 +183,7 @@ var keys = map[Key]string{
 	TimerProcessorRedispatchIntervalJitterCoefficient:      "history.timerProcessorRedispatchIntervalJitterCoefficient",
 	TimerProcessorMaxRedispatchQueueSize:                   "history.timerProcessorMaxRedispatchQueueSize",
 	TimerProcessorEnablePriorityTaskProcessor:              "history.timerProcessorEnablePriorityTaskProcessor",
+	TimerProcessorEnableMultiCurosrProcessor:               "history.timerProcessorEnableMultiCursorProcessor",
 	TimerProcessorMaxTimeShift:                             "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                 "history.timerProcessorHistoryArchivalSizeLimit",
 	TimerProcessorArchivalTimeLimit:                        "history.timerProcessorArchivalTimeLimit",
@@ -574,6 +575,8 @@ const (
 	TimerProcessorMaxRedispatchQueueSize
 	// TimerProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for timer processor
 	TimerProcessorEnablePriorityTaskProcessor
+	// TimerProcessorEnableMultiCurosrProcessor indicates whether multi-cursor queue processor should be used for timer processor
+	TimerProcessorEnableMultiCurosrProcessor
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift
 	// TimerProcessorHistoryArchivalSizeLimit is the max history size for inline archival

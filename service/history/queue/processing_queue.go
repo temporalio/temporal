@@ -276,7 +276,7 @@ func (q *processingQueueImpl) UpdateAckLevel() {
 	}
 
 	if timerKey, ok := q.state.ackLevel.(timerTaskKey); ok {
-		q.state.ackLevel = newTimerTaskKey(timerKey.visibilityTimeStamp, 0)
+		q.state.ackLevel = newTimerTaskKey(timerKey.visibilityTimestamp, 0)
 	}
 }
 

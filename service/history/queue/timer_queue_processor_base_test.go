@@ -115,8 +115,8 @@ func (s *timerQueueProcessorBaseSuite) TestGetTimerTasks_More() {
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     batchSize,
 		NextPageToken: []byte("some random input next page token"),
 	}
@@ -154,8 +154,8 @@ func (s *timerQueueProcessorBaseSuite) TestGetTimerTasks_NoMore() {
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     batchSize,
 		NextPageToken: nil,
 	}
@@ -196,8 +196,8 @@ func (s *timerQueueProcessorBaseSuite) TestReadLookAheadTask() {
 	maxReadLevel := newTimerTaskKey(shardMaxReadLevel.Add(10*time.Second), 0)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     1,
 		NextPageToken: nil,
 	}
@@ -238,15 +238,15 @@ func (s *timerQueueProcessorBaseSuite) TestReadAndFilterTasks_NoLookAhead_NoNext
 	lookAheadMaxLevel := newTimerTaskKey(time.Now().Add(10*time.Second), 0)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: []byte("some random input next page token"),
 	}
 
 	lookAheadRequest := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  lookAheadMaxLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  lookAheadMaxLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     1,
 		NextPageToken: nil,
 	}
@@ -289,8 +289,8 @@ func (s *timerQueueProcessorBaseSuite) TestReadAndFilterTasks_NoLookAhead_HasNex
 	lookAheadMaxLevel := newTimerTaskKey(time.Now().Add(10*time.Second), 0)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: []byte("some random input next page token"),
 	}
@@ -332,8 +332,8 @@ func (s *timerQueueProcessorBaseSuite) TestReadAndFilterTasks_HasLookAhead_NoNex
 	lookAheadMaxLevel := newTimerTaskKey(time.Now().Add(10*time.Second), 0)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: []byte("some random input next page token"),
 	}
@@ -386,8 +386,8 @@ func (s *timerQueueProcessorBaseSuite) TestReadAndFilterTasks_HasLookAhead_HasNe
 	lookAheadMaxLevel := newTimerTaskKey(time.Now().Add(10*time.Second), 0)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: []byte("some random input next page token"),
 	}
@@ -455,7 +455,7 @@ func (s *timerQueueProcessorBaseSuite) TestUpdateAckLevel() {
 	}
 	updateAckLevel := time.Time{}
 	updateTransferAckLevelFn := func(ackLevel task.Key) error {
-		updateAckLevel = ackLevel.(timerTaskKey).visibilityTimeStamp
+		updateAckLevel = ackLevel.(timerTaskKey).visibilityTimestamp
 		return nil
 	}
 
@@ -577,8 +577,8 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_HasNextPage() {
 	}
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: nil,
 	}
@@ -664,8 +664,8 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead(
 
 	requestNextPageToken := []byte("some random input next page token")
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: requestNextPageToken,
 	}
@@ -758,15 +758,15 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_NoLookAhead()
 
 	requestNextPageToken := []byte("some random input next page token")
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  ackLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: requestNextPageToken,
 	}
 
 	lookAheadRequest := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  shardMaxReadLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     1,
 		NextPageToken: nil,
 	}

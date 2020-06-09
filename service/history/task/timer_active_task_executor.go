@@ -40,8 +40,6 @@ import (
 type (
 	timerActiveTaskExecutor struct {
 		*timerTaskExecutorBase
-
-		queueProcessor common.Daemon // use common.Daemon here to avoid cycle dependency of history package
 	}
 )
 
@@ -50,7 +48,6 @@ func NewTimerActiveTaskExecutor(
 	shard shard.Context,
 	archiverClient archiver.Client,
 	executionCache *execution.Cache,
-	queueProcessor common.Daemon,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *config.Config,
@@ -64,7 +61,6 @@ func NewTimerActiveTaskExecutor(
 			metricsClient,
 			config,
 		),
-		queueProcessor: queueProcessor,
 	}
 }
 
@@ -568,11 +564,8 @@ func (t *timerActiveTaskExecutor) updateWorkflowExecution(
 	now := t.shard.GetTimeSource().Now()
 	err = context.UpdateWorkflowExecutionAsActive(now)
 	if err != nil {
-		if shard.IsShardOwnershiptLostError(err) {
-			// Shard is stolen.  Stop timer processing to reduce duplicates
-			t.queueProcessor.Stop()
-			return err
-		}
+		// if is shard ownership error, the shard context will stop the entire history engine
+		// we don't need to explicitly stop the queue processor here
 		return err
 	}
 

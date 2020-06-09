@@ -48,7 +48,7 @@ var (
 
 type (
 	timerTaskKey struct {
-		visibilityTimeStamp time.Time
+		visibilityTimestamp time.Time
 		taskID              int64
 	}
 
@@ -314,7 +314,7 @@ func (t *timerQueueProcessorBase) processBatch() {
 
 		if !readLevel.Less(maxReadLevel) {
 			// notify timer gate about the min time
-			t.timerGate.Update(readLevel.(timerTaskKey).visibilityTimeStamp)
+			t.timerGate.Update(readLevel.(timerTaskKey).visibilityTimestamp)
 			continue
 		}
 
@@ -344,7 +344,7 @@ func (t *timerQueueProcessorBase) processBatch() {
 		}
 
 		var newReadLevel task.Key
-		if nextPageToken == nil {
+		if len(nextPageToken) == 0 {
 			if lookAheadTask != nil {
 				newReadLevel = minTaskKey(maxReadLevel, newTimerTaskKey(lookAheadTask.GetVisibilityTimestamp(), 0))
 			} else {
@@ -482,8 +482,8 @@ func (t *timerQueueProcessorBase) getTimerTasks(
 	batchSize int,
 ) ([]*persistence.TimerTaskInfo, []byte, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimeStamp,
-		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimeStamp,
+		MinTimestamp:  readLevel.(timerTaskKey).visibilityTimestamp,
+		MaxTimestamp:  maxReadLevel.(timerTaskKey).visibilityTimestamp,
 		BatchSize:     batchSize,
 		NextPageToken: nextPageToken,
 	}
@@ -569,12 +569,26 @@ func (t *timerQueueProcessorBase) submitTask(
 	return true
 }
 
+func (t *timerQueueProcessorBase) getProcessingQueueStates() []ProcessingQueueState {
+	t.queueCollectionsLock.RLock()
+	defer t.queueCollectionsLock.RUnlock()
+
+	var queueStates []ProcessingQueueState
+	for _, queueCollection := range t.processingQueueCollections {
+		for _, queue := range queueCollection.Queues() {
+			queueStates = append(queueStates, copyQueueState(queue.State()))
+		}
+	}
+
+	return queueStates
+}
+
 func newTimerTaskKey(
 	visibilityTimestamp time.Time,
 	taskID int64,
 ) task.Key {
 	return timerTaskKey{
-		visibilityTimeStamp: visibilityTimestamp,
+		visibilityTimestamp: visibilityTimestamp,
 		taskID:              taskID,
 	}
 }
@@ -583,8 +597,8 @@ func (k timerTaskKey) Less(
 	key task.Key,
 ) bool {
 	timerKey := key.(timerTaskKey)
-	if k.visibilityTimeStamp.Equal(timerKey.visibilityTimeStamp) {
+	if k.visibilityTimestamp.Equal(timerKey.visibilityTimestamp) {
 		return k.taskID < timerKey.taskID
 	}
-	return k.visibilityTimeStamp.Before(timerKey.visibilityTimeStamp)
+	return k.visibilityTimestamp.Before(timerKey.visibilityTimestamp)
 }

@@ -63,9 +63,9 @@ type (
 
 		controller               *gomock.Controller
 		mockShard                *shard.TestContext
-		mockTxProcessor          *queue.MockTransferQueueProcessor
+		mockTxProcessor          *queue.MockProcessor
+		mockTimerProcessor       *queue.MockProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *events.MockCache
 		mockDomainCache          *cache.MockDomainCache
 		mockClusterMetadata      *cluster.MockMetadata
@@ -96,12 +96,12 @@ func (s *engine2Suite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.mockTxProcessor = queue.NewMockTransferQueueProcessor(s.controller)
+	s.mockTxProcessor = queue.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queue.NewMockProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,

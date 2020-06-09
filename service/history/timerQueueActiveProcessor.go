@@ -40,7 +40,6 @@ type (
 	timerQueueActiveProcessorImpl struct {
 		shard                   shard.Context
 		timerTaskFilter         task.Filter
-		now                     timeNow
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		currentClusterName      string
@@ -92,7 +91,6 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		timerTaskFilter:    timerTaskFilter,
-		now:                timeNow,
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		currentClusterName: currentClusterName,
@@ -101,7 +99,6 @@ func newTimerQueueActiveProcessor(
 		shard,
 		historyService.archivalClient,
 		historyService.executionCache,
-		processor,
 		logger,
 		historyService.metricsClient,
 		shard.GetConfig(),
@@ -209,7 +206,6 @@ func newTimerQueueFailoverProcessor(
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		timerTaskFilter:    timerTaskFilter,
-		now:                timeNow,
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		currentClusterName: currentClusterName,
@@ -218,7 +214,6 @@ func newTimerQueueFailoverProcessor(
 		shard,
 		historyService.archivalClient,
 		historyService.executionCache,
-		processor,
 		logger,
 		historyService.metricsClient,
 		shard.GetConfig(),

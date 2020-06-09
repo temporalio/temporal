@@ -90,8 +90,8 @@ type (
 		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
-		txProcessor               queue.TransferQueueProcessor
-		timerProcessor            timerQueueProcessor
+		txProcessor               queue.Processor
+		timerProcessor            queue.Processor
 		replicator                *historyReplicator
 		nDCReplicator             ndc.HistoryReplicator
 		nDCActivityReplicator     ndc.ActivityReplicator
@@ -229,7 +229,17 @@ func NewEngineWithShardContext(
 	} else {
 		historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	}
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
+	if config.TimerProcessorEnableMultiCurosrProcessor() {
+		historyEngImpl.timerProcessor = queue.NewTimerQueueProcessor(
+			shard,
+			historyEngImpl,
+			queueTaskProcessor,
+			executionCache,
+			historyEngImpl.archivalClient,
+		)
+	} else {
+		historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
+	}
 	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
 	// Only start the replicator processor if valid publisher is passed in
@@ -433,7 +443,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				fakeDecisionTask := []persistence.Task{&persistence.DecisionTask{}}
 				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTask)
-				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
+				e.timerProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
 			// handle graceful failover on active to passive
@@ -2409,7 +2419,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
 	e.txProcessor.NotifyNewTask(clusterName, []persistence.Task{})
-	e.timerProcessor.NotifyNewTimers(clusterName, []persistence.Task{})
+	e.timerProcessor.NotifyNewTask(clusterName, []persistence.Task{})
 	return nil
 }
 
@@ -2743,7 +2753,7 @@ func (e *historyEngineImpl) NotifyNewTimerTasks(
 	if len(tasks) > 0 {
 		task := tasks[0]
 		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
-		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
+		e.timerProcessor.NotifyNewTask(clusterName, tasks)
 	}
 }
 
