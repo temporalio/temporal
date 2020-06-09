@@ -170,7 +170,44 @@ func newAdminShardManagementCommands() []cli.Command {
 				AdminDescribeTask(c)
 			},
 		},
-
+		{
+			Name:  "list_tasks",
+			Usage: "List tasks for given shard Id and task type",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The ID of the shard",
+				},
+				cli.IntFlag{
+					Name:  FlagTaskType,
+					Value: 2,
+					Usage: "Task type: 2 - transfer task (default), 3 - timer task, 4 - replication task",
+				},
+				cli.StringFlag{
+					Name:  FlagMinVisibilityTimestamp,
+					Value: "2020-01-01T00:00:00+00:00",
+					Usage: "Task visibility min timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.StringFlag{
+					Name:  FlagMaxVisibilityTimestamp,
+					Value: "2035-01-01T00:00:00+00:00",
+					Usage: "Task visibility max timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListTasks(c)
+			},
+		},
 		{
 			Name:    "close_shard",
 			Aliases: []string{"clsh"},
