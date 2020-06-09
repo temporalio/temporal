@@ -202,7 +202,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          uuid.New(),
 		Name:        registerRequest.GetName(),
-		Status:      namespacepb.NamespaceStatus_Registered,
+		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
@@ -262,7 +262,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
-			replicationgenpb.NamespaceOperation_Create,
+			replicationgenpb.NAMESPACE_OPERATION_CREATE,
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
@@ -560,7 +560,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	if isGlobalNamespace {
-		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NamespaceOperation_Update,
+		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NAMESPACE_OPERATION_UPDATE,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err
@@ -607,7 +607,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	}
 
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	getResponse.Namespace.Info.Status = namespacepb.NamespaceStatus_Deprecated
+	getResponse.Namespace.Info.Status = namespacepb.NAMESPACE_STATUS_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info:                        getResponse.Namespace.Info,
@@ -710,7 +710,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == namespacepb.ArchivalStatus_Default {
+	if event.status == namespacepb.ARCHIVAL_STATUS_DEFAULT {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {

@@ -301,8 +301,8 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-				Status:              executionpb.WorkflowExecutionStatus_Running,
+				State:               executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:              executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -370,8 +370,8 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-				Status:              executionpb.WorkflowExecutionStatus_Running,
+				State:               executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:              executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -425,8 +425,8 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				WorkflowID:         workflowExecution.GetWorkflowId(),
 				RunID:              workflowExecution.GetRunId(),
 				TaskList:           taskList,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-				Status:             executionpb.WorkflowExecutionStatus_Running,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
 				LastProcessedEvent: lastProcessedEventID,
@@ -465,8 +465,8 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
 
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
-				Status:             executionpb.WorkflowExecutionStatus_Running,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+				Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
 				LastProcessedEvent: lastProcessedEventID,
@@ -594,8 +594,8 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
-	req.UpdateWorkflowMutation.ExecutionInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
-	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WorkflowExecutionStatus_ContinuedAsNew
+	req.UpdateWorkflowMutation.ExecutionInfo.State = executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
 }
@@ -1244,7 +1244,7 @@ func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution comm
 	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID: namespaceID,
 		TaskList:    taskList,
-		TaskType:    tasklistpb.TaskListType_Decision,
+		TaskType:    tasklistpb.TASK_LIST_TYPE_DECISION,
 	})
 	if err != nil {
 		return 0, err
@@ -1285,7 +1285,7 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 		_, ok := taskLists[tl]
 		if !ok {
 			resp, err := s.TaskMgr.LeaseTaskList(
-				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: tasklistpb.TaskListType_Activity})
+				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: tasklistpb.TASK_LIST_TYPE_ACTIVITY})
 			if err != nil {
 				return []int64{}, err
 			}

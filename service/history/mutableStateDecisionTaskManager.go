@@ -137,10 +137,10 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.msb.GetWorkflowStateStatus()
-	if state != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+	if state != executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		if err := m.msb.UpdateWorkflowStateStatus(
-			executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-			executionpb.WorkflowExecutionStatus_Running,
+			executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		); err != nil {
 			return nil, err
 		}
@@ -256,7 +256,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent
 ) error {
 	incrementAttempt := true
 	// Do not increment decision attempt in the case of sticky timeout to prevent creating next decision as transient
-	if timeoutType == commonpb.TimeoutType_ScheduleToStart {
+	if timeoutType == commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
 	m.FailDecision(incrementAttempt)
@@ -279,9 +279,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTime
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, commonpb.TimeoutType_ScheduleToStart)
+	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TimeoutType_ScheduleToStart); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -536,8 +536,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	}
 
 	// always clear decision attempt for reset
-	if cause == eventpb.DecisionTaskFailedCause_ResetWorkflow ||
-		cause == eventpb.DecisionTaskFailedCause_FailoverCloseDecision {
+	if cause == eventpb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW ||
+		cause == eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION {
 		m.msb.executionInfo.DecisionAttempt = 0
 	}
 	return event, nil
@@ -561,10 +561,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 	var event *eventpb.HistoryEvent
 	// Avoid creating new history events when decisions are continuously timing out
 	if dt.Attempt == 0 {
-		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, commonpb.TimeoutType_StartToClose)
+		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, commonpb.TIMEOUT_TYPE_START_TO_CLOSE)
 	}
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TimeoutType_StartToClose); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(commonpb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
 	return event, nil

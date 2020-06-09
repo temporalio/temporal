@@ -272,12 +272,12 @@ func (d *DataBlob) ToProto() *commonpb.DataBlob {
 	switch d.Encoding {
 	case common.EncodingTypeJSON:
 		return &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_JSON,
+			EncodingType: commonpb.ENCODING_TYPE_JSON,
 			Data:         d.Data,
 		}
 	case common.EncodingTypeProto3:
 		return &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         d.Data,
 		}
 	default:

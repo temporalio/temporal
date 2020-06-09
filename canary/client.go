@@ -55,7 +55,7 @@ func (client *cadenceClient) createNamespace(name string, desc string, owner str
 	emitMetric := true
 	isGlobalNamespace := false
 	retention := int32(workflowRetentionDays)
-	if archivalStatus == namespacepb.ArchivalStatus_Enabled {
+	if archivalStatus == namespacepb.ARCHIVAL_STATUS_ENABLED {
 		retention = int32(0)
 	}
 	req := &workflowservice.RegisterNamespaceRequest{

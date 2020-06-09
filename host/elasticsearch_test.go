@@ -205,7 +205,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
+			DecisionType: decisionpb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
@@ -866,7 +866,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
+			DecisionType: decisionpb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes:   &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}}}
 
 		// handle first upsert
@@ -890,7 +890,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -924,10 +924,10 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.Equal(int64(3), newTask.DecisionTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.DecisionTask.GetStartedEventId())
 	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(eventpb.EventType_DecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(eventpb.EventType_UpsertWorkflowSearchAttributes, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -972,10 +972,10 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
 	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(eventpb.EventType_DecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(eventpb.EventType_UpsertWorkflowSearchAttributes, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(eventpb.EventType_DecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -1065,7 +1065,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
+			DecisionType: decisionpb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
@@ -1100,9 +1100,9 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.NoError(err)
 	history := historyResponse.History
 	decisionFailedEvent := history.GetEvents()[3]
-	s.Equal(eventpb.EventType_DecisionTaskFailed, decisionFailedEvent.GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_DECISION_TASK_FAILED, decisionFailedEvent.GetEventType())
 	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
-	s.Equal(eventpb.DecisionTaskFailedCause_BadSearchAttributes, failedDecisionAttr.GetCause())
+	s.Equal(eventpb.DECISION_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedDecisionAttr.GetCause())
 	s.NotNil(failedDecisionAttr.GetFailure())
 }
 

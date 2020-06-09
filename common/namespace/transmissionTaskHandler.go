@@ -70,7 +70,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 		return nil
 	}
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 			NamespaceOperation: namespaceOperation,

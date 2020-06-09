@@ -100,23 +100,23 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 
 	switch task.TaskType {
-	case commongenpb.TaskType_TransferActivityTask:
+	case commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(task)
-	case commongenpb.TaskType_TransferDecisionTask:
+	case commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 		return t.processDecisionTask(task)
-	case commongenpb.TaskType_TransferCloseExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(task)
-	case commongenpb.TaskType_TransferCancelExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		return t.processCancelExecution(task)
-	case commongenpb.TaskType_TransferSignalExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return t.processSignalExecution(task)
-	case commongenpb.TaskType_TransferStartChildExecution:
+	case commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(task)
-	case commongenpb.TaskType_TransferRecordWorkflowStarted:
+	case commongenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		return t.processRecordWorkflowStarted(task)
-	case commongenpb.TaskType_TransferResetWorkflow:
+	case commongenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		return t.processResetWorkflow(task)
-	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
+	case commongenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
@@ -145,7 +145,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
@@ -182,7 +182,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferDecisionTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -205,7 +205,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
 		// this decision is an sticky decision
 		// there shall already be an timer set
-		taskList.Kind = tasklistpb.TaskListKind_Sticky
+		taskList.Kind = tasklistpb.TASK_LIST_KIND_STICKY
 		taskTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
@@ -245,7 +245,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	completionEvent, err := mutableState.GetCompletionEvent()
 	if err != nil {
 		return err
@@ -887,7 +887,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
-				eventpb.StartChildWorkflowExecutionFailedCause_WorkflowAlreadyExists, initiatedAttributes)
+				eventpb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS, initiatedAttributes)
 
 			return err
 		})
@@ -1021,7 +1021,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 				targetNamespace,
 				targetWorkflowID,
 				targetRunID,
-				eventpb.CancelExternalWorkflowExecutionFailedCause_ExternalWorkflowExecutionNotFound1,
+				eventpb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 			)
 			return err
 		})
@@ -1062,7 +1062,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 				targetWorkflowID,
 				targetRunID,
 				control,
-				eventpb.SignalExternalWorkflowExecutionFailedCause_ExternalWorkflowExecutionNotFound2,
+				eventpb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 			)
 			return err
 		})
@@ -1358,7 +1358,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
-			if childInfo.ParentClosePolicy == commonpb.ParentClosePolicy_Abandon {
+			if childInfo.ParentClosePolicy == commonpb.PARENT_CLOSE_POLICY_ABANDON {
 				continue
 			}
 
@@ -1407,11 +1407,11 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	defer cancel()
 
 	switch childInfo.ParentClosePolicy {
-	case commonpb.ParentClosePolicy_Abandon:
+	case commonpb.PARENT_CLOSE_POLICY_ABANDON:
 		// noop
 		return nil
 
-	case commonpb.ParentClosePolicy_Terminate:
+	case commonpb.PARENT_CLOSE_POLICY_TERMINATE:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1426,7 +1426,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		})
 		return err
 
-	case commonpb.ParentClosePolicy_RequestCancel:
+	case commonpb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

@@ -216,7 +216,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TaskListKind_Normal,
+		Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
 

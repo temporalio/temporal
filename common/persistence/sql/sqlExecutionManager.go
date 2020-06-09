@@ -161,11 +161,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+			if row.State != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed),
+						workflowID, row.State, executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED),
 				}
 			}
 			runIDStr := row.RunID.String()
@@ -881,7 +881,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		}
 
 		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
-		if info.GetTaskType() == commongenpb.TaskType_ReplicationHistory {
+		if info.GetTaskType() == commongenpb.TASK_TYPE_REPLICATION_HISTORY {
 			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
 				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}

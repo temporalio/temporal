@@ -126,7 +126,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.handlerContext = newHandlerContext(
 		context.Background(),
 		matchingTestNamespace,
-		&tasklistpb.TaskList{matchingTestTaskList, tasklistpb.TaskListKind_Normal},
+		&tasklistpb.TaskList{matchingTestTaskList, tasklistpb.TASK_LIST_KIND_NORMAL},
 		metrics.NewClient(tally.NoopScope, metrics.Matching),
 		metrics.MatchingTaskListMgrScope,
 	)
@@ -215,25 +215,25 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(context.Background(), tasklistpb.TaskListType_Activity)
+	s.PollForTasksEmptyResultTest(context.Background(), tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(context.Background(), tasklistpb.TaskListType_Decision)
+	s.PollForTasksEmptyResultTest(context.Background(), tasklistpb.TASK_LIST_TYPE_DECISION)
 }
 
 func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
-	s.PollForTasksEmptyResultTest(callContext, tasklistpb.TaskListType_Activity)
+	s.PollForTasksEmptyResultTest(callContext, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
-	s.PollForTasksEmptyResultTest(callContext, tasklistpb.TaskListType_Decision)
+	s.PollForTasksEmptyResultTest(callContext, tasklistpb.TASK_LIST_TYPE_DECISION)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasks() {
@@ -244,7 +244,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
-	stickyTlKind := tasklistpb.TaskListKind_Sticky
+	stickyTlKind := tasklistpb.TASK_LIST_KIND_STICKY
 	identity := "selfDrivingToaster"
 
 	stickyTaskList := &tasklistpb.TaskList{Name: stickyTl, Kind: stickyTlKind}
@@ -270,7 +270,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 				ScheduledEventId:          scheduleID + 1,
 				Attempt:                   0,
 				StickyExecutionEnabled:    true,
-				WorkflowExecutionTaskList: &tasklistpb.TaskList{Name: tl, Kind: tasklistpb.TaskListKind_Normal},
+				WorkflowExecutionTaskList: &tasklistpb.TaskList{Name: tl, Kind: tasklistpb.TASK_LIST_KIND_NORMAL},
 			}
 			return response, nil
 		}).AnyTimes()
@@ -307,7 +307,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		DecisionInfo:           nil,
 		WorkflowExecutionTaskList: &tasklistpb.TaskList{
 			Name: tl,
-			Kind: tasklistpb.TaskListKind_Normal,
+			Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
 		},
 		EventStoreVersion:  0,
 		BranchToken:        nil,
@@ -336,7 +336,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	s.handlerContext.Context = callContext
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
-		if taskType == tasklistpb.TaskListType_Activity {
+		if taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
 			pollResp, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 				NamespaceId: namespaceID,
 				PollRequest: &workflowservice.PollForActivityTaskRequest{
@@ -347,7 +347,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			s.NoError(err)
 			s.Equal(emptyPollForActivityTaskResponse, pollResp)
 
-			taskListType = tasklistpb.TaskListType_Activity
+			taskListType = tasklistpb.TASK_LIST_TYPE_ACTIVITY
 		} else {
 			resp, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
 				NamespaceId: namespaceID,
@@ -358,7 +358,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			s.NoError(err)
 			s.Equal(emptyPollForDecisionTaskResponse, resp)
 
-			taskListType = tasklistpb.TaskListType_Decision
+			taskListType = tasklistpb.TASK_LIST_TYPE_DECISION
 		}
 		select {
 		case <-callContext.Done():
@@ -385,15 +385,15 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
-	s.AddTasksTest(tasklistpb.TaskListType_Activity, false)
+	s.AddTasksTest(tasklistpb.TASK_LIST_TYPE_ACTIVITY, false)
 }
 
 func (s *matchingEngineSuite) TestAddDecisionTasks() {
-	s.AddTasksTest(tasklistpb.TaskListType_Decision, false)
+	s.AddTasksTest(tasklistpb.TASK_LIST_TYPE_DECISION, false)
 }
 
 func (s *matchingEngineSuite) TestAddDecisionTasksForwarded() {
-	s.AddTasksTest(tasklistpb.TaskListType_Decision, true)
+	s.AddTasksTest(tasklistpb.TASK_LIST_TYPE_DECISION, true)
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType tasklistpb.TaskListType, isForwarded bool) {
@@ -414,7 +414,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType tasklistpb.TaskListType, isF
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		var err error
-		if taskType == tasklistpb.TaskListType_Activity {
+		if taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
 			addRequest := matchingservice.AddActivityTaskRequest{
 				SourceNamespaceId:             namespaceID,
 				NamespaceId:                   namespaceID,
@@ -469,8 +469,8 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	workflowID := "workflow1"
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
-	tlKind := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlKind := tasklistpb.TASK_LIST_KIND_NORMAL
 	tlm, err := s.matchingEngine.getTaskListManager(tlID, tlKind)
 	s.Nil(err)
 
@@ -513,7 +513,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -625,8 +625,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
-	tlKind := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlKind := tasklistpb.TASK_LIST_KIND_NORMAL
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
@@ -765,7 +765,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 
 	// check the poller information
-	tlType := tasklistpb.TaskListType_Activity
+	tlType := tasklistpb.TASK_LIST_TYPE_ACTIVITY
 	descResp, err := s.matchingEngine.DescribeTaskList(s.handlerContext, &matchingservice.DescribeTaskListRequest{
 		NamespaceId: namespaceID,
 		DescRequest: &workflowservice.DescribeTaskListRequest{
@@ -825,8 +825,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	var scheduleID int64 = 123
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
-	tlKind := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlKind := tasklistpb.TASK_LIST_KIND_NORMAL
 	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	dPtr := _defaultTaskDispatchRPS
@@ -976,7 +976,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Decision)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_DECISION)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1121,7 +1121,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1270,7 +1270,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Decision)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_DECISION)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1399,8 +1399,8 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
-	tlKind := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlKind := tasklistpb.TASK_LIST_KIND_NORMAL
 
 	taskList := &tasklistpb.TaskList{Name: tl}
 
@@ -1442,7 +1442,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 
 	taskList := &tasklistpb.TaskList{Name: tl}
 
@@ -1535,8 +1535,8 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
-	tlNormal := tasklistpb.TaskListKind_Normal
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	tlNormal := tasklistpb.TASK_LIST_KIND_NORMAL
 
 	const rangeSize = 10
 	const maxReadLevel = int64(120)
@@ -1571,7 +1571,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "task-expiry-completion-tl0"
-	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
+	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
 
 	taskList := &tasklistpb.TaskList{Name: tl}
 
@@ -1684,7 +1684,7 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
 	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *eventpb.HistoryEvent {
 
-	historyEvent := newHistoryEvent(eventID, eventpb.EventType_ActivityTaskScheduled)
+	historyEvent := newHistoryEvent(eventID, eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 		ActivityId:                    scheduleAttributes.ActivityId,
 		ActivityType:                  scheduleAttributes.ActivityType,
@@ -1954,7 +1954,7 @@ func (m *testTaskManager) String() string {
 	var result string
 	for id, tl := range m.taskLists {
 		tl.Lock()
-		if id.taskType == tasklistpb.TaskListType_Activity {
+		if id.taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
 			result += "Activity"
 		} else {
 			result += "Decision"

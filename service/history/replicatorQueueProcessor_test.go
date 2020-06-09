@@ -130,7 +130,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -173,7 +173,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -221,7 +221,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -271,7 +271,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -346,7 +346,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	), nil).AnyTimes()
 
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -381,7 +381,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
+		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -455,7 +455,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		nil,
 	), nil).AnyTimes()
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -499,7 +499,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		HistoryEvents: []*eventpb.HistoryEvent{
 			{
 				EventId: int64(1),
-				// EventType:  eventpb.EventType_WorkflowExecutionStarted,
+				// EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},

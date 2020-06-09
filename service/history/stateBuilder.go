@@ -136,7 +136,7 @@ func (b *stateBuilderImpl) applyEvents(
 		b.mutableState.GetExecutionInfo().LastEventTaskID = event.GetTaskId()
 
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionStarted:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
 			var parentNamespaceID string
 			if attributes.GetParentWorkflowNamespace() != "" {
@@ -192,7 +192,7 @@ func (b *stateBuilderImpl) applyEvents(
 				b.mutableState.GetReplicationState().StartVersion = event.GetVersion()
 			}
 
-		case eventpb.EventType_DecisionTaskScheduled:
+		case eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
 			attributes := event.GetDecisionTaskScheduledEventAttributes()
 			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			decision, err := b.mutableState.ReplicateDecisionTaskScheduledEvent(
@@ -218,7 +218,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_DecisionTaskStarted:
+		case eventpb.EVENT_TYPE_DECISION_TASK_STARTED:
 			attributes := event.GetDecisionTaskStartedEventAttributes()
 			decision, err := b.mutableState.ReplicateDecisionTaskStartedEvent(
 				nil,
@@ -239,14 +239,14 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_DecisionTaskCompleted:
+		case eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED:
 			if err := b.mutableState.ReplicateDecisionTaskCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_DecisionTaskTimedOut:
+		case eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
 			if err := b.mutableState.ReplicateDecisionTaskTimedOutEvent(
 				event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType(),
 			); err != nil {
@@ -271,7 +271,7 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 			}
 
-		case eventpb.EventType_DecisionTaskFailed:
+		case eventpb.EVENT_TYPE_DECISION_TASK_FAILED:
 			if err := b.mutableState.ReplicateDecisionTaskFailedEvent(); err != nil {
 				return nil, err
 			}
@@ -294,7 +294,7 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 			}
 
-		case eventpb.EventType_ActivityTaskScheduled:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 			if _, err := b.mutableState.ReplicateActivityTaskScheduledEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -309,76 +309,76 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskStarted:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 			if err := b.mutableState.ReplicateActivityTaskStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskCompleted:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			if err := b.mutableState.ReplicateActivityTaskCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskFailed:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			if err := b.mutableState.ReplicateActivityTaskFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskTimedOut:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			if err := b.mutableState.ReplicateActivityTaskTimedOutEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskCancelRequested:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateActivityTaskCancelRequestedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ActivityTaskCanceled:
+		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			if err := b.mutableState.ReplicateActivityTaskCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_RequestCancelActivityTaskFailed:
+		case eventpb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
 			// No mutable state action is needed
 
-		case eventpb.EventType_TimerStarted:
+		case eventpb.EVENT_TYPE_TIMER_STARTED:
 			if _, err := b.mutableState.ReplicateTimerStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_TimerFired:
+		case eventpb.EVENT_TYPE_TIMER_FIRED:
 			if err := b.mutableState.ReplicateTimerFiredEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_TimerCanceled:
+		case eventpb.EVENT_TYPE_TIMER_CANCELED:
 			if err := b.mutableState.ReplicateTimerCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_CancelTimerFailed:
+		case eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:
 			// no mutable state action is needed
 
-		case eventpb.EventType_StartChildWorkflowExecutionInitiated:
+		case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 			if _, err := b.mutableState.ReplicateStartChildWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -396,56 +396,56 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_StartChildWorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateStartChildWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionStarted:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionCompleted:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionCanceled:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionTimedOut:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTimedOutEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ChildWorkflowExecutionTerminated:
+		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTerminatedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated:
+		case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 			if _, err := b.mutableState.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -463,21 +463,21 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ExternalWorkflowExecutionCancelRequested:
+		case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateExternalWorkflowExecutionCancelRequested(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_SignalExternalWorkflowExecutionInitiated:
+		case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 			// Create a new request ID which is used by transfer queue processor if namespace is failed over at this point
 			signalRequestID := uuid.New()
 			if _, err := b.mutableState.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(
@@ -495,38 +495,38 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_SignalExternalWorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateSignalExternalWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_ExternalWorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 			if err := b.mutableState.ReplicateExternalWorkflowExecutionSignaled(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_MarkerRecorded:
+		case eventpb.EVENT_TYPE_MARKER_RECORDED:
 			// No mutable state action is needed
 
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			if err := b.mutableState.ReplicateWorkflowExecutionSignaled(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionCancelRequested:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCancelRequestedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EventType_UpsertWorkflowSearchAttributes:
+		case eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 			if err := taskGenerator.generateWorkflowSearchAttrTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
@@ -534,7 +534,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionCompleted:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCompletedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -548,7 +548,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionFailed:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateWorkflowExecutionFailedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -562,7 +562,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionTimedOut:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 			if err := b.mutableState.ReplicateWorkflowExecutionTimedoutEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -576,7 +576,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionCanceled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCanceledEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -590,7 +590,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionTerminated:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 			if err := b.mutableState.ReplicateWorkflowExecutionTerminatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -604,7 +604,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EventType_WorkflowExecutionContinuedAsNew:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {

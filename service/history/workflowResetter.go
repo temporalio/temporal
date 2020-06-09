@@ -221,7 +221,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetFailure := failure.NewResetWorkflowFailure(resetReason, nil)
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
-		decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow,
+		decision.StartedID, eventpb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		resetFailure,
 		identityHistoryService,
 		"",
@@ -390,7 +390,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				failure.NewResetWorkflowFailure(terminateReason, ai.Details),
-				commonpb.RetryStatus_NonRetryableFailure,
+				commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
 			); err != nil {
 				return err
@@ -544,7 +544,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	if len(lastEvents) > 0 {
 		lastEvent := lastEvents[len(lastEvents)-1]
-		if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 			nextRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 		}
 	}
@@ -558,7 +558,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

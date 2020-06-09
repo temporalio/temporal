@@ -96,13 +96,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
+		s.registerNamespace(s.namespace, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
 	s.Require().NoError(
-		s.registerNamespace(s.testRawHistoryNamespaceName, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
+		s.registerNamespace(s.testRawHistoryNamespaceName, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
+		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -221,13 +221,13 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:     uuid.New(),
 				Name:   s.archivalNamespace,
-				Status: namespacepb.NamespaceStatus_Registered,
+				Status: namespacepb.NAMESPACE_STATUS_REGISTERED,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:            0,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
+				HistoryArchivalStatus:    namespacepb.ARCHIVAL_STATUS_ENABLED,
 				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
+				VisibilityArchivalStatus: namespacepb.ARCHIVAL_STATUS_ENABLED,
 				VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},

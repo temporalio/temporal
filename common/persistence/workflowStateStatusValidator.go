@@ -34,21 +34,21 @@ import (
 
 var (
 	validWorkflowStates = map[executiongenpb.WorkflowExecutionState]struct{}{
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:   {},
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:   {},
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed: {},
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:    {},
-		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted: {},
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   {},
+		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   {},
+		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
+		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
+		executiongenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
 	}
 
 	validWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]struct{}{
-		executionpb.WorkflowExecutionStatus_Running:        {},
-		executionpb.WorkflowExecutionStatus_Completed:      {},
-		executionpb.WorkflowExecutionStatus_Failed:         {},
-		executionpb.WorkflowExecutionStatus_Canceled:       {},
-		executionpb.WorkflowExecutionStatus_Terminated:     {},
-		executionpb.WorkflowExecutionStatus_ContinuedAsNew: {},
-		executionpb.WorkflowExecutionStatus_TimedOut:       {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING:        {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED:      {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED:         {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED:       {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED:     {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: {},
+		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:       {},
 	}
 )
 
@@ -66,7 +66,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed || status != executionpb.WorkflowExecutionStatus_Running {
+	if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -86,18 +86,18 @@ func ValidateUpdateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if status == executionpb.WorkflowExecutionStatus_Running {
-		if state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if status == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
-		// executionpb.WorkflowExecutionStatus_Completed
-		// executionpb.WorkflowExecutionStatus_Failed
-		// executionpb.WorkflowExecutionStatus_Canceled
-		// executionpb.WorkflowExecutionStatus_Terminated
-		// executionpb.WorkflowExecutionStatus_ContinuedAsNew
-		// executionpb.WorkflowExecutionStatus_TimedOut
-		if state != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		// executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		// executionpb.WORKFLOW_EXECUTION_STATUS_FAILED
+		// executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED
+		// executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+		// executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+		// executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+		if state != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	}

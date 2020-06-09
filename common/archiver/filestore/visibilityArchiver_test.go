@@ -135,7 +135,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -176,7 +176,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatus_Failed,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
@@ -274,11 +274,11 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 				workflowTypeName:  convert.StringPtr("some random type name"),
-				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
-				Status:           executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+				Status:           executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 				WorkflowTypeName: "some random type name",
 			},
 			shouldMatch: true,
@@ -433,7 +433,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(1),
 		latestCloseTime:   int64(10001),
-		status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+		status:            toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -470,7 +470,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(10),
 		latestCloseTime:   int64(10001),
-		status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+		status:            toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)
@@ -518,7 +518,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   10000,
-			Status:           executionpb.WorkflowExecutionStatus_Failed,
+			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
 		{
@@ -530,7 +530,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     2,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     1000,
-			Status:             executionpb.WorkflowExecutionStatus_Failed,
+			Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:      123,
 		},
 		{
@@ -542,7 +542,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10,
-			Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+			Status:             executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 			HistoryLength:      456,
 		},
 		{
@@ -554,7 +554,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     5,
-			Status:             executionpb.WorkflowExecutionStatus_Failed,
+			Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:      456,
 		},
 		{
@@ -566,7 +566,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10000,
-			Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+			Status:             executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 			HistoryLength:      456,
 		},
 	}

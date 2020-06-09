@@ -101,7 +101,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
-	timeoutErr := temporal.NewTimeoutError(commonpb.TimeoutType_StartToClose, nil)
+	timeoutErr := temporal.NewTimeoutError(commonpb.TIMEOUT_TYPE_START_TO_CLOSE, nil)
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)

@@ -24,6 +24,6 @@ package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
 enum ChecksumFlavor {
-    Unknown = 0;
-    IEEECRC32OverProto3Binary = 1;
+    CHECKSUM_FLAVOR_UNKNOWN = 0;
+    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
 }

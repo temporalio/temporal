@@ -507,7 +507,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) (
 	var historyEvents []*eventpb.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case commonpb.EncodingType_Proto3:
+	case commonpb.ENCODING_TYPE_PROTO3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,

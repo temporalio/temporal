@@ -132,7 +132,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		Version:   version,
 		EventId:   newDecisionStartedEvent.GetEventId() + 1,
 		Timestamp: time.Now().UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskCompleted,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: newDecisionScheduleEvent.GetEventId(),
 			StartedEventId:   newDecisionStartedEvent.GetEventId(),
@@ -181,7 +181,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	s.NotNil(s.msBuilder.AddDecisionTaskFailedEvent(
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
-		eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
+		eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		failure.NewServerFailure("some random decision failure details", false),
 		"some random decision failure identity",
 		"", "", "", 0,
@@ -193,46 +193,46 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 func (s *mutableStateSuite) TestShouldBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[eventpb.EventType]bool{
-		eventpb.EventType_WorkflowExecutionStarted:        true,
-		eventpb.EventType_WorkflowExecutionCompleted:      true,
-		eventpb.EventType_WorkflowExecutionFailed:         true,
-		eventpb.EventType_WorkflowExecutionTimedOut:       true,
-		eventpb.EventType_WorkflowExecutionTerminated:     true,
-		eventpb.EventType_WorkflowExecutionContinuedAsNew: true,
-		eventpb.EventType_WorkflowExecutionCanceled:       true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:        true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:      true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:         true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:       true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:     true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:       true,
 	}
 
 	// decision events will be assign event ID immediately
 	decisionTaskEvents := map[eventpb.EventType]bool{
-		eventpb.EventType_DecisionTaskScheduled: true,
-		eventpb.EventType_DecisionTaskStarted:   true,
-		eventpb.EventType_DecisionTaskCompleted: true,
-		eventpb.EventType_DecisionTaskFailed:    true,
-		eventpb.EventType_DecisionTaskTimedOut:  true,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED: true,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED:   true,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED: true,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED:    true,
+		eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:  true,
 	}
 
 	// events corresponding to decisions from client will be assign event ID immediately
 	decisionEvents := map[eventpb.EventType]bool{
-		eventpb.EventType_WorkflowExecutionCompleted:                      true,
-		eventpb.EventType_WorkflowExecutionFailed:                         true,
-		eventpb.EventType_WorkflowExecutionCanceled:                       true,
-		eventpb.EventType_WorkflowExecutionContinuedAsNew:                 true,
-		eventpb.EventType_ActivityTaskScheduled:                           true,
-		eventpb.EventType_ActivityTaskCancelRequested:                     true,
-		eventpb.EventType_TimerStarted:                                    true,
-		eventpb.EventType_TimerCanceled:                                   true,
-		eventpb.EventType_CancelTimerFailed:                               true,
-		eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated: true,
-		eventpb.EventType_MarkerRecorded:                                  true,
-		eventpb.EventType_StartChildWorkflowExecutionInitiated:            true,
-		eventpb.EventType_SignalExternalWorkflowExecutionInitiated:        true,
-		eventpb.EventType_UpsertWorkflowSearchAttributes:                  true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                      true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                         true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                       true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:                 true,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:                           true,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:                     true,
+		eventpb.EVENT_TYPE_TIMER_STARTED:                                    true,
+		eventpb.EVENT_TYPE_TIMER_CANCELED:                                   true,
+		eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:                               true,
+		eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED: true,
+		eventpb.EVENT_TYPE_MARKER_RECORDED:                                  true,
+		eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:            true,
+		eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:        true,
+		eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                  true,
 	}
 
 	// other events will not be assign event ID immediately
 	otherEvents := map[eventpb.EventType]bool{}
 OtherEventsLoop:
-	for _, eventType := range eventpb.EventType_value {
+	for _, eventType := range eventpb.EVENT_TYPE_VALUE {
 		if _, ok := workflowEvents[eventpb.EventType(eventType)]; ok {
 			continue OtherEventsLoop
 		}
@@ -262,7 +262,7 @@ OtherEventsLoop:
 
 	// +1 is because DecisionTypeCancelTimer will be mapped
 	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-	s.Equal(len(decisionpb.DecisionType_value)+1, len(decisionEvents),
+	s.Equal(len(decisionpb.DECISION_TYPE_VALUE)+1, len(decisionEvents),
 		"This assertion will be broken a new decision is added and no corresponding logic added to shouldBufferEvent()")
 }
 
@@ -284,8 +284,8 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:               executionpb.WorkflowExecutionStatus_Running,
+		State:                executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:               executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:          int64(8),
 		LastProcessedEvent:   int64(3),
 		LastUpdatedTimestamp: time.Now(),
@@ -313,7 +313,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	bufferedEvents := []*eventpb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
-			EventType: eventpb.EventType_ActivityTaskCompleted,
+			EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
 			Version:   1,
 			Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 				Result:           activityResult,
@@ -324,7 +324,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 
 		{
 			EventId:   common.BufferedEventID,
-			EventType: eventpb.EventType_ActivityTaskStarted,
+			EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 			Version:   1,
 			Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 				ScheduledEventId: 5,
@@ -348,15 +348,15 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 
 	s.msBuilder.Load(dbState)
-	s.Equal(eventpb.EventType_ActivityTaskCompleted, s.msBuilder.bufferedEvents[0].GetEventType())
-	s.Equal(eventpb.EventType_ActivityTaskStarted, s.msBuilder.bufferedEvents[1].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, s.msBuilder.bufferedEvents[0].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED, s.msBuilder.bufferedEvents[1].GetEventType())
 
 	err := s.msBuilder.FlushBufferedEvents()
 	s.Nil(err)
-	s.Equal(eventpb.EventType_ActivityTaskStarted, s.msBuilder.hBuilder.history[0].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED, s.msBuilder.hBuilder.history[0].GetEventType())
 	s.Equal(int64(8), s.msBuilder.hBuilder.history[0].GetEventId())
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[0].GetActivityTaskStartedEventAttributes().GetScheduledEventId())
-	s.Equal(eventpb.EventType_ActivityTaskCompleted, s.msBuilder.hBuilder.history[1].GetEventType())
+	s.Equal(eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, s.msBuilder.hBuilder.history[1].GetEventType())
 	s.Equal(int64(9), s.msBuilder.hBuilder.history[1].GetEventId())
 	s.Equal(int64(8), s.msBuilder.hBuilder.history[1].GetActivityTaskCompletedEventAttributes().GetStartedEventId())
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].GetActivityTaskCompletedEventAttributes().GetScheduledEventId())
@@ -493,21 +493,10 @@ func (s *mutableStateSuite) TestTrimEvents() {
 
 	input = []*eventpb.HistoryEvent{
 		{
-			EventType: eventpb.EventType_ActivityTaskCanceled,
+			EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
 		},
 		{
-			EventType: eventpb.EventType_WorkflowExecutionSignaled,
-		},
-	}
-	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
-	s.Equal(input, output)
-
-	input = []*eventpb.HistoryEvent{
-		{
-			EventType: eventpb.EventType_ActivityTaskCanceled,
-		},
-		{
-			EventType: eventpb.EventType_WorkflowExecutionCompleted,
+			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
@@ -515,16 +504,27 @@ func (s *mutableStateSuite) TestTrimEvents() {
 
 	input = []*eventpb.HistoryEvent{
 		{
-			EventType: eventpb.EventType_WorkflowExecutionCompleted,
+			EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
 		},
 		{
-			EventType: eventpb.EventType_ActivityTaskCanceled,
+			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		},
+	}
+	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal(input, output)
+
+	input = []*eventpb.HistoryEvent{
+		{
+			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		},
+		{
+			EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal([]*eventpb.HistoryEvent{
 		{
-			EventType: eventpb.EventType_WorkflowExecutionCompleted,
+			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}, output)
 }
@@ -576,7 +576,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_WorkflowExecutionStarted,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
@@ -592,7 +592,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskScheduled,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
@@ -605,7 +605,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskStarted,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
@@ -617,7 +617,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskFailed,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			StartedEventId:   decisionStartedEvent.GetEventId(),
@@ -668,7 +668,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskScheduled,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
@@ -681,7 +681,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskStarted,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
@@ -742,8 +742,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:               executionpb.WorkflowExecutionStatus_Running,
+		State:                executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:               executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:          int64(101),
 		LastProcessedEvent:   int64(99),
 		LastUpdatedTimestamp: time.Now(),
@@ -810,7 +810,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	bufferedEvents := []*eventpb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
-			EventType: eventpb.EventType_WorkflowExecutionSignaled,
+			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 			Version:   failoverVersion,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",

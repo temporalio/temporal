@@ -95,7 +95,7 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 	}
 
 	if resp.Configuration != nil &&
-		resp.Configuration.GetVisibilityArchivalStatus() == namespacepb.ArchivalStatus_Disabled {
+		resp.Configuration.GetVisibilityArchivalStatus() == namespacepb.ARCHIVAL_STATUS_DISABLED {
 		return errors.New("namespace not configured for visibility archival")
 	}
 

@@ -715,12 +715,12 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 // NewDataBlobFromProto convert data blob from Proto representation
 func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
-	case commonpb.EncodingType_JSON:
+	case commonpb.ENCODING_TYPE_JSON:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case commonpb.EncodingType_Proto3:
+	case commonpb.ENCODING_TYPE_PROTO3:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,

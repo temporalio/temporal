@@ -577,7 +577,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatus_Running
+		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -588,7 +588,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	isLongPoll := request.GetWaitForNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterType_CloseEvent
+	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Execution
 	var continuationToken *tokengenpb.HistoryContinuation
 
@@ -825,7 +825,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Decision, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TASK_LIST_TYPE_DECISION, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -1085,7 +1085,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Activity, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TASK_LIST_TYPE_ACTIVITY, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -2604,7 +2604,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ArchivalStatus_Enabled {
+	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ARCHIVAL_STATUS_ENABLED {
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 
@@ -2842,7 +2842,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
-			CompletedType: querypb.QueryResultType_Failed,
+			CompletedType: querypb.QUERY_RESULT_TYPE_FAILED,
 			QueryResult:   nil,
 			ErrorMessage:  err.Error(),
 		}
@@ -3183,9 +3183,9 @@ func (wh *WorkflowHandler) getRawHistory(
 	for _, data := range resp.HistoryEventBlobs {
 		switch data.Encoding {
 		case common.EncodingTypeJSON:
-			encoding = commonpb.EncodingType_JSON
+			encoding = commonpb.ENCODING_TYPE_JSON
 		case common.EncodingTypeProto3:
-			encoding = commonpb.EncodingType_Proto3
+			encoding = commonpb.ENCODING_TYPE_PROTO3
 		default:
 			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
 		}
@@ -3210,7 +3210,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 
@@ -3219,7 +3219,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 	}

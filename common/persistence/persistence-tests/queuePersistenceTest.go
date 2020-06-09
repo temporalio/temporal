@@ -71,7 +71,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replicationgenpb.ReplicationTask{
@@ -147,7 +147,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replicationgenpb.ReplicationTask{

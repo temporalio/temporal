@@ -254,7 +254,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
-			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
+			DecisionType: decisionpb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
@@ -345,7 +345,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != eventpb.EventType_WorkflowExecutionTerminated {
+		if lastEvent.EventType != eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -369,7 +369,7 @@ GetHistoryLoop2:
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == eventpb.EventType_WorkflowExecutionTerminated {
+			if lastEvent.EventType == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				s.Equal(terminateReason, terminateEventAttributes.Reason)
 				s.Equal(terminateDetails, terminateEventAttributes.Details)

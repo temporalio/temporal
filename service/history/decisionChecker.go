@@ -148,7 +148,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RetryStatus_NonRetryableFailure, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
 		return false, err
 	}
 
@@ -172,7 +172,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, false),
 		}
 
-		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RetryStatus_NonRetryableFailure, attributes); err != nil {
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
 			return false, err
 		}
 		return true, nil

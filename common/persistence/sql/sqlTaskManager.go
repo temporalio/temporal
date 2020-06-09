@@ -180,7 +180,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 	tl.LastUpdated = types.TimestampNow()
 
 	var blob serialization.DataBlob
-	if request.TaskListInfo.Kind == tasklistpb.TaskListKind_Sticky {
+	if request.TaskListInfo.Kind == tasklistpb.TASK_LIST_KIND_STICKY {
 		tl.Expiry, err = types.TimestampProto(stickyTaskListTTL())
 		if err != nil {
 			return nil, err

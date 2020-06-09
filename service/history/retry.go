@@ -46,17 +46,17 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, commonpb.RetryStatus) {
 	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, commonpb.RetryStatus_NonRetryableFailure
+		return backoff.NoBackoff, commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE
 	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff, commonpb.RetryStatus_RetryPolicyNotSet
+		return backoff.NoBackoff, commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return backoff.NoBackoff, commonpb.RetryStatus_MaximumAttemptsReached
+		return backoff.NoBackoff, commonpb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED
 	}
 
 	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
@@ -65,7 +65,7 @@ func getBackoffInterval(
 		if maxInterval > 0 {
 			nextInterval = int64(maxInterval)
 		} else {
-			return backoff.NoBackoff, commonpb.RetryStatus_Timeout
+			return backoff.NoBackoff, commonpb.RETRY_STATUS_TIMEOUT
 		}
 	}
 
@@ -77,10 +77,10 @@ func getBackoffInterval(
 	backoffInterval := time.Duration(nextInterval) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return backoff.NoBackoff, commonpb.RetryStatus_Timeout
+		return backoff.NoBackoff, commonpb.RETRY_STATUS_TIMEOUT
 	}
 
-	return backoffInterval, commonpb.RetryStatus_InProgress
+	return backoffInterval, commonpb.RETRY_STATUS_IN_PROGRESS
 }
 
 func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
@@ -98,8 +98,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		if failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_StartToClose &&
-			failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TimeoutType_Heartbeat {
+		if failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TIMEOUT_TYPE_START_TO_CLOSE &&
+			failure.GetTimeoutFailureInfo().GetTimeoutType() != commonpb.TIMEOUT_TYPE_HEARTBEAT {
 			return false
 		}
 	}

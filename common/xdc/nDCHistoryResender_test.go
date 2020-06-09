@@ -145,13 +145,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskScheduled,
+			EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EventType_DecisionTaskStarted,
+			EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -235,7 +235,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("some random history blob"),
 	}
 	versionHistoryItems := []*eventgenpb.VersionHistoryItem{
@@ -275,7 +275,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 			RunId:      runID,
 		},
 		Events: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		VersionHistoryItems: []*eventgenpb.VersionHistoryItem{item},
@@ -300,7 +300,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 			RunId:      runID,
 		},
 		Events: &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		VersionHistoryItems: []*eventgenpb.VersionHistoryItem{item},
@@ -334,7 +334,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{{
-			EncodingType: commonpb.EncodingType_Proto3,
+			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
@@ -371,7 +371,7 @@ func (s *nDCHistoryResenderSuite) serializeEvents(events []*eventpb.HistoryEvent
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
-		EncodingType: commonpb.EncodingType_Proto3,
+		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	}
 }

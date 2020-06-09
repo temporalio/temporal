@@ -206,7 +206,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				{
 					Version:   version,
 					Timestamp: now,
-					EventType: eventpb.EventType_WorkflowExecutionCanceled,
+					EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 				},
 			},
 		},
@@ -269,7 +269,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				{
 					Version:   version,
 					Timestamp: now,
-					EventType: eventpb.EventType_WorkflowExecutionSignaled,
+					EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: signalName,
 						Input:      signalInput,
@@ -314,7 +314,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -357,7 +357,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				{
 					Version:   version,
 					Timestamp: now,
-					EventType: eventpb.EventType_WorkflowExecutionSignaled,
+					EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: signalName,
 						Input:      signalInput,
@@ -407,7 +407,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -489,7 +489,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -562,7 +562,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
 				LastEventTaskID:    currentLastEventTaskID,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -620,7 +620,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:  currentRunID,
-		Status: executionpb.WorkflowExecutionStatus_Running,
+		Status: executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
@@ -639,7 +639,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:  currentRunID,
-		Status: executionpb.WorkflowExecutionStatus_Running,
+		Status: executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}, nil)
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
@@ -706,7 +706,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -776,7 +776,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -852,7 +852,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
-				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
+				State:              executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -882,7 +882,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionCanceled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 				Timestamp: time.Now().UnixNano(),
 			},
 		}},
@@ -926,7 +926,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionCanceled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 				Timestamp: time.Now().UnixNano(),
 			},
 		}},
@@ -989,7 +989,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: time.Now().UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -1027,7 +1027,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -1075,7 +1075,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: time.Now().UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -1113,7 +1113,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -1153,7 +1153,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionCanceled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 				Timestamp: time.Now().UnixNano(),
 			},
 		}},
@@ -1184,7 +1184,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: time.Now().UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -1199,7 +1199,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -1235,7 +1235,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version: incomingVersion,
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: time.Now().UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -1250,7 +1250,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -1387,18 +1387,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			},
 		},
 	}).AnyTimes()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
 		State:              currentState,
-		Status:             executionpb.WorkflowExecutionStatus_Running,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1458,18 +1458,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			},
 		},
 	}).AnyTimes()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
 		State:              currentState,
-		Status:             executionpb.WorkflowExecutionStatus_Running,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed)
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1555,18 +1555,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	}).AnyTimes()
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(false).Times(1)
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
 		State:              currentState,
-		Status:             executionpb.WorkflowExecutionStatus_Running,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1708,10 +1708,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision, nil, identityHistoryService, "", "", "", int64(0),
+		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:               startTimeStamp,
 		NamespaceID:                  namespaceID,
@@ -1721,7 +1721,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		DecisionTimeout:              decisionTimeout,
 		StickyScheduleToStartTimeout: decisionStickyTimeout,
 		State:                        currentState,
-		Status:                       executionpb.WorkflowExecutionStatus_Running,
+		Status:                       executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		DecisionVersion:              common.EmptyVersion,
 		DecisionScheduleID:           common.EmptyEventID,
 		DecisionStartedID:            common.EmptyEventID,
@@ -1743,7 +1743,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID + 2,
 	}).Times(1)
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).Times(1)
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1922,8 +1922,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2042,8 +2042,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2158,8 +2158,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2181,7 +2181,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 
 	currentVersion := version
 	currentRunID := runID
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2287,8 +2287,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,
 		HasRetryPolicy:           true,
 		InitialInterval:          retryPolicy.GetInitialIntervalInSeconds(),
@@ -2317,7 +2317,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2431,8 +2431,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2454,7 +2454,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2568,8 +2568,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2591,7 +2591,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version - 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2705,8 +2705,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2729,7 +2729,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2826,7 +2826,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			{
 				Version:   version,
 				EventId:   2,
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: now.UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -2869,8 +2869,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2893,7 +2893,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2943,7 +2943,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -3003,7 +3003,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			{
 				Version:   version,
 				EventId:   2,
-				EventType: eventpb.EventType_WorkflowExecutionSignaled,
+				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Timestamp: now.UnixNano(),
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName,
@@ -3046,8 +3046,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -3070,7 +3070,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	currentDecisionStickyTasklist := "some random decision sticky tasklist"
 
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
@@ -3122,7 +3122,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&eventpb.HistoryEvent{
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Timestamp: time.Now().UnixNano(),
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signalName,
@@ -3221,8 +3221,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3245,7 +3245,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version
 	currentRunID := uuid.New()
 	currentNextEventID := int64(3456)
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3377,8 +3377,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3401,7 +3401,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version
 	currentRunID := uuid.New()
 	currentNextEventID := int64(3456)
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3541,8 +3541,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,
 		HasRetryPolicy:           true,
 		InitialInterval:          retryPolicy.GetInitialIntervalInSeconds(),
@@ -3572,7 +3572,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentNextEventID := int64(2333)
 	currentVersion := version - 1
 	currentRunID := uuid.New()
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3650,7 +3650,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetRunning() {
 	runID := uuid.New()
 	lastWriteVersion := int64(1394)
-	state := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	state := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 
@@ -3689,8 +3689,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
-		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+		State:              executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3698,14 +3698,14 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	currentRunID := uuid.New()
 	currentLastWriteVersion := int64(1394)
-	currentState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
+	currentState := executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		State:            currentState,
-		Status:           executionpb.WorkflowExecutionStatus_Completed,
+		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		LastWriteVersion: currentLastWriteVersion,
 	}, nil)
 
@@ -3734,8 +3734,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
-		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+		State:              executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3771,8 +3771,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
-		State:            executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
-		Status:           executionpb.WorkflowExecutionStatus_Running,
+		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: currentVersion,
 	}, nil)
 
@@ -3785,7 +3785,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	s.Nil(err)
 	s.Equal(currentRunID, prevRunID)
 	s.Equal(currentVersion, prevLastWriteVersion)
-	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, prevState)
+	s.Equal(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevState)
 }
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_NotLowerVersion() {
@@ -3804,7 +3804,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
-		Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3816,7 +3816,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
-		Status:           executionpb.WorkflowExecutionStatus_Running,
+		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: incomingVersion,
 	}, nil)
 

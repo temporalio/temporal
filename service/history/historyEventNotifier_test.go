@@ -89,8 +89,8 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
-	workflowStatus := executionpb.WorkflowExecutionStatus_Running
+	workflowState := executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED
+	workflowStatus := executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -122,8 +122,8 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
-	workflowStatus := executionpb.WorkflowExecutionStatus_Running
+	workflowState := executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED
+	workflowStatus := executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C

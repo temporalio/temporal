@@ -265,7 +265,7 @@ func (r *historyReplicator) ApplyEvents(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		_, err := weContext.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
@@ -623,7 +623,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case eventpb.EventType_WorkflowExecutionStarted:
+	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
@@ -728,7 +728,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	}
 
 	// current workflow is completed
-	if currentState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
+	if currentState == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// allow the application of workflow creation if currentLastWriteVersion > incomingVersion
 		// because this can be caused by the combination of missing replication events and failovers
 		// proceed to create workflow
@@ -865,7 +865,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		return "", 0, 0, nil
 	}
 
-	if currentStatus != executionpb.WorkflowExecutionStatus_Running {
+	if currentStatus != executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")
@@ -886,7 +886,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 		return "", 0, 0, err
 	}
-	return currentRunID, currentLastWriteVetsion, executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, nil
+	return currentRunID, currentLastWriteVetsion, executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
 
 func (r *historyReplicator) getCurrentWorkflowMutableState(
@@ -1087,7 +1087,7 @@ func (r *historyReplicator) deserializeBlob(
 	blob *commonpb.DataBlob,
 ) ([]*eventpb.HistoryEvent, error) {
 
-	if blob.GetEncodingType() != commonpb.EncodingType_Proto3 {
+	if blob.GetEncodingType() != commonpb.ENCODING_TYPE_PROTO3 {
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -1123,7 +1123,7 @@ func (r *historyReplicator) flushEventsBuffer(
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
+		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil, identityHistoryService,
 		"",
 		"",
@@ -1147,7 +1147,7 @@ func (r *historyReplicator) reapplyEvents(
 	var reapplyEvents []*eventpb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			reapplyEvents = append(reapplyEvents, event)
 		}
 	}
@@ -1179,7 +1179,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	numSignals := 0
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventType_WorkflowExecutionSignaled:
+		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := msBuilder.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

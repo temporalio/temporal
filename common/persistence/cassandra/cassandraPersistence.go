@@ -2340,7 +2340,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) (*p.UpdateTaskListResponse, error) {
 	tli := *request.TaskListInfo
 	tli.LastUpdated = types.TimestampNow()
-	if tli.Kind == tasklistpb.TaskListKind_Sticky { // if task_list is sticky, then update with TTL
+	if tli.Kind == tasklistpb.TASK_LIST_KIND_STICKY { // if task_list is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskListTTL)
 

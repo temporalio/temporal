@@ -66,10 +66,10 @@ func newPerTaskListScope(
 	if namespace != "" {
 		namespaceTag = metrics.NamespaceTag(namespace)
 	}
-	if taskListName != "" && taskListKind != tasklistpb.TaskListKind_Sticky {
+	if taskListName != "" && taskListKind != tasklistpb.TASK_LIST_KIND_STICKY {
 		taskListTag = metrics.TaskListTag(taskListName)
 	}
-	if taskListKind == tasklistpb.TaskListKind_Sticky {
+	if taskListKind == tasklistpb.TASK_LIST_KIND_STICKY {
 		taskListTag = stickyTaskListMetricTag
 	}
 	return client.Scope(scopeIdx, namespaceTag, taskListTag)

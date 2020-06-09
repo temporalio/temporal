@@ -166,7 +166,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionStarted
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &eventpb.WorkflowExecutionStartedEventAttributes{
 		ParentWorkflowNamespace: testParentNamespace,
 	}
@@ -213,10 +213,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionStarted
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &eventpb.WorkflowExecutionStartedEventAttributes{
 		ParentWorkflowNamespace:         testParentNamespace,
-		Initiator:                       commonpb.ContinueAsNewInitiator_CronSchedule,
+		Initiator:                       commonpb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 		FirstDecisionTaskBackoffSeconds: int32(backoff.GetBackoffForNextSchedule(cronSchedule, now, now).Seconds()),
 	}
 
@@ -260,7 +260,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionTimedOut
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -290,7 +290,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionTerminated
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -319,7 +319,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionFailed
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -349,7 +349,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionCompleted
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -379,7 +379,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionCanceled
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -422,7 +422,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: newRunID,
 		}},
@@ -432,7 +432,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   1,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_WorkflowExecutionStarted,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			ParentWorkflowNamespace: testParentNamespace,
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
@@ -451,7 +451,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   2,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      payloads.EncodeString("some random signal input"),
@@ -464,7 +464,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   3,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_DecisionTaskScheduled,
+		EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: taskTimeoutSeconds,
@@ -533,7 +533,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
-		EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: newRunID,
 		}},
@@ -571,7 +571,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled()
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionSignaled
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -597,7 +597,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCancelRequ
 		RunId:      testRunID,
 	}
 	now := time.Now()
-	evenType := eventpb.EventType_WorkflowExecutionCancelRequested
+	evenType := eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -625,7 +625,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_UpsertWorkflowSearchAttributes
+	evenType := eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -655,7 +655,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeMarkerRecorded() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_MarkerRecorded
+	evenType := eventpb.EVENT_TYPE_MARKER_RECORDED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -685,7 +685,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	now := time.Now()
 	tasklist := "some random tasklist"
 	timeoutSecond := int32(11)
-	evenType := eventpb.EventType_DecisionTaskScheduled
+	evenType := eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED
 	decisionAttempt := int64(111)
 	event := &eventpb.HistoryEvent{
 		Version:   version,
@@ -738,7 +738,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 	timeoutSecond := int32(11)
 	scheduleID := int64(111)
 	decisionRequestID := uuid.New()
-	evenType := eventpb.EventType_DecisionTaskStarted
+	evenType := eventpb.EVENT_TYPE_DECISION_TASK_STARTED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -785,7 +785,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := eventpb.EventType_DecisionTaskTimedOut
+	evenType := eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -794,10 +794,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 		Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
-			TimeoutType:      commonpb.TimeoutType_StartToClose,
+			TimeoutType:      commonpb.TIMEOUT_TYPE_START_TO_CLOSE,
 		}},
 	}
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskTimedOutEvent(commonpb.TimeoutType_StartToClose).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateDecisionTaskTimedOutEvent(commonpb.TIMEOUT_TYPE_START_TO_CLOSE).Return(nil).Times(1)
 	tasklist := "some random tasklist"
 	newScheduleID := int64(233)
 	executionInfo := &persistence.WorkflowExecutionInfo{
@@ -832,7 +832,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := eventpb.EventType_DecisionTaskFailed
+	evenType := eventpb.EVENT_TYPE_DECISION_TASK_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -878,7 +878,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := eventpb.EventType_DecisionTaskCompleted
+	evenType := eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -912,7 +912,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 	now := time.Now()
 	timerID := "timer ID"
 	timeoutSecond := int64(10)
-	evenType := eventpb.EventType_TimerStarted
+	evenType := eventpb.EVENT_TYPE_TIMER_STARTED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -952,7 +952,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerFired() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_TimerFired
+	evenType := eventpb.EVENT_TYPE_TIMER_FIRED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -982,7 +982,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeCancelTimerFailed() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_CancelTimerFailed
+	evenType := eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1010,7 +1010,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 
 	now := time.Now()
 
-	evenType := eventpb.EventType_TimerCanceled
+	evenType := eventpb.EVENT_TYPE_TIMER_CANCELED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1044,7 +1044,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	activityID := "activity ID"
 	tasklist := "some random tasklist"
 	timeoutSecond := int32(10)
-	evenType := eventpb.EventType_ActivityTaskScheduled
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1101,7 +1101,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 
 	now := time.Now()
 	tasklist := "some random tasklist"
-	evenType := eventpb.EventType_ActivityTaskScheduled
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED
 	scheduledEvent := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1110,7 +1110,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 
-	evenType = eventpb.EventType_ActivityTaskStarted
+	evenType = eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED
 	startedEvent := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    scheduledEvent.GetEventId() + 1,
@@ -1143,7 +1143,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskTimedOut() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ActivityTaskTimedOut
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1174,7 +1174,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskFailed() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ActivityTaskFailed
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1204,7 +1204,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCompleted() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ActivityTaskCompleted
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1234,7 +1234,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ActivityTaskCancelRequested
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1261,7 +1261,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCanceled() {
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ActivityTaskCanceled
+	evenType := eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1295,7 +1295,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 
 	now := time.Now()
 	createRequestID := uuid.New()
-	evenType := eventpb.EventType_StartChildWorkflowExecutionInitiated
+	evenType := eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -1342,7 +1342,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_StartChildWorkflowExecutionFailed
+	evenType := eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1369,7 +1369,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionStart
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionStarted
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1396,7 +1396,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTimed
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionTimedOut
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1423,7 +1423,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTermi
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionTerminated
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1450,7 +1450,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionFaile
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionFailed
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1477,7 +1477,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCompl
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionCompleted
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1512,7 +1512,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	now := time.Now()
 	cancellationRequestID := uuid.New()
 	control := "some random control"
-	evenType := eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated
+	evenType := eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -1560,7 +1560,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed
+	evenType := eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1587,7 +1587,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionCa
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ExternalWorkflowExecutionCancelRequested
+	evenType := eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1614,7 +1614,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCance
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ChildWorkflowExecutionCanceled
+	evenType := eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1649,7 +1649,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	signalName := "some random signal name"
 	signalInput := payloads.EncodeString("some random signal input")
 	control := "some random control"
-	evenType := eventpb.EventType_SignalExternalWorkflowExecutionInitiated
+	evenType := eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED
 	event := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
@@ -1701,7 +1701,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_SignalExternalWorkflowExecutionFailed
+	evenType := eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1728,7 +1728,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 	}
 
 	now := time.Now()
-	evenType := eventpb.EventType_ExternalWorkflowExecutionSignaled
+	evenType := eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED
 	event := &eventpb.HistoryEvent{
 		Version:    version,
 		EventId:    130,
@@ -1746,7 +1746,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 }
 
 func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
-	eventTypes := eventpb.EventType_value
+	eventTypes := eventpb.EVENT_TYPE_VALUE
 	s.Equal(42, len(eventTypes), "If you see this error, you are adding new event type. "+
 		"Before updating the number to make this test pass, please make sure you update stateBuilderImpl.applyEvents method "+
 		"to handle the new decision type. Otherwise cross dc will not work on the new event.")

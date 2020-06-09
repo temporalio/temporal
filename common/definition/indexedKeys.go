@@ -66,14 +66,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:     commonpb.IndexedValueType_String,
-		CustomKeywordField:    commonpb.IndexedValueType_Keyword,
-		CustomIntField:        commonpb.IndexedValueType_Int,
-		CustomDoubleField:     commonpb.IndexedValueType_Double,
-		CustomBoolField:       commonpb.IndexedValueType_Bool,
-		CustomDatetimeField:   commonpb.IndexedValueType_Datetime,
-		TemporalChangeVersion: commonpb.IndexedValueType_Keyword,
-		BinaryChecksums:       commonpb.IndexedValueType_Keyword,
+		CustomStringField:     commonpb.INDEXED_VALUE_TYPE_STRING,
+		CustomKeywordField:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomIntField:        commonpb.INDEXED_VALUE_TYPE_INT,
+		CustomDoubleField:     commonpb.INDEXED_VALUE_TYPE_DOUBLE,
+		CustomBoolField:       commonpb.INDEXED_VALUE_TYPE_BOOL,
+		CustomDatetimeField:   commonpb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalChangeVersion: commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+		BinaryChecksums:       commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -88,16 +88,16 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     commonpb.IndexedValueType_Keyword,
-	WorkflowID:      commonpb.IndexedValueType_Keyword,
-	RunID:           commonpb.IndexedValueType_Keyword,
-	WorkflowType:    commonpb.IndexedValueType_Keyword,
-	StartTime:       commonpb.IndexedValueType_Int,
-	ExecutionTime:   commonpb.IndexedValueType_Int,
-	CloseTime:       commonpb.IndexedValueType_Int,
-	ExecutionStatus: commonpb.IndexedValueType_Int,
-	HistoryLength:   commonpb.IndexedValueType_Int,
-	TaskList:        commonpb.IndexedValueType_Keyword,
+	NamespaceID:     commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowID:      commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+	RunID:           commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowType:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+	StartTime:       commonpb.INDEXED_VALUE_TYPE_INT,
+	ExecutionTime:   commonpb.INDEXED_VALUE_TYPE_INT,
+	CloseTime:       commonpb.INDEXED_VALUE_TYPE_INT,
+	ExecutionStatus: commonpb.INDEXED_VALUE_TYPE_INT,
+	HistoryLength:   commonpb.INDEXED_VALUE_TYPE_INT,
+	TaskList:        commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 }
 
 // IsSystemIndexedKey return true is key is system added

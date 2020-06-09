@@ -105,10 +105,10 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	for _, execution := range request.Executions {
 		var err error
 		switch execution.Policy {
-		case commonpb.ParentClosePolicy_Abandon:
+		case commonpb.PARENT_CLOSE_POLICY_ABANDON:
 			//no-op
 			continue
-		case commonpb.ParentClosePolicy_Terminate:
+		case commonpb.PARENT_CLOSE_POLICY_TERMINATE:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -121,7 +121,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity: processorWFTypeName,
 				},
 			})
-		case commonpb.ParentClosePolicy_RequestCancel:
+		case commonpb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

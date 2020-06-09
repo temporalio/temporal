@@ -249,16 +249,16 @@ func convertToTimestamp(timeStr string) (int64, error) {
 func convertStatusStr(statusStr string) (executionpb.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
 	switch statusStr {
-	case "completed", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Completed)):
-		return executionpb.WorkflowExecutionStatus_Completed, nil
-	case "failed", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Failed)):
-		return executionpb.WorkflowExecutionStatus_Failed, nil
-	case "canceled", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Canceled)):
-		return executionpb.WorkflowExecutionStatus_Canceled, nil
-	case "continuedasnew", "continued_as_new", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_ContinuedAsNew)):
-		return executionpb.WorkflowExecutionStatus_ContinuedAsNew, nil
-	case "timedout", "timed_out", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_TimedOut)):
-		return executionpb.WorkflowExecutionStatus_TimedOut, nil
+	case "completed", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+		return executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
+	case "failed", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+		return executionpb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
+	case "canceled", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+		return executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "continuedasnew", "continued_as_new", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+		return executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
+	case "timedout", "timed_out", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+		return executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

@@ -51,11 +51,11 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 	taskList := &tasklistpb.TaskList{
 		Name: tl,
-		Kind: tasklistpb.TaskListKind_Normal,
+		Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
 	}
 	stikyTaskList := &tasklistpb.TaskList{
 		Name: "test-sticky-tasklist",
-		Kind: tasklistpb.TaskListKind_Sticky,
+		Kind: tasklistpb.TASK_LIST_KIND_STICKY,
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -78,7 +78,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	// start decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -89,7 +89,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
@@ -128,7 +128,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		TaskToken: taskToken,
 		Decisions: []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+				DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payloads.EncodeString("efg"),
 				},
@@ -144,7 +144,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	s.NoError(err5)
 	s.Nil(resp5.DecisionTask)
 
-	s.assertLastHistoryEvent(we, 41, eventpb.EventType_WorkflowExecutionCompleted)
+	s.assertLastHistoryEvent(we, 41, eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
@@ -157,11 +157,11 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	taskList := &tasklistpb.TaskList{
 		Name: tl,
-		Kind: tasklistpb.TaskListKind_Normal,
+		Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
 	}
 	stikyTaskList := &tasklistpb.TaskList{
 		Name: "test-sticky-tasklist",
-		Kind: tasklistpb.TaskListKind_Sticky,
+		Kind: tasklistpb.TASK_LIST_KIND_STICKY,
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -184,7 +184,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	// start decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -195,7 +195,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	resp2, err2 := s.engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
@@ -213,7 +213,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		TaskToken: resp2.DecisionTask.GetTaskToken(),
 		Decisions: []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionType_RecordMarker,
+				DecisionType: decisionpb.DECISION_TYPE_RECORD_MARKER,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity1",
 					Details: map[string]*commonpb.Payloads{
@@ -234,7 +234,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		TaskToken: resp3.DecisionTask.GetTaskToken(),
 		Decisions: []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionType_RecordMarker,
+				DecisionType: decisionpb.DECISION_TYPE_RECORD_MARKER,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity2",
 					Details: map[string]*commonpb.Payloads{
@@ -255,7 +255,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		TaskToken: resp4.DecisionTask.GetTaskToken(),
 		Decisions: []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+				DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payloads.EncodeString("efg"),
 				},
@@ -272,22 +272,22 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	s.Nil(resp5.DecisionTask)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskCompleted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskCompleted,
-		eventpb.EventType_MarkerRecorded,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskCompleted,
-		eventpb.EventType_MarkerRecorded,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskCompleted,
-		eventpb.EventType_WorkflowExecutionCompleted,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+		eventpb.EVENT_TYPE_MARKER_RECORDED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+		eventpb.EVENT_TYPE_MARKER_RECORDED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -322,7 +322,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -333,7 +333,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_WorkflowExecutionSignaled)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -344,7 +344,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -355,12 +355,12 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -395,7 +395,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	// start decision to make signals into bufferedEvents
 	_, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -405,7 +405,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -417,7 +417,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -428,12 +428,12 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -468,9 +468,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
-	cause := eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure
+	cause := eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
 	// start decision to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -480,7 +480,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -492,7 +492,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 3, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// fail this decision to flush buffer, and then another decision will be scheduled
 	_, err2 := s.engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
@@ -501,7 +501,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Identity:  "integ test",
 	})
 	s.NoError(err2)
-	s.assertLastHistoryEvent(we, 6, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 6, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -512,13 +512,13 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -553,9 +553,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
-	cause := eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure
+	cause := eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
@@ -580,7 +580,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -591,7 +591,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 5, eventpb.EventType_WorkflowExecutionSignaled)
+	s.assertLastHistoryEvent(we, 5, eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -602,7 +602,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 7, eventpb.EventType_DecisionTaskStarted)
+	s.assertLastHistoryEvent(we, 7, eventpb.EVENT_TYPE_DECISION_TASK_STARTED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -613,15 +613,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -656,9 +656,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
-	cause := eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure
+	cause := eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
@@ -683,7 +683,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// start decision to make signals into bufferedEvents
 	_, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -693,7 +693,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -705,7 +705,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -716,12 +716,12 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }
@@ -756,9 +756,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 2, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
-	cause := eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure
+	cause := eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
@@ -783,7 +783,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// start decision to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
@@ -793,7 +793,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -805,7 +805,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 4, eventpb.EventType_DecisionTaskFailed)
+	s.assertLastHistoryEvent(we, 4, eventpb.EVENT_TYPE_DECISION_TASK_FAILED)
 
 	// fail this decision to flush buffer
 	_, err2 := s.engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
@@ -814,7 +814,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Identity:  "integ test",
 	})
 	s.NoError(err2)
-	s.assertLastHistoryEvent(we, 6, eventpb.EventType_DecisionTaskScheduled)
+	s.assertLastHistoryEvent(we, 6, eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
 	// then terminate the worklfow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -825,13 +825,13 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	s.NoError(err)
 
 	expectedHistory := []eventpb.EventType{
-		eventpb.EventType_WorkflowExecutionStarted,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_DecisionTaskStarted,
-		eventpb.EventType_DecisionTaskFailed,
-		eventpb.EventType_WorkflowExecutionSignaled,
-		eventpb.EventType_DecisionTaskScheduled,
-		eventpb.EventType_WorkflowExecutionTerminated,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+		eventpb.EVENT_TYPE_DECISION_TASK_FAILED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	}
 	s.assertHistory(we, expectedHistory)
 }

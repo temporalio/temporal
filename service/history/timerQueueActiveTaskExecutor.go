@@ -88,19 +88,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TaskType_UserTimer:
+	case commongenpb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TaskType_ActivityTimeout:
+	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TaskType_DecisionTimeout:
+	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TaskType_WorkflowRunTimeout:
+	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TaskType_ActivityRetryTimer:
+	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case commongenpb.TaskType_WorkflowBackoffTimer:
+	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TaskType_DeleteHistoryEvent:
+	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -189,7 +189,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(commonpb.TIMEOUT_TYPE_HEARTBEAT)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -226,7 +226,7 @@ Loop:
 			timeoutFailure,
 		); err != nil {
 			return err
-		} else if retryStatus == commonpb.RetryStatus_InProgress {
+		} else if retryStatus == commonpb.RETRY_STATUS_IN_PROGRESS {
 			updateMutableState = true
 			continue Loop
 		}
@@ -234,8 +234,8 @@ Loop:
 		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
 		// If retryStatus is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
-		if retryStatus == commonpb.RetryStatus_Timeout {
-			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = commonpb.TimeoutType_ScheduleToClose
+		if retryStatus == commonpb.RETRY_STATUS_TIMEOUT {
+			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
@@ -284,7 +284,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_DecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TASK_TYPE_DECISION_TIMEOUT))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -485,16 +485,16 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutFailure := failure.NewTimeoutFailure(commonpb.TimeoutType_StartToClose)
+	timeoutFailure := failure.NewTimeoutFailure(commonpb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval, retryStatus := mutableState.GetRetryBackoffDuration(timeoutFailure)
-	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
+	continueAsNewInitiator := commonpb.CONTINUE_AS_NEW_INITIATOR_RETRY
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
 		backoffInterval, err = mutableState.GetCronBackoffDuration()
 		if err != nil {
 			return err
 		}
-		continueAsNewInitiator = commonpb.ContinueAsNewInitiator_CronSchedule
+		continueAsNewInitiator = commonpb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
 	if backoffInterval == backoff.NoBackoff {
 		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryStatus); err != nil {

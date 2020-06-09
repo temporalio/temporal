@@ -536,7 +536,7 @@ func verifyFirstHistoryEvent(
 			},
 		})
 		return VerificationResultDetectedCorruption
-	} else if firstBatch[0].GetEventType() != eventpb.EventType_WorkflowExecutionStarted {
+	} else if firstBatch[0].GetEventType() != eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
 			NamespaceID: execution.NamespaceID,
@@ -549,7 +549,7 @@ func verifyFirstHistoryEvent(
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
 				Note:           "got unexpected first eventType",
-				Details:        fmt.Sprintf("expected: %v but got %v", eventpb.EventType_WorkflowExecutionStarted.String(), firstBatch[0].GetEventType().String()),
+				Details:        fmt.Sprintf("expected: %v but got %v", eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED.String(), firstBatch[0].GetEventType().String()),
 			},
 		})
 		return VerificationResultDetectedCorruption
@@ -848,5 +848,5 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 }
 
 func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created || execution.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	return execution.State == executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

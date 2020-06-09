@@ -93,7 +93,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -108,7 +108,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -253,7 +253,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -268,7 +268,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -397,7 +397,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -412,7 +412,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -473,7 +473,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
-	go queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+	go queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -494,7 +494,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
-	go queryWorkflowFn("invalid-query-type", querypb.QueryRejectCondition_None)
+	go queryWorkflowFn("invalid-query-type", querypb.QUERY_REJECT_CONDITION_NONE)
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
@@ -513,7 +513,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 
-	go queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+	go queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -533,16 +533,16 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
-	rejectCondition := querypb.QueryRejectCondition_NotOpen
+	rejectCondition := querypb.QUERY_REJECT_CONDITION_NOT_OPEN
 	go queryWorkflowFn(queryType, rejectCondition)
 	queryResult = <-queryResultCh
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.Nil(queryResult.Resp.QueryResult)
 	s.NotNil(queryResult.Resp.QueryRejected.GetStatus())
-	s.Equal(executionpb.WorkflowExecutionStatus_Completed, queryResult.Resp.QueryRejected.GetStatus())
+	s.Equal(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED, queryResult.Resp.QueryRejected.GetStatus())
 
-	rejectCondition = querypb.QueryRejectCondition_NotCompletedCleanly
+	rejectCondition = querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY
 	go queryWorkflowFn(queryType, rejectCondition)
 	for {
 		// loop until process the query task
@@ -606,7 +606,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -620,7 +620,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					handledSignal.Store(true)
 					return []*decisionpb.Decision{}, nil
 				}
@@ -628,7 +628,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -687,7 +687,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		// after the query is answered the signal is handled because query is consistent and since
 		// signal came before query signal must be handled by the time query returns
@@ -713,7 +713,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+	go queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -729,7 +729,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		5,
 		false,
 		&querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultType_Answered,
+			ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeString("consistent query result"),
 		})
 
@@ -790,7 +790,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -804,7 +804,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					<-time.After(3 * time.Second) // take longer to respond to the decision task than the query waits for
 					return []*decisionpb.Decision{}, nil
 				}
@@ -812,7 +812,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -869,7 +869,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		cancel()
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -891,7 +891,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+	go queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -950,7 +950,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -964,7 +964,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					// wait for some time to force decision task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
 					handledSignal.Store(true)
@@ -974,7 +974,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -1031,7 +1031,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -1059,7 +1059,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		// at the time the query comes in there will be a started decision task
 		// only once signal completes can queryWorkflow unblock
 		<-time.After(time.Second)
-		queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+		queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
@@ -1138,7 +1138,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -1152,7 +1152,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events {
-				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					// wait for some time to force decision task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
 					handledSignal.Store(true)
@@ -1162,7 +1162,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -1221,7 +1221,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -1265,7 +1265,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		})
 		s.NoError(err)
 
-		queryWorkflowFn(queryType, querypb.QueryRejectCondition_None)
+		queryWorkflowFn(queryType, querypb.QUERY_REJECT_CONDITION_NONE)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTaskWithSticky(false, false)
@@ -1290,7 +1290,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		5,
 		false,
 		&querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultType_Answered,
+			ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeString("consistent query result"),
 		})
 

@@ -24,47 +24,45 @@ package common;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/common";
 
-enum DLQType {
-    Replication = 0;
-    Namespace = 1;
+enum DeadLetterQueueType {
+    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 0;
+    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 1;
 }
 
 // TaskSource is the source from which a task was produced.
 enum TaskSource {
-    Unknown = 0;
-    History = 1;    // Task produced by history service
-    DbBacklog = 2;  // Task produced from matching db backlog
+    TASK_SOURCE_UNKNOWN = 0;
+    TASK_SOURCE_HISTORY = 1;    // Task produced by history service
+    TASK_SOURCE_DB_BACKLOG = 2;  // Task produced from matching db backlog
 }
 
 enum TaskCategory {
-    TaskCategory_Unspecified = 0;
+    TASK_CATEGORY_UNSPECIFIED = 0;
     // Transfer is the task type for transfer task
-    TaskCategory_Transfer = 2; // starting from 2 here to be consistent with the row type define for cassandra
+    TASK_CATEGORY_TRANSFER = 2; // starting from 2 here to be consistent with the row type define for cassandra
     // Timer is the task type for timer task
-    TaskCategory_Timer = 3;
+    TASK_CATEGORY_TIMER = 3;
     // Replication is the task type for replication task
-    TaskCategory_Replication = 4;
+    TASK_CATEGORY_REPLICATION = 4;
 }
 
 enum TaskType {
-    ReplicationHistory = 0;
-    ReplicationSyncActivity = 1;
-
-    TransferDecisionTask = 2;
-    TransferActivityTask = 3;
-    TransferCloseExecution = 4;
-    TransferCancelExecution = 5;
-    TransferStartChildExecution = 6;
-    TransferSignalExecution = 7;
-    TransferRecordWorkflowStarted = 8;
-    TransferResetWorkflow = 9;
-    TransferUpsertWorkflowSearchAttributes = 10;
-
-    DecisionTimeout = 11;
-    ActivityTimeout = 12;
-    UserTimer = 13;
-    WorkflowRunTimeout = 14;
-    DeleteHistoryEvent = 15;
-    ActivityRetryTimer = 16;
-    WorkflowBackoffTimer = 17;
+    TASK_TYPE_REPLICATION_HISTORY = 0;
+    TASK_TYPE_REPLICATION_SYNC_ACTIVITY = 1;
+    TASK_TYPE_TRANSFER_DECISION_TASK = 2;
+    TASK_TYPE_TRANSFER_ACTIVITY_TASK = 3;
+    TASK_TYPE_TRANSFER_CLOSE_EXECUTION = 4;
+    TASK_TYPE_TRANSFER_CANCEL_EXECUTION = 5;
+    TASK_TYPE_TRANSFER_START_CHILD_EXECUTION = 6;
+    TASK_TYPE_TRANSFER_SIGNAL_EXECUTION = 7;
+    TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED = 8;
+    TASK_TYPE_TRANSFER_RESET_WORKFLOW = 9;
+    TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES = 10;
+    TASK_TYPE_DECISION_TIMEOUT = 11;
+    TASK_TYPE_ACTIVITY_TIMEOUT = 12;
+    TASK_TYPE_USER_TIMER = 13;
+    TASK_TYPE_WORKFLOW_RUN_TIMEOUT = 14;
+    TASK_TYPE_DELETE_HISTORY_EVENT = 15;
+    TASK_TYPE_ACTIVITY_RETRY_TIMER = 16;
+    TASK_TYPE_WORKFLOW_BACKOFF_TIMER = 17;
 }

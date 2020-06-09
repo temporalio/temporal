@@ -64,7 +64,7 @@ const (
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
 	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = commonpb.WorkflowIdReusePolicy_AllowDuplicate
+	defaultWorkflowIDReusePolicy    = commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
@@ -106,25 +106,25 @@ var (
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
 	workflowClosedStatusMap = map[string]executionpb.WorkflowExecutionStatus{
-		"running":        executionpb.WorkflowExecutionStatus_Running,
-		"completed":      executionpb.WorkflowExecutionStatus_Completed,
-		"failed":         executionpb.WorkflowExecutionStatus_Failed,
-		"canceled":       executionpb.WorkflowExecutionStatus_Canceled,
-		"terminated":     executionpb.WorkflowExecutionStatus_Terminated,
-		"continuedasnew": executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"continueasnew":  executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"timedout":       executionpb.WorkflowExecutionStatus_TimedOut,
+		"running":        executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"completed":      executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"failed":         executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"canceled":       executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminated":     executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continuedasnew": executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"continueasnew":  executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timedout":       executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 		// below are some alias
-		"r":         executionpb.WorkflowExecutionStatus_Running,
-		"c":         executionpb.WorkflowExecutionStatus_Completed,
-		"complete":  executionpb.WorkflowExecutionStatus_Completed,
-		"f":         executionpb.WorkflowExecutionStatus_Failed,
-		"fail":      executionpb.WorkflowExecutionStatus_Failed,
-		"cancel":    executionpb.WorkflowExecutionStatus_Canceled,
-		"terminate": executionpb.WorkflowExecutionStatus_Terminated,
-		"term":      executionpb.WorkflowExecutionStatus_Terminated,
-		"continue":  executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"cont":      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
-		"timeout":   executionpb.WorkflowExecutionStatus_TimedOut,
+		"r":         executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"c":         executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"complete":  executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"f":         executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"fail":      executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"cancel":    executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminate": executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"term":      executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continue":  executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"cont":      executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timeout":   executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 )

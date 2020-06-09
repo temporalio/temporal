@@ -162,16 +162,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	fmt.Println("Successfully merged all messages.")
 }
 
-func toQueueType(dlqType string) commongenpb.DLQType {
+func toQueueType(dlqType string) commongenpb.DeadLetterQueueType {
 	switch dlqType {
 	case "namespace":
-		return commongenpb.DLQType_Namespace
+		return commongenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 	case "history":
-		return commongenpb.DLQType_Replication
+		return commongenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return commongenpb.DLQType_Namespace
+	return commongenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 }
 
 func confirmOrExit(message string) {

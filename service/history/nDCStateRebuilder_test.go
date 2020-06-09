@@ -129,12 +129,12 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 	events := []*eventpb.HistoryEvent{
 		{
 			EventId:    1,
-			EventType:  eventpb.EventType_WorkflowExecutionStarted,
+			EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
-			EventType:  eventpb.EventType_WorkflowExecutionSignaled,
+			EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{}},
 		},
 	}
@@ -166,27 +166,27 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 
 	event1 := &eventpb.HistoryEvent{
 		EventId:    1,
-		EventType:  eventpb.EventType_WorkflowExecutionStarted,
+		EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 	}
 	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		EventType:  eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
-		EventType:  eventpb.EventType_DecisionTaskStarted,
+		EventType:  eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
 	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
-		EventType:  eventpb.EventType_DecisionTaskCompleted,
+		EventType:  eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	event5 := &eventpb.HistoryEvent{
 		EventId:    5,
-		EventType:  eventpb.EventType_ActivityTaskScheduled,
+		EventType:  eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 	history1 := []*eventpb.History{{[]*eventpb.HistoryEvent{event1, event2, event3}}}
@@ -251,7 +251,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	events1 := []*eventpb.HistoryEvent{{
 		EventId:   1,
 		Version:   version,
-		EventType: eventpb.EventType_WorkflowExecutionStarted,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
@@ -265,7 +265,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	events2 := []*eventpb.HistoryEvent{{
 		EventId:   2,
 		Version:   version,
-		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      payloads.EncodeString("some random signal input"),

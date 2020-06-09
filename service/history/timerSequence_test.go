@@ -189,7 +189,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 		),
-		TimeoutType: int(commonpb.TimeoutType_ScheduleToStart),
+		TimeoutType: int(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START),
 		EventID:     activityInfo.ScheduleID,
 		Attempt:     int64(activityInfo.Attempt),
 		Version:     currentVersion,
@@ -234,7 +234,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
-		TimeoutType:         int(commonpb.TimeoutType_Heartbeat),
+		TimeoutType:         int(commonpb.TIMEOUT_TYPE_HEARTBEAT),
 		EventID:             activityInfo.ScheduleID,
 		Attempt:             int64(activityInfo.Attempt),
 		Version:             currentVersion,
@@ -1063,15 +1063,15 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestConversion() {
-	s.Equal(commonpb.TimeoutType_StartToClose, timerTypeToProto(timerTypeStartToClose))
-	s.Equal(commonpb.TimeoutType_ScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
-	s.Equal(commonpb.TimeoutType_ScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
-	s.Equal(commonpb.TimeoutType_Heartbeat, timerTypeToProto(timerTypeHeartbeat))
+	s.Equal(commonpb.TIMEOUT_TYPE_START_TO_CLOSE, timerTypeToProto(timerTypeStartToClose))
+	s.Equal(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START, timerTypeToProto(timerTypeScheduleToStart))
+	s.Equal(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timerTypeToProto(timerTypeScheduleToClose))
+	s.Equal(commonpb.TIMEOUT_TYPE_HEARTBEAT, timerTypeToProto(timerTypeHeartbeat))
 
-	s.Equal(timerTypeFromProto(commonpb.TimeoutType_StartToClose), timerTypeStartToClose)
-	s.Equal(timerTypeFromProto(commonpb.TimeoutType_ScheduleToStart), timerTypeScheduleToStart)
-	s.Equal(timerTypeFromProto(commonpb.TimeoutType_ScheduleToClose), timerTypeScheduleToClose)
-	s.Equal(timerTypeFromProto(commonpb.TimeoutType_Heartbeat), timerTypeHeartbeat)
+	s.Equal(timerTypeFromProto(commonpb.TIMEOUT_TYPE_START_TO_CLOSE), timerTypeStartToClose)
+	s.Equal(timerTypeFromProto(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START), timerTypeScheduleToStart)
+	s.Equal(timerTypeFromProto(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE), timerTypeScheduleToClose)
+	s.Equal(timerTypeFromProto(commonpb.TIMEOUT_TYPE_HEARTBEAT), timerTypeHeartbeat)
 
 	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(timerTypeStartToClose))
 	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(timerTypeScheduleToStart))

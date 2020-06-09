@@ -71,7 +71,7 @@ func (s *UtilSuite) TestHashDeterminism() {
 				ShardID:     0,
 				BranchToken: []byte{1, 2, 3},
 				NextEventID: int64(123),
-				Status:      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+				Status:      executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 				Memo: &commonpb.Memo{
 					Fields: map[string]*commonpb.Payload{
 						"memoKey1": payload.EncodeBytes([]byte{1, 2, 3}),

@@ -87,28 +87,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != commongenpb.TaskType_WorkflowRunTimeout &&
-		timerTask.TaskType != commongenpb.TaskType_DeleteHistoryEvent {
+		timerTask.TaskType != commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
+		timerTask.TaskType != commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT {
 		// guarantee the processing of workflow execution history deletion
 		return nil
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TaskType_UserTimer:
+	case commongenpb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TaskType_ActivityTimeout:
+	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TaskType_DecisionTimeout:
+	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TaskType_WorkflowRunTimeout:
+	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TaskType_ActivityRetryTimer:
+	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case commongenpb.TaskType_WorkflowBackoffTimer:
+	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TaskType_DeleteHistoryEvent:
+	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -217,7 +217,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
-		isHeartBeatTask := timerTask.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
+		isHeartBeatTask := timerTask.TimeoutType == int32(commonpb.TIMEOUT_TYPE_HEARTBEAT)
 		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
 		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
 		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
@@ -272,7 +272,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if timerTask.TimeoutType == int32(commonpb.TimeoutType_ScheduleToStart) {
+	if timerTask.TimeoutType == int32(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START) {
 		return nil
 	}
 

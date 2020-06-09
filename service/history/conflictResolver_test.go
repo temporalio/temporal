@@ -150,7 +150,7 @@ func (s *conflictResolverSuite) TestReset() {
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
-	prevState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
+	prevState := executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 
 	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
@@ -210,8 +210,8 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
 		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		State:                    executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:                   executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastFirstEventID:         event1.GetEventId(),
 		NextEventID:              nextEventID,
 		LastProcessedEvent:       common.EmptyEventID,

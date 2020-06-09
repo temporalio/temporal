@@ -47,7 +47,7 @@ var (
 		Version:   1234,
 		EventId:   130,
 		Timestamp: 112345132134,
-		EventType: eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
+		EventType: eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
 			WorkflowExecution: &commonpb.WorkflowExecution{

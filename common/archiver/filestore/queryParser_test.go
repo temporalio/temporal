@@ -154,28 +154,28 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Completed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
+				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'TIMED_OUT'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_TimedOut),
+				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -205,7 +205,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = 3",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -317,7 +317,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             convert.StringPtr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
