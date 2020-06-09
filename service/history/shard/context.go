@@ -109,6 +109,8 @@ type (
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error)
+
+		InsertFailoverMarkers(makers []*persistence.FailoverMarkerTask) error
 	}
 
 	contextImpl struct {
@@ -1170,6 +1172,37 @@ func (s *contextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
+func (s *contextImpl) InsertFailoverMarkers(
+	markers []*persistence.FailoverMarkerTask,
+) error {
+
+	tasks := make([]persistence.Task, 0, len(markers))
+	for _, marker := range markers {
+		tasks = append(tasks, marker)
+	}
+
+	s.Lock()
+	defer s.Unlock()
+
+	transferMaxReadLevel := int64(0)
+	if err := s.allocateTransferIDsLocked(
+		tasks,
+		&transferMaxReadLevel,
+	); err != nil {
+		return err
+	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	var err error
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		err = s.executionManager.CreateFailoverMarkerTasks(&persistence.CreateFailoverMarkersRequest{Markers: markers})
+		if err == nil {
+			break
+		}
+	}
+	return err
+}
+
 func acquireShard(
 	shardItem *historyShardsItem,
 	closeCallback func(int, *historyShardsItem),
@@ -1187,7 +1220,6 @@ func acquireShard(
 		}
 		_, ok := err.(*persistence.ShardAlreadyExistError)
 		return ok
-
 	}
 
 	getShard := func() error {

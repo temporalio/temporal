@@ -555,6 +555,9 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 			task.SourceTaskId = common.Int64Ptr(qTask.GetTaskID())
 		}
 		return task, err
+	case persistence.ReplicationTaskTypeFailoverMarker:
+		//TODO: add function to generate failover marker task
+		return nil, nil
 	default:
 		return nil, errUnknownReplicationTask
 	}

@@ -436,6 +436,38 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
+			// handle graceful failover on active to passive
+			// make sure task processor failover the domain before inserting the failover marker
+			failoverMarkerTasks := []*persistence.FailoverMarkerTask{}
+			for _, nextDomain := range nextDomains {
+				domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
+				domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
+				previousFailoverVersion := nextDomain.GetPreviousFailoverVersion()
+
+				if nextDomain.IsGlobalDomain() &&
+					domainFailoverNotificationVersion >= shardNotificationVersion &&
+					domainActiveCluster != e.currentClusterName &&
+					previousFailoverVersion != common.InitialPreviousFailoverVersion &&
+					e.clusterMetadata.ClusterNameForFailoverVersion(previousFailoverVersion) == e.currentClusterName {
+					failoverMarkerTasks = append(failoverMarkerTasks, &persistence.FailoverMarkerTask{
+						VisibilityTimestamp: e.timeSource.Now(),
+						Version:             shardNotificationVersion,
+						DomainID:            nextDomain.GetInfo().ID,
+					})
+				}
+			}
+
+			if len(failoverMarkerTasks) > 0 {
+				if err := e.shard.InsertFailoverMarkers(
+					failoverMarkerTasks,
+				); err != nil {
+					e.logger.Error("Failed to insert failover marker to replication queue.", tag.Error(err))
+					e.metricsClient.IncCounter(metrics.HistoryFailoverMarkerScope, metrics.HistoryFailoverMarkerInsertFailure)
+					// fail this failover callback and it retries on next domain cache refresh
+					return
+				}
+			}
+
 			//nolint:errcheck
 			e.shard.UpdateDomainNotificationVersion(nextDomains[len(nextDomains)-1].GetNotificationVersion() + 1)
 		},
