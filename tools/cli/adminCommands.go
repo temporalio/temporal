@@ -419,14 +419,14 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == commongenpb.TaskCategory_TaskCategory_Transfer {
+	if category == commongenpb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTasksRequest{}
 		tasks, err := executionManager.GetTransferTasks(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Transfer Tasks", err)
 		}
 		prettyPrintJSONObject(tasks)
-	} else if category == commongenpb.TaskCategory_TaskCategory_Timer {
+	} else if category == commongenpb.TASK_CATEGORY_TIMER {
 		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
 		minVis := time.Unix(0, minVisFlag)
 		maxVisFlag := parseTime(c.String(FlagMaxVisibilityTimestamp), 0, time.Now())
@@ -438,7 +438,7 @@ func AdminListTasks(c *cli.Context) {
 			ErrorAndExit("Failed to get Timer Tasks", err)
 		}
 		prettyPrintJSONObject(tasks)
-	} else if category == commongenpb.TaskCategory_TaskCategory_Replication {
+	} else if category == commongenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
 		task, err := executionManager.GetReplicationTasks(req)
 		if err != nil {
