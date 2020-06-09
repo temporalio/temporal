@@ -120,6 +120,7 @@ update-mockgen:
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	(cd && go get -u github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick)
+	go get -u github.com/gogo/protobuf
 	go get -u google.golang.org/grpc
 
 update-tools: update-checkers update-mockgen update-proto-plugins
