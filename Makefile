@@ -102,26 +102,25 @@ PROTO_ROOT     := proto
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
 PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
+PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_GEN      := .gen/proto
 
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	(cd && go get -u golang.org/x/tools/cmd/goimports)
-	(cd && go get -u golang.org/x/lint/golint)
-	(cd && go get -u honnef.co/go/tools/cmd/staticcheck)
-	(cd && go get -u github.com/kisielk/errcheck)
+	GO111MODULE=off go get -u golang.org/x/tools/cmd/goimports
+	GO111MODULE=off go get -u golang.org/x/lint/golint
+	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
+	GO111MODULE=off go get -u github.com/kisielk/errcheck
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	go get -u -t github.com/golang/mock/mockgen
+	GO111MODULE=off go get -u github.com/golang/mock/mockgen
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	(cd && go get -u github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick)
-	go get -u github.com/gogo/protobuf
-	go get -u google.golang.org/grpc
+	GO111MODULE=off go get -u github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u google.golang.org/grpc
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
