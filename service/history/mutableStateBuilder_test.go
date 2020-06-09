@@ -193,13 +193,13 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 func (s *mutableStateSuite) TestShouldBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[eventpb.EventType]bool{
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:        true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:      true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:         true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:       true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:     true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:          true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:        true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:           true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:        true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
 		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:       true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
 	}
 
 	// decision events will be assign event ID immediately
@@ -208,31 +208,31 @@ func (s *mutableStateSuite) TestShouldBufferEvent() {
 		eventpb.EVENT_TYPE_DECISION_TASK_STARTED:   true,
 		eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED: true,
 		eventpb.EVENT_TYPE_DECISION_TASK_FAILED:    true,
-		eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:  true,
+		eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT: true,
 	}
 
 	// events corresponding to decisions from client will be assign event ID immediately
 	decisionEvents := map[eventpb.EventType]bool{
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                      true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                         true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                       true,
-		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:                 true,
-		eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:                           true,
-		eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:                     true,
-		eventpb.EVENT_TYPE_TIMER_STARTED:                                    true,
-		eventpb.EVENT_TYPE_TIMER_CANCELED:                                   true,
-		eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:                               true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                         true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                            true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                          true,
+		eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:                  true,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:                              true,
+		eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:                       true,
+		eventpb.EVENT_TYPE_TIMER_STARTED:                                        true,
+		eventpb.EVENT_TYPE_TIMER_CANCELED:                                       true,
+		eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:                                  true,
 		eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED: true,
-		eventpb.EVENT_TYPE_MARKER_RECORDED:                                  true,
-		eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:            true,
-		eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:        true,
-		eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                  true,
+		eventpb.EVENT_TYPE_MARKER_RECORDED:                                      true,
+		eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:             true,
+		eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
+		eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
 	}
 
 	// other events will not be assign event ID immediately
 	otherEvents := map[eventpb.EventType]bool{}
 OtherEventsLoop:
-	for _, eventType := range eventpb.EVENT_TYPE_VALUE {
+	for _, eventType := range eventpb.EventType_value {
 		if _, ok := workflowEvents[eventpb.EventType(eventType)]; ok {
 			continue OtherEventsLoop
 		}
@@ -262,7 +262,7 @@ OtherEventsLoop:
 
 	// +1 is because DecisionTypeCancelTimer will be mapped
 	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-	s.Equal(len(decisionpb.DECISION_TYPE_VALUE)+1, len(decisionEvents),
+	s.Equal(len(decisionpb.DecisionType_value)+1, len(decisionEvents),
 		"This assertion will be broken a new decision is added and no corresponding logic added to shouldBufferEvent()")
 }
 
@@ -687,7 +687,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 			RequestId:        uuid.New(),
 		}},
 	}
-	eventID++ //nolint:ineffassign
+	eventID++ // nolint:ineffassign
 
 	di, err = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		newDecisionScheduleEvent.GetVersion(),
