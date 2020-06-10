@@ -173,8 +173,9 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks for given shard Id and task type",
-			Flags: append(
+			Flags: append(append(
 				getDBFlags(),
+				getFlagsForList()...),
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Value: "active",
