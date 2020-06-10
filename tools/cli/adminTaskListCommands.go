@@ -113,10 +113,9 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType tasklistpb.T
 func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
-	tlType := tasklistpb.TaskListType_Decision
-	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		tlType = tasklistpb.TaskListType_Activity
-	}
+	tlTypeFlag := strings.Title(c.String(FlagTaskListType))
+	tlTypeInt := tasklistpb.TaskListType_value[tlTypeFlag]
+	tlType := tasklistpb.TaskListType(tlTypeInt)
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
 
