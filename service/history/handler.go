@@ -44,6 +44,7 @@ import (
 	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/enums"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -590,7 +591,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest != nil && failedRequest.GetCause() == eventpb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
+	if failedRequest.GetCause() == eventpb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
@@ -637,6 +638,8 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
+
+	enums.SetDefaultContinueAsNewInitiator(&request.ContinueAsNewInitiator)
 
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")

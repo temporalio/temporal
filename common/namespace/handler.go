@@ -710,7 +710,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == namespacepb.ARCHIVAL_STATUS_DEFAULT {
+	if event.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {

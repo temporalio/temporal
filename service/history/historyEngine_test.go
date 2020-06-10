@@ -546,9 +546,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:            &execution,
-			Query:                &querypb.WorkflowQuery{},
-			QueryRejectCondition: querypb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:             &execution,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryRejectCondition:  querypb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -580,9 +581,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:            &execution,
-			Query:                &querypb.WorkflowQuery{},
-			QueryRejectCondition: querypb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:             &execution,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryRejectCondition:  querypb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -594,9 +596,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:            &execution,
-			Query:                &querypb.WorkflowQuery{},
-			QueryRejectCondition: querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
+			Execution:             &execution,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryRejectCondition:  querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -625,8 +628,9 @@ func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution: &execution,
-			Query:     &querypb.WorkflowQuery{},
+			Execution:             &execution,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)

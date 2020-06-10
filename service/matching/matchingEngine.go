@@ -575,10 +575,7 @@ func (e *matchingEngineImpl) DescribeTaskList(
 	request *matchingservice.DescribeTaskListRequest,
 ) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := tasklistpb.TASK_LIST_TYPE_DECISION
-	if request.DescRequest.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
-		taskListType = tasklistpb.TASK_LIST_TYPE_ACTIVITY
-	}
+	taskListType := request.DescRequest.GetTaskListType()
 	taskListName := request.DescRequest.TaskList.GetName()
 	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
 	if err != nil {

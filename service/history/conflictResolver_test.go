@@ -164,6 +164,7 @@ func (s *conflictResolverSuite) TestReset() {
 	event1 := &eventpb.HistoryEvent{
 		EventId: 1,
 		Version: version,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
@@ -176,6 +177,7 @@ func (s *conflictResolverSuite) TestReset() {
 	}
 	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
+		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
@@ -282,7 +284,10 @@ func (s *conflictResolverSuite) TestReset() {
 		Execution:   execution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
-			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
+			ExecutionInfo:  &persistence.WorkflowExecutionInfo{
+				State: executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+				Status: executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
 			ExecutionStats: &persistence.ExecutionStats{},
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load

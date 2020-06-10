@@ -205,7 +205,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 		commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
 	}
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowBackoffTimerTask{

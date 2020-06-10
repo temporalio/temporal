@@ -404,6 +404,7 @@ func CreateHistoryStartWorkflowRequest(
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
+
 	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
@@ -496,16 +497,20 @@ func IsJustOrderByClause(clause string) bool {
 func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) commonpb.IndexedValueType {
 	switch t := fieldType.(type) {
 	case float64:
-		return commonpb.IndexedValueType(fieldType.(float64))
+		return commonpb.IndexedValueType(t)
 	case int:
-		return commonpb.IndexedValueType(fieldType.(int))
+		return commonpb.IndexedValueType(t)
+	case string:
+		if ivt, ok := commonpb.IndexedValueType_value[t]; ok{
+			return commonpb.IndexedValueType(ivt)
+		}
 	case commonpb.IndexedValueType:
-		return fieldType.(commonpb.IndexedValueType)
-	default:
-		// Unknown fieldType, please make sure dynamic config return correct value type
-		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
-		return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
+		return t
 	}
+
+	// Unknown fieldType, please make sure dynamic config return correct value type
+	logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(fieldType))
+	return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
 }
 
 // DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
