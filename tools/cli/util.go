@@ -904,6 +904,7 @@ func showNextPage() bool {
 
 // paginate creates an interactive CLI mode to control the printing of items
 func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
+	more := c.Bool(FlagMore)
 	pageSize := c.Int(FlagPageSize)
 	if pageSize == 0 {
 		pageSize = defaultPageSize
@@ -919,7 +920,7 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 
 		prettyPrintJSONObject(batch)
 		pageItemsCount++
-		if pageItemsCount%pageSize == 0 && !showNextPage() {
+		if pageItemsCount%pageSize == 0 && (!more || !showNextPage()) {
 			break
 		}
 	}

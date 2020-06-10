@@ -450,9 +450,7 @@ func AdminListTasks(c *cli.Context) {
 		paginate(c, paginationFunc)
 	} else if category == commongenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
-
 		task, err := executionManager.GetReplicationTasks(req)
-
 		if err != nil {
 			ErrorAndExit("Failed to get Replication Tasks", err)
 		}
