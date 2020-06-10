@@ -34,10 +34,9 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -45,7 +44,6 @@ import (
 type (
 	failoverWatcherSuite struct {
 		suite.Suite
-		persistencetests.TestBase
 
 		*require.Assertions
 		controller *gomock.Controller
@@ -53,7 +51,7 @@ type (
 		mockResource    *resource.Test
 		mockDomainCache *cache.MockDomainCache
 		timeSource      clock.TimeSource
-		metadataMgr     persistence.MetadataManager
+		mockMetadataMgr *mocks.MetadataManager
 		watcher         *failoverWatcherImpl
 	}
 )
@@ -67,15 +65,9 @@ func (s *failoverWatcherSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
-
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{
-		ClusterMetadata: cluster.GetTestClusterMetadata(true, true),
-	})
-	s.TestBase.Setup()
 }
 
 func (s *failoverWatcherSuite) TearDownSuite() {
-	s.TestBase.TearDownWorkflowStore()
 }
 
 func (s *failoverWatcherSuite) SetupTest() {
@@ -84,11 +76,16 @@ func (s *failoverWatcherSuite) SetupTest() {
 
 	s.mockResource = resource.NewTest(s.controller, metrics.DomainFailoverScope)
 	s.mockDomainCache = s.mockResource.DomainCache
-	s.metadataMgr = s.TestBase.MetadataManager
 	s.timeSource = s.mockResource.GetTimeSource()
+	s.mockMetadataMgr = s.mockResource.MetadataMgr
+
+	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 1,
+	}, nil)
+
 	s.watcher = NewFailoverWatcher(
 		s.mockDomainCache,
-		s.metadataMgr,
+		s.mockMetadataMgr,
 		s.timeSource,
 		dynamicconfig.GetDurationPropertyFn(10*time.Second),
 		dynamicconfig.GetFloatPropertyFn(0.2),
@@ -118,55 +115,76 @@ func (s *failoverWatcherSuite) TestCleanPendingActiveState() {
 		EmitMetric: true,
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
-		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
+		ActiveClusterName: "active",
 		Clusters: []*persistence.ClusterReplicationConfig{
 			{
-				s.ClusterMetadata.GetCurrentClusterName(),
+				"active",
 			},
 		},
 	}
 
-	_, err := s.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
-		Info:              info,
-		Config:            domainConfig,
-		ReplicationConfig: replicationConfig,
-		IsGlobalDomain:    true,
-		ConfigVersion:     1,
-		FailoverVersion:   1,
-	})
-	s.NoError(err)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{
+		ID: domainName,
+	}).Return(&persistence.GetDomainResponse{
+		Info:                        info,
+		Config:                      domainConfig,
+		ReplicationConfig:           replicationConfig,
+		IsGlobalDomain:              true,
+		ConfigVersion:               1,
+		FailoverVersion:             1,
+		FailoverNotificationVersion: 1,
+		FailoverEndTime:             nil,
+		NotificationVersion:         1,
+	}, nil).Times(1)
 
 	// does not have failover end time
-	err = CleanPendingActiveState(s.metadataMgr, domainName, 1, s.watcher.retryPolicy)
+	err := CleanPendingActiveState(s.mockMetadataMgr, domainName, 1, s.watcher.retryPolicy)
 	s.NoError(err)
 
-	metadata, err := s.metadataMgr.GetMetadata()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{
+		ID: domainName,
+	}).Return(&persistence.GetDomainResponse{
+		Info:                        info,
+		Config:                      domainConfig,
+		ReplicationConfig:           replicationConfig,
+		IsGlobalDomain:              true,
+		ConfigVersion:               1,
+		FailoverVersion:             1,
+		FailoverNotificationVersion: 1,
+		FailoverEndTime:             common.Int64Ptr(1),
+		NotificationVersion:         1,
+	}, nil).Times(1)
+
+	// does not match failover versions
+	err = CleanPendingActiveState(s.mockMetadataMgr, domainName, 5, s.watcher.retryPolicy)
 	s.NoError(err)
-	notificationVersion := metadata.NotificationVersion
-	err = s.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+
+	s.mockMetadataMgr.On("UpdateDomain", &persistence.UpdateDomainRequest{
 		Info:                        info,
 		Config:                      domainConfig,
 		ReplicationConfig:           replicationConfig,
 		ConfigVersion:               1,
 		FailoverVersion:             2,
-		FailoverNotificationVersion: notificationVersion,
-		FailoverEndTime:             common.Int64Ptr(2),
-		NotificationVersion:         notificationVersion,
-	})
-	s.NoError(err)
+		FailoverNotificationVersion: 2,
+		FailoverEndTime:             nil,
+		NotificationVersion:         1,
+	}).Return(nil).Times(1)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{
+		ID: domainName,
+	}).Return(&persistence.GetDomainResponse{
+		Info:                        info,
+		Config:                      domainConfig,
+		ReplicationConfig:           replicationConfig,
+		IsGlobalDomain:              true,
+		ConfigVersion:               1,
+		FailoverVersion:             2,
+		FailoverNotificationVersion: 2,
+		FailoverEndTime:             common.Int64Ptr(1),
+		NotificationVersion:         1,
+	}, nil).Times(1)
 
-	// does not have failover version
-	err = CleanPendingActiveState(s.metadataMgr, domainName, 5, s.watcher.retryPolicy)
+	err = CleanPendingActiveState(s.mockMetadataMgr, domainName, 2, s.watcher.retryPolicy)
 	s.NoError(err)
-
-	err = CleanPendingActiveState(s.metadataMgr, domainName, 2, s.watcher.retryPolicy)
-	s.NoError(err)
-
-	resp, err := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
-		Name: domainName,
-	})
-	s.NoError(err)
-	s.True(resp.FailoverEndTime == nil)
 }
 
 func (s *failoverWatcherSuite) TestHandleFailoverTimeout() {
@@ -184,54 +202,47 @@ func (s *failoverWatcherSuite) TestHandleFailoverTimeout() {
 		EmitMetric: true,
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
-		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
+		ActiveClusterName: "active",
 		Clusters: []*persistence.ClusterReplicationConfig{
 			{
-				s.ClusterMetadata.GetCurrentClusterName(),
+				"active",
 			},
 		},
 	}
-
-	_, err := s.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
-		Info:              info,
-		Config:            domainConfig,
-		ReplicationConfig: replicationConfig,
-		IsGlobalDomain:    true,
-		ConfigVersion:     1,
-		FailoverVersion:   1,
-	})
-	s.NoError(err)
-
-	metadata, err := s.metadataMgr.GetMetadata()
-	s.NoError(err)
-	notificationVersion := metadata.NotificationVersion
-
 	endtime := common.Int64Ptr(s.timeSource.Now().UnixNano() - 1)
-	err = s.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{
+		ID: domainName,
+	}).Return(&persistence.GetDomainResponse{
+		Info:                        info,
+		Config:                      domainConfig,
+		ReplicationConfig:           replicationConfig,
+		IsGlobalDomain:              true,
+		ConfigVersion:               1,
+		FailoverVersion:             1,
+		FailoverNotificationVersion: 1,
+		FailoverEndTime:             endtime,
+		NotificationVersion:         1,
+	}, nil).Times(1)
+	s.mockMetadataMgr.On("UpdateDomain", &persistence.UpdateDomainRequest{
 		Info:                        info,
 		Config:                      domainConfig,
 		ReplicationConfig:           replicationConfig,
 		ConfigVersion:               1,
-		FailoverVersion:             2,
-		FailoverNotificationVersion: notificationVersion,
-		FailoverEndTime:             endtime,
-		NotificationVersion:         notificationVersion,
-	})
-	s.NoError(err)
+		FailoverVersion:             1,
+		FailoverNotificationVersion: 1,
+		FailoverEndTime:             nil,
+		NotificationVersion:         1,
+	}).Return(nil).Times(1)
+
 	domainEntry := cache.NewDomainCacheEntryForTest(
 		info,
 		domainConfig,
 		true,
 		replicationConfig,
-		2,
+		1,
 		endtime,
-		s.ClusterMetadata,
+		nil,
 	)
 	s.watcher.handleFailoverTimeout(domainEntry)
-
-	resp, err := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
-		Name: domainName,
-	})
-	s.NoError(err)
-	s.True(resp.FailoverEndTime == nil)
 }

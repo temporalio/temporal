@@ -21,27 +21,75 @@
 package resource
 
 import (
+	"sync/atomic"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/failover"
 )
 
 // Resource is the interface which expose common history resources
 type Resource interface {
 	resource.Resource
 	GetEventCache() events.Cache
+	GetFailoverCoordinator() failover.Coordinator
 }
 
-// Impl contains all common resources shared across history
-type Impl struct {
+type resourceImpl struct {
+	status int32
+
 	resource.Resource
-	eventCache events.Cache
+	config              *config.Config
+	eventCache          events.Cache
+	failoverCoordinator failover.Coordinator
+}
+
+// Start starts all resources
+func (h *resourceImpl) Start() {
+
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
+	h.Resource.Start()
+	if h.config.EnableGracefulFailover() {
+		h.failoverCoordinator.Start()
+	}
+	h.GetLogger().Info("history resource started", tag.LifeCycleStarted)
+}
+
+// Stop stops all resources
+func (h *resourceImpl) Stop() {
+
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
+	h.Resource.Stop()
+	h.failoverCoordinator.Stop()
+	h.GetLogger().Info("history resource stopped", tag.LifeCycleStopped)
 }
 
 // GetEventCache return event cache
-func (h *Impl) GetEventCache() events.Cache {
+func (h *resourceImpl) GetEventCache() events.Cache {
 	return h.eventCache
+}
+
+// GetFailoverCoordinator return failover coordinator
+func (h *resourceImpl) GetFailoverCoordinator() failover.Coordinator {
+	return h.failoverCoordinator
 }
 
 // New create a new resource containing common history dependencies
@@ -50,7 +98,7 @@ func New(
 	serviceName string,
 	config *config.Config,
 	visibilityManagerInitializer resource.VisibilityManagerInitializer,
-) (impl *Impl, retError error) {
+) (historyResource Resource, retError error) {
 	serviceResource, err := resource.New(
 		params,
 		serviceName,
@@ -63,17 +111,29 @@ func New(
 		return nil, err
 	}
 
-	impl = &Impl{
-		Resource: serviceResource,
-		eventCache: events.NewGlobalCache(
-			config.EventsCacheGlobalInitialCount(),
-			config.EventsCacheGlobalMaxCount(),
-			config.EventsCacheTTL(),
-			serviceResource.GetHistoryManager(),
-			params.Logger,
-			params.MetricsClient,
-			uint64(config.EventsCacheMaxSize()),
-		),
+	eventCache := events.NewGlobalCache(
+		config.EventsCacheGlobalInitialCount(),
+		config.EventsCacheGlobalMaxCount(),
+		config.EventsCacheTTL(),
+		serviceResource.GetHistoryManager(),
+		params.Logger,
+		params.MetricsClient,
+		uint64(config.EventsCacheMaxSize()),
+	)
+	coordinator := failover.NewCoordinator(
+		serviceResource.GetMetadataManager(),
+		serviceResource.GetHistoryClient(),
+		serviceResource.GetTimeSource(),
+		config,
+		serviceResource.GetMetricsClient(),
+		serviceResource.GetLogger(),
+	)
+
+	historyResource = &resourceImpl{
+		Resource:            serviceResource,
+		config:              config,
+		eventCache:          eventCache,
+		failoverCoordinator: coordinator,
 	}
-	return impl, nil
+	return
 }

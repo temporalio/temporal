@@ -228,6 +228,7 @@ func (h *Handler) CreateEngine(
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
 		h.queueTaskProcessor,
+		h.GetFailoverCoordinator(),
 	)
 }
 
@@ -1889,8 +1890,12 @@ func (h *Handler) NotifyFailoverMarkers(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	//TODO: wire up the function with failover coordinator
-	return &gen.BadRequestError{Message: "This method has not been implemented."}
+	for _, token := range request.GetFailoverMarkerTokens() {
+		marker := token.GetFailoverMarker()
+		h.GetLogger().Debug("Handling failover maker", tag.WorkflowDomainID(marker.GetDomainID()))
+		h.GetFailoverCoordinator().ReceiveFailoverMarkers(token.GetShardIDs(), token.GetFailoverMarker())
+	}
+	return nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -153,16 +153,16 @@ func (p *failoverWatcherImpl) handleFailoverTimeout(
 
 	failoverEndTime := domain.GetDomainFailoverEndTime()
 	if failoverEndTime != nil && p.timeSource.Now().After(time.Unix(0, *failoverEndTime)) {
-		domainName := domain.GetInfo().Name
+		domainID := domain.GetInfo().ID
 		// force failover the domain without setting the failover timeout
 		if err := CleanPendingActiveState(
 			p.metadataMgr,
-			domainName,
+			domainID,
 			domain.GetFailoverVersion(),
 			p.retryPolicy,
 		); err != nil {
 			p.metrics.IncCounter(metrics.DomainFailoverScope, metrics.CadenceFailures)
-			p.logger.Error("Failed to update pending-active domain to active.", tag.WorkflowDomainID(domainName), tag.Error(err))
+			p.logger.Error("Failed to update pending-active domain to active.", tag.WorkflowDomainID(domainID), tag.Error(err))
 		}
 	}
 }
@@ -170,7 +170,7 @@ func (p *failoverWatcherImpl) handleFailoverTimeout(
 // CleanPendingActiveState removes the pending active state from the domain
 func CleanPendingActiveState(
 	metadataMgr persistence.MetadataManager,
-	domainName string,
+	domainID string,
 	failoverVersion int64,
 	policy backoff.RetryPolicy,
 ) error {
@@ -184,7 +184,7 @@ func CleanPendingActiveState(
 		return err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: domainName})
+	getResponse, err := metadataMgr.GetDomain(&persistence.GetDomainRequest{ID: domainID})
 	if err != nil {
 		return err
 	}

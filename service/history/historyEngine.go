@@ -56,6 +56,7 @@ import (
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/failover"
 	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/query"
 	"github.com/uber/cadence/service/history/queue"
@@ -114,6 +115,7 @@ type (
 		rawMatchingClient         matching.Client
 		clientChecker             client.VersionChecker
 		replicationDLQHandler     replication.DLQHandler
+		failoverCoordinator       failover.Coordinator
 	}
 )
 
@@ -172,6 +174,7 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers replication.TaskFetchers,
 	rawMatchingClient matching.Client,
 	queueTaskProcessor task.Processor,
+	failoverCoordinator failover.Coordinator,
 ) engine.Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -207,11 +210,12 @@ func NewEngineWithShardContext(
 			executionCache,
 			logger,
 		),
-		publicClient:       publicClient,
-		matchingClient:     matching,
-		rawMatchingClient:  rawMatchingClient,
-		queueTaskProcessor: queueTaskProcessor,
-		clientChecker:      client.NewVersionChecker(),
+		publicClient:        publicClient,
+		matchingClient:      matching,
+		rawMatchingClient:   rawMatchingClient,
+		queueTaskProcessor:  queueTaskProcessor,
+		clientChecker:       client.NewVersionChecker(),
+		failoverCoordinator: failoverCoordinator,
 	}
 	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
