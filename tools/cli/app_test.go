@@ -742,8 +742,12 @@ func (s *cliAppSuite) TestIsAttributeName() {
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
-	res := getWorkflowIDReusePolicy(2)
-	s.Equal(res.String(), commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE.String())
+	res := getWorkflowIDReusePolicy(1)
+	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	res = getWorkflowIDReusePolicy(2)
+	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
+	res = getWorkflowIDReusePolicy(3)
+	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {

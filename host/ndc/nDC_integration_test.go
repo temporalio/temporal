@@ -403,6 +403,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
@@ -713,6 +714,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
@@ -1182,6 +1184,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
