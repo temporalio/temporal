@@ -1194,10 +1194,26 @@ func (s *contextImpl) InsertFailoverMarkers(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	var err error
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		err = s.executionManager.CreateFailoverMarkerTasks(&persistence.CreateFailoverMarkersRequest{Markers: markers})
-		if err == nil {
+	for attempt := int32(0); attempt < conditionalRetryCount; attempt++ {
+		err = s.executionManager.CreateFailoverMarkerTasks(
+			&persistence.CreateFailoverMarkersRequest{
+				RangeID: s.getRangeID(),
+				Markers: markers,
+			},
+		)
+		switch err.(type) {
+		case nil:
 			break
+		case *persistence.ShardOwnershipLostError:
+			// do not retry on ShardOwnershipLostError
+			s.closeShard()
+			break
+		default:
+			s.logger.Error(
+				"Failed to insert the failover marker into replication queue.",
+				tag.Error(err),
+				tag.Attempt(attempt),
+			)
 		}
 	}
 	return err

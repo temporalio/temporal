@@ -1157,6 +1157,7 @@ func (s *TestBase) CreateFailoverMarkers(
 ) error {
 
 	return s.ExecutionManager.CreateFailoverMarkerTasks(&p.CreateFailoverMarkersRequest{
+		RangeID: s.ShardInfo.RangeID,
 		Markers: markers,
 	})
 }

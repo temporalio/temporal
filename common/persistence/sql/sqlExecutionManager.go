@@ -1106,37 +1106,29 @@ func (m *sqlExecutionManager) CreateFailoverMarkerTasks(
 	request *p.CreateFailoverMarkersRequest,
 ) error {
 
-	tx, err := m.db.BeginTx()
-	if err != nil {
-		return err
-	}
+	return m.txExecuteShardLocked("CreateFailoverMarkerTasks", request.RangeID, func(tx sqlplugin.Tx) error {
+		for _, task := range request.Markers {
+			t := []p.Task{task}
+			if err := createReplicationTasks(
+				tx,
+				t,
+				m.shardID,
+				sqlplugin.MustParseUUID(task.DomainID),
+				emptyWorkflowID,
+				sqlplugin.MustParseUUID(emptyReplicationRunID),
+			); err != nil {
+				rollBackErr := tx.Rollback()
+				if rollBackErr != nil {
+					m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+				}
 
-	for _, task := range request.Markers {
-		t := []p.Task{task}
-		if err := createReplicationTasks(
-			tx,
-			t,
-			m.shardID,
-			sqlplugin.MustParseUUID(task.DomainID),
-			emptyWorkflowID,
-			sqlplugin.MustParseUUID(emptyReplicationRunID),
-		); err != nil {
-			rollBackErr := tx.Rollback()
-			if rollBackErr != nil {
-				m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-			}
-
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("%v: %v", "CreateFailoverMarkerTasks", err),
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("%v: %v", "CreateFailoverMarkerTasks", err),
+				}
 			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", "CreateFailoverMarkerTasks", err),
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 type timerTaskPageToken struct {

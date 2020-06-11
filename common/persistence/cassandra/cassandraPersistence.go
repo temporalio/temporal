@@ -1258,18 +1258,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			}
 		}
 
-		// At this point we only know that the write was not applied.
-		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
-		// shard to recover from such errors
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-		return nil, &p.ShardOwnershipLostError{
-			ShardID: d.shardID,
-			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
-				request.RangeID, strings.Join(columns, ",")),
-		}
+		return nil, newShardOwnershipLostError(d.shardID, request.RangeID, previous)
 	}
 
 	return &p.CreateWorkflowExecutionResponse{}, nil
@@ -2914,7 +2903,26 @@ func (d *cassandraPersistence) CreateFailoverMarkerTasks(
 		}
 	}
 
-	err := d.session.ExecuteBatch(batch)
+	// Verifies that the RangeID has not changed
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		d.shardID,
+		rowTypeShard,
+		rowTypeShardDomainID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
 	if err != nil {
 		if isThrottlingError(err) {
 			return &workflow.ServiceBusyError{
@@ -2925,5 +2933,42 @@ func (d *cassandraPersistence) CreateFailoverMarkerTasks(
 			Message: fmt.Sprintf("CreateFailoverMarkerTasks operation failed. Error: %v", err),
 		}
 	}
+	if !applied {
+		rowType, ok := previous["type"].(int)
+		if !ok {
+			// This should never happen, as all our rows have the type field.
+			panic("Encounter row type not found")
+		}
+		if rowType == rowTypeShard {
+			if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+				// CreateWorkflowExecution failed because rangeID was modified
+				return &p.ShardOwnershipLostError{
+					ShardID: d.shardID,
+					Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
+						request.RangeID, rangeID),
+				}
+			}
+		}
+		return newShardOwnershipLostError(d.shardID, request.RangeID, previous)
+	}
 	return nil
+}
+
+func newShardOwnershipLostError(
+	shardID int,
+	rangeID int64,
+	row map[string]interface{},
+) error {
+	// At this point we only know that the write was not applied.
+	// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
+	// shard to recover from such errors
+	var columns []string
+	for k, v := range row {
+		columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+	}
+	return &p.ShardOwnershipLostError{
+		ShardID: shardID,
+		Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
+			rangeID, strings.Join(columns, ",")),
+	}
 }

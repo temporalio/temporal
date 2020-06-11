@@ -1478,6 +1478,7 @@ type (
 
 	// CreateFailoverMarkersRequest is request to create failover markers
 	CreateFailoverMarkersRequest struct {
+		RangeID int64
 		Markers []*FailoverMarkerTask
 	}
 
