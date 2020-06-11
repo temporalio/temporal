@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/temporalio/temporal/common/persistence"
 	"github.com/urfave/cli"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -106,4 +107,28 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType tasklistpb.T
 		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
 	}
 	table.Render()
+}
+
+// AdminListTaskListTasks displays task information
+func AdminListTaskListTasks(c *cli.Context) {
+	namespace := getRequiredOption(c, FlagNamespaceID)
+	tlName := getRequiredOption(c, FlagTaskList)
+	tlTypeFlag := strings.Title(c.String(FlagTaskListType))
+	tlTypeInt := tasklistpb.TaskListType_value[tlTypeFlag]
+	tlType := tasklistpb.TaskListType(tlTypeInt)
+	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
+	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
+
+	pFactory := CreatePersistenceFactory(c)
+	taskManager, err := pFactory.NewTaskManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize task manager", err)
+	}
+
+	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskList: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
+	tasks, err := taskManager.GetTasks(req)
+	if err != nil {
+		ErrorAndExit("Failed to get Tasks", err)
+	}
+	prettyPrintJSONObject(tasks)
 }

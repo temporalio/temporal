@@ -196,6 +196,8 @@ const (
 	FlagSignalNameWithAlias               = FlagSignalName + ", sig"
 	FlagTaskID                            = "task_id"
 	FlagTaskType                          = "task_type"
+	FlagMinReadLevel                      = "min_read_level"
+	FlagMaxReadLevel                      = "max_read_level"
 	FlagTaskVisibilityTimestamp           = "task_timestamp"
 	FlagMinVisibilityTimestamp            = "min_visibility_ts"
 	FlagMaxVisibilityTimestamp            = "max_visibility_ts"
@@ -579,6 +581,59 @@ func getFlagsForObserveID() []cli.Flag {
 		cli.IntFlag{
 			Name:  FlagMaxFieldLengthWithAlias,
 			Usage: "Optional maximum length for each attribute field when show details",
+		},
+	}
+}
+
+func getDBFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.StringFlag{
+			Name:  FlagDBEngine,
+			Value: "cassandra",
+			Usage: "Type of the DB engine to use (cassandra, mysql..)",
+		},
+		cli.StringFlag{
+			Name:  FlagDBAddress,
+			Value: "127.0.0.1",
+			Usage: "persistence address (right now only cassandra is fully supported)",
+		},
+		cli.IntFlag{
+			Name:  FlagDBPort,
+			Value: 9042,
+			Usage: "persistence port",
+		},
+		cli.StringFlag{
+			Name:  FlagUsername,
+			Usage: "cassandra username",
+		},
+		cli.StringFlag{
+			Name:  FlagPassword,
+			Usage: "cassandra password",
+		},
+		cli.StringFlag{
+			Name:  FlagKeyspace,
+			Value: "temporal",
+			Usage: "cassandra keyspace",
+		},
+		cli.BoolFlag{
+			Name:  FlagEnableTLS,
+			Usage: "enable TLS over cassandra connection",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSCertPath,
+			Usage: "cassandra tls client cert path (tls must be enabled)",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSKeyPath,
+			Usage: "cassandra tls client key path (tls must be enabled)",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSCaPath,
+			Usage: "cassandra tls client ca path (tls must be enabled)",
+		},
+		cli.BoolFlag{
+			Name:  FlagTLSEnableHostVerification,
+			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
 }

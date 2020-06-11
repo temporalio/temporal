@@ -721,6 +721,36 @@ func newAdminTaskListCommands() []cli.Command {
 				AdminDescribeTaskList(c)
 			},
 		},
+		{
+			Name:  "list_tasks",
+			Usage: "List tasks of a tasklist",
+			Flags: append(getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "Namespace Id",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskListType,
+					Value: "activity",
+					Usage: "Tasklist type: activity, decision",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskList,
+					Usage: "Tasklist name",
+				},
+				cli.Int64Flag{
+					Name:  FlagMinReadLevel,
+					Usage: "Lower bound of read level",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxReadLevel,
+					Usage: "Upper bound of read level",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListTaskListTasks(c)
+			},
+		},
 	}
 }
 
@@ -937,60 +967,6 @@ func newDBCommands() []cli.Command {
 			Action: func(c *cli.Context) {
 				AdminDBClean(c)
 			},
-		},
-	}
-}
-
-// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-func getDBFlags() []cli.Flag {
-	return []cli.Flag{
-		cli.StringFlag{
-			Name:  FlagDBEngine,
-			Value: "cassandra",
-			Usage: "Type of the DB engine to use (cassandra, mysql..)",
-		},
-		cli.StringFlag{
-			Name:  FlagDBAddress,
-			Value: "127.0.0.1",
-			Usage: "persistence address (right now only cassandra is fully supported)",
-		},
-		cli.IntFlag{
-			Name:  FlagDBPort,
-			Value: 9042,
-			Usage: "persistence port",
-		},
-		cli.StringFlag{
-			Name:  FlagUsername,
-			Usage: "cassandra username",
-		},
-		cli.StringFlag{
-			Name:  FlagPassword,
-			Usage: "cassandra password",
-		},
-		cli.StringFlag{
-			Name:  FlagKeyspace,
-			Value: "temporal",
-			Usage: "cassandra keyspace",
-		},
-		cli.BoolFlag{
-			Name:  FlagEnableTLS,
-			Usage: "enable TLS over cassandra connection",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSCertPath,
-			Usage: "cassandra tls client cert path (tls must be enabled)",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSKeyPath,
-			Usage: "cassandra tls client key path (tls must be enabled)",
-		},
-		cli.StringFlag{
-			Name:  FlagTLSCaPath,
-			Usage: "cassandra tls client ca path (tls must be enabled)",
-		},
-		cli.BoolFlag{
-			Name:  FlagTLSEnableHostVerification,
-			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
 }
