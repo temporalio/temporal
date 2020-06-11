@@ -40,7 +40,6 @@ import (
 // CreatePersistenceFactory returns an initialized persistence managers factory.
 // The factory allows to easily initialize concrete persistence managers to execute commands against persistence layer
 func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
-
 	defaultStore, err := CreateDefaultDBConfig(c)
 	if err != nil {
 		ErrorAndExit("CreatePersistenceFactory err", err)
