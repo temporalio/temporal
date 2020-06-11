@@ -37,32 +37,22 @@ func SetDefaultWorkflowIdReusePolicy(f *commonpb.WorkflowIdReusePolicy){
 	}
 }
 
-func SetDefaultContinueAsNewInitiator(f *commonpb.ContinueAsNewInitiator){
-	if *f == commonpb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED{
-		*f = commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER
-	}
-}
-
-func SetDefaultQueryConsistencyLevel(f *querypb.QueryConsistencyLevel){
-	if *f == querypb.QUERY_CONSISTENCY_LEVEL_UNSPECIFIED{
-		*f = querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL
-	}
-}
-
 func SetDefaultHistoryEventFilterType(f *filterpb.HistoryEventFilterType){
 	if *f == filterpb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED{
 		*f = filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT
 	}
 }
 
-func SetDefaultTasklListType(f *tasklistpb.TaskListType){
-	if *f == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED{
-		*f = tasklistpb.TASK_LIST_TYPE_DECISION
-	}
-}
-
-func SetDefaultTasklListKind(f *tasklistpb.TaskListKind){
+func SetDefaultTaskListKind(f *tasklistpb.TaskListKind){
 	if *f == tasklistpb.TASK_LIST_KIND_UNSPECIFIED{
 		*f = tasklistpb.TASK_LIST_KIND_NORMAL
 	}
 }
+
+// TODO: remove this with corresponding field from request
+func SetDefaultQueryConsistencyLevel(f *querypb.QueryConsistencyLevel){
+	if *f == querypb.QUERY_CONSISTENCY_LEVEL_UNSPECIFIED{
+		*f = querypb.QUERY_CONSISTENCY_LEVEL_STRONG
+	}
+}
+

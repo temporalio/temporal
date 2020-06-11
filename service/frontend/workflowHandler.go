@@ -3082,8 +3082,9 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	enums.SetDefaultTasklListType(&request.TaskListType)
-	enums.SetDefaultTasklListKind(&request.TaskList.Kind)
+	if request.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED{
+		return nil, wh.error(errTaskListTypeNotSet, scope)
+	}
 
 	var matchingResponse *matchingservice.DescribeTaskListResponse
 	op := func() error {
@@ -3400,6 +3401,8 @@ func (wh *WorkflowHandler) validateTaskList(t *tasklistpb.TaskList, scope metric
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errTaskListTooLong, scope)
 	}
+
+	enums.SetDefaultTaskListKind(&t.Kind)
 	return nil
 }
 

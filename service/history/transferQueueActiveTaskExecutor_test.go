@@ -1529,6 +1529,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 				WorkflowExecutionTimeoutSeconds: 2,
 				WorkflowTaskTimeoutSeconds:      1,
 			},
+			ContinueAsNewInitiator: commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 		},
 	)
 	s.Nil(err)
@@ -2029,6 +2030,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			InitiatedId: task.GetScheduleId(),
 		},
 		FirstDecisionTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now),
+		ContinueAsNewInitiator: commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 	}
 }
 

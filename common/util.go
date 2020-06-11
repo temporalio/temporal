@@ -398,6 +398,7 @@ func CreateHistoryStartWorkflowRequest(
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceID,
 		StartRequest: startRequest,
+		ContinueAsNewInitiator: commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
 		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()

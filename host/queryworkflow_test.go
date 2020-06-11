@@ -1349,6 +1349,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		Query: &querypb.WorkflowQuery{
 			QueryType: queryType,
 		},
+		QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
 	s.IsType(history.ErrQueryWorkflowBeforeFirstDecision, err)

@@ -31,6 +31,7 @@ var (
 	errTaskTokenNotSet                                    = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errTaskListNotSet                                     = serviceerror.NewInvalidArgument("TaskList is not set on request.")
+	errTaskListTypeNotSet                                 = serviceerror.NewInvalidArgument("TaskListType is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
