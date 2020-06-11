@@ -20,37 +20,38 @@
 
 syntax = "proto3";
 
-package historyservice;
-option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice";
+package historyservice.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice/v1;historyservice";
 
-import "common/enum.proto";
-import "common/server_enum.proto";
-import "common/message.proto";
-import "event/message.proto";
-import "event/server_message.proto";
-import "tasklist/message.proto";
-import "execution/enum.proto";
-import "execution/message.proto";
-import "execution/server_enum.proto";
-import "execution/server_message.proto";
-import "namespace/server_message.proto";
-import "replication/server_message.proto";
-import "query/message.proto";
-import "failure/message.proto";
+import "enums/v1/common.proto";
+import "common/v1/message.proto";
+import "history/v1/message.proto";
+import "tasklist/v1/message.proto";
+import "enums/v1/workflow.proto";
+import "execution/v1/message.proto";
+import "query/v1/message.proto";
+import "failure/v1/message.proto";
+
+import "history/v1/server_message.proto";
+import "enums/v1/server_common.proto";
+import "enums/v1/server_workflow.proto";
+import "workflow/v1/server_message.proto";
+import "namespace/v1/server_message.proto";
+import "replication/v1/server_message.proto";
 
 // TODO: remove these dependencies
-import "workflowservice/request_response.proto";
-import "adminservice/request_response.proto";
+import "workflowservice/v1/request_response.proto";
+import "adminservice/v1/request_response.proto";
 
 message StartWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.StartWorkflowExecutionRequest startRequest = 2;
-    execution.ParentExecutionInfo parentExecutionInfo = 3;
+    workflowservice.v1.StartWorkflowExecutionRequest startRequest = 2;
+    workflow.v1.ParentExecutionInfo parentExecutionInfo = 3;
     int32 attempt = 4;
     int64 workflowExecutionExpirationTimestamp = 5;
-    common.ContinueAsNewInitiator continueAsNewInitiator = 6;
-    failure.Failure continuedFailure = 7;
-    common.Payloads lastCompletionResult = 8;
+    enums.v1.ContinueAsNewInitiator continueAsNewInitiator = 6;
+    failure.v1.Failure continuedFailure = 7;
+    common.v1.Payloads lastCompletionResult = 8;
     int32 firstDecisionTaskBackoffSeconds = 9;
 }
 
@@ -60,19 +61,19 @@ message StartWorkflowExecutionResponse {
 
 message GetMutableStateRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
 }
 
 message GetMutableStateResponse {
-    common.WorkflowExecution execution = 1;
-    common.WorkflowType workflowType = 2;
+    common.v1.WorkflowExecution execution = 1;
+    common.v1.WorkflowType workflowType = 2;
     int64 nextEventId = 3;
     int64 previousStartedEventId = 4;
     int64 lastFirstEventId = 5;
-    tasklist.TaskList taskList = 6;
-    tasklist.TaskList stickyTaskList = 7;
+    tasklist.v1.TaskList taskList = 6;
+    tasklist.v1.TaskList stickyTaskList = 7;
     string clientLibraryVersion = 8;
     string clientFeatureVersion = 9;
     string clientImpl = 10;
@@ -81,45 +82,42 @@ message GetMutableStateResponse {
     int32 stickyTaskListScheduleToStartTimeout = 12;
     int32 eventStoreVersion = 13;
     bytes currentBranchToken = 14;
-    map<string, replication.ReplicationInfo> replicationInfo = 15;
-    execution.WorkflowExecutionState workflowState = 16;
-    execution.WorkflowExecutionStatus workflowStatus = 17;
-    event.VersionHistories versionHistories = 18;
+    map<string, replication.v1.ReplicationInfo> replicationInfo = 15;
+    enums.v1.WorkflowExecutionState workflowState = 16;
+    enums.v1.WorkflowExecutionStatus workflowStatus = 17;
+    history.v1.VersionHistories versionHistories = 18;
     bool isStickyTaskListEnabled = 19;
 }
 
 message PollMutableStateRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
 }
 
 message PollMutableStateResponse {
-    common.WorkflowExecution execution = 1;
-    common.WorkflowType workflowType = 2;
+    common.v1.WorkflowExecution execution = 1;
+    common.v1.WorkflowType workflowType = 2;
     int64 nextEventId = 3;
     int64 previousStartedEventId = 4;
     int64 lastFirstEventId = 5;
-    tasklist.TaskList taskList = 6;
-    tasklist.TaskList stickyTaskList = 7;
+    tasklist.v1.TaskList taskList = 6;
+    tasklist.v1.TaskList stickyTaskList = 7;
     string clientLibraryVersion = 8;
     string clientFeatureVersion = 9;
     string clientImpl = 10;
     int32 stickyTaskListScheduleToStartTimeout = 11;
     bytes currentBranchToken = 12;
-    map<string, replication.ReplicationInfo> replicationInfo = 13;
-    event.VersionHistories versionHistories = 14;
-    // TODO: when migrating to gRPC, make this a enum
-    // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
-    execution.WorkflowExecutionState workflowState = 15;
-    execution.WorkflowExecutionStatus workflowStatus = 16;
+    map<string, replication.v1.ReplicationInfo> replicationInfo = 13;
+    history.v1.VersionHistories versionHistories = 14;
+    enums.v1.WorkflowExecutionState workflowState = 15;
+    enums.v1.WorkflowExecutionStatus workflowStatus = 16;
 }
 
 message ResetStickyTaskListRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
 }
 
 message ResetStickyTaskListResponse {
@@ -127,54 +125,54 @@ message ResetStickyTaskListResponse {
 
 message RecordDecisionTaskStartedRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string requestId = 5;
-    workflowservice.PollForDecisionTaskRequest pollRequest = 6;
+    workflowservice.v1.PollForDecisionTaskRequest pollRequest = 6;
 }
 
 message RecordDecisionTaskStartedResponse {
-    common.WorkflowType workflowType = 1;
+    common.v1.WorkflowType workflowType = 1;
     int64 previousStartedEventId = 2;
     int64 scheduledEventId = 3;
     int64 startedEventId = 4;
     int64 nextEventId = 5;
     int64 attempt = 6;
     bool stickyExecutionEnabled = 7;
-    event.TransientDecisionInfo decisionInfo = 8;
-    tasklist.TaskList WorkflowExecutionTaskList = 9;
+    history.v1.TransientDecisionInfo decisionInfo = 8;
+    tasklist.v1.TaskList WorkflowExecutionTaskList = 9;
     int32 eventStoreVersion = 10;
     bytes branchToken = 11;
     int64 scheduledTimestamp = 12;
     int64 startedTimestamp = 13;
-    map<string, query.WorkflowQuery> queries = 14;
+    map<string, query.v1.WorkflowQuery> queries = 14;
 }
 
 message RecordActivityTaskStartedRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string requestId = 5;
-    workflowservice.PollForActivityTaskRequest pollRequest = 6;
+    workflowservice.v1.PollForActivityTaskRequest pollRequest = 6;
 }
 
 message RecordActivityTaskStartedResponse {
-    event.HistoryEvent scheduledEvent = 1;
+    history.v1.HistoryEvent scheduledEvent = 1;
     int64 startedTimestamp = 2;
     int64 attempt = 3;
     int64 scheduledTimestampOfThisAttempt = 4;
-    common.Payloads heartbeatDetails = 5;
-    common.WorkflowType workflowType = 6;
+    common.v1.Payloads heartbeatDetails = 5;
+    common.v1.WorkflowType workflowType = 6;
     string workflowNamespace = 7;
 }
 
 message RespondDecisionTaskCompletedRequest {
     string namespaceId = 1;
-    workflowservice.RespondDecisionTaskCompletedRequest completeRequest = 2;
+    workflowservice.v1.RespondDecisionTaskCompletedRequest completeRequest = 2;
 }
 
 message RespondDecisionTaskCompletedResponse {
@@ -183,7 +181,7 @@ message RespondDecisionTaskCompletedResponse {
 
 message RespondDecisionTaskFailedRequest {
     string namespaceId = 1;
-    workflowservice.RespondDecisionTaskFailedRequest failedRequest = 2;
+    workflowservice.v1.RespondDecisionTaskFailedRequest failedRequest = 2;
 }
 
 message RespondDecisionTaskFailedResponse {
@@ -191,7 +189,7 @@ message RespondDecisionTaskFailedResponse {
 
 message RecordActivityTaskHeartbeatRequest {
     string namespaceId = 1;
-    workflowservice.RecordActivityTaskHeartbeatRequest heartbeatRequest = 2;
+    workflowservice.v1.RecordActivityTaskHeartbeatRequest heartbeatRequest = 2;
 }
 
 message RecordActivityTaskHeartbeatResponse {
@@ -200,7 +198,7 @@ message RecordActivityTaskHeartbeatResponse {
 
 message RespondActivityTaskCompletedRequest {
     string namespaceId = 1;
-    workflowservice.RespondActivityTaskCompletedRequest completeRequest = 2;
+    workflowservice.v1.RespondActivityTaskCompletedRequest completeRequest = 2;
 }
 
 message RespondActivityTaskCompletedResponse {
@@ -208,7 +206,7 @@ message RespondActivityTaskCompletedResponse {
 
 message RespondActivityTaskFailedRequest {
     string namespaceId = 1;
-    workflowservice.RespondActivityTaskFailedRequest failedRequest = 2;
+    workflowservice.v1.RespondActivityTaskFailedRequest failedRequest = 2;
 }
 
 message RespondActivityTaskFailedResponse {
@@ -216,7 +214,7 @@ message RespondActivityTaskFailedResponse {
 
 message RespondActivityTaskCanceledRequest {
     string namespaceId = 1;
-    workflowservice.RespondActivityTaskCanceledRequest cancelRequest = 2;
+    workflowservice.v1.RespondActivityTaskCanceledRequest cancelRequest = 2;
 }
 
 message RespondActivityTaskCanceledResponse {
@@ -224,8 +222,8 @@ message RespondActivityTaskCanceledResponse {
 
 message SignalWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.SignalWorkflowExecutionRequest signalRequest = 2;
-    common.WorkflowExecution externalWorkflowExecution = 3;
+    workflowservice.v1.SignalWorkflowExecutionRequest signalRequest = 2;
+    common.v1.WorkflowExecution externalWorkflowExecution = 3;
     bool childWorkflowOnly = 4;
 }
 
@@ -234,7 +232,7 @@ message SignalWorkflowExecutionResponse {
 
 message SignalWithStartWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.SignalWithStartWorkflowExecutionRequest signalWithStartRequest = 2;
+    workflowservice.v1.SignalWithStartWorkflowExecutionRequest signalWithStartRequest = 2;
 }
 
 message SignalWithStartWorkflowExecutionResponse {
@@ -243,7 +241,7 @@ message SignalWithStartWorkflowExecutionResponse {
 
 message RemoveSignalMutableStateRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflowExecution = 2;
     string requestId = 3;
 }
 
@@ -252,7 +250,7 @@ message RemoveSignalMutableStateResponse {
 
 message TerminateWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.TerminateWorkflowExecutionRequest terminateRequest = 2;
+    workflowservice.v1.TerminateWorkflowExecutionRequest terminateRequest = 2;
 }
 
 message TerminateWorkflowExecutionResponse {
@@ -260,7 +258,7 @@ message TerminateWorkflowExecutionResponse {
 
 message ResetWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.ResetWorkflowExecutionRequest resetRequest = 2;
+    workflowservice.v1.ResetWorkflowExecutionRequest resetRequest = 2;
 }
 
 message ResetWorkflowExecutionResponse {
@@ -269,9 +267,9 @@ message ResetWorkflowExecutionResponse {
 
 message RequestCancelWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.RequestCancelWorkflowExecutionRequest cancelRequest = 2;
+    workflowservice.v1.RequestCancelWorkflowExecutionRequest cancelRequest = 2;
     int64 externalInitiatedEventId = 3;
-    common.WorkflowExecution externalWorkflowExecution = 4;
+    common.v1.WorkflowExecution externalWorkflowExecution = 4;
     bool childWorkflowOnly = 5;
 }
 
@@ -280,7 +278,7 @@ message RequestCancelWorkflowExecutionResponse {
 
 message ScheduleDecisionTaskRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflowExecution = 2;
     bool isFirstDecision = 3;
 }
 
@@ -296,10 +294,10 @@ message ScheduleDecisionTaskResponse {
 **/
 message RecordChildExecutionCompletedRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflowExecution = 2;
     int64 initiatedId = 3;
-    common.WorkflowExecution completedExecution = 4;
-    event.HistoryEvent completionEvent = 5;
+    common.v1.WorkflowExecution completedExecution = 4;
+    history.v1.HistoryEvent completionEvent = 5;
 }
 
 message RecordChildExecutionCompletedResponse {
@@ -307,26 +305,26 @@ message RecordChildExecutionCompletedResponse {
 
 message DescribeWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.DescribeWorkflowExecutionRequest request = 2;
+    workflowservice.v1.DescribeWorkflowExecutionRequest request = 2;
 }
 
 message DescribeWorkflowExecutionResponse {
-    execution.WorkflowExecutionConfiguration executionConfiguration = 1;
-    execution.WorkflowExecutionInfo workflowExecutionInfo = 2;
-    repeated execution.PendingActivityInfo pendingActivities = 3;
-    repeated execution.PendingChildExecutionInfo pendingChildren = 4;
+    execution.v1.WorkflowExecutionConfiguration executionConfiguration = 1;
+    execution.v1.WorkflowExecutionInfo workflowExecutionInfo = 2;
+    repeated execution.v1.PendingActivityInfo pendingActivities = 3;
+    repeated execution.v1.PendingChildExecutionInfo pendingChildren = 4;
 }
 
 message ReplicateEventsRequest {
     string sourceCluster = 1;
     string namespaceId = 2;
-    common.WorkflowExecution workflowExecution = 3;
+    common.v1.WorkflowExecution workflowExecution = 3;
     int64 firstEventId = 4;
     int64 nextEventId = 5;
     int64 version = 6;
-    map<string, replication.ReplicationInfo> replicationInfo = 7;
-    event.History history = 8;
-    event.History newRunHistory = 9;
+    map<string, replication.v1.ReplicationInfo> replicationInfo = 7;
+    history.v1.History history = 8;
+    history.v1.History newRunHistory = 9;
     // this attribute is deprecated
     bool forceBufferEvents = 10;
     int32 eventStoreVersion = 11;
@@ -340,10 +338,10 @@ message ReplicateEventsResponse {
 
 message ReplicateRawEventsRequest {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
-    map<string, replication.ReplicationInfo> replicationInfo = 3;
-    common.DataBlob history = 4;
-    common.DataBlob newRunHistory = 5;
+    common.v1.WorkflowExecution workflowExecution = 2;
+    map<string, replication.v1.ReplicationInfo> replicationInfo = 3;
+    common.v1.DataBlob history = 4;
+    common.v1.DataBlob newRunHistory = 5;
     int32 eventStoreVersion = 6;
     int32 newRunEventStoreVersion = 7;
 }
@@ -353,11 +351,11 @@ message ReplicateRawEventsResponse {
 
 message ReplicateEventsV2Request {
     string namespaceId = 1;
-    common.WorkflowExecution workflowExecution = 2;
-    repeated event.VersionHistoryItem versionHistoryItems = 3;
-    common.DataBlob events = 4;
+    common.v1.WorkflowExecution workflowExecution = 2;
+    repeated history.v1.VersionHistoryItem versionHistoryItems = 3;
+    common.v1.DataBlob events = 4;
     // New run events does not need version history since there is no prior events.
-    common.DataBlob newRunEvents = 5;
+    common.v1.DataBlob newRunEvents = 5;
 }
 
 message ReplicateEventsV2Response {
@@ -382,11 +380,11 @@ message SyncActivityRequest {
     int64 startedId = 7;
     int64 startedTime = 8;
     int64 lastHeartbeatTime = 9;
-    common.Payloads details = 10;
+    common.v1.Payloads details = 10;
     int32 attempt = 11;
-    failure.Failure lastFailure = 12;
+    failure.v1.Failure lastFailure = 12;
     string lastWorkerIdentity = 13;
-    event.VersionHistory versionHistory = 14;
+    history.v1.VersionHistory versionHistory = 14;
 }
 
 message SyncActivityResponse {
@@ -394,7 +392,7 @@ message SyncActivityResponse {
 
 message DescribeMutableStateRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
 }
 
 message DescribeMutableStateResponse {
@@ -407,14 +405,14 @@ message DescribeHistoryHostRequest {
     //ip:port
     string hostAddress = 1;
     int32 shardIdForHost = 2;
-    common.WorkflowExecution executionForHost = 3;
+    common.v1.WorkflowExecution executionForHost = 3;
 }
 
 message DescribeHistoryHostResponse {
     int32 numberOfShards = 1;
     repeated int32
     shardIds = 2;
-    namespace.NamespaceCacheInfo namespaceCache = 3;
+    namespace.v1.NamespaceCacheInfo namespaceCache = 3;
     string shardControllerStatus = 4;
     string address = 5;
 }
@@ -428,7 +426,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    common.TaskCategory category = 2;
+    enums.v1.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }
@@ -437,41 +435,41 @@ message RemoveTaskResponse {
 }
 
 message GetReplicationMessagesRequest {
-    repeated replication.ReplicationToken tokens = 1;
+    repeated replication.v1.ReplicationToken tokens = 1;
     string clusterName = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, replication.ReplicationMessages> messagesByShard = 1;
+    map<int32, replication.v1.ReplicationMessages> messagesByShard = 1;
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated replication.ReplicationTaskInfo taskInfos = 1;
+    repeated replication.v1.ReplicationTaskInfo taskInfos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated replication.ReplicationTask replicationTasks = 1;
+    repeated replication.v1.ReplicationTask replicationTasks = 1;
 }
 
 message QueryWorkflowRequest {
     string namespaceId = 1;
-    workflowservice.QueryWorkflowRequest request = 2;
+    workflowservice.v1.QueryWorkflowRequest request = 2;
 }
 
 message QueryWorkflowResponse {
-    workflowservice.QueryWorkflowResponse response = 1;
+    workflowservice.v1.QueryWorkflowResponse response = 1;
 }
 
 message ReapplyEventsRequest {
     string namespaceId = 1;
-    adminservice.ReapplyEventsRequest request = 2;
+    adminservice.v1.ReapplyEventsRequest request = 2;
 }
 
 message ReapplyEventsResponse {
 }
 
 message ReadDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -480,13 +478,13 @@ message ReadDLQMessagesRequest {
 }
 
 message ReadDLQMessagesResponse {
-    common.DeadLetterQueueType type = 1;
-    repeated replication.ReplicationTask replicationTasks = 2;
+    enums.v1.DeadLetterQueueType type = 1;
+    repeated replication.v1.ReplicationTask replicationTasks = 2;
     bytes nextPageToken = 3;
 }
 
 message PurgeDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -496,7 +494,7 @@ message PurgeDLQMessagesResponse {
 }
 
 message MergeDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -510,7 +508,7 @@ message MergeDLQMessagesResponse {
 
 message RefreshWorkflowTasksRequest {
     string namespaceId = 1;
-    adminservice.RefreshWorkflowTasksRequest request = 2;
+    adminservice.v1.RefreshWorkflowTasksRequest request = 2;
 }
 
 message RefreshWorkflowTasksResponse {

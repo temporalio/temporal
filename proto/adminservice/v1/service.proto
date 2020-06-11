@@ -20,10 +20,10 @@
 
 syntax = "proto3";
 
-package adminservice;
-option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
+package adminservice.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice/v1;adminservice";
 
-import "adminservice/request_response.proto";
+import "adminservice/v1/request_response.proto";
 
 // AdminService provides advanced APIs for debugging and analysis with admin privilege
 service AdminService {

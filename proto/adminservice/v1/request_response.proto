@@ -20,21 +20,22 @@
 
 syntax = "proto3";
 
-package adminservice;
-option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
+package adminservice.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice/v1;adminservice";
 
-import "common/enum.proto";
-import "common/server_enum.proto";
-import "common/message.proto";
-import "namespace/server_message.proto";
-import "event/server_message.proto";
-import "replication/server_message.proto";
-import "version/message.proto";
-import "cluster/server_message.proto";
+import "enums/v1/common.proto";
+import "common/v1/message.proto";
+import "version/v1/message.proto";
+
+import "cluster/v1/server_message.proto";
+import "enums/v1/server_common.proto";
+import "namespace/v1/server_message.proto";
+import "history/v1/server_message.proto";
+import "replication/v1/server_message.proto";
 
 message DescribeWorkflowExecutionRequest {
     string namespace = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
 }
 
 message DescribeWorkflowExecutionResponse {
@@ -49,14 +50,14 @@ message DescribeHistoryHostRequest {
     //ip:port
     string hostAddress = 1;
     int32 shardIdForHost = 2;
-    common.WorkflowExecution executionForHost = 3;
+    common.v1.WorkflowExecution executionForHost = 3;
 }
 
 message DescribeHistoryHostResponse {
     int32 numberOfShards = 1;
     repeated int32
     shardIds = 2;
-    namespace.NamespaceCacheInfo namespaceCache = 3;
+    namespace.v1.NamespaceCacheInfo namespaceCache = 3;
     string shardControllerStatus = 4;
     string address = 5;
 }
@@ -70,7 +71,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    common.TaskCategory category = 2;
+    enums.v1.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }
@@ -80,7 +81,7 @@ message RemoveTaskResponse {
 
 message GetWorkflowExecutionRawHistoryRequest {
     string namespace = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
     int64 firstEventId = 3;
     int64 nextEventId = 4;
     int32 maximumPageSize = 5;
@@ -89,8 +90,8 @@ message GetWorkflowExecutionRawHistoryRequest {
 
 message GetWorkflowExecutionRawHistoryResponse {
     bytes nextPageToken = 1;
-    repeated common.DataBlob historyBatches = 2;
-    map<string, replication.ReplicationInfo> replicationInfo = 3;
+    repeated common.v1.DataBlob historyBatches = 2;
+    map<string, replication.v1.ReplicationInfo> replicationInfo = 3;
     int32 eventStoreVersion = 4;
 }
 
@@ -100,7 +101,7 @@ message GetWorkflowExecutionRawHistoryResponse {
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
     string namespace = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
     int64 startEventId = 3;
     int64 startEventVersion = 4;
     int64 endEventId = 5;
@@ -111,17 +112,17 @@ message GetWorkflowExecutionRawHistoryV2Request {
 
 message GetWorkflowExecutionRawHistoryV2Response {
     bytes nextPageToken = 1;
-    repeated common.DataBlob historyBatches = 2;
-    event.VersionHistory versionHistory = 3;
+    repeated common.v1.DataBlob historyBatches = 2;
+    history.v1.VersionHistory versionHistory = 3;
 }
 
 message GetReplicationMessagesRequest {
-    repeated replication.ReplicationToken tokens = 1;
+    repeated replication.v1.ReplicationToken tokens = 1;
     string clusterName = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, replication.ReplicationMessages> messagesByShard = 1;
+    map<int32, replication.v1.ReplicationMessages> messagesByShard = 1;
 }
 
 message GetNamespaceReplicationMessagesRequest {
@@ -135,29 +136,29 @@ message GetNamespaceReplicationMessagesRequest {
 }
 
 message GetNamespaceReplicationMessagesResponse {
-    replication.ReplicationMessages messages = 1;
+    replication.v1.ReplicationMessages messages = 1;
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated replication.ReplicationTaskInfo taskInfos = 1;
+    repeated replication.v1.ReplicationTaskInfo taskInfos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated replication.ReplicationTask replicationTasks = 1;
+    repeated replication.v1.ReplicationTask replicationTasks = 1;
 }
 
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
     string namespace = 1;
-    common.WorkflowExecution workflowExecution = 2;
-    common.DataBlob events = 3;
+    common.v1.WorkflowExecution workflowExecution = 2;
+    common.v1.DataBlob events = 3;
 }
 
 message ReapplyEventsResponse {
 }
 
 message AddSearchAttributeRequest {
-    map<string, common.IndexedValueType> searchAttribute = 1;
+    map<string, enums.v1.IndexedValueType> searchAttribute = 1;
     string securityToken = 2;
 }
 
@@ -168,12 +169,12 @@ message DescribeClusterRequest {
 }
 
 message DescribeClusterResponse {
-    version.SupportedClientVersions supportedClientVersions = 1;
-    cluster.MembershipInfo membershipInfo = 2;
+    version.v1.SupportedClientVersions supportedClientVersions = 1;
+    cluster.v1.MembershipInfo membershipInfo = 2;
 }
 
 message ReadDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -182,13 +183,13 @@ message ReadDLQMessagesRequest {
 }
 
 message ReadDLQMessagesResponse {
-    common.DeadLetterQueueType type = 1;
-    repeated replication.ReplicationTask replicationTasks = 2;
+    enums.v1.DeadLetterQueueType type = 1;
+    repeated replication.v1.ReplicationTask replicationTasks = 2;
     bytes nextPageToken = 3;
 }
 
 message PurgeDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -198,7 +199,7 @@ message PurgeDLQMessagesResponse {
 }
 
 message MergeDLQMessagesRequest {
-    common.DeadLetterQueueType type = 1;
+    enums.v1.DeadLetterQueueType type = 1;
     int32 shardId = 2;
     string sourceCluster = 3;
     int64 inclusiveEndMessageId = 4;
@@ -212,7 +213,7 @@ message MergeDLQMessagesResponse {
 
 message RefreshWorkflowTasksRequest {
     string namespace = 1;
-    common.WorkflowExecution execution = 2;
+    common.v1.WorkflowExecution execution = 2;
 }
 
 message RefreshWorkflowTasksResponse {
