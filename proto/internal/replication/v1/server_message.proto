@@ -72,7 +72,7 @@ message ReplicationMessages {
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 last_retrieved_message_id = 2;
     // Hint for flow control.
-    bool hasMore  = 3;
+    bool has_more  = 3;
     SyncShardStatus sync_shard_status = 4;
 }
 

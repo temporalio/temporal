@@ -1,7 +1,0 @@
-build:
-  roots:
-    - .
-    - temporal-proto
-lint:
-  use:
-    - DEFAULT

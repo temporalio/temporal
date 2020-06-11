@@ -20,7 +20,7 @@
 
 syntax = "proto3";
 
-package archiver;
+package archiver.v1;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/archiver/v1;archiver";
 

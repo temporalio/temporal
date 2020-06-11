@@ -20,37 +20,20 @@
 
 syntax = "proto3";
 
-package checksum;
-option go_package = "github.com/temporalio/temporal/.gen/proto/checksum/v1;checksum";
+package enums.v1;
 
-import "enums/v1/workflow.proto";
+option go_package = "github.com/temporalio/temporal/.gen/proto/enums/v1;enums";
 
-import "history/v1/server_message.proto";
-import "enums/v1/server_workflow.proto";
+enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED = 0;
+    MESSAGE_TYPE_INDEX = 1;
+    MESSAGE_TYPE_DELETE = 2;
+}
 
-message MutableStateChecksumPayload {
-    bool cancel_requested = 1;
-    enums.v1.WorkflowExecutionState state = 2;
-    enums.v1.WorkflowExecutionStatus status = 3;
-
-    int64 last_write_version = 4;
-    int64 last_write_event_id = 5;
-    int64 last_first_event_id = 6;
-    int64 next_event_id = 7;
-    int64 last_processed_event_id = 8;
-    int64 signal_count = 9;
-
-    int32 decision_attempt = 10;
-    int64 decision_version = 11;
-    int64 decision_scheduled_id = 12;
-    int64 decision_started_id = 13;
-
-    repeated int64 pending_timer_started_ids = 14;
-    repeated int64 pending_activity_scheduled_ids = 15;
-    repeated int64 pending_signal_initiated_ids = 16;
-    repeated int64 pending_req_cancel_initiated_ids = 17;
-    repeated int64 pending_child_initiated_ids = 18;
-
-    string sticky_task_list_name = 19;
-    history.v1.VersionHistories version_histories = 20;
+enum FieldType {
+    FIELD_TYPE_UNSPECIFIED = 0;
+    FIELD_TYPE_STRING = 1;
+    FIELD_TYPE_INT = 2;
+    FIELD_TYPE_BOOL = 3;
+    FIELD_TYPE_BINARY =4;
 }

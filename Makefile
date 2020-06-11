@@ -100,9 +100,9 @@ GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..
 
 PROTO_ROOT     := proto
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
-PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
+PROTO_SERVICES = $(shell find $(PROTO_ROOT)/internal -name "*service.proto")
+PROTO_IMPORT   := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT      := .gen/proto
 
 ##### Tools #####
@@ -144,7 +144,7 @@ protoc: $(PROTO_OUT)
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
-# All gRPC generated service files pathes relative to PROTO_ROOT.
+# All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
