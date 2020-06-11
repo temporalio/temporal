@@ -427,11 +427,22 @@ func AdminListTasks(c *cli.Context) {
 
 	if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTasksRequest{}
-		tasks, err := executionManager.GetTransferTasks(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Transfer Tasks", err)
+
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetTransferTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
 		}
-		prettyPrintJSONObject(tasks)
+		paginate(c, paginationFunc)
 	} else if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
 		minVis := time.Unix(0, minVisFlag)
@@ -456,11 +467,21 @@ func AdminListTasks(c *cli.Context) {
 		paginate(c, paginationFunc)
 	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
-		task, err := executionManager.GetReplicationTasks(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Replication Tasks", err)
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetReplicationTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
 		}
-		prettyPrintJSONObject(task)
+		paginate(c, paginationFunc)
 	} else {
 		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
 	}
