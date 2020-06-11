@@ -20,49 +20,45 @@
 
 syntax = "proto3";
 
-package token;
+package archiver;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/token";
+option go_package = "github.com/temporalio/temporal/.gen/proto/archiver/v1;archiver";
 
-import "event/server_message.proto";
-import "replication/server_message.proto";
+import "common/v1/message.proto";
+import "history/v1/message.proto";
+import "enums/v1/workflow.proto";
 
-message HistoryContinuation {
-    string runId = 1;
-    int64 firstEventId = 2;
-    int64 nextEventId = 3;
-    bool isWorkflowRunning = 5;
-    bytes persistenceToken = 6;
-    event.TransientDecisionInfo transientDecision = 7;
-    bytes branchToken = 8;
-    map<string,replication.ReplicationInfo> replicationInfo = 9;
-}
-
-message RawHistoryContinuation{
+message HistoryBlobHeader {
     string namespace = 1;
-    string workflowId = 2;
-    string runId = 3;
-    int64 startEventId = 4;
-    int64 startEventVersion = 5;
-    int64 endEventId = 6;
-    int64 endEventVersion = 7;
-    bytes persistenceToken = 8;
-    event.VersionHistories versionHistories = 9;
+    string namespaceId = 2;
+    string workflowId = 3;
+    string runId = 4;
+    bool isLast = 5;
+    int64 firstFailoverVersion = 6;
+    int64 lastFailoverVersion = 7;
+    int64 firstEventId = 8;
+    int64 lastEventId = 9;
+    int64 eventCount = 10;
 }
 
-message Task {
-    string namespaceId = 1;
-    string workflowId  = 2;
-    string runId = 3;
-    int64 scheduleId = 4;
-    int64 scheduleAttempt = 5;
-    string activityId = 6;
-    string workflowType = 7;
-    string activityType = 8;
+message HistoryBlob  {
+    HistoryBlobHeader header = 1;
+    repeated history.v1.History body = 2;
 }
 
-message QueryTask {
+// ArchiveVisibilityRequest is request to Archive single workflow visibility record
+message ArchiveVisibilityRequest {
     string namespaceId = 1;
-    string taskList = 2;
-    string taskId = 3;
+    string namespace = 2;
+    string workflowId = 3;
+    string runId = 4;
+    string workflowTypeName = 5;
+    int64 startTimestamp = 6;
+    int64 executionTimestamp = 7;
+    int64 closeTimestamp = 8;
+    enums.v1.WorkflowExecutionStatus status = 9;
+    int64 historyLength = 10;
+    common.v1.Memo memo = 11;
+    map<string, string> searchAttributes = 12;
+    string historyArchivalURI = 13;
 }

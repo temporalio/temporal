@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,26 +20,17 @@
 
 syntax = "proto3";
 
-package indexer;
-option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
+package enums.v1;
 
-import "indexer/server_enum.proto";
+option go_package = "github.com/temporalio/temporal/.gen/proto/enums/v1;enums";
 
-message Field {
-    FieldType type = 1;
-    oneof data {
-        string stringData = 2;
-        int64 intData = 3;
-        bool boolData = 4;
-        bytes binaryData = 5;
-    }
+enum DeadLetterQueueType {
+    DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
+    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 1;
+    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 2;
 }
 
-message Message {
-    MessageType messageType = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    int64 version = 5;
-    map<string, Field> fields = 6;
+enum ChecksumFlavor {
+    CHECKSUM_FLAVOR_UNSPECIFIED = 0;
+    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
 }

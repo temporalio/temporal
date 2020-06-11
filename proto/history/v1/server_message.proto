@@ -20,10 +20,31 @@
 
 syntax = "proto3";
 
-package persistenceblobs;
-option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
+package history.v1;
 
-enum ChecksumFlavor {
-    CHECKSUM_FLAVOR_UNSPECIFIED = 0;
-    CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/history/v1;history";
+
+import "history/v1/message.proto";
+
+message TransientDecisionInfo {
+    HistoryEvent scheduledEvent = 1;
+    HistoryEvent startedEvent = 2;
+}
+
+// VersionHistoryItem contains signal eventId and the corresponding version.
+message VersionHistoryItem {
+    int64 eventId = 1;
+    int64 version = 2;
+}
+
+// VersionHistory contains the version history of a branch.
+message VersionHistory {
+    bytes branchToken = 1;
+    repeated VersionHistoryItem items = 2;
+}
+
+// VersionHistories contains all version histories from all branches.
+message VersionHistories {
+    int32 currentVersionHistoryIndex = 1;
+    repeated VersionHistory histories = 2;
 }

@@ -20,24 +20,24 @@
 
 syntax = "proto3";
 
-package persistenceblobs;
-option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
+package persistenceblobs.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1;persistenceblobs";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
-import "common/enum.proto";
-import "common/message.proto";
-import "common/server_enum.proto";
+import "enums/v1/common.proto";
+import "common/v1/message.proto";
+import "enums/v1/workflow.proto";
+import "enums/v1/namespace.proto";
+import "namespace/v1/message.proto";
+import "enums/v1/task_list.proto";
+import "failure/v1/message.proto";
 
-import "persistenceblobs/server_enum.proto";
-import "replication/server_message.proto";
-import "execution/enum.proto";
-import "execution/server_enum.proto";
-import "namespace/enum.proto";
-import "namespace/message.proto";
-import "tasklist/enum.proto";
-import "failure/message.proto";
+import "enums/v1/server_common.proto";
+import "enums/v1/server_workflow.proto";
+import "enums/v1/server_common.proto";
+import "replication/v1/server_message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -74,11 +74,11 @@ message ActivityInfo {
     int64 retryExpirationTimeNanos = 26;
     double retryBackoffCoefficient = 27;
     repeated string retryNonRetryableErrorTypes = 28;
-    failure.Failure retryLastFailure = 29;
+    failure.v1.Failure retryLastFailure = 29;
     string retryLastWorkerIdentity = 30;
     string namespaceId = 31;
     int64 scheduleId = 32;
-    common.Payloads lastHeartbeatDetails = 33;
+    common.v1.Payloads lastHeartbeatDetails = 33;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 34;
 }
 
@@ -103,7 +103,7 @@ message ReplicationTaskInfo {
     string namespaceId = 1;
     string workflowId = 2;
     string runId = 3;
-    common.TaskType taskType = 4;
+    enums.v1.TaskType taskType = 4;
     int64 version = 5;
     int64 firstEventId = 6;
     int64 nextEventId = 7;
@@ -111,7 +111,7 @@ message ReplicationTaskInfo {
     int32 eventStoreVersion = 9;
     int32 newRunEventStoreVersion = 10;
     bytes branch_token = 11;
-    map<string, replication.ReplicationInfo> lastReplicationInfo = 12;
+    map<string, replication.v1.ReplicationInfo> lastReplicationInfo = 12;
     bytes newRunBranchToken = 13;
     bool resetWorkflow = 14;
     int64 taskId = 15;
@@ -121,7 +121,7 @@ message TimerTaskInfo {
     string namespaceId = 1;
     string workflowId = 2;
     string runId = 3;
-    common.TaskType taskType = 4;
+    enums.v1.TaskType taskType = 4;
     int32 timeoutType = 5;
     int64 version = 6;
     int64 scheduleAttempt = 7;
@@ -134,7 +134,7 @@ message TransferTaskInfo {
     string namespaceId = 1;
     string workflowId = 2;
     string runId = 3;
-    common.TaskType taskType = 4;
+    enums.v1.TaskType taskType = 4;
     string targetNamespaceId = 5;
     string targetWorkflowId = 6;
     string targetRunId = 7;
@@ -198,8 +198,8 @@ message AllocatedTaskInfo {
 message TaskListInfo {
     string namespaceId = 1;
     string name = 2;
-    tasklist.TaskListType taskType = 3;
-    tasklist.TaskListKind kind = 5;
+    enums.v1.TaskListType taskType = 3;
+    enums.v1.TaskListKind kind = 5;
     int64 ackLevel = 6;
     google.protobuf.Timestamp expiry = 7;
     google.protobuf.Timestamp lastUpdated = 8;
@@ -210,7 +210,7 @@ message SignalInfo {
     int64 initiatedEventBatchId = 2;
     string requestId = 3;
     string name = 4;
-    common.Payloads input = 5;
+    common.v1.Payloads input = 5;
     string control = 6;
     int64 initiatedId = 7;
 }
@@ -225,8 +225,8 @@ message RequestCancelInfo {
 message WorkflowExecutionState {
     string createRequestId = 1;
     string runId = 2;
-    execution.WorkflowExecutionState state = 3;
-    execution.WorkflowExecutionStatus status = 4;
+    enums.v1.WorkflowExecutionState state = 3;
+    enums.v1.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
@@ -283,15 +283,15 @@ message WorkflowExecutionInfo {
     string clientImpl = 53;
     bytes autoResetPoints = 54;
     string autoResetPointsEncoding = 55;
-    map<string, common.Payload> searchAttributes = 56;
-    map<string, common.Payload> memo = 57;
+    map<string, common.v1.Payload> searchAttributes = 56;
+    map<string, common.v1.Payload> memo = 57;
     bytes versionHistories = 58;
     string versionHistoriesEncoding = 59;
 }
 
 message Checksum {
     int32 version = 1;
-    ChecksumFlavor flavor = 2;
+    enums.v1.ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
 
@@ -308,7 +308,7 @@ message ChildExecutionInfo {
     string createRequestId = 10;
     string namespace = 11;
     string workflowTypeName = 12;
-    common.ParentClosePolicy parentClosePolicy = 13;
+    enums.v1.ParentClosePolicy parentClosePolicy = 13;
     int64 initiatedId = 14;
 }
 
@@ -325,7 +325,7 @@ message NamespaceDetail {
 
 message NamespaceInfo {
     string id = 1;
-    namespace.NamespaceStatus status = 2;
+    enums.v1.NamespaceStatus status = 2;
     string name = 3;
     string description = 4;
     string owner = 5;
@@ -341,10 +341,10 @@ message NamespaceConfig {
     int32 retentionDays = 1;
     bool emitMetric = 2;
     string archivalBucket = 3;
-    namespace.BadBinaries badBinaries = 16;
-    namespace.ArchivalStatus historyArchivalStatus = 18;
+    namespace.v1.BadBinaries badBinaries = 16;
+    enums.v1.ArchivalStatus historyArchivalStatus = 18;
     string historyArchivalURI = 19;
-    namespace.ArchivalStatus visibilityArchivalStatus = 20;
+    enums.v1.ArchivalStatus visibilityArchivalStatus = 20;
     string visibilityArchivalURI = 21;
 }
 
@@ -353,7 +353,7 @@ message NamespaceConfig {
 // only used in cassandra
 message ReplicationData {
     int64 lastWriteEventId = 1;
-    map<string, replication.ReplicationInfo> lastReplicationInfo = 2;
+    map<string, replication.v1.ReplicationInfo> lastReplicationInfo = 2;
 }
 
 message ReplicationVersions {

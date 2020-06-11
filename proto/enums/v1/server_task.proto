@@ -20,15 +20,9 @@
 
 syntax = "proto3";
 
-package common;
+package enums.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/common";
-
-enum DeadLetterQueueType {
-    DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
-    DEAD_LETTER_QUEUE_TYPE_REPLICATION = 1;
-    DEAD_LETTER_QUEUE_TYPE_NAMESPACE = 2;
-}
+option go_package = "github.com/temporalio/temporal/.gen/proto/enums/v1;enums";
 
 // TaskSource is the source from which a task was produced.
 enum TaskSource {

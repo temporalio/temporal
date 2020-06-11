@@ -20,15 +20,49 @@
 
 syntax = "proto3";
 
-package execution;
+package token.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/execution";
+option go_package = "github.com/temporalio/temporal/.gen/proto/token/v1;token";
 
-import "common/message.proto";
+import "history/v1/server_message.proto";
+import "replication/v1/server_message.proto";
 
-message ParentExecutionInfo {
+message HistoryContinuation {
+    string runId = 1;
+    int64 firstEventId = 2;
+    int64 nextEventId = 3;
+    bool isWorkflowRunning = 5;
+    bytes persistenceToken = 6;
+    history.v1.TransientDecisionInfo transientDecision = 7;
+    bytes branchToken = 8;
+    map<string,replication.v1.ReplicationInfo> replicationInfo = 9;
+}
+
+message RawHistoryContinuation{
+    string namespace = 1;
+    string workflowId = 2;
+    string runId = 3;
+    int64 startEventId = 4;
+    int64 startEventVersion = 5;
+    int64 endEventId = 6;
+    int64 endEventVersion = 7;
+    bytes persistenceToken = 8;
+    history.v1.VersionHistories versionHistories = 9;
+}
+
+message Task {
     string namespaceId = 1;
-    string namespace = 2;
-    common.WorkflowExecution execution = 3;
-    int64 initiatedId = 4;
+    string workflowId  = 2;
+    string runId = 3;
+    int64 scheduleId = 4;
+    int64 scheduleAttempt = 5;
+    string activityId = 6;
+    string workflowType = 7;
+    string activityType = 8;
+}
+
+message QueryTask {
+    string namespaceId = 1;
+    string taskList = 2;
+    string taskId = 3;
 }

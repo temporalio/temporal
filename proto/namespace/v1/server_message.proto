@@ -20,22 +20,11 @@
 
 syntax = "proto3";
 
-package cluster;
+package namespace.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/cluster";
+option go_package = "github.com/temporalio/temporal/.gen/proto/namespace/v1;namespace";
 
-message HostInfo {
-    string identity = 1;
-}
-
-message RingInfo {
-    string role = 1;
-    int32 memberCount = 2;
-    repeated HostInfo members = 3;
-}
-
-message MembershipInfo {
-    HostInfo currentHost = 1;
-    repeated string reachableMembers = 2;
-    repeated RingInfo rings = 3;
+message NamespaceCacheInfo {
+    int64 numOfItemsInCacheById = 1;
+    int64 numOfItemsInCacheByName = 2;
 }

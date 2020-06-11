@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +20,19 @@
 
 syntax = "proto3";
 
-package namespace;
+package enums.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/enums/v1;enums";
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/namespace";
+enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED = 0;
+    MESSAGE_TYPE_INDEX = 1;
+    MESSAGE_TYPE_DELETE = 2;
+}
 
-message NamespaceCacheInfo {
-    int64 numOfItemsInCacheById = 1;
-    int64 numOfItemsInCacheByName = 2;
+enum FieldType {
+    FIELD_TYPE_UNSPECIFIED = 0;
+    FIELD_TYPE_STRING = 1;
+    FIELD_TYPE_INT = 2;
+    FIELD_TYPE_BOOL = 3;
+    FIELD_TYPE_BINARY =4;
 }

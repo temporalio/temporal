@@ -20,16 +20,37 @@
 
 syntax = "proto3";
 
-package execution;
+package checksum;
+option go_package = "github.com/temporalio/temporal/.gen/proto/checksum/v1;checksum";
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/execution";
+import "enums/v1/workflow.proto";
 
-enum WorkflowExecutionState {
-    WORKFLOW_EXECUTION_STATE_UNSPECIFIED = 0;
-    WORKFLOW_EXECUTION_STATE_CREATED = 1;
-    WORKFLOW_EXECUTION_STATE_RUNNING = 2;
-    WORKFLOW_EXECUTION_STATE_COMPLETED = 3;
-    WORKFLOW_EXECUTION_STATE_ZOMBIE = 4;
-    WORKFLOW_EXECUTION_STATE_VOID = 5;
-    WORKFLOW_EXECUTION_STATE_CORRUPTED = 6;
+import "history/v1/server_message.proto";
+import "enums/v1/server_workflow.proto";
+
+message MutableStateChecksumPayload {
+    bool cancelRequested = 1;
+    enums.v1.WorkflowExecutionState state = 2;
+    enums.v1.WorkflowExecutionStatus status = 3;
+
+    int64 lastWriteVersion = 4;
+    int64 lastWriteEventId = 5;
+    int64 lastFirstEventId = 6;
+    int64 nextEventId = 7;
+    int64 lastProcessedEventId = 8;
+    int64 signalCount = 9;
+
+    int32 decisionAttempt = 10;
+    int64 decisionVersion = 11;
+    int64 decisionScheduledId = 12;
+    int64 decisionStartedId = 13;
+
+    repeated int64 pendingTimerStartedIds = 14;
+    repeated int64 pendingActivityScheduledIds = 15;
+    repeated int64 pendingSignalInitiatedIds = 16;
+    repeated int64 pendingReqCancelInitiatedIds = 17;
+    repeated int64 pendingChildInitiatedIds = 18;
+
+    string stickyTaskListName = 19;
+    history.v1.VersionHistories versionHistories = 20;
 }
