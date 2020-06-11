@@ -882,7 +882,7 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	attr *eventpb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
-	continueAsNewIter commonpb.ContinueAsNewInitiator,
+	continueAsNewInitiator commonpb.ContinueAsNewInitiator,
 	failure *failurepb.Failure,
 	lastCompletionResult *commonpb.Payloads,
 ) error {
@@ -896,7 +896,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		WorkflowTaskTimeoutSeconds:    attr.WorkflowTaskTimeoutSeconds,
 		CronSchedule:                  attr.CronSchedule,
 		BackoffStartIntervalInSeconds: backoffInterval,
-		Initiator:                     continueAsNewIter,
+		Initiator:                     continueAsNewInitiator,
 		Failure:                       failure,
 		LastCompletionResult:          lastCompletionResult,
 		Header:                        attr.Header,

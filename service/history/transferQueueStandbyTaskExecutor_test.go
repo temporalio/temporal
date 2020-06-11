@@ -986,6 +986,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 				WorkflowExecutionTimeoutSeconds: 2,
 				WorkflowTaskTimeoutSeconds:      1,
 			},
+			ContinueAsNewInitiator: commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 		},
 	)
 	s.Nil(err)

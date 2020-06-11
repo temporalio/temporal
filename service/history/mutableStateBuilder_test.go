@@ -260,9 +260,11 @@ OtherEventsLoop:
 		s.True(s.msBuilder.shouldBufferEvent(eventType))
 	}
 
+	decisionTypes := decisionpb.DecisionType_name
+	delete(decisionTypes, 0) // Remove Unspecified.
 	// +1 is because DecisionTypeCancelTimer will be mapped
 	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-	s.Equal(len(decisionpb.DecisionType_value)+1, len(decisionEvents),
+	s.Equal(len(decisionTypes)+1, len(decisionEvents),
 		"This assertion will be broken a new decision is added and no corresponding logic added to shouldBufferEvent()")
 }
 

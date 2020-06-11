@@ -585,7 +585,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_NotEnabled() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerNamespaceRequest(namespacepb.ARCHIVAL_STATUS_DEFAULT, "", namespacepb.ARCHIVAL_STATUS_DEFAULT, "")
+	req := registerNamespaceRequest(namespacepb.ARCHIVAL_STATUS_UNSPECIFIED, "", namespacepb.ARCHIVAL_STATUS_UNSPECIFIED, "")
 	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 }
@@ -654,9 +654,9 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchiva
 
 	updateReq := updateRequest(
 		"",
-		namespacepb.ARCHIVAL_STATUS_DEFAULT,
+		namespacepb.ARCHIVAL_STATUS_UNSPECIFIED,
 		"updated visibility URI",
-		namespacepb.ARCHIVAL_STATUS_DEFAULT,
+		namespacepb.ARCHIVAL_STATUS_UNSPECIFIED,
 	)
 	_, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.Error(err)
@@ -681,7 +681,7 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() 
 		"testScheme://invalid/updated/history/URI",
 		namespacepb.ARCHIVAL_STATUS_ENABLED,
 		"",
-		namespacepb.ARCHIVAL_STATUS_DEFAULT,
+		namespacepb.ARCHIVAL_STATUS_UNSPECIFIED,
 	)
 	_, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.Error(err)
@@ -740,7 +740,7 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredF
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	updateReq := updateRequest("", namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DEFAULT)
+	updateReq := updateRequest("", namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_UNSPECIFIED)
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
@@ -1216,27 +1216,33 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	s.NotNil(err)
 }
 
-func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
+func (s *workflowHandlerSuite) TestConvertIndexedKeyToProto() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	m := map[string]interface{}{
-		"key1":  float64(0),
-		"key2":  float64(1),
-		"key3":  float64(2),
-		"key4":  float64(3),
-		"key5":  float64(4),
-		"key6":  float64(5),
-		"key1i": 0,
-		"key2i": 1,
-		"key3i": 2,
-		"key4i": 3,
-		"key5i": 4,
-		"key6i": 5,
+		"key1":  float64(1),
+		"key2":  float64(2),
+		"key3":  float64(3),
+		"key4":  float64(4),
+		"key5":  float64(5),
+		"key6":  float64(6),
+		"key1i": 1,
+		"key2i": 2,
+		"key3i": 3,
+		"key4i": 4,
+		"key5i": 5,
+		"key6i": 6,
 		"key1t": commonpb.INDEXED_VALUE_TYPE_STRING,
 		"key2t": commonpb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3t": commonpb.INDEXED_VALUE_TYPE_INT,
 		"key4t": commonpb.INDEXED_VALUE_TYPE_DOUBLE,
 		"key5t": commonpb.INDEXED_VALUE_TYPE_BOOL,
 		"key6t": commonpb.INDEXED_VALUE_TYPE_DATETIME,
+		"key1s": "String",
+		"key2s": "Keyword",
+		"key3s": "Int",
+		"key4s": "Double",
+		"key5s": "Bool",
+		"key6s": "Datetime",
 	}
 	result := wh.convertIndexedKeyToProto(m)
 	s.Equal(commonpb.INDEXED_VALUE_TYPE_STRING, result["key1"])
@@ -1257,6 +1263,12 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 	s.Equal(commonpb.INDEXED_VALUE_TYPE_DOUBLE, result["key4t"])
 	s.Equal(commonpb.INDEXED_VALUE_TYPE_BOOL, result["key5t"])
 	s.Equal(commonpb.INDEXED_VALUE_TYPE_DATETIME, result["key6t"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_STRING, result["key1s"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_KEYWORD, result["key2s"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_INT, result["key3s"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_DOUBLE, result["key4s"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_BOOL, result["key5s"])
+	s.Equal(commonpb.INDEXED_VALUE_TYPE_DATETIME, result["key6s"])
 	s.Panics(func() {
 		wh.convertIndexedKeyToProto(map[string]interface{}{
 			"invalidType": "unknown",

@@ -459,5 +459,5 @@ func archivalStatus(c *cli.Context, statusFlagName string) namespacepb.ArchivalS
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
-	return namespacepb.ARCHIVAL_STATUS_DEFAULT
+	return namespacepb.ARCHIVAL_STATUS_UNSPECIFIED
 }

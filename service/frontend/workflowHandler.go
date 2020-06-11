@@ -52,6 +52,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
+	"github.com/temporalio/temporal/common/enums"
 	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -459,6 +460,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(err, scope)
 	}
 
+	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+
 	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespace))
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
@@ -532,6 +535,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	if request.GetMaximumPageSize() <= 0 {
 		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
 	}
+
+	enums.SetDefaultHistoryEventFilterType(&request.HistoryEventFilterType)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
@@ -2139,6 +2144,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
+	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -2953,6 +2960,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, wh.error(errQueryTypeNotSet, scope)
 	}
 
+	enums.SetDefaultQueryConsistencyLevel(&request.QueryConsistencyLevel)
+
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -3071,6 +3080,10 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 
 	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
 		return nil, err
+	}
+
+	if request.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED{
+		return nil, wh.error(errTaskListTypeNotSet, scope)
 	}
 
 	var matchingResponse *matchingservice.DescribeTaskListResponse
@@ -3388,6 +3401,8 @@ func (wh *WorkflowHandler) validateTaskList(t *tasklistpb.TaskList, scope metric
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errTaskListTooLong, scope)
 	}
+
+	enums.SetDefaultTaskListKind(&t.Kind)
 	return nil
 }
 

@@ -834,7 +834,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	req := request.GetRequest()
-	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != querypb.QUERY_REJECT_CONDITION_NONE {
+	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != querypb.QUERY_REJECT_CONDITION_UNSPECIFIED {
 		notOpenReject := req.GetQueryRejectCondition() == querypb.QUERY_REJECT_CONDITION_NOT_OPEN
 		status := mutableStateResp.GetWorkflowStatus()
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == querypb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && status != executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED

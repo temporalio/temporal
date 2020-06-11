@@ -1332,7 +1332,7 @@ func getWorkflowStatus(statusStr string) executionpb.WorkflowExecutionStatus {
 }
 
 func getWorkflowIDReusePolicy(value int) commonpb.WorkflowIdReusePolicy {
-	if value >= 0 && value <= len(commonpb.WorkflowIdReusePolicy_value) {
+	if value > 0 && value < len(commonpb.WorkflowIdReusePolicy_value) {
 		return commonpb.WorkflowIdReusePolicy(value)
 	}
 	// At this point, the policy should return if the value is valid

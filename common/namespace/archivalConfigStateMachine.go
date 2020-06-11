@@ -169,10 +169,10 @@ func (s *ArchivalState) getNextState(
 				URI:    s.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && !eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
@@ -197,10 +197,10 @@ func (s *ArchivalState) getNextState(
 		if e.status == namespacepb.ARCHIVAL_STATUS_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && !eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
@@ -228,13 +228,13 @@ func (s *ArchivalState) getNextState(
 		if e.status == namespacepb.ARCHIVAL_STATUS_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && eventURISet {
 			return &ArchivalState{
 				Status: namespacepb.ARCHIVAL_STATUS_DISABLED,
 				URI:    e.URI,
 			}, true, nil
 		}
-		if e.status == namespacepb.ARCHIVAL_STATUS_DEFAULT && !eventURISet {
+		if e.status == namespacepb.ARCHIVAL_STATUS_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}

@@ -659,7 +659,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		default:
-			return nil, serviceerror.NewInvalidArgument("Unknown event type")
+			return nil, serviceerror.NewInvalidArgument("Unknown event type: %v").MessageArgs(event.GetEventType())
 		}
 	}
 
