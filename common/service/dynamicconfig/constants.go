@@ -164,6 +164,15 @@ var keys = map[Key]string{
 	TaskSchedulerWorkerCount:                               "history.taskSchedulerWorkerCount",
 	TaskSchedulerQueueSize:                                 "history.taskSchedulerQueueSize",
 	TaskSchedulerRoundRobinWeights:                         "history.taskSchedulerRoundRobinWeight",
+	QueueProcessorEnableSplit:                              "history.queueProcessorEnableSplit",
+	QueueProcessorSplitMaxLevel:                            "history.queueProcessorSplitMaxLevel",
+	QueueProcessorEnableRandomSplitByDomainID:              "history.queueProcessorEnableRandomSplitByDomain",
+	QueueProcessorRandomSplitProbability:                   "history.queueProcessorRandomSplitProbability",
+	QueueProcessorEnablePendingTaskSplit:                   "history.queueProcessorEnablePendingTaskSplit",
+	QueueProcessorPendingTaskSplitThreshold:                "history.queueProcessorPendingTaskSplitThreshold",
+	QueueProcessorEnableStuckTaskSplit:                     "history.queueProcessorEnableStuckTaskSplit",
+	QueueProcessorStuckTaskSplitThreshold:                  "history.queueProcessorStuckTaskSplitThreshold",
+	QueueProcessorSplitLookAheadDurationByDomainID:         "history.queueProcessorSplitLookAheadDuration",
 	TimerTaskBatchSize:                                     "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                   "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                 "history.timerTaskMaxRetryCount",
@@ -539,6 +548,24 @@ const (
 	TaskSchedulerQueueSize
 	// TaskSchedulerRoundRobinWeights is the priority weight for weighted round robin task scheduler
 	TaskSchedulerRoundRobinWeights
+	// QueueProcessorEnableSplit indicates whether processing queue split policy should be enabled
+	QueueProcessorEnableSplit
+	// QueueProcessorSplitMaxLevel is the max processing queue level
+	QueueProcessorSplitMaxLevel
+	// QueueProcessorEnableRandomSplitByDomainID indicates whether random queue split policy should be enabled for a domain
+	QueueProcessorEnableRandomSplitByDomainID
+	// QueueProcessorRandomSplitProbability is the probability for a domain to be split to a new processing queue
+	QueueProcessorRandomSplitProbability
+	// QueueProcessorEnablePendingTaskSplit indicates whether pending task split policy should be enabled
+	QueueProcessorEnablePendingTaskSplit
+	// QueueProcessorPendingTaskSplitThreshold is the threshold for the number of pending tasks per domain
+	QueueProcessorPendingTaskSplitThreshold
+	// QueueProcessorEnableStuckTaskSplit indicates whether stuck task split policy should be enabled
+	QueueProcessorEnableStuckTaskSplit
+	// QueueProcessorStuckTaskSplitThreshold is the threshold for the number of attempts of a task
+	QueueProcessorStuckTaskSplitThreshold
+	// QueueProcessorSplitLookAheadDurationByDomainID is the look ahead duration when spliting a domain to a new processing queue
+	QueueProcessorSplitLookAheadDurationByDomainID
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor

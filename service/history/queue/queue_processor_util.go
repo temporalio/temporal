@@ -24,6 +24,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -44,12 +45,20 @@ type (
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
 		UpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-		SplitQueueInterval                  dynamicconfig.DurationPropertyFn
-		SplitQueueIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		QueueSplitPolicy                    ProcessingQueueSplitPolicy
 		RedispatchInterval                  dynamicconfig.DurationPropertyFn
 		RedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
+		SplitQueueInterval                  dynamicconfig.DurationPropertyFn
+		SplitQueueIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		EnableSplit                         dynamicconfig.BoolPropertyFn
+		SplitMaxLevel                       dynamicconfig.IntPropertyFn
+		EnableRandomSplitByDomainID         dynamicconfig.BoolPropertyFnWithDomainIDFilter
+		RandomSplitProbability              dynamicconfig.FloatPropertyFn
+		EnablePendingTaskSplit              dynamicconfig.BoolPropertyFn
+		PendingTaskSplitThreshold           dynamicconfig.MapPropertyFn
+		EnableStuckTaskSplit                dynamicconfig.BoolPropertyFn
+		StuckTaskSplitThreshold             dynamicconfig.MapPropertyFn
+		SplitLookAheadDurationByDomainID    dynamicconfig.DurationPropertyFnWithDomainIDFilter
 		MetricScope                         int
 	}
 )
@@ -112,6 +121,54 @@ func RedispatchTasks(
 		default:
 		}
 	}
+}
+
+func initializeSplitPolicy(
+	options *queueProcessorOptions,
+	lookAheadFunc lookAheadFunc,
+	logger log.Logger,
+) ProcessingQueueSplitPolicy {
+	if !options.EnableSplit() {
+		return nil
+	}
+
+	// note the order of policies matters, check the comment for aggregated split policy
+	var policies []ProcessingQueueSplitPolicy
+	maxNewQueueLevel := options.SplitMaxLevel()
+
+	if options.EnablePendingTaskSplit() {
+		thresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(options.PendingTaskSplitThreshold())
+		if err != nil {
+			logger.Error("Failed to convert pending task threshold", tag.Error(err))
+		} else {
+			policies = append(policies, NewPendingTaskSplitPolicy(thresholds, lookAheadFunc, maxNewQueueLevel))
+		}
+	}
+
+	if options.EnableStuckTaskSplit() {
+		thresholds, err := common.ConvertDynamicConfigMapPropertyToIntMap(options.StuckTaskSplitThreshold())
+		if err != nil {
+			logger.Error("Failed to convert stuck task threshold", tag.Error(err))
+		} else {
+			policies = append(policies, NewStuckTaskSplitPolicy(thresholds, maxNewQueueLevel))
+		}
+	}
+
+	randomSplitProbability := options.RandomSplitProbability()
+	if randomSplitProbability != float64(0) {
+		policies = append(policies, NewRandomSplitPolicy(
+			randomSplitProbability,
+			options.EnableRandomSplitByDomainID,
+			maxNewQueueLevel,
+			lookAheadFunc,
+		))
+	}
+
+	if len(policies) == 0 {
+		return nil
+	}
+
+	return NewAggregatedSplitPolicy(policies...)
 }
 
 func splitProcessingQueueCollection(

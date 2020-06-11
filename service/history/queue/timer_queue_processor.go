@@ -390,21 +390,7 @@ func newTimerQueueActiveProcessor(
 	logger log.Logger,
 ) *timerQueueProcessorBase {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TimerTaskBatchSize,
-		MaxPollRPS:                          config.TimerProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TimerProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TimerProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TimerProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TimerProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TimerProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TimerProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TimerProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TimerProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TimerActiveQueueProcessorScope,
-	}
+	options := newTimerQueueProcessorOptions(config, true, false)
 
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
@@ -487,21 +473,7 @@ func newTimerQueueStandbyProcessor(
 	logger log.Logger,
 ) (*timerQueueProcessorBase, RemoteTimerGate) {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TimerTaskBatchSize,
-		MaxPollRPS:                          config.TimerProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TimerProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TimerProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TimerProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TimerProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TimerProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TimerProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TimerProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TimerProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TimerStandbyQueueProcessorScope,
-	}
+	options := newTimerQueueProcessorOptions(config, false, false)
 
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
@@ -589,21 +561,7 @@ func newTimerQueueFailoverProcessor(
 	domainIDs map[string]struct{},
 ) (updateClusterAckLevelFn, *timerQueueProcessorBase) {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TimerTaskBatchSize,
-		MaxPollRPS:                          config.TimerProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TimerProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TimerProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TimerProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TimerProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TimerProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TimerProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TimerProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TimerProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TimerActiveQueueProcessorScope,
-	}
+	options := newTimerQueueProcessorOptions(config, true, true)
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	failoverStartTime := shard.GetTimeSource().Now()

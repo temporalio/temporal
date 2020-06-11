@@ -122,8 +122,11 @@ type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
 // StringPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithDomainFilter func(domain string) string
 
-// BoolPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
+// BoolPropertyFnWithDomainFilter is a wrapper to get bool property from dynamic config with domain as filter
 type BoolPropertyFnWithDomainFilter func(domain string) bool
+
+// BoolPropertyFnWithDomainIDFilter is a wrapper to get bool property from dynamic config with domainID as filter
+type BoolPropertyFnWithDomainIDFilter func(domainID string) bool
 
 // BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: domain, taskList, taskType
 type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) bool
@@ -337,8 +340,8 @@ func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}
 	}
 }
 
-// GetStringPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
-func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue string) StringPropertyFnWithDomainFilter {
+// GetStringPropertyFilteredByDomain gets property with domain filter and asserts that it's a string
+func (c *Collection) GetStringPropertyFilteredByDomain(key Key, defaultValue string) StringPropertyFnWithDomainFilter {
 	return func(domain string) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
@@ -349,10 +352,22 @@ func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue s
 	}
 }
 
-// GetBoolPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
-func (c *Collection) GetBoolPropertyFnWithDomainFilter(key Key, defaultValue bool) BoolPropertyFnWithDomainFilter {
+// GetBoolPropertyFilteredByDomain gets property with domain filter and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFilteredByDomain(key Key, defaultValue bool) BoolPropertyFnWithDomainFilter {
 	return func(domain string) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, boolCompareEquals)
+		return val
+	}
+}
+
+// GetBoolPropertyFilteredByDomainID gets property with domainID filter and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFilteredByDomainID(key Key, defaultValue bool) BoolPropertyFnWithDomainIDFilter {
+	return func(domainID string) bool {
+		val, err := c.client.GetBoolValue(key, getFilterMap(DomainFilter(domainID)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}

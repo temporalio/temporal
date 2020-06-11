@@ -23,11 +23,12 @@ package queue
 import (
 	"math/rand"
 
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/task"
 )
 
 type (
-	lookAheadFunc func(task.Key) task.Key
+	lookAheadFunc func(task.Key, string) task.Key
 
 	pendingTaskSplitPolicy struct {
 		pendingTaskThreshold map[int]int // queue level -> threshold
@@ -38,7 +39,6 @@ type (
 	stuckTaskSplitPolicy struct {
 		attemptThreshold map[int]int // queue level -> threshold
 		maxNewQueueLevel int
-		lookAheadFunc    lookAheadFunc
 	}
 
 	selectedDomainSplitPolicy struct {
@@ -47,9 +47,10 @@ type (
 	}
 
 	randomSplitPolicy struct {
-		splitProbability float64
-		maxNewQueueLevel int
-		lookAheadFunc    lookAheadFunc
+		splitProbability  float64
+		enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
+		maxNewQueueLevel  int
+		lookAheadFunc     lookAheadFunc
 	}
 
 	aggregatedSplitPolicy struct {
@@ -75,12 +76,10 @@ func NewPendingTaskSplitPolicy(
 // based on the number of task attempts tasks
 func NewStuckTaskSplitPolicy(
 	attemptThreshold map[int]int,
-	lookAheadFunc lookAheadFunc,
 	maxNewQueueLevel int,
 ) ProcessingQueueSplitPolicy {
 	return &stuckTaskSplitPolicy{
 		attemptThreshold: attemptThreshold,
-		lookAheadFunc:    lookAheadFunc,
 		maxNewQueueLevel: maxNewQueueLevel,
 	}
 }
@@ -101,13 +100,15 @@ func NewSelectedDomainSplitPolicy(
 // or more domains into a new processing queue
 func NewRandomSplitPolicy(
 	splitProbability float64,
+	enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter,
 	maxNewQueueLevel int,
 	lookAheadFunc lookAheadFunc,
 ) ProcessingQueueSplitPolicy {
 	return &randomSplitPolicy{
-		splitProbability: splitProbability,
-		maxNewQueueLevel: maxNewQueueLevel,
-		lookAheadFunc:    lookAheadFunc,
+		splitProbability:  splitProbability,
+		enabledByDomainID: enabledByDomainID,
+		maxNewQueueLevel:  maxNewQueueLevel,
+		lookAheadFunc:     lookAheadFunc,
 	}
 }
 
@@ -188,7 +189,7 @@ func (p *stuckTaskSplitPolicy) Evaluate(
 		queueImpl,
 		domainToSplit,
 		queueImpl.state.level+1, // split stuck tasks to current level + 1
-		p.lookAheadFunc,
+		nil,                     // no need to look ahead
 	)
 }
 
@@ -232,10 +233,6 @@ func (p *selectedDomainSplitPolicy) Evaluate(
 func (p *randomSplitPolicy) Evaluate(
 	queue ProcessingQueue,
 ) []ProcessingQueueState {
-	if !shouldSplit(p.splitProbability) {
-		return nil
-	}
-
 	queueImpl := queue.(*processingQueueImpl)
 
 	if queueImpl.state.level == p.maxNewQueueLevel {
@@ -252,14 +249,16 @@ func (p *randomSplitPolicy) Evaluate(
 		return nil
 	}
 
-	// pick a random set of domains
-	numDomainToSplit := rand.Intn(len(domainIDs)) + 1
 	domainToSplit := make(map[string]struct{})
 	for domainID := range domainIDs {
-		domainToSplit[domainID] = struct{}{}
-		if len(domainToSplit) == numDomainToSplit {
-			break
+		if !p.enabledByDomainID(domainID) {
+			continue
 		}
+		if !shouldSplit(p.splitProbability) {
+			continue
+		}
+
+		domainToSplit[domainID] = struct{}{}
 	}
 
 	return splitQueueHelper(
@@ -294,7 +293,9 @@ func splitQueueHelper(
 
 	newMaxLevel := queueImpl.state.readLevel
 	if lookAheadFunc != nil {
-		newMaxLevel = lookAheadFunc(queueImpl.state.readLevel)
+		for domainID := range domainToSplit {
+			newMaxLevel = maxTaskKey(newMaxLevel, lookAheadFunc(queueImpl.state.readLevel, domainID))
+		}
 	}
 	if queueImpl.state.maxLevel.Less(newMaxLevel) {
 		newMaxLevel = queueImpl.state.maxLevel

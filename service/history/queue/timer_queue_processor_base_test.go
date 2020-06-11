@@ -835,22 +835,6 @@ func (s *timerQueueProcessorBaseSuite) newTestTimerQueueProcessBase(
 	transferQueueShutdown queueShutdownFn,
 	taskInitializer task.Initializer,
 ) *timerQueueProcessorBase {
-	testConfig := s.mockShard.GetConfig()
-	testQueueProcessorOptions := &queueProcessorOptions{
-		BatchSize:                           testConfig.TimerTaskBatchSize,
-		MaxPollRPS:                          testConfig.TimerProcessorMaxPollRPS,
-		MaxPollInterval:                     testConfig.TimerProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    testConfig.TimerProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   testConfig.TimerProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  testConfig.TimerProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  testConfig.TimerProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: testConfig.TimerProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    s.mockQueueSplitPolicy,
-		RedispatchInterval:                  testConfig.TimerProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: testConfig.TimerProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              testConfig.TimerProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TimerQueueProcessorScope,
-	}
 	return newTimerQueueProcessorBase(
 		s.clusterName,
 		s.mockShard,
@@ -858,7 +842,7 @@ func (s *timerQueueProcessorBaseSuite) newTestTimerQueueProcessBase(
 		s.mockTaskProcessor,
 		s.redispatchQueue,
 		NewLocalTimerGate(s.mockShard.GetTimeSource()),
-		testQueueProcessorOptions,
+		newTimerQueueProcessorOptions(s.mockShard.GetConfig(), true, false),
 		maxReadLevel,
 		updateTransferAckLevel,
 		transferQueueShutdown,

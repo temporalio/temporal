@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -747,4 +748,36 @@ func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) stri
 		return AdvancedVisibilityWritingModeOn
 	}
 	return AdvancedVisibilityWritingModeOff
+}
+
+// ConvertIntMapToDynamicConfigMapProperty converts a map whose key value type are both int to
+// a map value that is compatible with dynamic config's map property
+func ConvertIntMapToDynamicConfigMapProperty(
+	intMap map[int]int,
+) map[string]interface{} {
+	dcValue := make(map[string]interface{})
+	for key, value := range intMap {
+		dcValue[strconv.Itoa(key)] = value
+	}
+	return dcValue
+}
+
+// ConvertDynamicConfigMapPropertyToIntMap convert a map property from dynamic config to a map
+// whose type for both key and value are int
+func ConvertDynamicConfigMapPropertyToIntMap(
+	dcValue map[string]interface{},
+) (map[int]int, error) {
+	thresholds := make(map[int]int)
+	for key, value := range dcValue {
+		level, err := strconv.Atoi(strings.TrimSpace(key))
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert level: %v", err)
+		}
+		threshold, ok := value.(int)
+		if !ok {
+			return nil, fmt.Errorf("failed to convert threshold %v", value)
+		}
+		thresholds[level] = threshold
+	}
+	return thresholds, nil
 }

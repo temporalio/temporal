@@ -164,7 +164,7 @@ func (s *configSuite) TestGetIntPropertyFilteredByDomain() {
 func (s *configSuite) TestGetStringPropertyFnWithDomainFilter() {
 	key := DefaultEventEncoding
 	domain := "testDomain"
-	value := s.cln.GetStringPropertyFnWithDomainFilter(key, "abc")
+	value := s.cln.GetStringPropertyFilteredByDomain(key, "abc")
 	s.Equal("abc", value(domain))
 	s.client.SetValue(key, "efg")
 	s.Equal("efg", value(domain))

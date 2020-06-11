@@ -34,6 +34,8 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -70,6 +72,9 @@ type (
 		status       int32
 		shutdownWG   sync.WaitGroup
 		shutdownCh   chan struct{}
+
+		lastSplitTime    time.Time
+		lastMaxReadLevel int64
 
 		queueCollectionsLock       sync.RWMutex
 		processingQueueCollections []ProcessingQueueCollection
@@ -114,6 +119,9 @@ func newTransferQueueProcessorBase(
 		notifyCh:     make(chan struct{}, 1),
 		status:       common.DaemonStatusInitialized,
 		shutdownCh:   make(chan struct{}),
+
+		lastSplitTime:    time.Time{},
+		lastMaxReadLevel: 0,
 
 		processingQueueCollections: newProcessingQueueCollections(
 			processingQueueStates,
@@ -371,12 +379,38 @@ func (t *transferQueueProcessorBase) updateAckLevel() (bool, error) {
 }
 
 func (t *transferQueueProcessorBase) splitQueue() {
+	currentTime := t.shard.GetTimeSource().Now()
+	currentMaxReadLevel := t.updateMaxReadLevel().(transferTaskKey).taskID
+	defer func() {
+		t.lastSplitTime = currentTime
+		t.lastMaxReadLevel = currentMaxReadLevel
+	}()
+
+	if t.lastSplitTime.IsZero() {
+		// skip the first split as we can't estimate the look ahead taskID
+		return
+	}
+
+	lookAhead := (currentMaxReadLevel - t.lastMaxReadLevel) / int64(currentTime.Sub(t.lastSplitTime))
+
+	splitPolicy := initializeSplitPolicy(
+		t.options,
+		func(key task.Key, domainID string) task.Key {
+			totalLookAhead := lookAhead * int64(t.options.SplitLookAheadDurationByDomainID(domainID))
+			return newTransferTaskKey(key.(timerTaskKey).taskID + totalLookAhead)
+		},
+		t.logger,
+	)
+	if splitPolicy == nil {
+		return
+	}
+
 	t.queueCollectionsLock.Lock()
 	defer t.queueCollectionsLock.Unlock()
 
 	t.processingQueueCollections = splitProcessingQueueCollection(
 		t.processingQueueCollections,
-		t.options.QueueSplitPolicy,
+		splitPolicy,
 	)
 }
 
@@ -444,4 +478,47 @@ func (k transferTaskKey) Less(
 	key task.Key,
 ) bool {
 	return k.taskID < key.(transferTaskKey).taskID
+}
+
+func newTransferQueueProcessorOptions(
+	config *config.Config,
+	isActive bool,
+	isFailover bool,
+) *queueProcessorOptions {
+	options := &queueProcessorOptions{
+		BatchSize:                           config.TransferTaskBatchSize,
+		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
+		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
+		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
+		SplitQueueIntervalJitterCoefficient: config.TransferProcessorSplitQueueIntervalJitterCoefficient,
+	}
+
+	if isFailover {
+		// disable queue split for failover processor
+		options.EnableSplit = dynamicconfig.GetBoolPropertyFn(false)
+	} else {
+		options.EnableSplit = config.QueueProcessorEnableSplit
+		options.SplitMaxLevel = config.QueueProcessorSplitMaxLevel
+		options.EnableRandomSplitByDomainID = config.QueueProcessorEnableRandomSplitByDomainID
+		options.RandomSplitProbability = config.QueueProcessorRandomSplitProbability
+		options.EnablePendingTaskSplit = config.QueueProcessorEnablePendingTaskSplit
+		options.PendingTaskSplitThreshold = config.QueueProcessorPendingTaskSplitThreshold
+		options.EnableStuckTaskSplit = config.QueueProcessorEnableStuckTaskSplit
+		options.StuckTaskSplitThreshold = config.QueueProcessorStuckTaskSplitThreshold
+		options.SplitLookAheadDurationByDomainID = config.QueueProcessorSplitLookAheadDurationByDomainID
+	}
+
+	if isActive {
+		options.MetricScope = metrics.TransferActiveQueueProcessorScope
+	} else {
+		options.MetricScope = metrics.TransferStandbyQueueProcessorScope
+	}
+
+	return options
 }

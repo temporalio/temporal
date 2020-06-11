@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/task"
 )
 
@@ -64,7 +65,7 @@ func (s *splitPolicySuite) TestPendingTaskSplitPolicy() {
 		3: 10000,
 	}
 	lookAheadTasks := 5
-	lookAheadFunc := func(key task.Key) task.Key {
+	lookAheadFunc := func(key task.Key, _ string) task.Key {
 		currentID := key.(testKey).ID
 		return testKey{ID: currentID + lookAheadTasks}
 	}
@@ -272,13 +273,9 @@ func (s *splitPolicySuite) TestStuckTaskSplitPolicy() {
 		2: 1000,
 		3: 10000,
 	}
-	lookAheadFunc := func(key task.Key) task.Key {
-		currentID := key.(testKey).ID
-		return testKey{ID: currentID + 0}
-	}
+
 	stuckTaskSplitPolicy := NewStuckTaskSplitPolicy(
 		attemptThreshold,
-		lookAheadFunc,
 		maxNewQueueLevel,
 	)
 
@@ -542,7 +539,7 @@ func (s *splitPolicySuite) TestSelectedDomainSplitPolicy() {
 
 func (s *splitPolicySuite) TestRandomSplitPolicy() {
 	maxNewQueueLevel := 3
-	lookAheadFunc := func(key task.Key) task.Key {
+	lookAheadFunc := func(key task.Key, _ string) task.Key {
 		currentID := key.(testKey).ID
 		return testKey{ID: currentID + 10}
 	}
@@ -632,7 +629,12 @@ func (s *splitPolicySuite) TestRandomSplitPolicy() {
 			nil,
 			nil,
 		)
-		splitPolicy := NewRandomSplitPolicy(tc.splitProbability, maxNewQueueLevel, lookAheadFunc)
+		splitPolicy := NewRandomSplitPolicy(
+			tc.splitProbability,
+			dynamicconfig.GetBoolPropertyFnFilteredByDomain(true),
+			maxNewQueueLevel,
+			lookAheadFunc,
+		)
 
 		s.assertQueueStatesEqual(tc.expectedNewStates, splitPolicy.Evaluate(queue))
 	}

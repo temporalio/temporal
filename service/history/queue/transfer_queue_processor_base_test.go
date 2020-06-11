@@ -440,28 +440,12 @@ func (s *transferQueueProcessorBaseSuite) newTestTransferQueueProcessBase(
 	transferQueueShutdown queueShutdownFn,
 	taskInitializer task.Initializer,
 ) *transferQueueProcessorBase {
-	testConfig := s.mockShard.GetConfig()
-	testQueueProcessorOptions := &queueProcessorOptions{
-		BatchSize:                           testConfig.TransferTaskBatchSize,
-		MaxPollRPS:                          testConfig.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                     testConfig.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    testConfig.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   testConfig.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  testConfig.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  testConfig.TransferProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: testConfig.TransferProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    s.mockQueueSplitPolicy,
-		RedispatchInterval:                  testConfig.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: testConfig.TransferProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              testConfig.TransferProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TransferQueueProcessorScope,
-	}
 	return newTransferQueueProcessorBase(
 		s.mockShard,
 		processingQueueStates,
 		s.mockTaskProcessor,
 		s.redispatchQueue,
-		testQueueProcessorOptions,
+		newTransferQueueProcessorOptions(s.mockShard.GetConfig(), true, false),
 		maxReadLevel,
 		updateTransferAckLevel,
 		transferQueueShutdown,

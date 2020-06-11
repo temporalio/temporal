@@ -415,21 +415,7 @@ func newTransferQueueActiveProcessor(
 	logger log.Logger,
 ) *transferQueueProcessorBase {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TransferProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
-	}
+	options := newTransferQueueProcessorOptions(config, true, false)
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
@@ -512,21 +498,7 @@ func newTransferQueueStandbyProcessor(
 	logger log.Logger,
 ) *transferQueueProcessorBase {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TransferProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
-	}
+	options := newTransferQueueProcessorOptions(config, false, false)
 
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
@@ -610,21 +582,7 @@ func newTransferQueueFailoverProcessor(
 	standbyClusterName string,
 ) (updateClusterAckLevelFn, *transferQueueProcessorBase) {
 	config := shard.GetConfig()
-	options := &queueProcessorOptions{
-		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
-		SplitQueueIntervalJitterCoefficient: config.TransferProcessorSplitQueueIntervalJitterCoefficient,
-		QueueSplitPolicy:                    nil, // TODO: create dynamic config and specify a split policy
-		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
-		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
-	}
+	options := newTransferQueueProcessorOptions(config, true, true)
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
