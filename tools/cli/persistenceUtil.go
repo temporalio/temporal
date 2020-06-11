@@ -40,7 +40,6 @@ import (
 // CreatePersistenceFactory returns an initialized persistence managers factory.
 // The factory allows to easily initialize concrete persistence managers to execute commands against persistence layer
 func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
-
 	defaultStore, err := CreateDefaultDBConfig(c)
 	if err != nil {
 		ErrorAndExit("CreatePersistenceFactory err", err)
@@ -76,11 +75,11 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 
 	if engine == cassandraDBType {
 		defaultConfig := &config.Cassandra{
-			Hosts:    getRequiredOption(c, FlagDBAddress),
+			Hosts:    c.String(FlagDBAddress),
 			Port:     c.Int(FlagDBPort),
 			User:     c.String(FlagUsername),
 			Password: c.String(FlagPassword),
-			Keyspace: getRequiredOption(c, FlagKeyspace),
+			Keyspace: c.String(FlagKeyspace),
 		}
 
 		if c.Bool(FlagEnableTLS) {

@@ -433,11 +433,21 @@ func AdminListTasks(c *cli.Context) {
 		maxVis := time.Unix(0, maxVisFlag)
 
 		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
-		tasks, err := executionManager.GetTimerIndexTasks(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Timer Tasks", err)
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetTimerIndexTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Timers {
+				items = append(items, task)
+			}
+			return items, token, nil
 		}
-		prettyPrintJSONObject(tasks)
+		paginate(c, paginationFunc)
 	} else if category == commongenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
 		task, err := executionManager.GetReplicationTasks(req)

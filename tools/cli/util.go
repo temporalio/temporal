@@ -52,6 +52,7 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
@@ -899,6 +900,32 @@ func showNextPage() bool {
 	var input string
 	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
+}
+
+// paginate creates an interactive CLI mode to control the printing of items
+func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
+	more := c.Bool(FlagMore)
+	pageSize := c.Int(FlagPageSize)
+	if pageSize == 0 {
+		pageSize = defaultPageSize
+	}
+	iter := collection.NewPagingIterator(paginationFn)
+
+	pageItemsCount := 0
+	for iter.HasNext() {
+		batch, err := iter.Next()
+		if err != nil {
+			return err
+		}
+
+		prettyPrintJSONObject(batch)
+		pageItemsCount++
+		if pageItemsCount%pageSize == 0 && (!more || !showNextPage()) {
+			break
+		}
+	}
+
+	return nil
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue
