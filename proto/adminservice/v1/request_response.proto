@@ -29,6 +29,7 @@ import "version/v1/message.proto";
 
 import "cluster/v1/server_message.proto";
 import "enums/v1/server_common.proto";
+import "enums/v1/server_task.proto";
 import "namespace/v1/server_message.proto";
 import "history/v1/server_message.proto";
 import "replication/v1/server_message.proto";

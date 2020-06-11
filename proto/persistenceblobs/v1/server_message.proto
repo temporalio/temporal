@@ -26,7 +26,6 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs/
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
-import "enums/v1/common.proto";
 import "common/v1/message.proto";
 import "enums/v1/workflow.proto";
 import "enums/v1/namespace.proto";
@@ -36,7 +35,7 @@ import "failure/v1/message.proto";
 
 import "enums/v1/server_common.proto";
 import "enums/v1/server_workflow.proto";
-import "enums/v1/server_common.proto";
+import "enums/v1/server_task.proto";
 import "replication/v1/server_message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
