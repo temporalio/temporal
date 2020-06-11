@@ -35,65 +35,65 @@ import "history/v1/server_message.proto";
 import "workflowservice/v1/request_response.proto";
 
 message PollForDecisionTaskRequest {
-    string namespaceId = 1;
-    string pollerId = 2;
-    workflowservice.v1.PollForDecisionTaskRequest pollRequest = 3;
-    string forwardedFrom = 4;
+    string namespace_id = 1;
+    string poller_id = 2;
+    workflowservice.v1.PollForDecisionTaskRequest poll_request = 3;
+    string forwarded_from = 4;
 }
 
 message PollForDecisionTaskResponse {
-    bytes taskToken = 1;
-    common.v1.WorkflowExecution workflowExecution = 2;
-    common.v1.WorkflowType workflowType = 3;
-    int64 previousStartedEventId = 4;
-    int64 startedEventId = 5;
+    bytes task_token = 1;
+    common.v1.WorkflowExecution workflow_execution = 2;
+    common.v1.WorkflowType workflow_type = 3;
+    int64 previous_started_event_id = 4;
+    int64 started_event_id = 5;
     int64 attempt = 6;
-    int64 nextEventId = 7;
-    int64 backlogCountHint = 8;
-    bool stickyExecutionEnabled = 9;
+    int64 next_event_id = 7;
+    int64 backlog_count_hint = 8;
+    bool sticky_execution_enabled = 9;
     query.v1.WorkflowQuery query = 10;
-    history.v1.TransientDecisionInfo decisionInfo = 11;
-    tasklist.v1.TaskList workflowExecutionTaskList = 12;
-    int32 eventStoreVersion = 13;
-    bytes branchToken = 14;
-    int64 scheduledTimestamp = 15;
-    int64 startedTimestamp = 16;
+    history.v1.TransientDecisionInfo decision_info = 11;
+    tasklist.v1.TaskList workflow_execution_task_list = 12;
+    int32 event_store_version = 13;
+    bytes branch_token = 14;
+    int64 scheduled_timestamp = 15;
+    int64 started_timestamp = 16;
     map<string, query.v1.WorkflowQuery> queries = 17;
 }
 
 message PollForActivityTaskRequest {
-    string namespaceId = 1;
-    string pollerId = 2;
-    workflowservice.v1.PollForActivityTaskRequest pollRequest = 3;
-    string forwardedFrom = 4;
+    string namespace_id = 1;
+    string poller_id = 2;
+    workflowservice.v1.PollForActivityTaskRequest poll_request = 3;
+    string forwarded_from = 4;
 }
 
 message PollForActivityTaskResponse {
-    bytes taskToken = 1;
-    common.v1.WorkflowExecution workflowExecution = 2;
-    string activityId = 3;
-    common.v1.ActivityType activityType = 4;
+    bytes task_token = 1;
+    common.v1.WorkflowExecution workflow_execution = 2;
+    string activity_id = 3;
+    common.v1.ActivityType activity_type = 4;
     common.v1.Payloads input = 5;
-    int64 scheduledTimestamp = 6;
-    int32 scheduleToCloseTimeoutSeconds = 7;
-    int64 startedTimestamp = 8;
-    int32 startToCloseTimeoutSeconds = 9;
-    int32 heartbeatTimeoutSeconds = 10;
+    int64 scheduled_timestamp = 6;
+    int32 schedule_to_close_timeout_seconds = 7;
+    int64 started_timestamp = 8;
+    int32 start_to_close_timeout_seconds = 9;
+    int32 heartbeat_timeout_seconds = 10;
     int32 attempt = 11;
-    int64 scheduledTimestampOfThisAttempt = 12;
-    common.v1.Payloads heartbeatDetails = 13;
-    common.v1.WorkflowType workflowType = 14;
-    string workflowNamespace = 15;
+    int64 scheduled_timestamp_of_this_attempt = 12;
+    common.v1.Payloads heartbeat_details = 13;
+    common.v1.WorkflowType workflow_type = 14;
+    string workflow_namespace = 15;
     common.v1.Header header = 16;
 }
 
 message AddDecisionTaskRequest {
-    string namespaceId = 1;
+    string namespace_id = 1;
     common.v1.WorkflowExecution execution = 2;
-    tasklist.v1.TaskList taskList = 3;
-    int64 scheduleId = 4;
-    int32 scheduleToStartTimeoutSeconds = 5;
-    string forwardedFrom = 6;
+    tasklist.v1.TaskList task_list = 3;
+    int64 schedule_id = 4;
+    int32 schedule_to_start_timeout_seconds = 5;
+    string forwarded_from = 6;
     enums.v1.TaskSource source = 7;
 }
 
@@ -101,13 +101,13 @@ message AddDecisionTaskResponse {
 }
 
 message AddActivityTaskRequest {
-    string namespaceId = 1;
+    string namespace_id = 1;
     common.v1.WorkflowExecution execution = 2;
-    string sourceNamespaceId = 3;
-    tasklist.v1.TaskList taskList = 4;
-    int64 scheduleId = 5;
-    int32 scheduleToStartTimeoutSeconds = 6;
-    string forwardedFrom = 7;
+    string source_namespace_id = 3;
+    tasklist.v1.TaskList task_list = 4;
+    int64 schedule_id = 5;
+    int32 schedule_to_start_timeout_seconds = 6;
+    string forwarded_from = 7;
     enums.v1.TaskSource source = 8;
 }
 
@@ -115,53 +115,53 @@ message AddActivityTaskResponse {
 }
 
 message QueryWorkflowRequest {
-    string namespaceId = 1;
-    tasklist.v1.TaskList taskList = 2;
-    workflowservice.v1.QueryWorkflowRequest queryRequest = 3;
-    string forwardedFrom = 4;
+    string namespace_id = 1;
+    tasklist.v1.TaskList task_list = 2;
+    workflowservice.v1.QueryWorkflowRequest query_request = 3;
+    string forwarded_from = 4;
 }
 
 message QueryWorkflowResponse {
-    common.v1.Payloads queryResult = 1;
-    query.v1.QueryRejected queryRejected = 2;
+    common.v1.Payloads query_result = 1;
+    query.v1.QueryRejected query_rejected = 2;
 }
 
 message RespondQueryTaskCompletedRequest {
-    string namespaceId = 1;
-    tasklist.v1.TaskList taskList = 2;
-    string taskId = 3;
-    workflowservice.v1.RespondQueryTaskCompletedRequest completedRequest = 4;
+    string namespace_id = 1;
+    tasklist.v1.TaskList task_list = 2;
+    string task_id = 3;
+    workflowservice.v1.RespondQueryTaskCompletedRequest completed_request = 4;
 }
 
 message RespondQueryTaskCompletedResponse {
 }
 
 message CancelOutstandingPollRequest {
-    string namespaceId = 1;
-    enums.v1.TaskListType taskListType = 2;
-    tasklist.v1.TaskList taskList = 3;
-    string pollerId = 4;
+    string namespace_id = 1;
+    enums.v1.TaskListType task_list_type = 2;
+    tasklist.v1.TaskList task_list = 3;
+    string poller_id = 4;
 }
 
 message CancelOutstandingPollResponse {
 }
 
 message DescribeTaskListRequest {
-    string namespaceId = 1;
-    workflowservice.v1.DescribeTaskListRequest descRequest = 2;
+    string namespace_id = 1;
+    workflowservice.v1.DescribeTaskListRequest desc_request = 2;
 }
 
 message DescribeTaskListResponse {
     repeated tasklist.v1.PollerInfo pollers = 1;
-    tasklist.v1.TaskListStatus taskListStatus = 2;
+    tasklist.v1.TaskListStatus task_list_status = 2;
 }
 
 message ListTaskListPartitionsRequest {
     string namespace = 1;
-    tasklist.v1.TaskList taskList = 2;
+    tasklist.v1.TaskList task_list = 2;
 }
 
 message ListTaskListPartitionsResponse {
-    repeated tasklist.v1.TaskListPartitionMetadata activityTaskListPartitions = 1;
-    repeated tasklist.v1.TaskListPartitionMetadata decisionTaskListPartitions = 2;
+    repeated tasklist.v1.TaskListPartitionMetadata activity_task_list_partitions = 1;
+    repeated tasklist.v1.TaskListPartitionMetadata decision_task_list_partitions = 2;
 }

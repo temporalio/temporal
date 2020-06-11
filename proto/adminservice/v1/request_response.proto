@@ -40,41 +40,41 @@ message DescribeWorkflowExecutionRequest {
 }
 
 message DescribeWorkflowExecutionResponse {
-    string shardId = 1;
-    string historyAddr = 2;
-    string mutableStateInCache = 3;
-    string mutableStateInDatabase = 4;
+    string shard_id = 1;
+    string history_addr = 2;
+    string mutable_state_in_cache = 3;
+    string mutable_state_in_database = 4;
 }
 
 //At least one of the parameters needs to be provided
 message DescribeHistoryHostRequest {
     //ip:port
-    string hostAddress = 1;
-    int32 shardIdForHost = 2;
-    common.v1.WorkflowExecution executionForHost = 3;
+    string host_address = 1;
+    int32 shard_id_for_host = 2;
+    common.v1.WorkflowExecution execution_for_host = 3;
 }
 
 message DescribeHistoryHostResponse {
-    int32 numberOfShards = 1;
+    int32 number_of_shards = 1;
     repeated int32
-    shardIds = 2;
-    namespace.v1.NamespaceCacheInfo namespaceCache = 3;
-    string shardControllerStatus = 4;
+    shard_ids = 2;
+    namespace.v1.NamespaceCacheInfo namespace_cache = 3;
+    string shard_controller_status = 4;
     string address = 5;
 }
 
 message CloseShardRequest {
-    int32 shardId = 1;
+    int32 shard_id = 1;
 }
 
 message CloseShardResponse {
 }
 
 message RemoveTaskRequest {
-    int32 shardId = 1;
+    int32 shard_id = 1;
     enums.v1.TaskCategory category = 2;
-    int64 taskId = 3;
-    int64 visibilityTimestamp = 4;
+    int64 task_id = 3;
+    int64 visibility_timestamp = 4;
 }
 
 message RemoveTaskResponse {
@@ -83,17 +83,17 @@ message RemoveTaskResponse {
 message GetWorkflowExecutionRawHistoryRequest {
     string namespace = 1;
     common.v1.WorkflowExecution execution = 2;
-    int64 firstEventId = 3;
-    int64 nextEventId = 4;
-    int32 maximumPageSize = 5;
-    bytes nextPageToken = 6;
+    int64 first_event_id = 3;
+    int64 next_event_id = 4;
+    int32 maximum_page_size = 5;
+    bytes next_page_token = 6;
 }
 
 message GetWorkflowExecutionRawHistoryResponse {
-    bytes nextPageToken = 1;
-    repeated common.v1.DataBlob historyBatches = 2;
-    map<string, replication.v1.ReplicationInfo> replicationInfo = 3;
-    int32 eventStoreVersion = 4;
+    bytes next_page_token = 1;
+    repeated common.v1.DataBlob history_batches = 2;
+    map<string, replication.v1.ReplicationInfo> replication_info = 3;
+    int32 event_store_version = 4;
 }
 
 /**
@@ -103,37 +103,37 @@ message GetWorkflowExecutionRawHistoryResponse {
 message GetWorkflowExecutionRawHistoryV2Request {
     string namespace = 1;
     common.v1.WorkflowExecution execution = 2;
-    int64 startEventId = 3;
-    int64 startEventVersion = 4;
-    int64 endEventId = 5;
-    int64 endEventVersion = 6;
-    int32 maximumPageSize = 7;
-    bytes nextPageToken = 8;
+    int64 start_event_id = 3;
+    int64 start_event_version = 4;
+    int64 end_event_id = 5;
+    int64 end_event_version = 6;
+    int32 maximum_page_size = 7;
+    bytes next_page_token = 8;
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
-    bytes nextPageToken = 1;
-    repeated common.v1.DataBlob historyBatches = 2;
-    history.v1.VersionHistory versionHistory = 3;
+    bytes next_page_token = 1;
+    repeated common.v1.DataBlob history_batches = 2;
+    history.v1.VersionHistory version_history = 3;
 }
 
 message GetReplicationMessagesRequest {
     repeated replication.v1.ReplicationToken tokens = 1;
-    string clusterName = 2;
+    string cluster_name = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, replication.v1.ReplicationMessages> messagesByShard = 1;
+    map<int32, replication.v1.ReplicationMessages> messages_by_shard = 1;
 }
 
 message GetNamespaceReplicationMessagesRequest {
     // lastRetrievedMessageId is where the next fetch should begin with.
-    int64 lastRetrievedMessageId = 1;
+    int64 last_retrieved_message_id = 1;
     // lastProcessedMessageId is the last messageId that is processed on the passive side.
     // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
-    int64 lastProcessedMessageId = 2;
+    int64 last_processed_message_id = 2;
     // clusterName is the name of the pulling cluster.
-    string clusterName = 3;
+    string cluster_name = 3;
 }
 
 message GetNamespaceReplicationMessagesResponse {
@@ -141,17 +141,17 @@ message GetNamespaceReplicationMessagesResponse {
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated replication.v1.ReplicationTaskInfo taskInfos = 1;
+    repeated replication.v1.ReplicationTaskInfo task_infos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated replication.v1.ReplicationTask replicationTasks = 1;
+    repeated replication.v1.ReplicationTask replication_tasks = 1;
 }
 
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
     string namespace = 1;
-    common.v1.WorkflowExecution workflowExecution = 2;
+    common.v1.WorkflowExecution workflow_execution = 2;
     common.v1.DataBlob events = 3;
 }
 
@@ -159,8 +159,8 @@ message ReapplyEventsResponse {
 }
 
 message AddSearchAttributeRequest {
-    map<string, enums.v1.IndexedValueType> searchAttribute = 1;
-    string securityToken = 2;
+    map<string, enums.v1.IndexedValueType> search_attribute = 1;
+    string security_token = 2;
 }
 
 message AddSearchAttributeResponse {
@@ -170,30 +170,30 @@ message DescribeClusterRequest {
 }
 
 message DescribeClusterResponse {
-    version.v1.SupportedClientVersions supportedClientVersions = 1;
-    cluster.v1.MembershipInfo membershipInfo = 2;
+    version.v1.SupportedClientVersions supported_client_versions = 1;
+    cluster.v1.MembershipInfo membership_info = 2;
 }
 
 message ReadDLQMessagesRequest {
     enums.v1.DeadLetterQueueType type = 1;
-    int32 shardId = 2;
-    string sourceCluster = 3;
-    int64 inclusiveEndMessageId = 4;
-    int32 maximumPageSize = 5;
-    bytes nextPageToken = 6;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
+    int32 maximum_page_size = 5;
+    bytes next_page_token = 6;
 }
 
 message ReadDLQMessagesResponse {
     enums.v1.DeadLetterQueueType type = 1;
-    repeated replication.v1.ReplicationTask replicationTasks = 2;
-    bytes nextPageToken = 3;
+    repeated replication.v1.ReplicationTask replication_tasks = 2;
+    bytes next_page_token = 3;
 }
 
 message PurgeDLQMessagesRequest {
     enums.v1.DeadLetterQueueType type = 1;
-    int32 shardId = 2;
-    string sourceCluster = 3;
-    int64 inclusiveEndMessageId = 4;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
 }
 
 message PurgeDLQMessagesResponse {
@@ -201,15 +201,15 @@ message PurgeDLQMessagesResponse {
 
 message MergeDLQMessagesRequest {
     enums.v1.DeadLetterQueueType type = 1;
-    int32 shardId = 2;
-    string sourceCluster = 3;
-    int64 inclusiveEndMessageId = 4;
-    int32 maximumPageSize = 5;
-    bytes nextPageToken = 6;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
+    int32 maximum_page_size = 5;
+    bytes next_page_token = 6;
 }
 
 message MergeDLQMessagesResponse {
-    bytes nextPageToken = 1;
+    bytes next_page_token = 1;
 }
 
 message RefreshWorkflowTasksRequest {

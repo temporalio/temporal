@@ -27,24 +27,24 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/history/v1;histor
 import "history/v1/message.proto";
 
 message TransientDecisionInfo {
-    HistoryEvent scheduledEvent = 1;
-    HistoryEvent startedEvent = 2;
+    HistoryEvent scheduled_event = 1;
+    HistoryEvent started_event = 2;
 }
 
 // VersionHistoryItem contains signal eventId and the corresponding version.
 message VersionHistoryItem {
-    int64 eventId = 1;
+    int64 event_id = 1;
     int64 version = 2;
 }
 
 // VersionHistory contains the version history of a branch.
 message VersionHistory {
-    bytes branchToken = 1;
+    bytes branch_token = 1;
     repeated VersionHistoryItem items = 2;
 }
 
 // VersionHistories contains all version histories from all branches.
 message VersionHistories {
-    int32 currentVersionHistoryIndex = 1;
+    int32 current_version_history_index = 1;
     repeated VersionHistory histories = 2;
 }

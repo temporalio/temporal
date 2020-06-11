@@ -30,12 +30,12 @@ message HostInfo {
 
 message RingInfo {
     string role = 1;
-    int32 memberCount = 2;
+    int32 member_count = 2;
     repeated HostInfo members = 3;
 }
 
 message MembershipInfo {
-    HostInfo currentHost = 1;
-    repeated string reachableMembers = 2;
+    HostInfo current_host = 1;
+    repeated string reachable_members = 2;
     repeated RingInfo rings = 3;
 }

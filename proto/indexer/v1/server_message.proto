@@ -28,18 +28,18 @@ import "enums/v1/server_indexer.proto";
 message Field {
     enums.v1.FieldType type = 1;
     oneof data {
-        string stringData = 2;
-        int64 intData = 3;
-        bool boolData = 4;
-        bytes binaryData = 5;
+        string string_data = 2;
+        int64 int_data = 3;
+        bool bool_data = 4;
+        bytes binary_data = 5;
     }
 }
 
 message Message {
-    enums.v1.MessageType messageType = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
+    enums.v1.MessageType message_type = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
     int64 version = 5;
     map<string, Field> fields = 6;
 }

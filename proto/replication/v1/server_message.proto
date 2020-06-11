@@ -36,31 +36,31 @@ import "failure/v1/message.proto";
 
 message ReplicationInfo {
     int64 version = 1;
-    int64 lastEventId = 2;
+    int64 last_event_id = 2;
 }
 
 message ReplicationTask {
-    enums.v1.ReplicationTaskType taskType = 1;
-    int64 sourceTaskId = 2;
+    enums.v1.ReplicationTaskType task_type = 1;
+    int64 source_task_id = 2;
     oneof attributes {
-        NamespaceTaskAttributes namespaceTaskAttributes = 3;
+        NamespaceTaskAttributes namespace_task_attributes = 3;
         // TODO: deprecate once NDC migration is done.
-        HistoryTaskAttributes historyTaskAttributes = 4;
-        SyncShardStatusTaskAttributes syncShardStatusTaskAttributes = 5;
-        SyncActivityTaskAttributes syncActivityTaskAttributes = 6;
+        HistoryTaskAttributes history_task_attributes = 4;
+        SyncShardStatusTaskAttributes sync_shard_status_task_attributes = 5;
+        SyncActivityTaskAttributes sync_activity_task_attributes = 6;
         // TODO: deprecate once kafka deprecation is done.
-        HistoryMetadataTaskAttributes historyMetadataTaskAttributes = 7;
-        HistoryTaskV2Attributes historyTaskV2Attributes = 8;
+        HistoryMetadataTaskAttributes history_metadata_task_attributes = 7;
+        HistoryTaskV2Attributes history_task_v2_attributes = 8;
     }
 }
 
 message ReplicationToken {
-    int32 shardId = 1;
+    int32 shard_id = 1;
     // lastRetrievedMessageId is where the next fetch should begin with.
-    int64 lastRetrievedMessageId = 2;
+    int64 last_retrieved_message_id = 2;
     // lastProcessedMessageId is the last messageId that is processed on the passive side.
     // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
-    int64 lastProcessedMessageId = 3;
+    int64 last_processed_message_id = 3;
 }
 
 message SyncShardStatus {
@@ -68,92 +68,92 @@ message SyncShardStatus {
 }
 
 message ReplicationMessages {
-    repeated ReplicationTask replicationTasks = 1;
+    repeated ReplicationTask replication_tasks = 1;
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
-    int64 lastRetrievedMessageId = 2;
+    int64 last_retrieved_message_id = 2;
     // Hint for flow control.
     bool hasMore  = 3;
-    SyncShardStatus syncShardStatus = 4;
+    SyncShardStatus sync_shard_status = 4;
 }
 
 message ReplicationTaskInfo {
-    string namespaceId = 1;
-    string workflowId = 2;
-    string runId = 3;
-    enums.v1.TaskType taskType = 4;
-    int64 taskId = 5;
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    enums.v1.TaskType task_type = 4;
+    int64 task_id = 5;
     int64 version = 6;
-    int64 firstEventId = 7;
-    int64 nextEventId = 8;
-    int64 scheduledId = 9;
+    int64 first_event_id = 7;
+    int64 next_event_id = 8;
+    int64 scheduled_id = 9;
 }
 
 message NamespaceTaskAttributes {
-    enums.v1.NamespaceOperation namespaceOperation = 1;
+    enums.v1.NamespaceOperation namespace_operation = 1;
     string id = 2;
     namespace.v1.NamespaceInfo info = 3;
     namespace.v1.NamespaceConfiguration config = 4;
-    NamespaceReplicationConfiguration replicationConfig = 5;
-    int64 configVersion = 6;
-    int64 failoverVersion = 7;
+    NamespaceReplicationConfiguration replication_config = 5;
+    int64 config_version = 6;
+    int64 failover_version = 7;
 }
 
 message HistoryTaskAttributes {
-    repeated string targetClusters = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    int64 firstEventId = 5;
-    int64 nextEventId = 6;
+    repeated string target_clusters = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    int64 first_event_id = 5;
+    int64 next_event_id = 6;
     int64 version = 7;
-    map<string, ReplicationInfo> replicationInfo = 8;
+    map<string, ReplicationInfo> replication_info = 8;
     history.v1.History history = 9;
-    history.v1.History newRunHistory = 10;
-    int32 eventStoreVersion = 11;
-    int32 newRunEventStoreVersion = 12;
-    bool resetWorkflow = 13;
-    bool newRunNDC = 14;
+    history.v1.History new_run_history = 10;
+    int32 event_store_version = 11;
+    int32 new_run_event_store_version = 12;
+    bool reset_workflow = 13;
+    bool new_run_n_d_c = 14;
 }
 
 message HistoryMetadataTaskAttributes {
-    repeated string targetClusters = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    int64 firstEventId = 5;
-    int64 nextEventId = 6;
+    repeated string target_clusters = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    int64 first_event_id = 5;
+    int64 next_event_id = 6;
 }
 
 message SyncShardStatusTaskAttributes {
-    string sourceCluster = 1;
-    int64 shardId = 2;
+    string source_cluster = 1;
+    int64 shard_id = 2;
     int64 timestamp = 3;
 }
 
 message SyncActivityTaskAttributes {
-    string namespaceId = 1;
-    string workflowId = 2;
-    string runId = 3;
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
     int64 version = 4;
-    int64 scheduledId = 5;
-    int64 scheduledTime = 6;
-    int64 startedId = 7;
-    int64 startedTime = 8;
-    int64 lastHeartbeatTime = 9;
+    int64 scheduled_id = 5;
+    int64 scheduled_time = 6;
+    int64 started_id = 7;
+    int64 started_time = 8;
+    int64 last_heartbeat_time = 9;
     common.v1.Payloads details = 10;
     int32 attempt = 11;
-    failure.v1.Failure lastFailure = 12;
-    string lastWorkerIdentity = 13;
-    history.v1.VersionHistory versionHistory = 14;
+    failure.v1.Failure last_failure = 12;
+    string last_worker_identity = 13;
+    history.v1.VersionHistory version_history = 14;
 }
 
 message HistoryTaskV2Attributes {
-    int64 taskId = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    repeated history.v1.VersionHistoryItem versionHistoryItems = 5;
+    int64 task_id = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    repeated history.v1.VersionHistoryItem version_history_items = 5;
     common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
-    common.v1.DataBlob newRunEvents = 7;
+    common.v1.DataBlob new_run_events = 7;
 }

@@ -30,15 +30,15 @@ import "enums/v1/workflow.proto";
 
 message HistoryBlobHeader {
     string namespace = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    bool isLast = 5;
-    int64 firstFailoverVersion = 6;
-    int64 lastFailoverVersion = 7;
-    int64 firstEventId = 8;
-    int64 lastEventId = 9;
-    int64 eventCount = 10;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    bool is_last = 5;
+    int64 first_failover_version = 6;
+    int64 last_failover_version = 7;
+    int64 first_event_id = 8;
+    int64 last_event_id = 9;
+    int64 event_count = 10;
 }
 
 message HistoryBlob  {
@@ -48,17 +48,17 @@ message HistoryBlob  {
 
 // ArchiveVisibilityRequest is request to Archive single workflow visibility record
 message ArchiveVisibilityRequest {
-    string namespaceId = 1;
+    string namespace_id = 1;
     string namespace = 2;
-    string workflowId = 3;
-    string runId = 4;
-    string workflowTypeName = 5;
-    int64 startTimestamp = 6;
-    int64 executionTimestamp = 7;
-    int64 closeTimestamp = 8;
+    string workflow_id = 3;
+    string run_id = 4;
+    string workflow_type_name = 5;
+    int64 start_timestamp = 6;
+    int64 execution_timestamp = 7;
+    int64 close_timestamp = 8;
     enums.v1.WorkflowExecutionStatus status = 9;
-    int64 historyLength = 10;
+    int64 history_length = 10;
     common.v1.Memo memo = 11;
-    map<string, string> searchAttributes = 12;
-    string historyArchivalURI = 13;
+    map<string, string> search_attributes = 12;
+    string history_archival_u_r_i = 13;
 }

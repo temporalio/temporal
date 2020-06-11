@@ -25,6 +25,6 @@ package namespace.v1;
 option go_package = "github.com/temporalio/temporal/.gen/proto/namespace/v1;namespace";
 
 message NamespaceCacheInfo {
-    int64 numOfItemsInCacheById = 1;
-    int64 numOfItemsInCacheByName = 2;
+    int64 num_of_items_in_cache_by_id = 1;
+    int64 num_of_items_in_cache_by_name = 2;
 }
