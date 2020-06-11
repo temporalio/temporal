@@ -151,10 +151,10 @@ func newAdminShardManagementCommands() []cli.Command {
 					Name:  FlagTaskID,
 					Usage: "The ID of the timer task to describe",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagTaskType,
-					Value: 2,
-					Usage: "Task type: 2 - transfer task, 3 - timer task, 4 - replication task",
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
 				},
 				cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
@@ -185,10 +185,10 @@ func newAdminShardManagementCommands() []cli.Command {
 					Name:  FlagShardID,
 					Usage: "The ID of the shard",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagTaskType,
-					Value: 2,
-					Usage: "Task type: 2 - transfer task (default), 3 - timer task, 4 - replication task",
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
 				},
 				cli.StringFlag{
 					Name:  FlagMinVisibilityTimestamp,
@@ -236,9 +236,10 @@ func newAdminShardManagementCommands() []cli.Command {
 					Name:  FlagTaskID,
 					Usage: "taskId",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagTaskType,
-					Usage: "task type : 2 (transfer task), 3 (timer task) or 4 (replication task)",
+					Value: "transfer",
+					Usage: "Task type: transfer (default), timer, replication",
 				},
 				cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
