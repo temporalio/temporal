@@ -957,13 +957,12 @@ func printTable(items []interface{}) error {
 	table.SetHeaderLine(false)
 	for i := 0; i < len(items); i++ {
 		item := reflect.ValueOf(items[i]).Elem()
-		var values []string
+		var columns []string
 		for j := 0; j < len(fields); j++ {
-			f := item.Field(j)
-			v := fmt.Sprintf("%v", f.Interface())
-			values = append(values, v)
+			col := item.Field(j)
+			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}
-		table.Append(values)
+		table.Append(columns)
 	}
 	table.Render()
 	table.ClearRows()
