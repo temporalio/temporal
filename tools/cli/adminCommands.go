@@ -413,9 +413,14 @@ func AdminDescribeTask(c *cli.Context) {
 // AdminListTasks outputs a list of a tasks for given Shard and Task Type
 func AdminListTasks(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
-	category := enumsgenpb.TaskCategory(categoryInt)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := commongenpb.TaskCategory(categoryInt)
+	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit("Task type Unspecified is currently not supported", nil)
+	}
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
