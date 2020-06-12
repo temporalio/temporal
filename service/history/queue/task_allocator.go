@@ -153,6 +153,15 @@ func (t *taskAllocatorImpl) VerifyStandbyTask(standbyCluster string, taskDomainI
 		t.logger.Debug("Domain is not standby, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	}
+
+	if err := t.checkDomainPendingActive(
+		domainEntry,
+		taskDomainID,
+		task,
+	); err != nil {
+		return false, err
+	}
+
 	t.logger.Debug("Domain is standby, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return true, nil
 }
