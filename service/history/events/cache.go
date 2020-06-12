@@ -198,10 +198,7 @@ func (e *cacheImpl) GetEvent(
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	// use local id to preserve old logic before full migration to global event cache
-	if e.shardID != nil {
-		shardID = *e.shardID
-	}
+
 	event, err := e.getHistoryEventFromStore(firstEventID, eventID, branchToken, shardID)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
