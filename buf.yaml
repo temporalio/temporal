@@ -1,0 +1,10 @@
+build:
+  roots:
+    - proto/internal
+    - proto/temporal-proto
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_SAME_JAVA_MULTIPLE_FILES
+    - PACKAGE_SAME_JAVA_PACKAGE

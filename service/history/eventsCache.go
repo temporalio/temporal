@@ -29,14 +29,15 @@ package history
 import (
 	"time"
 
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -48,13 +49,13 @@ type (
 			firstEventID int64,
 			eventID int64,
 			branchToken []byte,
-		) (*eventpb.HistoryEvent, error)
+		) (*historypb.HistoryEvent, error)
 		putEvent(
 			namespaceID string,
 			workflowID string,
 			runID string,
 			eventID int64,
-			event *eventpb.HistoryEvent,
+			event *historypb.HistoryEvent,
 		)
 		deleteEvent(
 			namespaceID string,
@@ -120,7 +121,7 @@ func newEventKey(namespaceID, workflowID, runID string, eventID int64) eventKey 
 }
 
 func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*eventpb.HistoryEvent, error) {
+	branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -128,7 +129,7 @@ func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstE
 	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	// Test hook for disabling cache
 	if !e.disabled {
-		event, cacheHit := e.Cache.Get(key).(*eventpb.HistoryEvent)
+		event, cacheHit := e.Cache.Get(key).(*historypb.HistoryEvent)
 		if cacheHit {
 			return event, nil
 		}
@@ -151,7 +152,7 @@ func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstE
 	return event, nil
 }
 
-func (e *eventsCacheImpl) putEvent(namespaceID, workflowID, runID string, eventID int64, event *eventpb.HistoryEvent) {
+func (e *eventsCacheImpl) putEvent(namespaceID, workflowID, runID string, eventID int64, event *historypb.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -170,7 +171,7 @@ func (e *eventsCacheImpl) deleteEvent(namespaceID, workflowID, runID string, eve
 }
 
 func (e *eventsCacheImpl) getHistoryEventFromStore(namespaceID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*eventpb.HistoryEvent, error) {
+	branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()

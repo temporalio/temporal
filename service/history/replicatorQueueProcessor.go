@@ -29,14 +29,15 @@ import (
 	"errors"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -172,13 +173,13 @@ func (p *replicatorQueueProcessorImpl) process(
 	// so should not do anything to shouldProcessTask variable
 
 	switch task.TaskType {
-	case commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+	case enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		err := p.processSyncActivityTask(task.ReplicationTaskInfo)
 		if err == nil {
 			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskId()})
 		}
 		return metrics.ReplicatorTaskSyncActivityScope, err
-	case commongenpb.TASK_TYPE_REPLICATION_HISTORY:
+	case enumsgenpb.TASK_TYPE_REPLICATION_HISTORY:
 		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			err = errHistoryNotFoundTask
@@ -229,7 +230,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistenceblobs.ReplicationTaskInfo) *replicationgenpb.ReplicationTask {
 	return &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{
 			HistoryMetadataTaskAttributes: &replicationgenpb.HistoryMetadataTaskAttributes{
 				TargetClusters: targetClusters,
@@ -249,7 +250,7 @@ func GenerateReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
-	history *eventpb.History,
+	history *historypb.History,
 	shardID *int,
 ) (*replicationgenpb.ReplicationTask, string, error) {
 	var err error
@@ -267,11 +268,11 @@ func GenerateReplicationTask(
 	}
 
 	var newRunID string
-	var newRunHistory *eventpb.History
+	var newRunHistory *historypb.History
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(
@@ -289,7 +290,7 @@ func GenerateReplicationTask(
 	}
 
 	ret := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
 			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 				TargetClusters:  targetClusters,
@@ -321,7 +322,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	now := clock.NewRealTimeSource().Now()
 	if p.lastShardSyncTimestamp.Add(p.shard.GetConfig().ShardSyncMinInterval()).Before(now) {
 		syncStatusTask := &replicationgenpb.ReplicationTask{
-			TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
+			TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
 			Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{
 				SyncShardStatusTaskAttributes: &replicationgenpb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
@@ -347,17 +348,17 @@ func GetAllHistory(
 	nextEventID int64,
 	branchToken []byte,
 	shardID *int,
-) (*eventpb.History, []*eventpb.History, error) {
+) (*historypb.History, []*historypb.History, error) {
 
 	// overall result
-	var historyEvents []*eventpb.HistoryEvent
-	var historyBatches []*eventpb.History
+	var historyEvents []*historypb.HistoryEvent
+	var historyBatches []*historypb.History
 	historySize := 0
 	var err error
 
 	// variable used for each page
-	var pageHistoryEvents []*eventpb.HistoryEvent
-	var pageHistoryBatches []*eventpb.History
+	var pageHistoryEvents []*historypb.HistoryEvent
+	var pageHistoryBatches []*historypb.History
 	var pageToken []byte
 	var pageHistorySize int
 
@@ -381,7 +382,7 @@ func GetAllHistory(
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
 	}
 
-	history := &eventpb.History{
+	history := &historypb.History{
 		Events: historyEvents,
 	}
 	return history, historyBatches, nil
@@ -397,10 +398,10 @@ func PaginateHistory(
 	tokenIn []byte,
 	pageSize int,
 	shardID *int,
-) ([]*eventpb.HistoryEvent, []*eventpb.History, []byte, int, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
 
-	var historyEvents []*eventpb.HistoryEvent
-	var historyBatches []*eventpb.History
+	var historyEvents []*historypb.HistoryEvent
+	var historyBatches []*historypb.History
 	var tokenOut []byte
 	var historySize int
 
@@ -574,13 +575,13 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 
 	task := t.ReplicationTaskInfo
 	switch task.TaskType {
-	case commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+	case enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		task, err := p.generateSyncActivityTask(ctx, task)
 		if task != nil {
 			task.SourceTaskId = qTask.GetTaskId()
 		}
 		return task, err
-	case commongenpb.TASK_TYPE_REPLICATION_HISTORY:
+	case enumsgenpb.TASK_TYPE_REPLICATION_HISTORY:
 		task, err := p.generateHistoryReplicationTask(ctx, task)
 		if task != nil {
 			task.SourceTaskId = qTask.GetTaskId()
@@ -620,7 +621,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()
-			var versionHistory *eventgenpb.VersionHistory
+			var versionHistory *historygenpb.VersionHistory
 			if versionHistories != nil {
 				rawVersionHistory, err := versionHistories.GetCurrentVersionHistory()
 				if err != nil {
@@ -630,7 +631,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			}
 
 			return &replicationgenpb.ReplicationTask{
-				TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+				TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 				Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 						NamespaceId:        namespaceID,
@@ -742,7 +743,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			}
 
 			replicationTask := &replicationgenpb.ReplicationTask{
-				TaskType: replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+				TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 				Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
 					HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 						TaskId:              task.GetFirstEventId(),
@@ -802,7 +803,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 	mutableState mutableState,
 	eventID int64,
 	version int64,
-) ([]*eventgenpb.VersionHistoryItem, []byte, error) {
+) ([]*historygenpb.VersionHistoryItem, []byte, error) {
 
 	versionHistories := mutableState.GetVersionHistories()
 	if versionHistories == nil {

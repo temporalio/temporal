@@ -32,8 +32,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.uber.org/zap"
+
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -41,10 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
-	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/zap"
 )
 
 type (

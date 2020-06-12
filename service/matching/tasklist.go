@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 )
 
 type (
@@ -38,7 +38,7 @@ type (
 	taskListID struct {
 		qualifiedTaskListName
 		namespaceID string
-		taskType    tasklistpb.TaskListType
+		taskType    enumspb.TaskListType
 	}
 	// qualifiedTaskListName refers to the fully qualified task list name
 	qualifiedTaskListName struct {
@@ -131,7 +131,7 @@ func (tn *qualifiedTaskListName) init() error {
 }
 
 // newTaskListID returns taskListID which uniquely identfies as task list
-func newTaskListID(namespaceID string, taskListName string, taskType tasklistpb.TaskListType) (*taskListID, error) {
+func newTaskListID(namespaceID string, taskListName string, taskType enumspb.TaskListType) (*taskListID, error) {
 	name, err := newTaskListName(taskListName)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (tid *taskListID) String() string {
 	b.WriteString("name=")
 	b.WriteString(tid.name)
 	b.WriteString("type=")
-	if tid.taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
+	if tid.taskType == enumspb.TASK_LIST_TYPE_ACTIVITY {
 		b.WriteString("activity")
 	} else {
 		b.WriteString("decision")

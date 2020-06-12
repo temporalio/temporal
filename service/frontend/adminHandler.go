@@ -32,17 +32,19 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	versionpb "go.temporal.io/temporal-proto/version"
+	versionpb "go.temporal.io/temporal-proto/version/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster/v1"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
@@ -388,7 +390,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	}
 
 	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*eventpb.History
+	var historyBatches []*historypb.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
@@ -425,7 +427,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			return nil, err
 		}
 		blobs = append(blobs, &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 	}
@@ -790,7 +792,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -809,7 +811,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -857,7 +859,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -870,7 +872,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -911,7 +913,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -927,7 +929,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case commongenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 
 		op = func() error {
 			select {
@@ -1142,19 +1144,19 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	return err
 }
 
-func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType commonpb.IndexedValueType) string {
+func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enumspb.IndexedValueType) string {
 	switch valueType {
-	case commonpb.INDEXED_VALUE_TYPE_STRING:
+	case enumspb.INDEXED_VALUE_TYPE_STRING:
 		return "text"
-	case commonpb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		return "keyword"
-	case commonpb.INDEXED_VALUE_TYPE_INT:
+	case enumspb.INDEXED_VALUE_TYPE_INT:
 		return "long"
-	case commonpb.INDEXED_VALUE_TYPE_DOUBLE:
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		return "double"
-	case commonpb.INDEXED_VALUE_TYPE_BOOL:
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		return "boolean"
-	case commonpb.INDEXED_VALUE_TYPE_DATETIME:
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		return "date"
 	default:
 		return ""

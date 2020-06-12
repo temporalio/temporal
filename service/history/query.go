@@ -28,7 +28,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
-	querypb "go.temporal.io/temporal-proto/query"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -123,10 +124,10 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		queryResult := terminationState.queryResult
-		validAnswered := queryResult.GetResultType() == querypb.QUERY_RESULT_TYPE_ANSWERED &&
+		validAnswered := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_ANSWERED &&
 			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
-		validFailed := queryResult.GetResultType() == querypb.QUERY_RESULT_TYPE_FAILED &&
+		validFailed := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_FAILED &&
 			queryResult.Answer == nil &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {

@@ -33,11 +33,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -149,7 +150,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -259,7 +260,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -347,8 +348,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Events: []*historypb.HistoryEvent{{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -401,8 +402,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Events: []*historypb.HistoryEvent{{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

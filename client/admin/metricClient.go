@@ -29,7 +29,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	"github.com/temporalio/temporal/common/metrics"
 )
 

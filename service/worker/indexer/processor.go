@@ -34,7 +34,8 @@ import (
 	"github.com/olivere/elastic"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
@@ -201,7 +202,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
 	switch indexMsg.GetMessageType() {
-	case indexergenpb.MESSAGE_TYPE_INDEX:
+	case enumsgenpb.MESSAGE_TYPE_INDEX:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
 		req = elastic.NewBulkIndexRequest().
@@ -211,7 +212,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 			VersionType(versionTypeExternal).
 			Version(indexMsg.GetVersion()).
 			Doc(doc)
-	case indexergenpb.MESSAGE_TYPE_DELETE:
+	case enumsgenpb.MESSAGE_TYPE_DELETE:
 		keyToKafkaMsg = docID
 		req = elastic.NewBulkDeleteRequest().
 			Index(p.esIndexName).
@@ -256,13 +257,13 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) 
 		}
 
 		switch v.GetType() {
-		case indexergenpb.FIELD_TYPE_STRING:
+		case enumsgenpb.FIELD_TYPE_STRING:
 			doc[k] = v.GetStringData()
-		case indexergenpb.FIELD_TYPE_INT:
+		case enumsgenpb.FIELD_TYPE_INT:
 			doc[k] = v.GetIntData()
-		case indexergenpb.FIELD_TYPE_BOOL:
+		case enumsgenpb.FIELD_TYPE_BOOL:
 			doc[k] = v.GetBoolData()
-		case indexergenpb.FIELD_TYPE_BINARY:
+		case enumsgenpb.FIELD_TYPE_BINARY:
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes

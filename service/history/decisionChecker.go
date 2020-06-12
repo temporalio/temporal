@@ -30,10 +30,11 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -148,7 +149,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
 		return false, err
 	}
 
@@ -172,7 +173,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, false),
 		}
 
-		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
 			return false, err
 		}
 		return true, nil

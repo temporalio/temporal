@@ -27,7 +27,7 @@ package history
 import (
 	"time"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -110,51 +110,51 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func getTransferTaskMetricsScope(
-	taskType commongenpb.TaskType,
+	taskType enumsgenpb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+	case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		if isActive {
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+	case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 		if isActive {
 			return metrics.TransferActiveTaskDecisionScope
 		}
 		return metrics.TransferStandbyTaskDecisionScope
-	case commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+	case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope
 		}
 		return metrics.TransferStandbyTaskCloseExecutionScope
-	case commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+	case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCancelExecutionScope
 		}
 		return metrics.TransferStandbyTaskCancelExecutionScope
-	case commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+	case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskSignalExecutionScope
 		}
 		return metrics.TransferStandbyTaskSignalExecutionScope
-	case commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+	case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case commongenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
+	case enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		if isActive {
 			return metrics.TransferActiveTaskRecordWorkflowStartedScope
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
-	case commongenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+	case enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case commongenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+	case enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		if isActive {
 			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
 		}

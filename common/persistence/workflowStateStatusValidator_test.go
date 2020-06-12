@@ -28,9 +28,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 )
 
 type (
@@ -60,138 +60,138 @@ func (s *workflowStateStatusSuite) TearDownTest() {
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCreated() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRunning() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCompleted() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZombie() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }
 
 // TODO
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCreated() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRunning() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCompleted() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NotNil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		s.Nil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZombie() {
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Nil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }

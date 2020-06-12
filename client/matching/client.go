@@ -28,11 +28,11 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 	"github.com/temporalio/temporal/common"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -73,7 +73,7 @@ func (c *clientImpl) AddActivityTask(
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetNamespaceId(),
 		*request.GetTaskList(),
-		tasklistpb.TASK_LIST_TYPE_ACTIVITY,
+		enumspb.TASK_LIST_TYPE_ACTIVITY,
 		request.GetForwardedFrom(),
 	)
 	request.TaskList.Name = partition
@@ -93,7 +93,7 @@ func (c *clientImpl) AddDecisionTask(
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetNamespaceId(),
 		*request.GetTaskList(),
-		tasklistpb.TASK_LIST_TYPE_DECISION,
+		enumspb.TASK_LIST_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
 	request.TaskList.Name = partition
@@ -113,7 +113,7 @@ func (c *clientImpl) PollForActivityTask(
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskList(),
-		tasklistpb.TASK_LIST_TYPE_ACTIVITY,
+		enumspb.TASK_LIST_TYPE_ACTIVITY,
 		request.GetForwardedFrom(),
 	)
 	request.PollRequest.TaskList.Name = partition
@@ -133,7 +133,7 @@ func (c *clientImpl) PollForDecisionTask(
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskList(),
-		tasklistpb.TASK_LIST_TYPE_DECISION,
+		enumspb.TASK_LIST_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
 	request.PollRequest.TaskList.Name = partition
@@ -150,7 +150,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.GetTaskList(),
-		tasklistpb.TASK_LIST_TYPE_DECISION,
+		enumspb.TASK_LIST_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
 	request.TaskList.Name = partition

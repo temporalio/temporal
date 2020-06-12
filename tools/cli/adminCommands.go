@@ -34,12 +34,13 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
@@ -87,7 +88,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
-	allEvents := &eventpb.History{}
+	allEvents := &historypb.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)
@@ -375,8 +376,8 @@ func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
 	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := commongenpb.TaskCategory_value[categoryFlag]
-	category := commongenpb.TaskCategory(categoryInt)
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -384,7 +385,7 @@ func AdminDescribeTask(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == commongenpb.TASK_CATEGORY_TIMER {
+	if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
 		task, err := executionManager.GetTimerTask(req)
@@ -392,14 +393,14 @@ func AdminDescribeTask(c *cli.Context) {
 			ErrorAndExit("Failed to get Timer Task", err)
 		}
 		prettyPrintJSONObject(task)
-	} else if category == commongenpb.TASK_CATEGORY_REPLICATION {
+	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
 		task, err := executionManager.GetReplicationTask(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Replication Task", err)
 		}
 		prettyPrintJSONObject(task)
-	} else if category == commongenpb.TASK_CATEGORY_TRANSFER {
+	} else if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
 		task, err := executionManager.GetTransferTask(req)
 		if err != nil {
@@ -415,8 +416,8 @@ func AdminDescribeTask(c *cli.Context) {
 func AdminListTasks(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := commongenpb.TaskCategory_value[categoryFlag]
-	category := commongenpb.TaskCategory(categoryInt)
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -424,14 +425,14 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == commongenpb.TASK_CATEGORY_TRANSFER {
+	if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTasksRequest{}
 		tasks, err := executionManager.GetTransferTasks(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Transfer Tasks", err)
 		}
 		prettyPrintJSONObject(tasks)
-	} else if category == commongenpb.TASK_CATEGORY_TIMER {
+	} else if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
 		minVis := time.Unix(0, minVisFlag)
 		maxVisFlag := parseTime(c.String(FlagMaxVisibilityTimestamp), 0, time.Now())
@@ -453,7 +454,7 @@ func AdminListTasks(c *cli.Context) {
 			return items, token, nil
 		}
 		paginate(c, paginationFunc)
-	} else if category == commongenpb.TASK_CATEGORY_REPLICATION {
+	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
 		task, err := executionManager.GetReplicationTasks(req)
 		if err != nil {
@@ -472,10 +473,10 @@ func AdminRemoveTask(c *cli.Context) {
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
 	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := commongenpb.TaskCategory_value[categoryFlag]
-	category := commongenpb.TaskCategory(categoryInt)
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 	var visibilityTimestamp int64
-	if category == commongenpb.TASK_CATEGORY_TIMER {
+	if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 

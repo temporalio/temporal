@@ -45,10 +45,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/codec"
@@ -59,10 +58,10 @@ import (
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
-func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*eventpb.History, error) {
+func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*historypb.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
-		filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-	var events []*eventpb.HistoryEvent
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	var events []*historypb.HistoryEvent
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
@@ -71,13 +70,13 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 		events = append(events, event)
 	}
 
-	history := &eventpb.History{}
+	history := &historypb.History{}
 	history.Events = events
 	return history, nil
 }
 
 // HistoryEventToString convert HistoryEvent to string
-func HistoryEventToString(e *eventpb.HistoryEvent, printFully bool, maxFieldLength int) string {
+func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
 	return anyToString(data, printFully, maxFieldLength)
 }
@@ -215,130 +214,130 @@ func breakLongWords(input string, maxWordLength int) string {
 //   Completed - green
 //   Started - blue
 //   Others - default (white/black)
-func ColorEvent(e *eventpb.HistoryEvent) string {
+func ColorEvent(e *historypb.HistoryEvent) string {
 	var data string
 	switch e.GetEventType() {
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_STARTED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
+	case enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_TIMER_STARTED:
+	case enumspb.EVENT_TYPE_TIMER_STARTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_TIMER_FIRED:
+	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:
+	case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_TIMER_CANCELED:
+	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_MARKER_RECORDED:
+	case enumspb.EVENT_TYPE_MARKER_RECORDED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.EventType.String()
 
-	case eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		data = e.EventType.String()
 
 	default:
@@ -347,124 +346,124 @@ func ColorEvent(e *eventpb.HistoryEvent) string {
 	return data
 }
 
-func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
+func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 	var data interface{}
 	switch e.GetEventType() {
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		data = e.GetWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		data = e.GetWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = e.GetWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
 		data = e.GetDecisionTaskScheduledEventAttributes()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_STARTED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_STARTED:
 		data = e.GetDecisionTaskStartedEventAttributes()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED:
 		data = e.GetDecisionTaskCompletedEventAttributes()
 
-	case eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
+	case enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
 		data = e.GetDecisionTaskTimedOutEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 		data = e.GetActivityTaskScheduledEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 		data = e.GetActivityTaskStartedEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 		data = e.GetActivityTaskCompletedEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 		data = e.GetActivityTaskFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 		data = e.GetActivityTaskTimedOutEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 		data = e.GetActivityTaskCancelRequestedEventAttributes()
 
-	case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 		data = e.GetActivityTaskCanceledEventAttributes()
 
-	case eventpb.EVENT_TYPE_TIMER_STARTED:
+	case enumspb.EVENT_TYPE_TIMER_STARTED:
 		data = e.GetTimerStartedEventAttributes()
 
-	case eventpb.EVENT_TYPE_TIMER_FIRED:
+	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.GetTimerFiredEventAttributes()
 
-	case eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:
+	case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
 		data = e.GetCancelTimerFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_TIMER_CANCELED:
+	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = e.GetTimerCanceledEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.GetWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		data = e.GetWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 		data = e.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EVENT_TYPE_MARKER_RECORDED:
+	case enumspb.EVENT_TYPE_MARKER_RECORDED:
 		data = e.GetMarkerRecordedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetWorkflowExecutionSignaledEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.GetWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 		data = e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 
-	case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetStartChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		data = e.GetChildWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 		data = e.GetChildWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 		data = e.GetChildWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 		data = e.GetChildWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 		data = e.GetChildWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 		data = e.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 		data = e.GetSignalExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
+	case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
 
 	default:
@@ -476,7 +475,7 @@ func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 func isAttributeName(name string) bool {
 	eventType := strings.TrimSuffix(name, "EventAttributes")
 
-	if _, ok := eventpb.EventType_value[eventType]; ok {
+	if _, ok := enumspb.EventType_value[eventType]; ok {
 		return true
 	}
 
@@ -705,11 +704,11 @@ func parseTimeDuration(duration string) (dur time.Duration, err error) {
 	return
 }
 
-func strToTaskListType(str string) tasklistpb.TaskListType {
+func strToTaskListType(str string) enumspb.TaskListType {
 	if strings.ToLower(str) == "activity" {
-		return tasklistpb.TASK_LIST_TYPE_ACTIVITY
+		return enumspb.TASK_LIST_TYPE_ACTIVITY
 	}
-	return tasklistpb.TASK_LIST_TYPE_DECISION
+	return enumspb.TASK_LIST_TYPE_DECISION
 }
 
 func getCliIdentity() string {

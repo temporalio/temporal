@@ -32,14 +32,15 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -96,13 +97,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.namespace, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
 	s.Require().NoError(
-		s.registerNamespace(s.testRawHistoryNamespaceName, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.testRawHistoryNamespaceName, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ARCHIVAL_STATUS_DISABLED, "", namespacepb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.foreignNamespace, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -156,9 +157,9 @@ func (s *IntegrationBase) tearDownSuite() {
 func (s *IntegrationBase) registerNamespace(
 	namespace string,
 	retentionDays int,
-	historyArchivalStatus namespacepb.ArchivalStatus,
+	historyArchivalStatus enumspb.ArchivalStatus,
 	historyArchivalURI string,
-	visibilityArchivalStatus namespacepb.ArchivalStatus,
+	visibilityArchivalStatus enumspb.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
@@ -182,13 +183,13 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	history := &eventpb.History{
+	history := &historypb.History{
 		Events: events,
 	}
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*eventpb.HistoryEvent {
+func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -221,13 +222,13 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:     uuid.New(),
 				Name:   s.archivalNamespace,
-				Status: namespacepb.NAMESPACE_STATUS_REGISTERED,
+				Status: enumspb.NAMESPACE_STATUS_REGISTERED,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:            0,
-				HistoryArchivalStatus:    namespacepb.ARCHIVAL_STATUS_ENABLED,
+				HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
 				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-				VisibilityArchivalStatus: namespacepb.ARCHIVAL_STATUS_ENABLED,
+				VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
 				VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},

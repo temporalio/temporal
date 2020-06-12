@@ -31,14 +31,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payloads"
@@ -78,9 +78,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *eventpb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -88,7 +88,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
+				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -103,7 +103,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -129,7 +129,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*eventpb.HistoryEvent, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -146,8 +146,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var allEvents []*eventpb.HistoryEvent
-	var events []*eventpb.HistoryEvent
+	var allEvents []*historypb.HistoryEvent
+	var events []*historypb.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -244,9 +244,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *eventpb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -254,7 +254,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
+				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -269,7 +269,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -295,8 +295,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*eventpb.HistoryEvent, []byte) {
-		closeEventOnly := filterpb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
+		closeEventOnly := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -314,7 +314,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var events []*eventpb.HistoryEvent
+	var events []*historypb.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -353,7 +353,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		// since we are only interested in close event
 		if token == nil {
 			s.Equal(1, len(events))
-			s.Equal(eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[0].EventType)
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[0].EventType)
 		} else {
 			s.Empty(events)
 		}
@@ -405,7 +405,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -413,7 +413,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
+				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{
 					ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "1",
@@ -430,7 +430,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payloads.EncodeString("Done"),
@@ -487,10 +487,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*commonpb.DataBlob) []*eventpb.HistoryEvent {
-		events := []*eventpb.HistoryEvent{}
+	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
+		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == commonpb.ENCODING_TYPE_PROTO3)
+			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
 				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
@@ -504,8 +504,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	var blobs []*commonpb.DataBlob
 	var token []byte
 
-	var allEvents []*eventpb.HistoryEvent
-	var events []*eventpb.HistoryEvent
+	var allEvents []*historypb.HistoryEvent
+	var events []*historypb.HistoryEvent
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()
@@ -609,9 +609,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *eventpb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -619,7 +619,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
+				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -634,7 +634,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
@@ -675,10 +675,10 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*commonpb.DataBlob) []*eventpb.HistoryEvent {
-		var events []*eventpb.HistoryEvent
+	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
+		var events []*historypb.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == commonpb.ENCODING_TYPE_PROTO3)
+			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
 				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
@@ -826,9 +826,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *eventpb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -836,7 +836,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*decisionpb.Decision{{
-				DecisionType: decisionpb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
+				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -851,7 +851,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		}
 
 		return []*decisionpb.Decision{{
-			DecisionType: decisionpb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},

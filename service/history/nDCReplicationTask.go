@@ -28,12 +28,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -49,12 +50,12 @@ type (
 		getWorkflowID() string
 		getRunID() string
 		getEventTime() time.Time
-		getFirstEvent() *eventpb.HistoryEvent
-		getLastEvent() *eventpb.HistoryEvent
+		getFirstEvent() *historypb.HistoryEvent
+		getLastEvent() *historypb.HistoryEvent
 		getVersion() int64
 		getSourceCluster() string
-		getEvents() []*eventpb.HistoryEvent
-		getNewEvents() []*eventpb.HistoryEvent
+		getEvents() []*historypb.HistoryEvent
+		getNewEvents() []*historypb.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
 		isWorkflowReset() bool
@@ -67,11 +68,11 @@ type (
 		namespaceID    string
 		execution      *commonpb.WorkflowExecution
 		version        int64
-		firstEvent     *eventpb.HistoryEvent
-		lastEvent      *eventpb.HistoryEvent
+		firstEvent     *historypb.HistoryEvent
+		lastEvent      *historypb.HistoryEvent
 		eventTime      time.Time
-		events         []*eventpb.HistoryEvent
-		newEvents      []*eventpb.HistoryEvent
+		events         []*historypb.HistoryEvent
+		newEvents      []*historypb.HistoryEvent
 		versionHistory *persistence.VersionHistory
 
 		startTime time.Time
@@ -114,7 +115,7 @@ func newNDCReplicationTask(
 
 	namespaceID := request.GetNamespaceId()
 	execution := request.WorkflowExecution
-	versionHistory := &eventgenpb.VersionHistory{
+	versionHistory := &historygenpb.VersionHistory{
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
 	}
@@ -183,11 +184,11 @@ func (t *nDCReplicationTaskImpl) getEventTime() time.Time {
 	return t.eventTime
 }
 
-func (t *nDCReplicationTaskImpl) getFirstEvent() *eventpb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getFirstEvent() *historypb.HistoryEvent {
 	return t.firstEvent
 }
 
-func (t *nDCReplicationTaskImpl) getLastEvent() *eventpb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getLastEvent() *historypb.HistoryEvent {
 	return t.lastEvent
 }
 
@@ -199,11 +200,11 @@ func (t *nDCReplicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *nDCReplicationTaskImpl) getEvents() []*eventpb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getEvents() []*historypb.HistoryEvent {
 	return t.events
 }
 
-func (t *nDCReplicationTaskImpl) getNewEvents() []*eventpb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getNewEvents() []*historypb.HistoryEvent {
 	return t.newEvents
 }
 
@@ -217,7 +218,7 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 
 func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
 	switch t.getFirstEvent().GetEventType() {
-	case eventpb.EVENT_TYPE_DECISION_TASK_FAILED:
+	case enumspb.EVENT_TYPE_DECISION_TASK_FAILED:
 		decisionTaskFailedEvent := t.getFirstEvent()
 		attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
 		baseRunID := attr.GetBaseRunId()
@@ -240,7 +241,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	}
 	newHistoryEvents := t.newEvents
 
-	if t.getLastEvent().GetEventType() != eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
+	if t.getLastEvent().GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
 		t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
 		return nil, nil, ErrLastEventIsNotContinueAsNew
 	}
@@ -256,9 +257,9 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}
 	}
 
-	newVersionHistory := persistence.NewVersionHistoryFromProto(&eventgenpb.VersionHistory{
+	newVersionHistory := persistence.NewVersionHistoryFromProto(&historygenpb.VersionHistory{
 		BranchToken: nil,
-		Items: []*eventgenpb.VersionHistoryItem{{
+		Items: []*historygenpb.VersionHistoryItem{{
 			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
 		}},
@@ -285,7 +286,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		lastEvent:      newLastEvent,
 		eventTime:      time.Unix(0, newEventTime),
 		events:         newHistoryEvents,
-		newEvents:      []*eventpb.HistoryEvent{},
+		newEvents:      []*historypb.HistoryEvent{},
 		versionHistory: newVersionHistory,
 
 		startTime: taskStartTime,
@@ -299,7 +300,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 func validateReplicateEventsRequest(
 	historySerializer persistence.PayloadSerializer,
 	request *historyservice.ReplicateEventsV2Request,
-) ([]*eventpb.HistoryEvent, []*eventpb.HistoryEvent, error) {
+) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
 
 	// TODO add validation on version history
 
@@ -352,7 +353,7 @@ func validateUUID(input string) bool {
 	return true
 }
 
-func validateEvents(events []*eventpb.HistoryEvent) (int64, error) {
+func validateEvents(events []*historypb.HistoryEvent) (int64, error) {
 
 	firstEvent := events[0]
 	firstEventID := firstEvent.GetEventId()
@@ -372,7 +373,7 @@ func validateEvents(events []*eventpb.HistoryEvent) (int64, error) {
 func deserializeBlob(
 	historySerializer persistence.PayloadSerializer,
 	blob *commonpb.DataBlob,
-) ([]*eventpb.HistoryEvent, error) {
+) ([]*historypb.HistoryEvent, error) {
 
 	if blob == nil {
 		return nil, nil

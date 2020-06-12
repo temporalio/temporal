@@ -28,12 +28,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (

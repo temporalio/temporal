@@ -25,7 +25,7 @@
 package definition
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 )
 
 // valid indexed fields on ES
@@ -66,14 +66,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:     commonpb.INDEXED_VALUE_TYPE_STRING,
-		CustomKeywordField:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-		CustomIntField:        commonpb.INDEXED_VALUE_TYPE_INT,
-		CustomDoubleField:     commonpb.INDEXED_VALUE_TYPE_DOUBLE,
-		CustomBoolField:       commonpb.INDEXED_VALUE_TYPE_BOOL,
-		CustomDatetimeField:   commonpb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalChangeVersion: commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-		BinaryChecksums:       commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomStringField:     enumspb.INDEXED_VALUE_TYPE_STRING,
+		CustomKeywordField:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomIntField:        enumspb.INDEXED_VALUE_TYPE_INT,
+		CustomDoubleField:     enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		CustomBoolField:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+		CustomDatetimeField:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -88,16 +88,16 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-	WorkflowID:      commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-	RunID:           commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-	WorkflowType:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
-	StartTime:       commonpb.INDEXED_VALUE_TYPE_INT,
-	ExecutionTime:   commonpb.INDEXED_VALUE_TYPE_INT,
-	CloseTime:       commonpb.INDEXED_VALUE_TYPE_INT,
-	ExecutionStatus: commonpb.INDEXED_VALUE_TYPE_INT,
-	HistoryLength:   commonpb.INDEXED_VALUE_TYPE_INT,
-	TaskList:        commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+	NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+	ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
+	CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+	ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
+	HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
+	TaskList:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 }
 
 // IsSystemIndexedKey return true is key is system added

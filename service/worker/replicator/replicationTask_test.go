@@ -32,14 +32,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -798,7 +799,7 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		LastWorkerIdentity: "some random worker identity",
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
@@ -823,16 +824,16 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationge
 				LastEventId: 0644,
 			},
 		},
-		History: &eventpb.History{
-			Events: []*eventpb.HistoryEvent{{EventId: 1}},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 1}},
 		},
-		NewRunHistory: &eventpb.History{
-			Events: []*eventpb.HistoryEvent{{EventId: 2}},
+		NewRunHistory: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 2}},
 		},
 		ResetWorkflow: true,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
@@ -848,7 +849,7 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		NextEventId:    1015,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask

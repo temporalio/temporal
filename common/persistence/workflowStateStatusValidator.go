@@ -27,35 +27,36 @@ package persistence
 import (
 	"fmt"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 )
 
 var (
-	validWorkflowStates = map[executiongenpb.WorkflowExecutionState]struct{}{
-		executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED:   {},
-		executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   {},
-		executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
-		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
-		executiongenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
+	validWorkflowStates = map[enumsgenpb.WorkflowExecutionState]struct{}{
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   {},
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   {},
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
 	}
 
-	validWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]struct{}{
-		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING:        {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED:      {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED:         {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED:       {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED:     {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: {},
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:       {},
+	validWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:        {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:      {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:         {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:       {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:     {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:       {},
 	}
 )
 
 // ValidateCreateWorkflowStateStatus validate workflow state and close status
 func ValidateCreateWorkflowStateStatus(
-	state executiongenpb.WorkflowExecutionState,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsgenpb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -66,7 +67,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -74,8 +75,8 @@ func ValidateCreateWorkflowStateStatus(
 
 // ValidateUpdateWorkflowStateStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateStatus(
-	state executiongenpb.WorkflowExecutionState,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsgenpb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -86,18 +87,18 @@ func ValidateUpdateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if status == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
-		// executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		// executionpb.WORKFLOW_EXECUTION_STATUS_FAILED
-		// executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED
-		// executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-		// executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
-		// executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
-		if state != executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		// enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+		// enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
+		// enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+		// enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+		// enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+		if state != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	}
@@ -106,7 +107,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 // validateWorkflowState validate workflow state
 func validateWorkflowState(
-	state executiongenpb.WorkflowExecutionState,
+	state enumsgenpb.WorkflowExecutionState,
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {
@@ -118,7 +119,7 @@ func validateWorkflowState(
 
 // validateWorkflowStatus validate workflow close status
 func validateWorkflowStatus(
-	status executionpb.WorkflowExecutionStatus,
+	status enumspb.WorkflowExecutionStatus,
 ) error {
 
 	if _, ok := validWorkflowStatuses[status]; !ok {

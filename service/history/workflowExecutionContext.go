@@ -31,15 +31,14 @@ import (
 	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -788,7 +787,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if currentWorkflow.ExecutionInfo.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)
@@ -814,7 +813,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+	if currentWorkflowMutation.ExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -1180,7 +1179,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         []*eventpb.HistoryEvent{},
+			NewBufferedEvents:         []*historypb.HistoryEvent{},
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1260,7 +1259,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	namespaceID := eventBatches[0].NamespaceID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
-	var reapplyEvents []*eventpb.HistoryEvent
+	var reapplyEvents []*historypb.HistoryEvent
 	for _, events := range eventBatches {
 		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {
@@ -1270,7 +1269,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

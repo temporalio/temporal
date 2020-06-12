@@ -29,11 +29,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -87,28 +87,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
-		timerTask.TaskType != commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT {
+		timerTask.TaskType != enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
+		timerTask.TaskType != enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT {
 		// guarantee the processing of workflow execution history deletion
 		return nil
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TASK_TYPE_USER_TIMER:
+	case enumsgenpb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_DECISION_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -217,7 +217,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
-		isHeartBeatTask := timerTask.TimeoutType == int32(commonpb.TIMEOUT_TYPE_HEARTBEAT)
+		isHeartBeatTask := timerTask.TimeoutType == int32(enumspb.TIMEOUT_TYPE_HEARTBEAT)
 		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
 		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
 		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
@@ -272,7 +272,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if timerTask.TimeoutType == int32(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START) {
+	if timerTask.TimeoutType == int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START) {
 		return nil
 	}
 

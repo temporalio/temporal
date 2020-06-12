@@ -29,9 +29,9 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
@@ -75,7 +75,7 @@ type (
 	queueTaskInfo interface {
 		GetVersion() int64
 		GetTaskId() int64
-		GetTaskType() commongenpb.TaskType
+		GetTaskType() enumsgenpb.TaskType
 		GetVisibilityTimestamp() *types.Timestamp
 		GetWorkflowId() string
 		GetRunId() string

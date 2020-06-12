@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common"

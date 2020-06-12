@@ -1,0 +1,515 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package server.historyservice.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice/v1;historyservice";
+
+import "temporal/common/v1/message.proto";
+import "temporal/history/v1/message.proto";
+import "temporal/tasklist/v1/message.proto";
+import "temporal/enums/v1/workflow.proto";
+import "temporal/workflow/v1/message.proto";
+import "temporal/query/v1/message.proto";
+import "temporal/failure/v1/message.proto";
+
+import "server/history/v1/message.proto";
+import "server/enums/v1/common.proto";
+import "server/enums/v1/workflow.proto";
+import "server/enums/v1/task.proto";
+import "server/workflow/v1/message.proto";
+import "server/namespace/v1/message.proto";
+import "server/replication/v1/message.proto";
+
+// TODO: remove these dependencies
+import "temporal/workflowservice/v1/request_response.proto";
+import "server/adminservice/v1/request_response.proto";
+
+message StartWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
+    server.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
+    int32 attempt = 4;
+    int64 workflow_execution_expiration_timestamp = 5;
+    temporal.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
+    temporal.failure.v1.Failure continued_failure = 7;
+    temporal.common.v1.Payloads last_completion_result = 8;
+    int32 first_decision_task_backoff_seconds = 9;
+}
+
+message StartWorkflowExecutionResponse {
+    string run_id = 1;
+}
+
+message GetMutableStateRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution execution = 2;
+    int64 expected_next_event_id = 3;
+    bytes current_branch_token = 4;
+}
+
+message GetMutableStateResponse {
+    temporal.common.v1.WorkflowExecution execution = 1;
+    temporal.common.v1.WorkflowType workflow_type = 2;
+    int64 next_event_id = 3;
+    int64 previous_started_event_id = 4;
+    int64 last_first_event_id = 5;
+    temporal.tasklist.v1.TaskList task_list = 6;
+    temporal.tasklist.v1.TaskList sticky_task_list = 7;
+    string client_library_version = 8;
+    string client_feature_version = 9;
+    string client_impl = 10;
+    //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
+    bool is_workflow_running = 11;
+    int32 sticky_task_list_schedule_to_start_timeout = 12;
+    int32 event_store_version = 13;
+    bytes current_branch_token = 14;
+    map<string, server.replication.v1.ReplicationInfo> replication_info = 15;
+    server.enums.v1.WorkflowExecutionState workflow_state = 16;
+    temporal.enums.v1.WorkflowExecutionStatus workflow_status = 17;
+    server.history.v1.VersionHistories version_histories = 18;
+    bool is_sticky_task_list_enabled = 19;
+}
+
+message PollMutableStateRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution execution = 2;
+    int64 expected_next_event_id = 3;
+    bytes current_branch_token = 4;
+}
+
+message PollMutableStateResponse {
+    temporal.common.v1.WorkflowExecution execution = 1;
+    temporal.common.v1.WorkflowType workflow_type = 2;
+    int64 next_event_id = 3;
+    int64 previous_started_event_id = 4;
+    int64 last_first_event_id = 5;
+    temporal.tasklist.v1.TaskList task_list = 6;
+    temporal.tasklist.v1.TaskList sticky_task_list = 7;
+    string client_library_version = 8;
+    string client_feature_version = 9;
+    string client_impl = 10;
+    int32 sticky_task_list_schedule_to_start_timeout = 11;
+    bytes current_branch_token = 12;
+    map<string, server.replication.v1.ReplicationInfo> replication_info = 13;
+    server.history.v1.VersionHistories version_histories = 14;
+    server.enums.v1.WorkflowExecutionState workflow_state = 15;
+    temporal.enums.v1.WorkflowExecutionStatus workflow_status = 16;
+}
+
+message ResetStickyTaskListRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution execution = 2;
+}
+
+message ResetStickyTaskListResponse {
+}
+
+message RecordDecisionTaskStartedRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    int64 schedule_id = 3;
+    int64 task_id = 4;
+    // Unique id of each poll request. Used to ensure at most once delivery of tasks.
+    string request_id = 5;
+    temporal.workflowservice.v1.PollForDecisionTaskRequest poll_request = 6;
+}
+
+message RecordDecisionTaskStartedResponse {
+    temporal.common.v1.WorkflowType workflow_type = 1;
+    int64 previous_started_event_id = 2;
+    int64 scheduled_event_id = 3;
+    int64 started_event_id = 4;
+    int64 next_event_id = 5;
+    int64 attempt = 6;
+    bool sticky_execution_enabled = 7;
+    server.history.v1.TransientDecisionInfo decision_info = 8;
+    temporal.tasklist.v1.TaskList workflow_execution_task_list = 9;
+    int32 event_store_version = 10;
+    bytes branch_token = 11;
+    int64 scheduled_timestamp = 12;
+    int64 started_timestamp = 13;
+    map<string, temporal.query.v1.WorkflowQuery> queries = 14;
+}
+
+message RecordActivityTaskStartedRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    int64 schedule_id = 3;
+    int64 task_id = 4;
+    // Unique id of each poll request. Used to ensure at most once delivery of tasks.
+    string request_id = 5;
+    temporal.workflowservice.v1.PollForActivityTaskRequest poll_request = 6;
+}
+
+message RecordActivityTaskStartedResponse {
+    temporal.history.v1.HistoryEvent scheduled_event = 1;
+    int64 started_timestamp = 2;
+    int64 attempt = 3;
+    int64 scheduled_timestamp_of_this_attempt = 4;
+    temporal.common.v1.Payloads heartbeat_details = 5;
+    temporal.common.v1.WorkflowType workflow_type = 6;
+    string workflow_namespace = 7;
+}
+
+message RespondDecisionTaskCompletedRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RespondDecisionTaskCompletedRequest complete_request = 2;
+}
+
+message RespondDecisionTaskCompletedResponse {
+    RecordDecisionTaskStartedResponse started_response = 1;
+}
+
+message RespondDecisionTaskFailedRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RespondDecisionTaskFailedRequest failed_request = 2;
+}
+
+message RespondDecisionTaskFailedResponse {
+}
+
+message RecordActivityTaskHeartbeatRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RecordActivityTaskHeartbeatRequest heartbeat_request = 2;
+}
+
+message RecordActivityTaskHeartbeatResponse {
+    bool cancel_requested = 1;
+}
+
+message RespondActivityTaskCompletedRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RespondActivityTaskCompletedRequest complete_request = 2;
+}
+
+message RespondActivityTaskCompletedResponse {
+}
+
+message RespondActivityTaskFailedRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RespondActivityTaskFailedRequest failed_request = 2;
+}
+
+message RespondActivityTaskFailedResponse {
+}
+
+message RespondActivityTaskCanceledRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RespondActivityTaskCanceledRequest cancel_request = 2;
+}
+
+message RespondActivityTaskCanceledResponse {
+}
+
+message SignalWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.SignalWorkflowExecutionRequest signal_request = 2;
+    temporal.common.v1.WorkflowExecution external_workflow_execution = 3;
+    bool child_workflow_only = 4;
+}
+
+message SignalWorkflowExecutionResponse {
+}
+
+message SignalWithStartWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.SignalWithStartWorkflowExecutionRequest signal_with_start_request = 2;
+}
+
+message SignalWithStartWorkflowExecutionResponse {
+    string run_id = 1;
+}
+
+message RemoveSignalMutableStateRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    string request_id = 3;
+}
+
+message RemoveSignalMutableStateResponse {
+}
+
+message TerminateWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.TerminateWorkflowExecutionRequest terminate_request = 2;
+}
+
+message TerminateWorkflowExecutionResponse {
+}
+
+message ResetWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.ResetWorkflowExecutionRequest reset_request = 2;
+}
+
+message ResetWorkflowExecutionResponse {
+    string run_id = 1;
+}
+
+message RequestCancelWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.RequestCancelWorkflowExecutionRequest cancel_request = 2;
+    int64 external_initiated_event_id = 3;
+    temporal.common.v1.WorkflowExecution external_workflow_execution = 4;
+    bool child_workflow_only = 5;
+}
+
+message RequestCancelWorkflowExecutionResponse {
+}
+
+message ScheduleDecisionTaskRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    bool is_first_decision = 3;
+}
+
+message ScheduleDecisionTaskResponse {
+}
+
+/**
+* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
+* execution which started it.  When a child execution is completed it creates this request and calls the
+* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
+* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
+* child creates multiple runs through ContinueAsNew before finally completing.
+**/
+message RecordChildExecutionCompletedRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    int64 initiated_id = 3;
+    temporal.common.v1.WorkflowExecution completed_execution = 4;
+    temporal.history.v1.HistoryEvent completion_event = 5;
+}
+
+message RecordChildExecutionCompletedResponse {
+}
+
+message DescribeWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.DescribeWorkflowExecutionRequest request = 2;
+}
+
+message DescribeWorkflowExecutionResponse {
+    temporal.workflow.v1.WorkflowExecutionConfiguration execution_configuration = 1;
+    temporal.workflow.v1.WorkflowExecutionInfo workflow_execution_info = 2;
+    repeated temporal.workflow.v1.PendingActivityInfo pending_activities = 3;
+    repeated temporal.workflow.v1.PendingChildExecutionInfo pending_children = 4;
+}
+
+message ReplicateEventsRequest {
+    string source_cluster = 1;
+    string namespace_id = 2;
+    temporal.common.v1.WorkflowExecution workflow_execution = 3;
+    int64 first_event_id = 4;
+    int64 next_event_id = 5;
+    int64 version = 6;
+    map<string, server.replication.v1.ReplicationInfo> replication_info = 7;
+    temporal.history.v1.History history = 8;
+    temporal.history.v1.History new_run_history = 9;
+    // this attribute is deprecated
+    bool force_buffer_events = 10;
+    int32 event_store_version = 11;
+    int32 new_run_event_store_version = 12;
+    bool reset_workflow = 13;
+    bool new_run_n_d_c = 14;
+}
+
+message ReplicateEventsResponse {
+}
+
+message ReplicateRawEventsRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    map<string, server.replication.v1.ReplicationInfo> replication_info = 3;
+    temporal.common.v1.DataBlob history = 4;
+    temporal.common.v1.DataBlob new_run_history = 5;
+    int32 event_store_version = 6;
+    int32 new_run_event_store_version = 7;
+}
+
+message ReplicateRawEventsResponse {
+}
+
+message ReplicateEventsV2Request {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution workflow_execution = 2;
+    repeated server.history.v1.VersionHistoryItem version_history_items = 3;
+    temporal.common.v1.DataBlob events = 4;
+    // New run events does not need version history since there is no prior events.
+    temporal.common.v1.DataBlob new_run_events = 5;
+}
+
+message ReplicateEventsV2Response {
+}
+
+message SyncShardStatusRequest {
+    string source_cluster = 1;
+    int64 shard_id = 2;
+    int64 timestamp = 3;
+}
+
+message SyncShardStatusResponse {
+}
+
+message SyncActivityRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 version = 4;
+    int64 scheduled_id = 5;
+    int64 scheduled_time = 6;
+    int64 started_id = 7;
+    int64 started_time = 8;
+    int64 last_heartbeat_time = 9;
+    temporal.common.v1.Payloads details = 10;
+    int32 attempt = 11;
+    temporal.failure.v1.Failure last_failure = 12;
+    string last_worker_identity = 13;
+    server.history.v1.VersionHistory version_history = 14;
+}
+
+message SyncActivityResponse {
+}
+
+message DescribeMutableStateRequest {
+    string namespace_id = 1;
+    temporal.common.v1.WorkflowExecution execution = 2;
+}
+
+message DescribeMutableStateResponse {
+    string mutable_state_in_cache = 1;
+    string mutable_state_in_database = 2;
+}
+
+//At least one of the parameters needs to be provided
+message DescribeHistoryHostRequest {
+    //ip:port
+    string host_address = 1;
+    int32 shard_id_for_host = 2;
+    temporal.common.v1.WorkflowExecution execution_for_host = 3;
+}
+
+message DescribeHistoryHostResponse {
+    int32 number_of_shards = 1;
+    repeated int32
+    shard_ids = 2;
+    server.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
+    string shard_controller_status = 4;
+    string address = 5;
+}
+
+message CloseShardRequest {
+    int32 shard_id = 1;
+}
+
+message CloseShardResponse {
+}
+
+message RemoveTaskRequest {
+    int32 shard_id = 1;
+    server.enums.v1.TaskCategory category = 2;
+    int64 task_id = 3;
+    int64 visibility_timestamp = 4;
+}
+
+message RemoveTaskResponse {
+}
+
+message GetReplicationMessagesRequest {
+    repeated server.replication.v1.ReplicationToken tokens = 1;
+    string cluster_name = 2;
+}
+
+message GetReplicationMessagesResponse {
+    map<int32, server.replication.v1.ReplicationMessages> messages_by_shard = 1;
+}
+
+message GetDLQReplicationMessagesRequest {
+    repeated server.replication.v1.ReplicationTaskInfo task_infos = 1;
+}
+
+message GetDLQReplicationMessagesResponse {
+    repeated server.replication.v1.ReplicationTask replication_tasks = 1;
+}
+
+message QueryWorkflowRequest {
+    string namespace_id = 1;
+    temporal.workflowservice.v1.QueryWorkflowRequest request = 2;
+}
+
+message QueryWorkflowResponse {
+    temporal.workflowservice.v1.QueryWorkflowResponse response = 1;
+}
+
+message ReapplyEventsRequest {
+    string namespace_id = 1;
+    server.adminservice.v1.ReapplyEventsRequest request = 2;
+}
+
+message ReapplyEventsResponse {
+}
+
+message ReadDLQMessagesRequest {
+    server.enums.v1.DeadLetterQueueType type = 1;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
+    int32 maximum_page_size = 5;
+    bytes next_page_token = 6;
+}
+
+message ReadDLQMessagesResponse {
+    server.enums.v1.DeadLetterQueueType type = 1;
+    repeated server.replication.v1.ReplicationTask replication_tasks = 2;
+    bytes next_page_token = 3;
+}
+
+message PurgeDLQMessagesRequest {
+    server.enums.v1.DeadLetterQueueType type = 1;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
+}
+
+message PurgeDLQMessagesResponse {
+}
+
+message MergeDLQMessagesRequest {
+    server.enums.v1.DeadLetterQueueType type = 1;
+    int32 shard_id = 2;
+    string source_cluster = 3;
+    int64 inclusive_end_message_id = 4;
+    int32 maximum_page_size = 5;
+    bytes next_page_token = 6;
+}
+
+message MergeDLQMessagesResponse {
+    bytes next_page_token = 1;
+}
+
+message RefreshWorkflowTasksRequest {
+    string namespace_id = 1;
+    server.adminservice.v1.RefreshWorkflowTasksRequest request = 2;
+}
+
+message RefreshWorkflowTasksResponse {
+}

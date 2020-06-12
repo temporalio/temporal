@@ -28,13 +28,13 @@ import (
 	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	failurepb "go.temporal.io/temporal-proto/failure"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -221,8 +221,8 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              executiongenpb.WorkflowExecutionState
-		Status                             executionpb.WorkflowExecutionStatus
+		State                              enumsgenpb.WorkflowExecutionState
+		Status                             enumspb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -335,7 +335,7 @@ type (
 		CreateRequestID       string
 		Namespace             string
 		WorkflowTypeName      string
-		ParentClosePolicy     commonpb.ParentClosePolicy
+		ParentClosePolicy     enumspb.ParentClosePolicy
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -565,7 +565,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *executionpb.WorkflowExecutionStatus
+		Status           *enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		TaskList         string
@@ -613,7 +613,7 @@ type (
 		TaskList           string
 		SearchAttributes   map[string]*commonpb.Payload
 		CloseTimestamp     int64
-		Status             executionpb.WorkflowExecutionStatus
+		Status             enumspb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 	}
@@ -715,12 +715,12 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 // NewDataBlobFromProto convert data blob from Proto representation
 func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
-	case commonpb.ENCODING_TYPE_JSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case commonpb.ENCODING_TYPE_PROTO3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
@@ -1025,7 +1025,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		CreateRequestID:       rowInfo.GetCreateRequestId(),
 		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     commonpb.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		ParentClosePolicy:     enumspb.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}

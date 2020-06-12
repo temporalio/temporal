@@ -27,7 +27,7 @@ package history
 import (
 	"sync"
 
-	querypb "go.temporal.io/temporal-proto/query"
+	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 

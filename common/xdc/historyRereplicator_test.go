@@ -32,17 +32,18 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -147,18 +148,18 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 			LastEventId: 999,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -187,7 +188,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		},
 		NewRunHistory: nil,
@@ -237,32 +238,32 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		},
 	}
 
-	beginingEventBatch := []*eventpb.HistoryEvent{
+	beginingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: midRunID1,
 			}},
 		},
 	}
 	beginingBlob := s.serializeEvents(beginingEventBatch)
 
-	midEventBatch1 := []*eventpb.HistoryEvent{
+	midEventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: beginingRunID,
 			}},
 		},
@@ -270,18 +271,18 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			EventId:   5,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	midBlob1 := s.serializeEvents(midEventBatch1)
 
-	midEventBatch2 := []*eventpb.HistoryEvent{
+	midEventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: "",
 			}},
 		},
@@ -289,21 +290,21 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			EventId:   5,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: endingRunID,
 			}},
 		},
 	}
 	midBlob2 := s.serializeEvents(midEventBatch2)
 
-	endingEventBatch := []*eventpb.HistoryEvent{
+	endingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: midRunID2,
 			}},
 		},
@@ -311,7 +312,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		},
 	}
 	endingBlob := s.serializeEvents(endingEventBatch)
@@ -464,40 +465,40 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 	}
 
-	eventBatch1 := []*eventpb.HistoryEvent{
+	eventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*eventpb.HistoryEvent{
+	eventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	blob2 := s.serializeEvents(eventBatch2)
@@ -542,7 +543,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -556,7 +557,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: nil,
@@ -586,54 +587,54 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 	}
 
-	eventBatch1 := []*eventpb.HistoryEvent{
+	eventBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*eventpb.HistoryEvent{
+	eventBatch2 := []*historypb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: newRunID,
 			}},
 		},
 	}
 	blob2 := s.serializeEvents(eventBatch2)
 
-	eventBatchNew := []*eventpb.HistoryEvent{
+	eventBatchNew := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   223,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: runID,
 			}},
 		},
@@ -696,7 +697,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -710,11 +711,11 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blobNew.Data,
 		},
 	}).Return(nil, nil).Times(1)
@@ -761,7 +762,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &commonpb.DataBlob{
-		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("some random history blob"),
 	}
 	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
@@ -800,11 +801,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 			},
 		},
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -831,11 +832,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -850,12 +851,12 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr).Times(1)
 
-	missingEventBatch := []*eventpb.HistoryEvent{
+	missingEventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
 	missingBlob := s.serializeEvents(missingEventBatch)
@@ -909,11 +910,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -962,12 +963,12 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   lastEventID + 1,
 			Version:   lastVersion + 1,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_TIMER_FIRED,
+			EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -1015,12 +1016,12 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*eventpb.HistoryEvent{
+	eventBatch := []*historypb.HistoryEvent{
 		{
 			EventId:   common.FirstEventID,
 			Version:   1,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -1069,7 +1070,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		HistoryBatches: []*commonpb.DataBlob{{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
@@ -1102,13 +1103,13 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	currentRunID := uuid.New()
 
 	prepareFn := func(prevRunID string) {
-		eventBatch := []*eventpb.HistoryEvent{
+		eventBatch := []*historypb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   123,
 				Timestamp: time.Now().UnixNano(),
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					ContinuedExecutionRunId: prevRunID,
 				}},
 			},
@@ -1116,7 +1117,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 				EventId:   2,
 				Version:   223,
 				Timestamp: time.Now().UnixNano(),
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 			},
 		}
 		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeProto3)
@@ -1134,7 +1135,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 			NextPageToken:   nil,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches: []*commonpb.DataBlob{{
-				EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			}},
 		}, nil).Times(1)
@@ -1179,19 +1180,19 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	nextRunID := uuid.New()
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		},
 		{
 			EventId:   234,
 			Version:   223,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: nextRunID,
 			}},
 		},
@@ -1200,7 +1201,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
-		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1208,26 +1209,26 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
 		},
 		{
 			EventId:    234,
 			Version:    223,
 			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &eventpb.WorkflowExecutionCancelRequestedEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
-		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1235,20 +1236,20 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestDeserializeBlob() {
-	eventBatchIn := []*eventpb.HistoryEvent{
+	eventBatchIn := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
 			Version:    123,
 			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
 			Version:    223,
 			Timestamp:  time.Now().UnixNano(),
-			EventType:  eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-			Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
 		},
 	}
 
@@ -1256,18 +1257,18 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 	s.Nil(err)
 
 	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonpb.DataBlob{
-		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
 	s.Equal(eventBatchIn, eventBatchOut)
 }
 
-func (s *historyRereplicatorSuite) serializeEvents(events []*eventpb.HistoryEvent) *commonpb.DataBlob {
+func (s *historyRereplicatorSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
-		EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,
 	}
 }

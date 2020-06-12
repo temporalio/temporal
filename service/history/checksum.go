@@ -27,7 +27,7 @@ package history
 import (
 	"fmt"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 )

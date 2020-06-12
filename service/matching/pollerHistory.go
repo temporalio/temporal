@@ -27,7 +27,7 @@ package matching
 import (
 	"time"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
 	"github.com/temporalio/temporal/common/cache"
 )

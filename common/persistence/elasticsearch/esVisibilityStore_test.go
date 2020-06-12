@@ -39,11 +39,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -76,7 +77,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testStatus       = executionpb.WORKFLOW_EXECUTION_STATUS_FAILED
+	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
@@ -157,7 +158,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MESSAGE_TYPE_INDEX, input.GetMessageType())
+		s.Equal(enumsgenpb.MESSAGE_TYPE_INDEX, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -181,7 +182,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
 	request.CloseTimestamp = int64(999)
-	request.Status = executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	request.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
 		fields := input.Fields
@@ -209,7 +210,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MESSAGE_TYPE_INDEX, input.GetMessageType())
+		s.Equal(enumsgenpb.MESSAGE_TYPE_INDEX, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -655,7 +656,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED, *info.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
@@ -1029,8 +1030,8 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 }
 
 func (s *ESVisibilitySuite) TestGetFieldType() {
-	s.Equal(commonpb.INDEXED_VALUE_TYPE_INT, s.visibilityStore.getFieldType("StartTime"))
-	s.Equal(commonpb.INDEXED_VALUE_TYPE_DATETIME, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
+	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, s.visibilityStore.getFieldType("StartTime"))
+	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
 }
 
 func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {

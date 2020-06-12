@@ -27,16 +27,17 @@
 package history
 
 import (
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -44,7 +45,7 @@ type (
 		reset(
 			prevRunID string,
 			prevLastWriteVersion int64,
-			prevState executiongenpb.WorkflowExecutionState,
+			prevState enumsgenpb.WorkflowExecutionState,
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
@@ -76,7 +77,7 @@ func newConflictResolver(shard ShardContext, context workflowExecutionContext, h
 func (r *conflictResolverImpl) reset(
 	prevRunID string,
 	prevLastWriteVersion int64,
-	prevState executiongenpb.WorkflowExecutionState,
+	prevState enumsgenpb.WorkflowExecutionState,
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
@@ -97,7 +98,7 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var history []*eventpb.HistoryEvent
+	var history []*historypb.HistoryEvent
 	var totalSize int64
 
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -176,7 +177,7 @@ func (r *conflictResolverImpl) reset(
 		resetMutableStateBuilder.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
 	}
 
-	r.logger.Info("All events applied for executiongenpb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
+	r.logger.Info("All events applied for workflowgenpb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	r.context.setHistorySize(totalSize)
 	if err := r.context.conflictResolveWorkflowExecution(
 		startTime,
@@ -199,7 +200,7 @@ func (r *conflictResolverImpl) reset(
 }
 
 func (r *conflictResolverImpl) getHistory(namespaceID string, execution commonpb.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*eventpb.HistoryEvent, int, int64, []byte, error) {
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*historypb.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

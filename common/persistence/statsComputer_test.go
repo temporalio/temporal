@@ -29,8 +29,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 )
 
 type (

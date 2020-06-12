@@ -28,13 +28,14 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -503,11 +504,11 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonpb.DataBlob) (str
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*eventpb.HistoryEvent, error) {
-	var historyEvents []*eventpb.HistoryEvent
+func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
+	var historyEvents []*historypb.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case commonpb.ENCODING_TYPE_PROTO3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,

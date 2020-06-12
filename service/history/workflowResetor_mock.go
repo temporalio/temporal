@@ -31,35 +31,35 @@ package history
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
-	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
 	reflect "reflect"
 )
 
-// MockworkflowResetor is a mock of workflowResetor interface.
+// MockworkflowResetor is a mock of workflowResetor interface
 type MockworkflowResetor struct {
 	ctrl     *gomock.Controller
 	recorder *MockworkflowResetorMockRecorder
 }
 
-// MockworkflowResetorMockRecorder is the mock recorder for MockworkflowResetor.
+// MockworkflowResetorMockRecorder is the mock recorder for MockworkflowResetor
 type MockworkflowResetorMockRecorder struct {
 	mock *MockworkflowResetor
 }
 
-// NewMockworkflowResetor creates a new mock instance.
+// NewMockworkflowResetor creates a new mock instance
 func NewMockworkflowResetor(ctrl *gomock.Controller) *MockworkflowResetor {
 	mock := &MockworkflowResetor{ctrl: ctrl}
 	mock.recorder = &MockworkflowResetorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockworkflowResetor) EXPECT() *MockworkflowResetorMockRecorder {
 	return m.recorder
 }
 
-// ResetWorkflowExecution mocks base method.
+// ResetWorkflowExecution mocks base method
 func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *workflowservice.ResetWorkflowExecutionRequest, baseContext workflowExecutionContext, baseMutableState mutableState, currContext workflowExecutionContext, currMutableState mutableState) (*historyservice.ResetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflowExecution", ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
@@ -68,13 +68,13 @@ func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetR
 	return ret0, ret1
 }
 
-// ResetWorkflowExecution indicates an expected call of ResetWorkflowExecution.
+// ResetWorkflowExecution indicates an expected call of ResetWorkflowExecution
 func (mr *MockworkflowResetorMockRecorder) ResetWorkflowExecution(ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflowExecution", reflect.TypeOf((*MockworkflowResetor)(nil).ResetWorkflowExecution), ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
 }
 
-// ApplyResetEvent mocks base method.
+// ApplyResetEvent mocks base method
 func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *historyservice.ReplicateEventsRequest, namespaceID, workflowID, currentRunID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyResetEvent", ctx, request, namespaceID, workflowID, currentRunID)
@@ -82,7 +82,7 @@ func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *hist
 	return ret0
 }
 
-// ApplyResetEvent indicates an expected call of ApplyResetEvent.
+// ApplyResetEvent indicates an expected call of ApplyResetEvent
 func (mr *MockworkflowResetorMockRecorder) ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResetEvent", reflect.TypeOf((*MockworkflowResetor)(nil).ApplyResetEvent), ctx, request, namespaceID, workflowID, currentRunID)

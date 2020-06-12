@@ -12,7 +12,7 @@ bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql
 clean: clean-bins clean-proto clean-test-results
 
 # Update proto submodule from remote and rebuild proto files.
-update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
+update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -98,12 +98,10 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/tools/..."
 
-PROTO_ROOT     := proto
-# Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
-PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
-PROTO_GEN      := .gen/proto
+PROTO_ROOT := proto
+PROTO_DIRS = $(shell find $(PROTO_ROOT)/internal -name "*.proto" -printf "%h\n" | sort -u)
+PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_OUT := .gen/proto
 
 ##### Tools #####
 update-checkers:
@@ -125,11 +123,11 @@ update-proto-plugins:
 update-tools: update-checkers update-mockgen update-proto-plugins
 
 ##### Proto #####
-$(PROTO_GEN):
-	@mkdir -p $(PROTO_GEN)
+$(PROTO_OUT):
+	@mkdir -p $(PROTO_OUT)
 
 clean-proto:
-	@rm -rf $(PROTO_GEN)/*
+	@rm -rf $(PROTO_OUT)/*
 
 update-proto-submodule:
 	@printf $(COLOR) "Update proto submodule from remote..."
@@ -139,25 +137,28 @@ install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
 	git submodule update --init $(PROTO_ROOT)/temporal-proto
 
-protoc: $(PROTO_GEN)
+protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)/*.proto$(NEWLINE))
 
-# All gRPC generated service files pathes relative to PROTO_ROOT.
-PROTO_GRPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.go"))
-dir_no_slash = $(patsubst %/,%,$(dir $(1)))
-dirname = $(notdir $(call dir_no_slash,$(1)))
+fix-proto-path:
+	mv -f $(PROTO_OUT)/server/* $(PROTO_OUT) && rm -d $(PROTO_OUT)/server
 
-proto-mock: $(PROTO_GEN)
+# All gRPC generated service files pathes relative to PROTO_OUT.
+PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
+service_name = $(firstword $(subst /, ,$(1)))
+mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
+
+proto-mock: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
-	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go))$(NEWLINE) )
+	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_OUT) && mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE))$(NEWLINE) )
 
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	@go get -u go.temporal.io/temporal-proto
 
-proto: clean-proto install-proto-submodule protoc proto-mock
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
 
 ##### Binaries #####
 clean-bins:

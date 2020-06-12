@@ -45,10 +45,10 @@ import (
 	"path"
 	"strconv"
 
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
@@ -148,7 +148,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
 	}
 
-	var historyBatches []*eventpb.History
+	var historyBatches []*historypb.History
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {

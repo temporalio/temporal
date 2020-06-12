@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 )

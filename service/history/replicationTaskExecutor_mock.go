@@ -30,35 +30,35 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	repication "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	reflect "reflect"
 )
 
-// MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface.
+// MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface
 type MockreplicationTaskExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockreplicationTaskExecutorMockRecorder
 }
 
-// MockreplicationTaskExecutorMockRecorder is the mock recorder for MockreplicationTaskExecutor.
+// MockreplicationTaskExecutorMockRecorder is the mock recorder for MockreplicationTaskExecutor
 type MockreplicationTaskExecutorMockRecorder struct {
 	mock *MockreplicationTaskExecutor
 }
 
-// NewMockreplicationTaskExecutor creates a new mock instance.
+// NewMockreplicationTaskExecutor creates a new mock instance
 func NewMockreplicationTaskExecutor(ctrl *gomock.Controller) *MockreplicationTaskExecutor {
 	mock := &MockreplicationTaskExecutor{ctrl: ctrl}
 	mock.recorder = &MockreplicationTaskExecutorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockreplicationTaskExecutor) EXPECT() *MockreplicationTaskExecutorMockRecorder {
 	return m.recorder
 }
 
-// execute mocks base method.
-func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *replication.ReplicationTask, forceApply bool) (int, error) {
+// execute mocks base method
+func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *repication.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "execute", sourceCluster, replicationTask, forceApply)
 	ret0, _ := ret[0].(int)
@@ -66,7 +66,7 @@ func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationT
 	return ret0, ret1
 }
 
-// execute indicates an expected call of execute.
+// execute indicates an expected call of execute
 func (mr *MockreplicationTaskExecutorMockRecorder) execute(sourceCluster, replicationTask, forceApply interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockreplicationTaskExecutor)(nil).execute), sourceCluster, replicationTask, forceApply)

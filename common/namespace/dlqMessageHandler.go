@@ -29,7 +29,7 @@ package namespace
 import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"

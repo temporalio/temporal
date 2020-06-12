@@ -36,10 +36,10 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
 	"github.com/temporalio/temporal/common/codec"
@@ -156,8 +156,8 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
-	return &executionpb.WorkflowExecutionInfo{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),

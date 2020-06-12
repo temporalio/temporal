@@ -25,7 +25,7 @@
 package persistence
 
 import (
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -191,9 +191,9 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
 	blobs []*serialization.DataBlob,
-) ([]*eventpb.HistoryEvent, error) {
+) ([]*historypb.HistoryEvent, error) {
 
-	events := make([]*eventpb.HistoryEvent, 0)
+	events := make([]*historypb.HistoryEvent, 0)
 	for _, b := range blobs {
 		history, err := m.serializer.DeserializeBatchEvents(b)
 		if err != nil {
