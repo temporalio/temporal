@@ -12,7 +12,7 @@ bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql
 clean: clean-bins clean-proto clean-test-results
 
 # Update proto submodule from remote and rebuild proto files.
-update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
+update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -142,8 +142,8 @@ protoc: $(PROTO_OUT)
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)/*.proto$(NEWLINE))
 
-fix-path:
-	mv -f $(PROTO_OUT)/internal/server/* $(PROTO_OUT) && rm -d $(PROTO_OUT)/internal/server
+fix-proto-path:
+	mv -f $(PROTO_OUT)/server/* $(PROTO_OUT) && rm -d $(PROTO_OUT)/server
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
@@ -158,7 +158,7 @@ update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	@go get -u go.temporal.io/temporal-proto
 
-proto: clean-proto install-proto-submodule protoc proto-mock
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
 
 ##### Binaries #####
 clean-bins:
