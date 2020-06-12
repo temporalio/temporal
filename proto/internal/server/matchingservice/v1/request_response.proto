@@ -1,0 +1,167 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package server.matchingservice.v1;
+option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice/v1;matchingservice";
+
+import "common/v1/message.proto";
+import "enums/v1/task_list.proto";
+import "tasklist/v1/message.proto";
+import "query/v1/message.proto";
+
+import "server/enums/v1/task.proto";
+import "server/history/v1/message.proto";
+
+// TODO: remove this dependency
+import "workflowservice/v1/request_response.proto";
+
+message PollForDecisionTaskRequest {
+    string namespace_id = 1;
+    string poller_id = 2;
+    workflowservice.v1.PollForDecisionTaskRequest poll_request = 3;
+    string forwarded_from = 4;
+}
+
+message PollForDecisionTaskResponse {
+    bytes task_token = 1;
+    common.v1.WorkflowExecution workflow_execution = 2;
+    common.v1.WorkflowType workflow_type = 3;
+    int64 previous_started_event_id = 4;
+    int64 started_event_id = 5;
+    int64 attempt = 6;
+    int64 next_event_id = 7;
+    int64 backlog_count_hint = 8;
+    bool sticky_execution_enabled = 9;
+    query.v1.WorkflowQuery query = 10;
+    server.history.v1.TransientDecisionInfo decision_info = 11;
+    tasklist.v1.TaskList workflow_execution_task_list = 12;
+    int32 event_store_version = 13;
+    bytes branch_token = 14;
+    int64 scheduled_timestamp = 15;
+    int64 started_timestamp = 16;
+    map<string, query.v1.WorkflowQuery> queries = 17;
+}
+
+message PollForActivityTaskRequest {
+    string namespace_id = 1;
+    string poller_id = 2;
+    workflowservice.v1.PollForActivityTaskRequest poll_request = 3;
+    string forwarded_from = 4;
+}
+
+message PollForActivityTaskResponse {
+    bytes task_token = 1;
+    common.v1.WorkflowExecution workflow_execution = 2;
+    string activity_id = 3;
+    common.v1.ActivityType activity_type = 4;
+    common.v1.Payloads input = 5;
+    int64 scheduled_timestamp = 6;
+    int32 schedule_to_close_timeout_seconds = 7;
+    int64 started_timestamp = 8;
+    int32 start_to_close_timeout_seconds = 9;
+    int32 heartbeat_timeout_seconds = 10;
+    int32 attempt = 11;
+    int64 scheduled_timestamp_of_this_attempt = 12;
+    common.v1.Payloads heartbeat_details = 13;
+    common.v1.WorkflowType workflow_type = 14;
+    string workflow_namespace = 15;
+    common.v1.Header header = 16;
+}
+
+message AddDecisionTaskRequest {
+    string namespace_id = 1;
+    common.v1.WorkflowExecution execution = 2;
+    tasklist.v1.TaskList task_list = 3;
+    int64 schedule_id = 4;
+    int32 schedule_to_start_timeout_seconds = 5;
+    string forwarded_from = 6;
+    server.enums.v1.TaskSource source = 7;
+}
+
+message AddDecisionTaskResponse {
+}
+
+message AddActivityTaskRequest {
+    string namespace_id = 1;
+    common.v1.WorkflowExecution execution = 2;
+    string source_namespace_id = 3;
+    tasklist.v1.TaskList task_list = 4;
+    int64 schedule_id = 5;
+    int32 schedule_to_start_timeout_seconds = 6;
+    string forwarded_from = 7;
+    server.enums.v1.TaskSource source = 8;
+}
+
+message AddActivityTaskResponse {
+}
+
+message QueryWorkflowRequest {
+    string namespace_id = 1;
+    tasklist.v1.TaskList task_list = 2;
+    workflowservice.v1.QueryWorkflowRequest query_request = 3;
+    string forwarded_from = 4;
+}
+
+message QueryWorkflowResponse {
+    common.v1.Payloads query_result = 1;
+    query.v1.QueryRejected query_rejected = 2;
+}
+
+message RespondQueryTaskCompletedRequest {
+    string namespace_id = 1;
+    tasklist.v1.TaskList task_list = 2;
+    string task_id = 3;
+    workflowservice.v1.RespondQueryTaskCompletedRequest completed_request = 4;
+}
+
+message RespondQueryTaskCompletedResponse {
+}
+
+message CancelOutstandingPollRequest {
+    string namespace_id = 1;
+    .enums.v1.TaskListType task_list_type = 2;
+    tasklist.v1.TaskList task_list = 3;
+    string poller_id = 4;
+}
+
+message CancelOutstandingPollResponse {
+}
+
+message DescribeTaskListRequest {
+    string namespace_id = 1;
+    workflowservice.v1.DescribeTaskListRequest desc_request = 2;
+}
+
+message DescribeTaskListResponse {
+    repeated tasklist.v1.PollerInfo pollers = 1;
+    tasklist.v1.TaskListStatus task_list_status = 2;
+}
+
+message ListTaskListPartitionsRequest {
+    string namespace = 1;
+    tasklist.v1.TaskList task_list = 2;
+}
+
+message ListTaskListPartitionsResponse {
+    repeated tasklist.v1.TaskListPartitionMetadata activity_task_list_partitions = 1;
+    repeated tasklist.v1.TaskListPartitionMetadata decision_task_list_partitions = 2;
+}
