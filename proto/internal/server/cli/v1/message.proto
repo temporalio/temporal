@@ -24,36 +24,36 @@ package server.cli.v1;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/cli/v1;cli";
 
-import "common/v1/message.proto";
-import "enums/v1/workflow.proto";
-import "execution/v1/message.proto";
+import "temporal/common/v1/message.proto";
+import "temporal/enums/v1/workflow.proto";
+import "temporal/workflow/v1/message.proto";
 
 message DescribeWorkflowExecutionResponse {
-    execution.v1.WorkflowExecutionConfiguration execution_configuration = 1;
+    temporal.workflow.v1.WorkflowExecutionConfiguration execution_configuration = 1;
     WorkflowExecutionInfo workflow_execution_info = 2;
     repeated PendingActivityInfo pending_activities = 3;
-    repeated execution.v1.PendingChildExecutionInfo pending_children = 4;
+    repeated temporal.workflow.v1.PendingChildExecutionInfo pending_children = 4;
 }
 
 message WorkflowExecutionInfo {
-    common.v1.WorkflowExecution execution = 1;
-    common.v1.WorkflowType type = 2;
+    temporal.common.v1.WorkflowExecution execution = 1;
+    temporal.common.v1.WorkflowType type = 2;
     string start_time = 3;
     string close_time = 4;
-    enums.v1.WorkflowExecutionStatus status = 5;
+    temporal.enums.v1.WorkflowExecutionStatus status = 5;
     int64 history_length = 6;
     string parent_namespace_id = 7;
-    common.v1.WorkflowExecution parent_execution = 8;
+    temporal.common.v1.WorkflowExecution parent_execution = 8;
     int64 execution_time = 9;
-    common.v1.Memo memo = 10;
+    temporal.common.v1.Memo memo = 10;
     SearchAttributes search_attributes = 11;
-    execution.v1.ResetPoints auto_reset_points = 12;
+    temporal.workflow.v1.ResetPoints auto_reset_points = 12;
 }
 
 message PendingActivityInfo {
     string activity_id = 1;
-    common.v1.ActivityType activity_type = 2;
-    enums.v1.PendingActivityState state = 3;
+    temporal.common.v1.ActivityType activity_type = 2;
+    temporal.enums.v1.PendingActivityState state = 3;
     string heartbeat_details = 4;
     string last_heartbeat_timestamp = 5;
     string last_started_timestamp = 6;

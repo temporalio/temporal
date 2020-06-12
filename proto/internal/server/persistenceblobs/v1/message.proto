@@ -26,12 +26,12 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs/
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
-import "common/v1/message.proto";
-import "enums/v1/workflow.proto";
-import "enums/v1/namespace.proto";
-import "namespace/v1/message.proto";
-import "enums/v1/task_list.proto";
-import "failure/v1/message.proto";
+import "temporal/common/v1/message.proto";
+import "temporal/enums/v1/workflow.proto";
+import "temporal/enums/v1/namespace.proto";
+import "temporal/namespace/v1/message.proto";
+import "temporal/enums/v1/task_list.proto";
+import "temporal/failure/v1/message.proto";
 
 import "server/enums/v1/common.proto";
 import "server/enums/v1/workflow.proto";
@@ -73,11 +73,11 @@ message ActivityInfo {
     int64 retry_expiration_time_nanos = 26;
     double retry_backoff_coefficient = 27;
     repeated string retry_non_retryable_error_types = 28;
-    failure.v1.Failure retry_last_failure = 29;
+    temporal.failure.v1.Failure retry_last_failure = 29;
     string retry_last_worker_identity = 30;
     string namespace_id = 31;
     int64 schedule_id = 32;
-    common.v1.Payloads last_heartbeat_details = 33;
+    temporal.common.v1.Payloads last_heartbeat_details = 33;
     google.protobuf.Timestamp last_heartbeat_updated_time = 34;
 }
 
@@ -197,8 +197,8 @@ message AllocatedTaskInfo {
 message TaskListInfo {
     string namespace_id = 1;
     string name = 2;
-    .enums.v1.TaskListType task_type = 3;
-    .enums.v1.TaskListKind kind = 5;
+    temporal.enums.v1.TaskListType task_type = 3;
+    temporal.enums.v1.TaskListKind kind = 5;
     int64 ack_level = 6;
     google.protobuf.Timestamp expiry = 7;
     google.protobuf.Timestamp last_updated = 8;
@@ -209,7 +209,7 @@ message SignalInfo {
     int64 initiated_event_batch_id = 2;
     string request_id = 3;
     string name = 4;
-    common.v1.Payloads input = 5;
+    temporal.common.v1.Payloads input = 5;
     string control = 6;
     int64 initiated_id = 7;
 }
@@ -225,7 +225,7 @@ message WorkflowExecutionState {
     string create_request_id = 1;
     string run_id = 2;
     server.enums.v1.WorkflowExecutionState state = 3;
-    .enums.v1.WorkflowExecutionStatus status = 4;
+    temporal.enums.v1.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
@@ -282,8 +282,8 @@ message WorkflowExecutionInfo {
     string client_impl = 53;
     bytes auto_reset_points = 54;
     string auto_reset_points_encoding = 55;
-    map<string, common.v1.Payload> search_attributes = 56;
-    map<string, common.v1.Payload> memo = 57;
+    map<string, temporal.common.v1.Payload> search_attributes = 56;
+    map<string, temporal.common.v1.Payload> memo = 57;
     bytes version_histories = 58;
     string version_histories_encoding = 59;
 }
@@ -307,7 +307,7 @@ message ChildExecutionInfo {
     string create_request_id = 10;
     string namespace = 11;
     string workflow_type_name = 12;
-    .enums.v1.ParentClosePolicy parent_close_policy = 13;
+    temporal.enums.v1.ParentClosePolicy parent_close_policy = 13;
     int64 initiated_id = 14;
 }
 
@@ -324,7 +324,7 @@ message NamespaceDetail {
 
 message NamespaceInfo {
     string id = 1;
-    .enums.v1.NamespaceStatus status = 2;
+    temporal.enums.v1.NamespaceStatus status = 2;
     string name = 3;
     string description = 4;
     string owner = 5;
@@ -340,10 +340,10 @@ message NamespaceConfig {
     int32 retention_days = 1;
     bool emit_metric = 2;
     string archival_bucket = 3;
-    namespace.v1.BadBinaries bad_binaries = 16;
-    .enums.v1.ArchivalStatus history_archival_status = 18;
+    temporal.namespace.v1.BadBinaries bad_binaries = 16;
+    temporal.enums.v1.ArchivalStatus history_archival_status = 18;
     string history_archival_u_r_i = 19;
-    .enums.v1.ArchivalStatus visibility_archival_status = 20;
+    temporal.enums.v1.ArchivalStatus visibility_archival_status = 20;
     string visibility_archival_u_r_i = 21;
 }
 

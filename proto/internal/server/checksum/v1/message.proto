@@ -24,7 +24,7 @@ package server.checksum.v1;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/checksum/v1;checksum";
 
-import "enums/v1/workflow.proto";
+import "temporal/enums/v1/workflow.proto";
 
 import "server/history/v1/message.proto";
 import "server/enums/v1/workflow.proto";
@@ -32,7 +32,7 @@ import "server/enums/v1/workflow.proto";
 message MutableStateChecksumPayload {
     bool cancel_requested = 1;
     server.enums.v1.WorkflowExecutionState state = 2;
-    .enums.v1.WorkflowExecutionStatus status = 3;
+    temporal.enums.v1.WorkflowExecutionStatus status = 3;
 
     int64 last_write_version = 4;
     int64 last_write_event_id = 5;

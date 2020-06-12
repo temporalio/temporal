@@ -28,11 +28,11 @@ import "server/enums/v1/replication.proto";
 import "server/enums/v1/task.proto";
 import "server/history/v1/message.proto";
 
-import "common/v1/message.proto";
-import "namespace/v1/message.proto";
-import "replication/v1/message.proto";
-import "history/v1/message.proto";
-import "failure/v1/message.proto";
+import "temporal/common/v1/message.proto";
+import "temporal/namespace/v1/message.proto";
+import "temporal/replication/v1/message.proto";
+import "temporal/history/v1/message.proto";
+import "temporal/failure/v1/message.proto";
 
 message ReplicationInfo {
     int64 version = 1;
@@ -91,9 +91,9 @@ message ReplicationTaskInfo {
 message NamespaceTaskAttributes {
     server.enums.v1.NamespaceOperation namespace_operation = 1;
     string id = 2;
-    namespace.v1.NamespaceInfo info = 3;
-    namespace.v1.NamespaceConfiguration config = 4;
-    .replication.v1.NamespaceReplicationConfiguration replication_config = 5;
+    temporal.namespace.v1.NamespaceInfo info = 3;
+    temporal.namespace.v1.NamespaceConfiguration config = 4;
+    temporal.replication.v1.NamespaceReplicationConfiguration replication_config = 5;
     int64 config_version = 6;
     int64 failover_version = 7;
 }
@@ -107,8 +107,8 @@ message HistoryTaskAttributes {
     int64 next_event_id = 6;
     int64 version = 7;
     map<string, ReplicationInfo> replication_info = 8;
-    .history.v1.History history = 9;
-    .history.v1.History new_run_history = 10;
+    temporal.history.v1.History history = 9;
+    temporal.history.v1.History new_run_history = 10;
     int32 event_store_version = 11;
     int32 new_run_event_store_version = 12;
     bool reset_workflow = 13;
@@ -140,9 +140,9 @@ message SyncActivityTaskAttributes {
     int64 started_id = 7;
     int64 started_time = 8;
     int64 last_heartbeat_time = 9;
-    common.v1.Payloads details = 10;
+    temporal.common.v1.Payloads details = 10;
     int32 attempt = 11;
-    failure.v1.Failure last_failure = 12;
+    temporal.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     server.history.v1.VersionHistory version_history = 14;
 }
@@ -153,7 +153,7 @@ message HistoryTaskV2Attributes {
     string workflow_id = 3;
     string run_id = 4;
     repeated server.history.v1.VersionHistoryItem version_history_items = 5;
-    common.v1.DataBlob events = 6;
+    temporal.common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
-    common.v1.DataBlob new_run_events = 7;
+    temporal.common.v1.DataBlob new_run_events = 7;
 }
