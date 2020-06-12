@@ -284,11 +284,6 @@ func (p *queueProcessorBase) processBatch() {
 			// submitted since processor has been shutdown
 			return
 		}
-		select {
-		case <-p.shutdownCh:
-			return
-		default:
-		}
 	}
 
 	if more {
@@ -316,9 +311,17 @@ func (p *queueProcessorBase) submitTask(
 	queueTask := p.queueTaskInitializer(taskInfo)
 	submitted, err := p.queueTaskProcessor.TrySubmit(queueTask)
 	if err != nil {
-		return false
+		select {
+		case <-p.shutdownCh:
+			// if error is due to shard shutdown
+			return false
+		default:
+			// otherwise it might be error from domain cache etc, add
+			// the task to redispatch queue so that it can be retried
+			p.logger.Error("Failed to submit task", tag.Error(err))
+		}
 	}
-	if !submitted {
+	if err != nil || !submitted {
 		p.redispatchQueue.Add(queueTask)
 	}
 

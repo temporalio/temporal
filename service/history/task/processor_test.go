@@ -24,14 +24,12 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
@@ -101,69 +99,51 @@ func (s *queueTaskProcessorSuite) TestIsRunning() {
 	s.False(s.processor.isRunning())
 }
 
-func (s *queueTaskProcessorSuite) TestPrepareSubmit_AssignPriorityFailed() {
-	mockTask := NewMockTask(s.controller)
-	errAssign := errors.New("some random error")
-	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(errAssign).Times(1)
-
-	s.processor.Start()
-	scheduler, err := s.processor.prepareSubmit(mockTask)
-	s.Equal(errAssign, err)
-	s.Nil(scheduler)
-}
-
-func (s *queueTaskProcessorSuite) TestPrepareSubmit_ProcessorNotRunning() {
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
-	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
-
-	scheduler, err := s.processor.prepareSubmit(mockTask)
+func (s *queueTaskProcessorSuite) TestGetOrCreateShardTaskScheduler_ProcessorNotRunning() {
+	scheduler, err := s.processor.getOrCreateShardTaskScheduler(s.mockShard)
 	s.Equal(errTaskProcessorNotRunning, err)
 	s.Nil(scheduler)
 }
 
-func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorAlreadyExists() {
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
-	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
-
+func (s *queueTaskProcessorSuite) TestGetOrCreateShardTaskScheduler_ShardProcessorAlreadyExists() {
 	mockScheduler := task.NewMockScheduler(s.controller)
-	s.processor.schedulers[s.mockShard] = mockScheduler
+	s.processor.shardSchedulers[s.mockShard] = mockScheduler
 
 	s.processor.Start()
-	scheduler, err := s.processor.prepareSubmit(mockTask)
+	scheduler, err := s.processor.getOrCreateShardTaskScheduler(s.mockShard)
 	s.NoError(err)
 	s.Equal(mockScheduler, scheduler)
 }
 
-func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorNotExist() {
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
-	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
-
-	s.Empty(s.processor.schedulers)
+func (s *queueTaskProcessorSuite) TestGetOrCreateShardTaskScheduler_ShardProcessorNotExist() {
+	s.Empty(s.processor.shardSchedulers)
 
 	s.processor.Start()
-	scheduler, err := s.processor.prepareSubmit(mockTask)
+	scheduler, err := s.processor.getOrCreateShardTaskScheduler(s.mockShard)
 	s.NoError(err)
 
-	s.Len(s.processor.schedulers, 1)
+	s.Len(s.processor.shardSchedulers, 1)
 	scheduler.Stop()
 }
 
 func (s *queueTaskProcessorSuite) TestStopShardProcessor() {
-	s.Empty(s.processor.schedulers)
+	s.Empty(s.processor.shardSchedulers)
 	s.processor.StopShardProcessor(s.mockShard)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
 	mockScheduler.EXPECT().Stop().Times(1)
-	s.processor.schedulers[s.mockShard] = mockScheduler
+	s.processor.shardSchedulers[s.mockShard] = mockScheduler
 
 	s.processor.StopShardProcessor(s.mockShard)
-	s.Empty(s.processor.schedulers)
+	s.Empty(s.processor.shardSchedulers)
 }
 
-func (s *queueTaskProcessorSuite) TestStop() {
+func (s *queueTaskProcessorSuite) TestStartStop() {
+	mockScheduler := task.NewMockScheduler(s.controller)
+	mockScheduler.EXPECT().Start().Times(1)
+	mockScheduler.EXPECT().Stop().Times(1)
+	s.processor.hostScheduler = mockScheduler
+
 	for i := 0; i != 10; i++ {
 		mockShard := shard.NewTestContext(
 			s.controller,
@@ -173,15 +153,15 @@ func (s *queueTaskProcessorSuite) TestStop() {
 			},
 			config.NewForTest(),
 		)
-		mockScheduler := task.NewMockScheduler(s.controller)
-		mockScheduler.EXPECT().Stop().Times(1)
-		s.processor.schedulers[mockShard] = mockScheduler
+		mockShardScheduler := task.NewMockScheduler(s.controller)
+		mockShardScheduler.EXPECT().Stop().Times(1)
+		s.processor.shardSchedulers[mockShard] = mockShardScheduler
 	}
 
 	s.processor.Start()
 	s.processor.Stop()
 
-	s.Empty(s.processor.schedulers)
+	s.Empty(s.processor.shardSchedulers)
 }
 
 func (s *queueTaskProcessorSuite) TestSubmit() {
@@ -190,72 +170,55 @@ func (s *queueTaskProcessorSuite) TestSubmit() {
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
-	mockScheduler.EXPECT().Submit(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
-	s.processor.schedulers[s.mockShard] = mockScheduler
+	mockScheduler.EXPECT().TrySubmit(newMockQueueTaskMatcher(mockTask)).Return(false, nil).Times(1)
 
-	s.processor.Start()
+	mockShardScheduler := task.NewMockScheduler(s.controller)
+	mockShardScheduler.EXPECT().Submit(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
+
+	s.processor.hostScheduler = mockScheduler
+	s.processor.shardSchedulers[s.mockShard] = mockShardScheduler
+
 	err := s.processor.Submit(mockTask)
 	s.NoError(err)
 }
 
+func (s *queueTaskProcessorSuite) TestTrySubmit_AssignPriorityFailed() {
+	mockTask := NewMockTask(s.controller)
+
+	errAssignPriority := errors.New("some randome error")
+	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(errAssignPriority).Times(1)
+
+	submitted, err := s.processor.TrySubmit(mockTask)
+	s.Equal(errAssignPriority, err)
+	s.False(submitted)
+}
+
 func (s *queueTaskProcessorSuite) TestTrySubmit_Fail() {
 	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	errTrySubmit := errors.New("some randome error")
 	mockScheduler := task.NewMockScheduler(s.controller)
 	mockScheduler.EXPECT().TrySubmit(newMockQueueTaskMatcher(mockTask)).Return(false, errTrySubmit).Times(1)
-	s.processor.schedulers[s.mockShard] = mockScheduler
 
-	s.processor.Start()
+	s.processor.hostScheduler = mockScheduler
+
 	submitted, err := s.processor.TrySubmit(mockTask)
 	s.Equal(errTrySubmit, err)
 	s.False(submitted)
 }
 
-func (s *queueTaskProcessorSuite) TestNewQueueTaskProcessor_UnknownSchedulerType() {
-	processor, err := NewProcessor(
-		s.mockPriorityAssigner,
-		&ProcessorOptions{
-			SchedulerType: 0,
-			FifoSchedulerOptions: &task.FIFOTaskSchedulerOptions{
-				QueueSize:   100,
-				WorkerCount: 10,
-				RetryPolicy: backoff.NewExponentialRetryPolicy(time.Millisecond),
-			},
-		},
-		s.logger,
-		s.metricsClient,
-	)
-	s.Equal(errUnknownTaskSchedulerType, err)
-	s.Nil(processor)
-}
-
-func (s *queueTaskProcessorSuite) TestNewQueueTaskProcessor_SchedulerOptionNotSpecified() {
-	processor, err := NewProcessor(
-		s.mockPriorityAssigner,
-		&ProcessorOptions{
-			SchedulerType: task.SchedulerTypeFIFO,
-		},
-		s.logger,
-		s.metricsClient,
-	)
-	s.Equal(errTaskSchedulerOptionsNotSpecified, err)
-	s.Nil(processor)
+func (s *queueTaskProcessorSuite) TestNewSchedulerOptions_UnknownSchedulerType() {
+	options, err := newSchedulerOptions(0, 100, 10, 1, nil)
+	s.Error(err)
+	s.Nil(options)
 }
 
 func (s *queueTaskProcessorSuite) newTestQueueTaskProcessor() *processorImpl {
+	config := config.NewForTest()
 	processor, err := NewProcessor(
 		s.mockPriorityAssigner,
-		&ProcessorOptions{
-			SchedulerType: task.SchedulerTypeFIFO,
-			FifoSchedulerOptions: &task.FIFOTaskSchedulerOptions{
-				QueueSize:   100,
-				WorkerCount: 10,
-				RetryPolicy: backoff.NewExponentialRetryPolicy(time.Millisecond),
-			},
-		},
+		config,
 		s.logger,
 		s.metricsClient,
 	)

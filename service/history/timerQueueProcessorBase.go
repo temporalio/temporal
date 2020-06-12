@@ -353,12 +353,8 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 
 	for _, task := range timerTasks {
 		if submitted := t.submitTask(task); !submitted {
+			// not submitted due to shard shutdown
 			return nil, nil
-		}
-		select {
-		case <-t.shutdownCh:
-			return nil, nil
-		default:
 		}
 	}
 
@@ -386,9 +382,17 @@ func (t *timerQueueProcessorBase) submitTask(
 	timeQueueTask := t.queueTaskInitializer(taskInfo)
 	submitted, err := t.queueTaskProcessor.TrySubmit(timeQueueTask)
 	if err != nil {
-		return false
+		select {
+		case <-t.shutdownCh:
+			// if error is due to shard shutdown
+			return false
+		default:
+			// otherwise it might be error from domain cache etc, add
+			// the task to redispatch queue so that it can be retried
+			t.logger.Error("Failed to submit task", tag.Error(err))
+		}
 	}
-	if !submitted {
+	if err != nil || !submitted {
 		t.redispatchQueue.Add(timeQueueTask)
 	}
 

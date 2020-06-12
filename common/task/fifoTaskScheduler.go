@@ -35,15 +35,17 @@ import (
 type (
 	// FIFOTaskSchedulerOptions configs FIFO task scheduler
 	FIFOTaskSchedulerOptions struct {
-		QueueSize   int
-		WorkerCount int
-		RetryPolicy backoff.RetryPolicy
+		QueueSize       int
+		WorkerCount     int
+		DispatcherCount int
+		RetryPolicy     backoff.RetryPolicy
 	}
 
 	fifoTaskSchedulerImpl struct {
 		status       int32
 		logger       log.Logger
 		metricsScope metrics.Scope
+		options      *FIFOTaskSchedulerOptions
 		dispatcherWG sync.WaitGroup
 		taskCh       chan PriorityTask
 		shutdownCh   chan struct{}
@@ -65,6 +67,7 @@ func NewFIFOTaskScheduler(
 		status:       common.DaemonStatusInitialized,
 		logger:       logger,
 		metricsScope: metricsClient.Scope(metrics.TaskSchedulerScope),
+		options:      options,
 		taskCh:       make(chan PriorityTask, options.QueueSize),
 		shutdownCh:   make(chan struct{}),
 		processor: NewParallelTaskProcessor(
@@ -86,8 +89,10 @@ func (f *fifoTaskSchedulerImpl) Start() {
 
 	f.processor.Start()
 
-	f.dispatcherWG.Add(1)
-	go f.dispatcher()
+	f.dispatcherWG.Add(f.options.DispatcherCount)
+	for i := 0; i != f.options.DispatcherCount; i++ {
+		go f.dispatcher()
+	}
 
 	f.logger.Info("FIFO task scheduler started.")
 }
