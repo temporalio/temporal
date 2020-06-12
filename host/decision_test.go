@@ -29,11 +29,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
@@ -97,7 +96,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		resp2, err2 := s.engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Decisions: []*decisionpb.Decision{},
-			StickyAttributes: &decisionpb.StickyExecutionAttributes{
+			StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 				WorkerTaskList:                stikyTaskList,
 				ScheduleToStartTimeoutSeconds: 5,
 			},
@@ -134,7 +133,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 				},
 				},
 			}},
-		StickyAttributes: &decisionpb.StickyExecutionAttributes{
+		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
@@ -200,7 +199,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	resp2, err2 := s.engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
 		Decisions: []*decisionpb.Decision{},
-		StickyAttributes: &decisionpb.StickyExecutionAttributes{
+		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
@@ -221,7 +220,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 						"result": payloads.EncodeString("local activity result"),
 					}}},
 			}},
-		StickyAttributes: &decisionpb.StickyExecutionAttributes{
+		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
@@ -242,7 +241,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 						"result": payloads.EncodeString("local activity result"),
 					}}},
 			}},
-		StickyAttributes: &decisionpb.StickyExecutionAttributes{
+		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
@@ -261,7 +260,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				},
 				},
 			}},
-		StickyAttributes: &decisionpb.StickyExecutionAttributes{
+		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 			WorkerTaskList:                stikyTaskList,
 			ScheduleToStartTimeoutSeconds: 5,
 		},

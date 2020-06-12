@@ -276,7 +276,7 @@ Loop:
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
 				Decisions: decisions,
-				StickyAttributes: &decisionpb.StickyExecutionAttributes{
+				StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 					WorkerTaskList:                p.StickyTaskList,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 				},
@@ -333,7 +333,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Decisions: decisions,
-			StickyAttributes: &decisionpb.StickyExecutionAttributes{
+			StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 				WorkerTaskList:                p.StickyTaskList,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 			},
