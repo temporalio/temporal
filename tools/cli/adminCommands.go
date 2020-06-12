@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -374,7 +375,9 @@ func AdminGetShardID(c *cli.Context) {
 func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
-	category := enumsgenpb.TaskCategory(c.Int(FlagTaskType))
+	categoryFlag := strings.Title(c.String(FlagTaskType))
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -412,7 +415,9 @@ func AdminDescribeTask(c *cli.Context) {
 // AdminListTasks outputs a list of a tasks for given Shard and Task Type
 func AdminListTasks(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	category := enumsgenpb.TaskCategory(c.Int(FlagTaskType))
+	categoryFlag := strings.Title(c.String(FlagTaskType))
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -467,9 +472,11 @@ func AdminRemoveTask(c *cli.Context) {
 
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	taskCategory := enumsgenpb.TaskCategory(getRequiredIntOption(c, FlagTaskType))
+	categoryFlag := strings.Title(c.String(FlagTaskType))
+	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
+	category := enumsgenpb.TaskCategory(categoryInt)
 	var visibilityTimestamp int64
-	if taskCategory == enumsgenpb.TASK_CATEGORY_TIMER {
+	if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 
@@ -478,7 +485,7 @@ func AdminRemoveTask(c *cli.Context) {
 
 	req := &adminservice.RemoveTaskRequest{
 		ShardId:             int32(shardID),
-		Category:            taskCategory,
+		Category:            category,
 		TaskId:              taskID,
 		VisibilityTimestamp: visibilityTimestamp,
 	}
