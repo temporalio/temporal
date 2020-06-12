@@ -98,12 +98,10 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/tools/..."
 
-PROTO_ROOT     := proto
-# Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
-PROTO_SERVICES = $(shell find $(PROTO_ROOT)/internal -name "*service.proto")
-PROTO_IMPORT   := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
-PROTO_OUT      := .gen/proto
+PROTO_ROOT := proto
+PROTO_DIRS = $(shell find $(PROTO_ROOT)/internal -name "*.proto" -printf "%h\n" | sort -u)
+PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_OUT := .gen/proto
 
 ##### Tools #####
 update-checkers:
@@ -142,7 +140,10 @@ install-proto-submodule:
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)/*.proto$(NEWLINE))
+
+fix-path:
+	mv -f $(PROTO_OUT)/internal/server/* $(PROTO_OUT) && rm -d $(PROTO_OUT)/internal/server
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
