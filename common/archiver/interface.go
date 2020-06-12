@@ -27,10 +27,10 @@ package archiver
 import (
 	"context"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -63,7 +63,7 @@ type (
 
 	// GetHistoryResponse is the response of Get archived history
 	GetHistoryResponse struct {
-		HistoryBatches []*eventpb.History
+		HistoryBatches []*historypb.History
 		NextPageToken  []byte
 	}
 
@@ -101,7 +101,7 @@ type (
 
 	// QueryVisibilityResponse is the response of querying archived visibility records
 	QueryVisibilityResponse struct {
-		Executions    []*executionpb.WorkflowExecutionInfo
+		Executions    []*workflowpb.WorkflowExecutionInfo
 		NextPageToken []byte
 	}
 

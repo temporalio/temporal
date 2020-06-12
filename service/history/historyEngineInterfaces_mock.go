@@ -34,8 +34,9 @@ import (
 	"github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	task "github.com/temporalio/temporal/common/task"
+
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 )
 
 // MockqueueTaskInfo is a mock of queueTaskInfo interface
@@ -90,10 +91,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTaskInfo) GetTaskType() commongenpb.TaskType {
+func (m *MockqueueTaskInfo) GetTaskType() enumsgenpb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(commongenpb.TaskType)
+	ret0, _ := ret[0].(enumsgenpb.TaskType)
 	return ret0
 }
 
@@ -317,10 +318,10 @@ func (mr *MockqueueTaskMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTask) GetTaskType() commongenpb.TaskType {
+func (m *MockqueueTask) GetTaskType() enumsgenpb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(commongenpb.TaskType)
+	ret0, _ := ret[0].(enumsgenpb.TaskType)
 	return ret0
 }
 

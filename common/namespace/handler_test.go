@@ -37,9 +37,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -343,7 +344,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace1: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace1,
-				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+				Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
@@ -352,9 +353,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
-				HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+				HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
@@ -368,7 +369,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace2: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace2,
-				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+				Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
@@ -377,9 +378,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
-				HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+				HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},

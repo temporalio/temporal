@@ -30,42 +30,42 @@ package namespace
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	repication "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	reflect "reflect"
 )
 
-// MockReplicationTaskExecutor is a mock of ReplicationTaskExecutor interface.
+// MockReplicationTaskExecutor is a mock of ReplicationTaskExecutor interface
 type MockReplicationTaskExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicationTaskExecutorMockRecorder
 }
 
-// MockReplicationTaskExecutorMockRecorder is the mock recorder for MockReplicationTaskExecutor.
+// MockReplicationTaskExecutorMockRecorder is the mock recorder for MockReplicationTaskExecutor
 type MockReplicationTaskExecutorMockRecorder struct {
 	mock *MockReplicationTaskExecutor
 }
 
-// NewMockReplicationTaskExecutor creates a new mock instance.
+// NewMockReplicationTaskExecutor creates a new mock instance
 func NewMockReplicationTaskExecutor(ctrl *gomock.Controller) *MockReplicationTaskExecutor {
 	mock := &MockReplicationTaskExecutor{ctrl: ctrl}
 	mock.recorder = &MockReplicationTaskExecutorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicationTaskExecutor) EXPECT() *MockReplicationTaskExecutorMockRecorder {
 	return m.recorder
 }
 
-// Execute mocks base method.
-func (m *MockReplicationTaskExecutor) Execute(task *replication.NamespaceTaskAttributes) error {
+// Execute mocks base method
+func (m *MockReplicationTaskExecutor) Execute(task *repication.NamespaceTaskAttributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Execute indicates an expected call of Execute.
+// Execute indicates an expected call of Execute
 func (mr *MockReplicationTaskExecutorMockRecorder) Execute(task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockReplicationTaskExecutor)(nil).Execute), task)

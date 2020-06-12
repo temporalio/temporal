@@ -25,8 +25,8 @@
 package frontend
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common/persistence"
 )
 

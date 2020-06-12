@@ -32,12 +32,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	querypb "go.temporal.io/temporal-proto/query"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal-proto/workflowservicemock"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/temporal-proto/workflowservicemock/v1"
 
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/resource"
@@ -384,7 +384,7 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 
 	req := &workflowservice.QueryWorkflowRequest{
 		Namespace:             s.namespace,
-		QueryConsistencyLevel: querypb.QUERY_CONSISTENCY_LEVEL_STRONG,
+		QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)

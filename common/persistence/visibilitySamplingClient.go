@@ -27,7 +27,7 @@ package persistence
 import (
 	"sync"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -268,7 +268,7 @@ func (p *visibilitySamplingClient) GetName() string {
 
 func getRequestPriority(request *RecordWorkflowExecutionClosedRequest) int {
 	priority := 0
-	if request.Status == executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+	if request.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		priority = 1 // low priority for completed workflows
 	}
 	return priority

@@ -31,7 +31,7 @@ import (
 	"sync"
 	"syscall"
 
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/log/loggerimpl"

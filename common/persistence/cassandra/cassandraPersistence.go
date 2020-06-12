@@ -31,9 +31,10 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	checksum "github.com/temporalio/temporal/common/checksum"
@@ -42,8 +43,6 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/service/config"
-
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 //	"go.temporal.io/temporal-proto/serviceerror"
@@ -2340,7 +2339,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) (*p.UpdateTaskListResponse, error) {
 	tli := *request.TaskListInfo
 	tli.LastUpdated = types.TimestampNow()
-	if tli.Kind == tasklistpb.TASK_LIST_KIND_STICKY { // if task_list is sticky, then update with TTL
+	if tli.Kind == enumspb.TASK_LIST_KIND_STICKY { // if task_list is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskListTTL)
 

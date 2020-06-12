@@ -31,21 +31,18 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	versionpb "go.temporal.io/temporal-proto/version"
-	"go.temporal.io/temporal-proto/workflowservice"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	versionpb "go.temporal.io/temporal-proto/version/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
@@ -582,7 +579,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -593,7 +590,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	isLongPoll := request.GetWaitForNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Execution
 	var continuationToken *tokengenpb.HistoryContinuation
 
@@ -650,8 +647,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
 
-	history := &eventpb.History{}
-	history.Events = []*eventpb.HistoryEvent{}
+	history := &historypb.History{}
+	history.Events = []*historypb.HistoryEvent{}
 	var historyBlob []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
@@ -702,7 +699,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		// return all events
 		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
-			history.Events = []*eventpb.HistoryEvent{}
+			history.Events = []*historypb.HistoryEvent{}
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
@@ -830,7 +827,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TASK_LIST_TYPE_DECISION, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_LIST_TYPE_DECISION, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -1090,7 +1087,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TASK_LIST_TYPE_ACTIVITY, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_LIST_TYPE_ACTIVITY, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -2611,7 +2608,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ARCHIVAL_STATUS_ENABLED {
+	if entry.GetConfig().VisibilityArchivalStatus != enumspb.ARCHIVAL_STATUS_ENABLED {
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 
@@ -2849,7 +2846,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
-			CompletedType: querypb.QUERY_RESULT_TYPE_FAILED,
+			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			QueryResult:   nil,
 			ErrorMessage:  err.Error(),
 		}
@@ -3082,7 +3079,7 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	if request.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED{
+	if request.GetTaskListType() == enumspb.TASK_LIST_TYPE_UNSPECIFIED{
 		return nil, wh.error(errTaskListTypeNotSet, scope)
 	}
 
@@ -3174,7 +3171,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *eventgenpb.TransientDecisionInfo,
+	transientDecision *historygenpb.TransientDecisionInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
@@ -3192,13 +3189,13 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	var encoding commonpb.EncodingType
+	var encoding enumspb.EncodingType
 	for _, data := range resp.HistoryEventBlobs {
 		switch data.Encoding {
 		case common.EncodingTypeJSON:
-			encoding = commonpb.ENCODING_TYPE_JSON
+			encoding = enumspb.ENCODING_TYPE_JSON
 		case common.EncodingTypeProto3:
-			encoding = commonpb.ENCODING_TYPE_PROTO3
+			encoding = enumspb.ENCODING_TYPE_PROTO3
 		default:
 			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
 		}
@@ -3223,7 +3220,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 
@@ -3232,7 +3229,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob.Data,
 		})
 	}
@@ -3247,16 +3244,16 @@ func (wh *WorkflowHandler) getHistory(
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *eventgenpb.TransientDecisionInfo,
+	transientDecision *historygenpb.TransientDecisionInfo,
 	branchToken []byte,
-) (*eventpb.History, []byte, error) {
+) (*historypb.History, []byte, error) {
 
 	var size int
 
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
-	var historyEvents []*eventpb.HistoryEvent
+	var historyEvents []*historypb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -3301,14 +3298,14 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
 	}
 
-	executionHistory := &eventpb.History{}
+	executionHistory := &historypb.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
 }
 
 func (wh *WorkflowHandler) validateTransientDecisionEvents(
 	expectedNextEventID int64,
-	decision *eventgenpb.TransientDecisionInfo,
+	decision *historygenpb.TransientDecisionInfo,
 ) error {
 
 	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
@@ -3427,15 +3424,15 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		return &workflowservice.PollForDecisionTaskResponse{}, nil
 	}
 
-	var history *eventpb.History
+	var history *historypb.History
 	var continuation []byte
 	var err error
 
 	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
 		// meaning sticky query, we should not return any events to worker
 		// since query task only check the current status
-		history = &eventpb.History{
-			Events: []*eventpb.HistoryEvent{},
+		history = &historypb.History{
+			Events: []*historypb.HistoryEvent{},
 		}
 	} else {
 		// here we have 3 cases:
@@ -3508,7 +3505,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 }
 
 func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*eventpb.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,
@@ -3628,7 +3625,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	history := &eventpb.History{}
+	history := &historypb.History{}
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
@@ -3639,8 +3636,8 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}, nil
 }
 
-func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]commonpb.IndexedValueType {
-	converted := make(map[string]commonpb.IndexedValueType)
+func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enumspb.IndexedValueType {
+	converted := make(map[string]enumspb.IndexedValueType)
 	for k, v := range keys {
 		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
 	}
@@ -3671,7 +3668,7 @@ func (wh *WorkflowHandler) checkPermission(
 	return nil
 }
 
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskListType tasklistpb.TaskListType,
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskListType enumspb.TaskListType,
 	taskList *tasklistpb.TaskList, pollerID string) error {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
 	if ctx.Err() == context.Canceled {

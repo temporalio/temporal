@@ -26,7 +26,7 @@ package frontend
 
 import (
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {

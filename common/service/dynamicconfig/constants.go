@@ -25,7 +25,7 @@
 package dynamicconfig
 
 import (
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 )
 
 // Key represents a key/property stored in dynamic config
@@ -819,7 +819,7 @@ func NamespaceIDFilter(namespaceID string) FilterOption {
 }
 
 // TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType tasklistpb.TaskListType) FilterOption {
+func TaskTypeFilter(taskType enumspb.TaskListType) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
 	}

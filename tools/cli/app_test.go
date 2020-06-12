@@ -36,20 +36,21 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal-proto/workflowservicemock"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/temporal-proto/workflowservicemock/v1"
 	sdkclient "go.temporal.io/temporal/client"
 	sdkmocks "go.temporal.io/temporal/mocks"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 )
@@ -234,14 +235,14 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 }
 
 var (
-	eventType = eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
+	eventType = enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 
 	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History: &eventpb.History{
-			Events: []*eventpb.HistoryEvent{
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventType: eventType,
-					Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
 						TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
 						WorkflowRunTimeoutSeconds:  60,
@@ -399,10 +400,10 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 }
 
 var (
-	status = executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
-		Executions: []*executionpb.WorkflowExecutionInfo{
+		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "test-list-workflow-id",
@@ -420,7 +421,7 @@ var (
 	}
 
 	listOpenWorkflowExecutionsResponse = &workflowservice.ListOpenWorkflowExecutionsResponse{
-		Executions: []*executionpb.WorkflowExecutionInfo{
+		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "test-list-open-workflow-id",
@@ -541,8 +542,8 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]commonpb.IndexedValueType{
-			"testKey": commonpb.IndexedValueType(1),
+		SearchAttribute: map[string]enumspb.IndexedValueType{
+			"testKey": enumspb.IndexedValueType(1),
 		},
 	}
 	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
@@ -700,10 +701,10 @@ func (s *cliAppSuite) TestBreakLongWords() {
 
 func (s *cliAppSuite) TestAnyToString() {
 	arg := strings.Repeat("LongText", 80)
-	event := &eventpb.HistoryEvent{
+	event := &historypb.HistoryEvent{
 		EventId:   1,
 		EventType: eventType,
-		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:               &commonpb.WorkflowType{Name: "helloworldWorkflow"},
 			TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
 			WorkflowRunTimeoutSeconds:  60,
@@ -722,8 +723,8 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	fields := map[string]*commonpb.Payload{
 		"TestKey": payload.EncodeString("testValue"),
 	}
-	execution := &executionpb.WorkflowExecutionInfo{
-		Status: executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	execution := &workflowpb.WorkflowExecutionInfo{
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
 	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:\"testValue\"}}}", anyToString(execution, true, 0))
@@ -743,11 +744,11 @@ func (s *cliAppSuite) TestIsAttributeName() {
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
 	res := getWorkflowIDReusePolicy(1)
-	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
 	res = getWorkflowIDReusePolicy(2)
-	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
+	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
 	res = getWorkflowIDReusePolicy(3)
-	s.Equal(res, commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
+	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
@@ -907,11 +908,11 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 		}
 	}
 
-	nextFn := func() *eventpb.HistoryEvent {
+	nextFn := func() *historypb.HistoryEvent {
 		if counter == 0 {
-			event := &eventpb.HistoryEvent{
+			event := &historypb.HistoryEvent{
 				EventType: eventType,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
 					TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
 					WorkflowRunTimeoutSeconds:  60,

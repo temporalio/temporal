@@ -29,7 +29,8 @@ import (
 	"math/rand"
 	"strings"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -48,7 +49,7 @@ type (
 		PickWritePartition(
 			namespaceID string,
 			taskList tasklistpb.TaskList,
-			taskListType tasklistpb.TaskListType,
+			taskListType enumspb.TaskListType,
 			forwardedFrom string,
 		) string
 
@@ -58,7 +59,7 @@ type (
 		PickReadPartition(
 			namespaceID string,
 			taskList tasklistpb.TaskList,
-			taskListType tasklistpb.TaskListType,
+			taskListType enumspb.TaskListType,
 			forwardedFrom string,
 		) string
 	}
@@ -90,7 +91,7 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskListType enumspb.TaskListType,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
@@ -99,7 +100,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskListType enumspb.TaskListType,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
@@ -108,12 +109,12 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 func (lb *defaultLoadBalancer) pickPartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskListType enumspb.TaskListType,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TASK_LIST_KIND_STICKY {
+	if forwardedFrom != "" || taskList.GetKind() == enumspb.TASK_LIST_KIND_STICKY {
 		return taskList.GetName()
 	}
 

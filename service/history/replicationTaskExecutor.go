@@ -29,11 +29,12 @@ package history
 import (
 	"context"
 
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -89,19 +90,19 @@ func (e *replicationTaskExecutorImpl) execute(
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
-	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		// Shard status will be sent as part of the Replication message without kafka
 		scope = metrics.SyncShardTaskScope
-	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		scope = metrics.SyncActivityTaskScope
 		err = e.handleActivityTask(replicationTask, forceApply)
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		scope = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(sourceCluster, replicationTask, forceApply)
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
 	default:

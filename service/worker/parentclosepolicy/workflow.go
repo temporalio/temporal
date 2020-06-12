@@ -29,13 +29,14 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -57,7 +58,7 @@ type (
 	RequestDetail struct {
 		WorkflowID string
 		RunID      string
-		Policy     commonpb.ParentClosePolicy
+		Policy     enumspb.ParentClosePolicy
 	}
 
 	// Request defines the request for parent close policy
@@ -105,10 +106,10 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	for _, execution := range request.Executions {
 		var err error
 		switch execution.Policy {
-		case commonpb.PARENT_CLOSE_POLICY_ABANDON:
+		case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 			//no-op
 			continue
-		case commonpb.PARENT_CLOSE_POLICY_TERMINATE:
+		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -121,7 +122,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity: processorWFTypeName,
 				},
 			})
-		case commonpb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
+		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

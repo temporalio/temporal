@@ -32,10 +32,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/persistence"
@@ -44,10 +44,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(commonpb.TIMEOUT_TYPE_START_TO_CLOSE)
-	timerTypeScheduleToStart = timerType(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START)
-	timerTypeScheduleToClose = timerType(commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
-	timerTypeHeartbeat       = timerType(commonpb.TIMEOUT_TYPE_HEARTBEAT)
+	timerTypeStartToClose    = timerType(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	timerTypeScheduleToStart = timerType(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	timerTypeScheduleToClose = timerType(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	timerTypeHeartbeat       = timerType(enumspb.TIMEOUT_TYPE_HEARTBEAT)
 )
 
 const (
@@ -388,34 +388,34 @@ func timerTypeToTimerMask(
 
 func timerTypeToProto(
 	timerType timerType,
-) commonpb.TimeoutType {
+) enumspb.TimeoutType {
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return commonpb.TIMEOUT_TYPE_START_TO_CLOSE
+		return enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 	case timerTypeScheduleToStart:
-		return commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START
+		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	case timerTypeScheduleToClose:
-		return commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	case timerTypeHeartbeat:
-		return commonpb.TIMEOUT_TYPE_HEARTBEAT
+		return enumspb.TIMEOUT_TYPE_HEARTBEAT
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
 }
 
 func timerTypeFromProto(
-	timerType commonpb.TimeoutType,
+	timerType enumspb.TimeoutType,
 ) timerType {
 
 	switch timerType {
-	case commonpb.TIMEOUT_TYPE_START_TO_CLOSE:
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		return timerTypeStartToClose
-	case commonpb.TIMEOUT_TYPE_SCHEDULE_TO_START:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		return timerTypeScheduleToStart
-	case commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 		return timerTypeScheduleToClose
-	case commonpb.TIMEOUT_TYPE_HEARTBEAT:
+	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))

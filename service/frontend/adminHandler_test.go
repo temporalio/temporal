@@ -30,7 +30,9 @@ import (
 	"fmt"
 	"testing"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -38,12 +40,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/definition"
@@ -113,35 +115,35 @@ func (s *adminHandlerSuite) TearDownTest() {
 
 func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
 	tests := []struct {
-		input    commonpb.IndexedValueType
+		input    enumspb.IndexedValueType
 		expected string
 	}{
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_STRING,
+			input:    enumspb.INDEXED_VALUE_TYPE_STRING,
 			expected: "text",
 		},
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+			input:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			expected: "keyword",
 		},
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_INT,
+			input:    enumspb.INDEXED_VALUE_TYPE_INT,
 			expected: "long",
 		},
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_DOUBLE,
+			input:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			expected: "double",
 		},
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_BOOL,
+			input:    enumspb.INDEXED_VALUE_TYPE_BOOL,
 			expected: "boolean",
 		},
 		{
-			input:    commonpb.INDEXED_VALUE_TYPE_DATETIME,
+			input:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			expected: "date",
 		},
 		{
-			input:    commonpb.IndexedValueType(-1),
+			input:    enumspb.IndexedValueType(-1),
 			expected: "",
 		},
 	}
@@ -465,7 +467,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "no advanced config",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]commonpb.IndexedValueType{
+				SearchAttribute: map[string]enumspb.IndexedValueType{
 					"CustomKeywordField": 1,
 				},
 			},
@@ -487,7 +489,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
-		"testkey": commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+		"testkey": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
 		Return(mockValidAttr, nil).AnyTimes()
@@ -496,7 +498,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "reserved key",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]commonpb.IndexedValueType{
+				SearchAttribute: map[string]enumspb.IndexedValueType{
 					"WorkflowId": 1,
 				},
 			},
@@ -505,7 +507,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "key already whitelisted",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]commonpb.IndexedValueType{
+				SearchAttribute: map[string]enumspb.IndexedValueType{
 					"testkey": 1,
 				},
 			},
@@ -521,14 +523,14 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	dcUpdateTest := test{
 		Name: "dynamic config update failed",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]commonpb.IndexedValueType{
+			SearchAttribute: map[string]enumspb.IndexedValueType{
 				"testkey2": 1,
 			},
 		},
 		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
 	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
-		"testkey":  commonpb.INDEXED_VALUE_TYPE_KEYWORD,
+		"testkey":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"testkey2": 1,
 	}).Return(errors.New("error"))
 
@@ -542,7 +544,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	convertFailedTest := test{
 		Name: "unknown value type",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]commonpb.IndexedValueType{
+			SearchAttribute: map[string]enumspb.IndexedValueType{
 				"testkey3": -1,
 			},
 		},
@@ -557,7 +559,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	esErrorTest := test{
 		Name: "es error",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]commonpb.IndexedValueType{
+			SearchAttribute: map[string]enumspb.IndexedValueType{
 				"testkey4": 1,
 			},
 		},

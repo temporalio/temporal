@@ -31,10 +31,12 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/urfave/cli"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
+
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 // AdminDescribeTaskList displays poller and status information of task list.
@@ -42,9 +44,9 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := tasklistpb.TASK_LIST_TYPE_DECISION
+	taskListType := enumspb.TASK_LIST_TYPE_DECISION
 	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = tasklistpb.TASK_LIST_TYPE_ACTIVITY
+		taskListType = enumspb.TASK_LIST_TYPE_ACTIVITY
 	}
 
 	ctx, cancel := newContext(c)
@@ -92,11 +94,11 @@ func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
 	table.Render()
 }
 
-func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType tasklistpb.TaskListType) {
+func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.TaskListType) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
+	if taskListType == enumspb.TASK_LIST_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
@@ -114,8 +116,8 @@ func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
 	tlTypeFlag := strings.Title(c.String(FlagTaskListType))
-	tlTypeInt := tasklistpb.TaskListType_value[tlTypeFlag]
-	tlType := tasklistpb.TaskListType(tlTypeInt)
+	tlTypeInt := enumspb.TaskListType_value[tlTypeFlag]
+	tlType := enumspb.TaskListType(tlTypeInt)
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
 

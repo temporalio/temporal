@@ -25,10 +25,11 @@
 package persistence
 
 import (
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -153,14 +154,14 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:          common.SystemNamespaceID,
 				Name:        common.SystemLocalNamespace,
-				Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+				Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:            common.SystemNamespaceRetentionDays,
-				HistoryArchivalStatus:    namespacepb.ARCHIVAL_STATUS_DISABLED,
-				VisibilityArchivalStatus: namespacepb.ARCHIVAL_STATUS_DISABLED,
+				HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
 				EmitMetric:               true,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{

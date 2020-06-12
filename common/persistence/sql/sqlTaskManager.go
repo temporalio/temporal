@@ -32,15 +32,16 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type sqlTaskManager struct {
@@ -180,7 +181,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 	tl.LastUpdated = types.TimestampNow()
 
 	var blob serialization.DataBlob
-	if request.TaskListInfo.Kind == tasklistpb.TASK_LIST_KIND_STICKY {
+	if request.TaskListInfo.Kind == enumspb.TASK_LIST_KIND_STICKY {
 		tl.Expiry, err = types.TimestampProto(stickyTaskListTTL())
 		if err != nil {
 			return nil, err
@@ -458,7 +459,7 @@ func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
 	return int(id)
 }
 
-func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType tasklistpb.TaskListType, oldRangeID int64) error {
+func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType enumspb.TaskListType, oldRangeID int64) error {
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
 		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: convert.Int64Ptr(int64(taskListType))})
 	if err != nil {

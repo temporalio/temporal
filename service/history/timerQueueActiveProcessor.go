@@ -29,7 +29,7 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common/collection"

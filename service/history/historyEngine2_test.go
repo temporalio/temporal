@@ -36,19 +36,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	querypb "go.temporal.io/temporal-proto/query"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -221,7 +221,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
+		Kind: enumspb.TASK_LIST_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
@@ -290,7 +290,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
+		Kind: enumspb.TASK_LIST_KIND_NORMAL,
 	}
 	currentBranchTokken, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
@@ -804,7 +804,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	tl := "testTaskList"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	msBuilder.GetExecutionInfo().State = executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	msBuilder.GetExecutionInfo().State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
 
@@ -866,7 +866,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
 	decisions := []*decisionpb.Decision{{
-		DecisionType: decisionpb.DECISION_TYPE_RECORD_MARKER,
+		DecisionType: enumspb.DECISION_TYPE_RECORD_MARKER,
 		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 			MarkerName: markerName,
 			Details: map[string]*commonpb.Payloads{
@@ -896,7 +896,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -944,8 +944,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		Msg:              "random message",
 		StartRequestID:   requestID,
 		RunID:            runID,
-		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -980,8 +980,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		Msg:              "random message",
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
-		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -1013,10 +1013,10 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
-	options := []commonpb.WorkflowIdReusePolicy{
-		commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	options := []enumspb.WorkflowIdReusePolicy{
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}
 
 	expecedErrs := []bool{true, false, true}
@@ -1031,8 +1031,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		Msg:              "random message",
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
-		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
 
@@ -1083,19 +1083,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
-	options := []commonpb.WorkflowIdReusePolicy{
-		commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		commonpb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	options := []enumspb.WorkflowIdReusePolicy{
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}
 
 	expecedErrs := []bool{false, false, true}
 
-	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	statuses := []enumspb.WorkflowExecutionStatus{
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 	runIDs := []string{"1", "2", "3", "4"}
 
@@ -1111,7 +1111,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			Msg:              "random message",
 			StartRequestID:   "oldRequestID",
 			RunID:            runIDs[i],
-			State:            executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			Status:           status,
 			LastWriteVersion: lastWriteVersion,
 		}).Times(len(expecedErrs))
@@ -1305,7 +1305,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
 			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
 			Control:                         "",
@@ -1320,7 +1320,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1357,7 +1357,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
 			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
 			Control:                         "",
@@ -1372,15 +1372,15 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
-		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1417,7 +1417,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
 			RequestId:                       requestID,
-			WorkflowIdReusePolicy:           commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdReusePolicy:           enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
 			Control:                         "",
@@ -1432,15 +1432,15 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   "new request ID",
 		RunID:            runID,
-		State:            executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
 	}
 

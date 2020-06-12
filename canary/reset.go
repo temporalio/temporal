@@ -30,10 +30,9 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 )
@@ -198,10 +197,10 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 		return workflow.Execution{}, err
 	}
 	for _, event := range events {
-		if event.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED {
 			resetEventID = event.GetEventId()
 		}
-		if event.GetEventType() == eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED {
 			seenTrigger = true
 			break
 		}
@@ -242,7 +241,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.GetStatus() != executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+	if resp.WorkflowExecutionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

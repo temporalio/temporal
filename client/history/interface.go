@@ -25,7 +25,7 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 )
 
 // Client is the interface exposed by history service client

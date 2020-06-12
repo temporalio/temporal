@@ -30,8 +30,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 )
 
 const (
@@ -64,7 +63,7 @@ const (
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
 	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = commonpb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	defaultWorkflowIDReusePolicy    = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
@@ -105,26 +104,26 @@ var (
 	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]executionpb.WorkflowExecutionStatus{
-		"running":        executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		"completed":      executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		"failed":         executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		"canceled":       executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		"terminated":     executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		"continuedasnew": executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		"continueasnew":  executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		"timedout":       executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	workflowClosedStatusMap = map[string]enumspb.WorkflowExecutionStatus{
+		"running":        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"completed":      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"failed":         enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"canceled":       enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminated":     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continuedasnew": enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"continueasnew":  enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timedout":       enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 		// below are some alias
-		"r":         executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		"c":         executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		"complete":  executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		"f":         executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		"fail":      executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		"cancel":    executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		"terminate": executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		"term":      executionpb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		"continue":  executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		"cont":      executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		"timeout":   executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		"r":         enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"c":         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"complete":  enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		"f":         enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"fail":      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		"cancel":    enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		"terminate": enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"term":      enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		"continue":  enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"cont":      enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		"timeout":   enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 )

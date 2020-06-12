@@ -31,8 +31,8 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
@@ -71,8 +71,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+	if wf.WorkflowExecutionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		if wf.WorkflowExecutionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -128,7 +128,7 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  operator,
 		}
 
-		if wf.GetStatus() != executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		if wf.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			job["status"] = wf.GetStatus().String()
 			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {

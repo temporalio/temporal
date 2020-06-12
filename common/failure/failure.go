@@ -25,8 +25,9 @@
 package failure
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
-	failurepb "go.temporal.io/temporal-proto/failure"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
 )
 
 func NewServerFailure(message string, nonRetryable bool) *failurepb.Failure {
@@ -51,7 +52,7 @@ func NewResetWorkflowFailure(message string, lastHeartbeatDetails *commonpb.Payl
 	return f
 }
 
-func NewTimeoutFailure(timeoutType commonpb.TimeoutType) *failurepb.Failure {
+func NewTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure {
 	f := &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 			TimeoutType: timeoutType,

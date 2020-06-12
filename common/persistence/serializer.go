@@ -29,13 +29,13 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common"
@@ -47,28 +47,28 @@ type (
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	PayloadSerializer interface {
 		// serialize/deserialize history events
-		SerializeBatchEvents(batch []*eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeBatchEvents(data *serialization.DataBlob) ([]*eventpb.HistoryEvent, error)
+		SerializeBatchEvents(batch []*historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeBatchEvents(data *serialization.DataBlob) ([]*historypb.HistoryEvent, error)
 
 		// serialize/deserialize a single history event
-		SerializeEvent(event *eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeEvent(data *serialization.DataBlob) (*eventpb.HistoryEvent, error)
+		SerializeEvent(event *historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeEvent(data *serialization.DataBlob) (*historypb.HistoryEvent, error)
 
 		// serialize/deserialize visibility memo fields
 		SerializeVisibilityMemo(memo *commonpb.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
 		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonpb.Memo, error)
 
 		// serialize/deserialize reset points
-		SerializeResetPoints(event *executionpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeResetPoints(data *serialization.DataBlob) (*executionpb.ResetPoints, error)
+		SerializeResetPoints(event *workflowpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeResetPoints(data *serialization.DataBlob) (*workflowpb.ResetPoints, error)
 
 		// serialize/deserialize bad binaries
 		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
 		DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error)
+		SerializeVersionHistories(histories *historygenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVersionHistories(data *serialization.DataBlob) (*historygenpb.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -98,11 +98,11 @@ func NewPayloadSerializer() PayloadSerializer {
 	return &serializerImpl{}
 }
 
-func (t *serializerImpl) SerializeBatchEvents(events []*eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
-	return t.serialize(&eventpb.History{Events: events}, encodingType)
+func (t *serializerImpl) SerializeBatchEvents(events []*historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+	return t.serialize(&historypb.History{Events: events}, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*eventpb.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*historypb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -110,7 +110,7 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 		return nil, nil
 	}
 
-	events := &eventpb.History{}
+	events := &historypb.History{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -128,14 +128,14 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	return events.Events, nil
 }
 
-func (t *serializerImpl) SerializeEvent(event *eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeEvent(event *historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if event == nil {
 		return nil, nil
 	}
 	return t.serialize(event, encodingType)
 }
 
-func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*eventpb.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*historypb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -143,7 +143,7 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*eventp
 		return nil, nil
 	}
 
-	event := &eventpb.HistoryEvent{}
+	event := &historypb.HistoryEvent{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -163,22 +163,22 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*eventp
 	return event, err
 }
 
-func (t *serializerImpl) SerializeResetPoints(rp *executionpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeResetPoints(rp *workflowpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if rp == nil {
-		rp = &executionpb.ResetPoints{}
+		rp = &workflowpb.ResetPoints{}
 	}
 	return t.serialize(rp, encodingType)
 }
 
-func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*executionpb.ResetPoints, error) {
+func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*workflowpb.ResetPoints, error) {
 	if data == nil {
-		return &executionpb.ResetPoints{}, nil
+		return &workflowpb.ResetPoints{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &executionpb.ResetPoints{}, nil
+		return &workflowpb.ResetPoints{}, nil
 	}
 
-	memo := &executionpb.ResetPoints{}
+	memo := &workflowpb.ResetPoints{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -270,22 +270,22 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *historygenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
 	return t.serialize(histories, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error) {
+func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*historygenpb.VersionHistories, error) {
 	if data == nil {
-		return &eventgenpb.VersionHistories{}, nil
+		return &historygenpb.VersionHistories{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &eventgenpb.VersionHistories{}, nil
+		return &historygenpb.VersionHistories{}, nil
 	}
 
-	memo := &eventgenpb.VersionHistories{}
+	memo := &historygenpb.VersionHistories{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:

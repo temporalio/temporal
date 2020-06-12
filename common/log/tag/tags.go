@@ -29,9 +29,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/common"
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 )
 
 // All logging tags are defined in this file.
@@ -112,7 +112,7 @@ func WorkflowType(wfType string) Tag {
 }
 
 // WorkflowState returns tag for WorkflowState
-func WorkflowState(s executiongenpb.WorkflowExecutionState) Tag {
+func WorkflowState(s enumsgenpb.WorkflowExecutionState) Tag {
 	return newInt("wf-state", int(s))
 }
 
@@ -265,7 +265,7 @@ func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 }
 
 // WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType tasklistpb.TaskListType) Tag {
+func WorkflowTaskListType(taskListType enumspb.TaskListType) Tag {
 	return newInt32("wf-task-list-type", int32(taskListType))
 }
 
@@ -506,7 +506,7 @@ func TaskID(taskID int64) Tag {
 }
 
 // TaskType returns tag for TaskType for queue processor
-func TaskType(taskType common.TaskType) Tag {
+func TaskType(taskType enumsgenpb.TaskType) Tag {
 	return newInt32("queue-task-type", int32(taskType))
 }
 

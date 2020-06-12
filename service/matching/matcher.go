@@ -31,8 +31,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/quotas"
 )
@@ -141,7 +141,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			token.release()
 		default:
 			if !tm.isForwardingAllowed() && // we are the root partition and forwarding is not possible
-				task.source == commongenpb.TASK_SOURCE_DB_BACKLOG && // task was from backlog (stored in db)
+				task.source == enumsgenpb.TASK_SOURCE_DB_BACKLOG && // task was from backlog (stored in db)
 				task.isForwarded() { // task came from a child partition
 				// a forwarded backlog task from a child partition, block trying
 				// to match with a poller until ctx timeout

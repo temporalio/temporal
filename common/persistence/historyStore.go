@@ -28,10 +28,10 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-	eventpb "go.temporal.io/temporal-proto/event"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -407,7 +407,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*eventpb.HistoryEvent, []*eventpb.History, []byte, int, int64, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
@@ -415,8 +415,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 	defaultLastEventID := request.MinEventID - 1
 
-	historyEvents := make([]*eventpb.HistoryEvent, 0, request.PageSize)
-	historyEventBatches := make([]*eventpb.History, 0, request.PageSize)
+	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
+	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 
@@ -471,7 +471,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		token.LastEventVersion = firstEvent.GetVersion()
 		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &eventpb.History{Events: events})
+			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

@@ -26,12 +26,12 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	sdkclient "go.temporal.io/temporal/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	"github.com/temporalio/temporal/common/rpc"
 )
 

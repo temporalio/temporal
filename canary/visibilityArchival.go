@@ -32,10 +32,10 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -45,7 +45,7 @@ type (
 	visibilityArchivalValidator interface {
 		shouldRun() bool
 		getQuery(workflowID, runID, workflowType string, startTime, closeTime time.Time) string
-		validateExecutions([]*executionpb.WorkflowExecutionInfo) error
+		validateExecutions([]*workflowpb.WorkflowExecutionInfo) error
 	}
 
 	filestoreVisibilityArchivalValidator struct {
@@ -95,7 +95,7 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 	}
 
 	if resp.Configuration != nil &&
-		resp.Configuration.GetVisibilityArchivalStatus() == namespacepb.ARCHIVAL_STATUS_DISABLED {
+		resp.Configuration.GetVisibilityArchivalStatus() == enumspb.ARCHIVAL_STATUS_DISABLED {
 		return errors.New("namespace not configured for visibility archival")
 	}
 
@@ -165,8 +165,8 @@ func listarchivedWorkflow(
 	scope tally.Scope,
 	client cadenceClient,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
-) ([]*executionpb.WorkflowExecutionInfo, error) {
-	var executions []*executionpb.WorkflowExecutionInfo
+) ([]*workflowpb.WorkflowExecutionInfo, error) {
+	var executions []*workflowpb.WorkflowExecutionInfo
 	for {
 		select {
 		case <-ctx.Done():
@@ -220,7 +220,7 @@ func (v *filestoreVisibilityArchivalValidator) getQuery(
 }
 
 func (v *filestoreVisibilityArchivalValidator) validateExecutions(
-	executions []*executionpb.WorkflowExecutionInfo,
+	executions []*workflowpb.WorkflowExecutionInfo,
 ) error {
 	if len(executions) != 1 {
 		return fmt.Errorf("listarchivedWorkflow returned %d executions, expecting 1", len(executions))

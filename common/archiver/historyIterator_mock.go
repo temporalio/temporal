@@ -33,7 +33,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 )
 
 // MockHistoryIterator is a mock of HistoryIterator interface

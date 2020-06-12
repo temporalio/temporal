@@ -30,7 +30,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	querypb "go.temporal.io/temporal-proto/query"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	querypb "go.temporal.io/temporal-proto/query/v1"
 
 	"github.com/temporalio/temporal/common/payloads"
 )
@@ -64,7 +65,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		err := qr.setTerminationState(ids[i], &queryTerminationState{
 			queryTerminationType: queryTerminationTypeCompleted,
 			queryResult: &querypb.WorkflowQueryResult{
-				ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
+				ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 				Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 			},
 		})

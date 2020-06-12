@@ -32,13 +32,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -130,7 +130,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -173,7 +173,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -221,7 +221,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -271,7 +271,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -346,7 +346,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	), nil).AnyTimes()
 
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -381,7 +381,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -455,7 +455,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		nil,
 	), nil).AnyTimes()
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -496,11 +496,11 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		ShardID:       &shardID,
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*eventpb.HistoryEvent{
+		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId: int64(1),
-				// EventType:  eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
+				// EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				// Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},
 		NextPageToken:    []byte{},

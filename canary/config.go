@@ -28,7 +28,7 @@ import (
 	"fmt"
 
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/service/config"
