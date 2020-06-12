@@ -38,10 +38,11 @@ import (
 type (
 	// WeightedRoundRobinTaskSchedulerOptions configs WRR task scheduler
 	WeightedRoundRobinTaskSchedulerOptions struct {
-		Weights     dynamicconfig.MapPropertyFn
-		QueueSize   int
-		WorkerCount int
-		RetryPolicy backoff.RetryPolicy
+		Weights         dynamicconfig.MapPropertyFn
+		QueueSize       int
+		WorkerCount     int
+		DispatcherCount int
+		RetryPolicy     backoff.RetryPolicy
 	}
 
 	weightedRoundRobinTaskSchedulerImpl struct {
@@ -116,8 +117,10 @@ func (w *weightedRoundRobinTaskSchedulerImpl) Start() {
 
 	w.processor.Start()
 
-	w.dispatcherWG.Add(1)
-	go w.dispatcher()
+	w.dispatcherWG.Add(w.options.DispatcherCount)
+	for i := 0; i != w.options.DispatcherCount; i++ {
+		go w.dispatcher()
+	}
 	go w.updateWeights()
 
 	w.logger.Info("Weighted round robin task scheduler started.")

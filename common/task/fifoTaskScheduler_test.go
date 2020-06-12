@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -65,9 +65,10 @@ func (s *fifoTaskSchedulerSuite) SetupTest() {
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		metrics.NewClient(tally.NoopScope, metrics.Common),
 		&FIFOTaskSchedulerOptions{
-			QueueSize:   s.queueSize,
-			WorkerCount: 1,
-			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Millisecond),
+			QueueSize:       s.queueSize,
+			WorkerCount:     1,
+			DispatcherCount: 1,
+			RetryPolicy:     backoff.NewExponentialRetryPolicy(time.Millisecond),
 		},
 	).(*fifoTaskSchedulerImpl)
 }

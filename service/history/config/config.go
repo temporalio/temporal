@@ -81,7 +81,10 @@ type Config struct {
 	EnablePriorityTaskProcessor    dynamicconfig.BoolPropertyFn
 	TaskSchedulerType              dynamicconfig.IntPropertyFn
 	TaskSchedulerWorkerCount       dynamicconfig.IntPropertyFn
+	TaskSchedulerShardWorkerCount  dynamicconfig.IntPropertyFn
 	TaskSchedulerQueueSize         dynamicconfig.IntPropertyFn
+	TaskSchedulerShardQueueSize    dynamicconfig.IntPropertyFn
+	TaskSchedulerDispatcherCount   dynamicconfig.IntPropertyFn
 	TaskSchedulerRoundRobinWeights dynamicconfig.MapPropertyFn
 
 	// QueueProcessor split policy settings
@@ -311,8 +314,11 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		TaskProcessRPS:                 dc.GetIntPropertyFilteredByDomain(dynamicconfig.TaskProcessRPS, 1000),
 		EnablePriorityTaskProcessor:    dc.GetBoolProperty(dynamicconfig.EnablePriorityTaskProcessor, false),
 		TaskSchedulerType:              dc.GetIntProperty(dynamicconfig.TaskSchedulerType, int(task.SchedulerTypeWRR)),
-		TaskSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.TaskSchedulerWorkerCount, 20),
-		TaskSchedulerQueueSize:         dc.GetIntProperty(dynamicconfig.TaskSchedulerQueueSize, 2000),
+		TaskSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.TaskSchedulerWorkerCount, 400),
+		TaskSchedulerShardWorkerCount:  dc.GetIntProperty(dynamicconfig.TaskSchedulerShardWorkerCount, 2),
+		TaskSchedulerQueueSize:         dc.GetIntProperty(dynamicconfig.TaskSchedulerQueueSize, 10000),
+		TaskSchedulerShardQueueSize:    dc.GetIntProperty(dynamicconfig.TaskSchedulerShardQueueSize, 200),
+		TaskSchedulerDispatcherCount:   dc.GetIntProperty(dynamicconfig.TaskSchedulerDispatcherCount, 10),
 		TaskSchedulerRoundRobinWeights: dc.GetMapProperty(dynamicconfig.TaskSchedulerRoundRobinWeights, common.ConvertIntMapToDynamicConfigMapProperty(DefaultTaskPriorityWeight)),
 
 		QueueProcessorEnableSplit:                      dc.GetBoolProperty(dynamicconfig.QueueProcessorEnableSplit, false),

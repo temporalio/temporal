@@ -336,12 +336,8 @@ func (t *timerQueueProcessorBase) processBatch() {
 			task := t.taskInitializer(taskInfo)
 			tasks[newTimerTaskKey(taskInfo.GetVisibilityTimestamp(), taskInfo.GetTaskID())] = task
 			if submitted := t.submitTask(task); !submitted {
+				// not submitted since processor has been shutdown
 				return
-			}
-			select {
-			case <-t.shutdownCh:
-				return
-			default:
 			}
 		}
 
@@ -578,9 +574,17 @@ func (t *timerQueueProcessorBase) submitTask(
 ) bool {
 	submitted, err := t.taskProcessor.TrySubmit(task)
 	if err != nil {
-		return false
+		select {
+		case <-t.shutdownCh:
+			// if error is due to shard shutdown
+			return false
+		default:
+			// otherwise it might be error from domain cache etc, add
+			// the task to redispatch queue so that it can be retried
+			t.logger.Error("Failed to submit task", tag.Error(err))
+		}
 	}
-	if !submitted {
+	if err != nil || !submitted {
 		t.redispatchQueue.Add(task)
 	}
 
