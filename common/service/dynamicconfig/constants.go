@@ -245,8 +245,6 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
-	EnableConsistentQuery:                                  "history.EnableConsistentQuery",
-	EnableConsistentQueryByNamespace:                       "history.EnableConsistentQueryByNamespace",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                     "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
@@ -741,10 +739,6 @@ const (
 	ReplicationTaskProcessorCleanupInterval
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient
-	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
-	EnableConsistentQuery
-	// EnableConsistentQueryByNamespace indicates if consistent query is enabled for a namespace
-	EnableConsistentQueryByNamespace
 	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state

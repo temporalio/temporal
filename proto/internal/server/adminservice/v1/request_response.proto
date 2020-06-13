@@ -170,7 +170,7 @@ message DescribeClusterRequest {
 }
 
 message DescribeClusterResponse {
-    temporal.version.v1.SupportedClientVersions supported_client_versions = 1;
+    temporal.version.v1.SupportedSDKVersions supported_client_versions = 1;
     server.cluster.v1.MembershipInfo membership_info = 2;
 }
 

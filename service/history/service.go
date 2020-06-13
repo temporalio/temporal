@@ -231,8 +231,6 @@ type Config struct {
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// The following are used by consistent query
-	EnableConsistentQuery            dynamicconfig.BoolPropertyFn
-	EnableConsistentQueryByNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxBufferedQueryCount            dynamicconfig.IntPropertyFn
 
 	// Data integrity check related config knobs
@@ -388,8 +386,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
 		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
 
-		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
-		EnableConsistentQueryByNamespace:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableConsistentQueryByNamespace, false),
 		MaxBufferedQueryCount:                 dc.GetIntProperty(dynamicconfig.MaxBufferedQueryCount, 1),
 		MutableStateChecksumGenProbability:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumGenProbability, 0),
 		MutableStateChecksumVerifyProbability: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumVerifyProbability, 0),

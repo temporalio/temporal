@@ -629,7 +629,7 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: &versionpb.SupportedClientVersions{
+		SupportedClientVersions: &versionpb.SupportedSDKVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},

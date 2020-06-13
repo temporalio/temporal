@@ -45,11 +45,3 @@ func SetDefaultTaskListKind(f *enumspb.TaskListKind){
 		*f = enumspb.TASK_LIST_KIND_NORMAL
 	}
 }
-
-// TODO: remove this with corresponding field from request
-func SetDefaultQueryConsistencyLevel(f *enumspb.QueryConsistencyLevel){
-	if *f == enumspb.QUERY_CONSISTENCY_LEVEL_UNSPECIFIED{
-		*f = enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-	}
-}
-
