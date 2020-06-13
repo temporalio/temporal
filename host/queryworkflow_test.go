@@ -26,6 +26,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"strconv"
@@ -45,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
-	"github.com/temporalio/temporal/service/history"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
@@ -1338,8 +1338,10 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		RunId:      we.RunId,
 	}
 
-	// query workflow without any decision task should produce an error
-	queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
+	// query workflow without any decision task should timeout
+	ctx, cancel := context.WithTimeout(NewContext(), 1 * time.Second)
+	defer cancel()
+	queryResp, err := s.engine.QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,
 		Query: &querypb.WorkflowQuery{
@@ -1347,5 +1349,5 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		},
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
-	s.IsType(history.ErrQueryWorkflowBeforeFirstDecision, err)
+	s.IsType(&serviceerror.DeadlineExceeded{}, err)
 }
