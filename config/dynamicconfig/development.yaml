@@ -4,9 +4,6 @@ frontend.enableClientVersionCheck:
 system.minRetentionDays:
 - value: 0
   constraints: {}
-history.EnableConsistentQueryByNamespace:
-- value: true
-  constraints: {}
 history.persistenceMaxQPS:
 - value: 3000
   constraints: {}

@@ -143,7 +143,7 @@ protoc: $(PROTO_OUT)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
 fix-proto-path:
-	mv -f $(PROTO_OUT)/server/* $(PROTO_OUT) && rm -d $(PROTO_OUT)/server
+	mv -f $(PROTO_OUT)/server/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/server
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))

@@ -32,10 +32,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal-proto/workflowservicemock/v1"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common/cluster"
@@ -43,8 +43,6 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -384,7 +382,6 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 
 	req := &workflowservice.QueryWorkflowRequest{
 		Namespace:             s.namespace,
-		QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)

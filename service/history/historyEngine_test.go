@@ -188,7 +188,6 @@ func NewDynamicConfigForTest() *Config {
 	config := NewConfig(dc, 1, cconfig.StoreTypeCassandra, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
-	config.EnableConsistentQueryByNamespace = dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableConsistentQueryByNamespace, true)
 	return config
 }
 
@@ -506,25 +505,6 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	s.Equal(int64(4), response.GetNextEventId())
 }
 
-func (s *engineSuite) TestQueryWorkflow_RejectBasedOnNotEnabled() {
-	s.mockHistoryEngine.config.EnableConsistentQueryByNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
-	request := &historyservice.QueryWorkflowRequest{
-		NamespaceId: testNamespaceID,
-		Request: &workflowservice.QueryWorkflowRequest{
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
-		},
-	}
-	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.Nil(resp)
-	s.Equal(ErrConsistentQueryNotEnabled, err)
-
-	s.mockHistoryEngine.config.EnableConsistentQueryByNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-	s.mockHistoryEngine.config.EnableConsistentQuery = dynamicconfig.GetBoolPropertyFn(false)
-	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.Nil(resp)
-	s.Equal(ErrConsistentQueryNotEnabled, err)
-}
-
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_RejectBasedOnCompleted",
@@ -550,7 +530,6 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
 			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -585,7 +564,6 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
 			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -600,7 +578,6 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
 			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -608,35 +585,6 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetResponse().GetQueryRejected().GetStatus())
-}
-
-func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "TestQueryWorkflow_FirstDecisionNotCompleted",
-		RunId:      testRunID,
-	}
-	tasklist := "testTaskList"
-	identity := "testIdentity"
-
-	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
-	ms := createMutableState(msBuilder)
-	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
-
-	request := &historyservice.QueryWorkflowRequest{
-		NamespaceId: testNamespaceID,
-		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
-		},
-	}
-	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.Equal(ErrQueryWorkflowBeforeFirstDecision, err)
-	s.Nil(resp)
 }
 
 func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
@@ -652,8 +600,6 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
-	di = addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -667,7 +613,6 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
 			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -706,7 +651,6 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
 			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		},
 	}
 
@@ -770,7 +714,6 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -828,7 +771,6 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -892,7 +834,6 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &querypb.WorkflowQuery{},
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})

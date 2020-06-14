@@ -198,8 +198,6 @@ var (
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
 	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewQueryFailed("workflow must handle at least one decision task before it can be queried")
-	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or namespace does not enable consistent query
-	ErrConsistentQueryNotEnabled = serviceerror.NewInvalidArgument("cluster or namespace does not enable strongly consistent query but strongly consistent query was requested")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
@@ -825,10 +823,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
-	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByNamespace(request.GetRequest().GetNamespace())
-	if request.GetRequest().GetQueryConsistencyLevel() == enumspb.QUERY_CONSISTENCY_LEVEL_STRONG && !consistentQueryEnabled {
-		return nil, ErrConsistentQueryNotEnabled
-	}
+	queryConsistencyLevel := enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
 
 	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
@@ -850,7 +845,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	if request.GetRequest().GetQueryConsistencyLevel() == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
+	if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
 		// query cannot be processed unless at least one decision task has finished
 		// if first decision task has not finished wait for up to a second for it to complete
 		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
@@ -904,7 +899,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		req.GetQueryConsistencyLevel() == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
+		queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)

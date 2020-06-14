@@ -545,18 +545,6 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		}
 		queryRequest.QueryRejectCondition = rejectCondition
 	}
-	if c.IsSet(FlagQueryConsistencyLevel) {
-		var consistencyLevel enumspb.QueryConsistencyLevel
-		switch c.String(FlagQueryConsistencyLevel) {
-		case "eventual":
-			consistencyLevel = enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL
-		case "strong":
-			consistencyLevel = enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-		default:
-			ErrorAndExit(fmt.Sprintf("invalid query consistency level %v, valid values are \"eventual\" and \"strong\"", c.String(FlagQueryConsistencyLevel)), nil)
-		}
-		queryRequest.QueryConsistencyLevel = consistencyLevel
-	}
 	queryResponse, err := serviceClient.QueryWorkflow(tcCtx, queryRequest)
 	if err != nil {
 		ErrorAndExit("Query workflow failed.", err)

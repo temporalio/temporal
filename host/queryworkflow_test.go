@@ -26,6 +26,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"strconv"
@@ -45,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
-	"github.com/temporalio/temporal/service/history"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
@@ -687,7 +687,6 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		// after the query is answered the signal is handled because query is consistent and since
 		// signal came before query signal must be handled by the time query returns
@@ -869,7 +868,6 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		cancel()
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -1031,7 +1029,6 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -1221,7 +1218,6 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 				QueryType: queryType,
 			},
 			QueryRejectCondition:  rejectCondition,
-			QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_STRONG,
 		})
 		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -1342,15 +1338,16 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		RunId:      we.RunId,
 	}
 
-	// query workflow without any decision task should produce an error
-	queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
+	// query workflow without any decision task should timeout
+	ctx, cancel := context.WithTimeout(NewContext(), 1 * time.Second)
+	defer cancel()
+	queryResp, err := s.engine.QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,
 		Query: &querypb.WorkflowQuery{
 			QueryType: queryType,
 		},
-		QueryConsistencyLevel: enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL,
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
-	s.IsType(history.ErrQueryWorkflowBeforeFirstDecision, err)
+	s.IsType(&serviceerror.DeadlineExceeded{}, err)
 }

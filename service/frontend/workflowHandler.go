@@ -2854,7 +2854,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 
 	headers := headers.GetValues(ctx, headers.ClientImplHeaderName, headers.ClientFeatureVersionHeaderName)
 	request.WorkerVersionInfo = &versionpb.WorkerVersionInfo{
-		Impl:           headers[0],
+		Implementation: headers[0],
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
@@ -2956,8 +2956,6 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.Query.GetQueryType() == "" {
 		return nil, wh.error(errQueryTypeNotSet, scope)
 	}
-
-	enums.SetDefaultQueryConsistencyLevel(&request.QueryConsistencyLevel)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
@@ -3079,7 +3077,7 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	if request.GetTaskListType() == enumspb.TASK_LIST_TYPE_UNSPECIFIED{
+	if request.GetTaskListType() == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
 		return nil, wh.error(errTaskListTypeNotSet, scope)
 	}
 
@@ -3114,7 +3112,7 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClientVersions: &versionpb.SupportedClientVersions{
+		SupportedSdkVersions: &versionpb.SupportedSDKVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
