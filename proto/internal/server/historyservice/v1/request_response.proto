@@ -309,7 +309,7 @@ message DescribeWorkflowExecutionRequest {
 }
 
 message DescribeWorkflowExecutionResponse {
-    temporal.workflow.v1.WorkflowExecutionConfiguration execution_configuration = 1;
+    temporal.workflow.v1.WorkflowExecutionConfig execution_config = 1;
     temporal.workflow.v1.WorkflowExecutionInfo workflow_execution_info = 2;
     repeated temporal.workflow.v1.PendingActivityInfo pending_activities = 3;
     repeated temporal.workflow.v1.PendingChildExecutionInfo pending_children = 4;
