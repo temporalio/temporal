@@ -47,7 +47,9 @@ import (
 
 const (
 	upsertMembershipRecordExpiryDefault = time.Hour * 48
-	healthyHostLastHeartbeatCutoff      = time.Second * 30
+
+	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
+	healthyHostLastHeartbeatCutoff      = time.Second * 20
 )
 
 type ringpopMonitor struct {
