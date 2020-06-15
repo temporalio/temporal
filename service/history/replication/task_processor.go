@@ -130,6 +130,7 @@ func NewTaskProcessor(
 		logger:                 shard.GetLogger(),
 		taskExecutor:           taskExecutor,
 		taskRetryPolicy:        taskRetryPolicy,
+		dlqRetryPolicy:         dlqRetryPolicy,
 		noTaskRetrier:          noTaskRetrier,
 		requestChan:            taskFetcher.GetRequestChan(),
 		syncShardChan:          make(chan *r.SyncShardStatus),
