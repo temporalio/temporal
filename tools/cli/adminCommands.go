@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -373,9 +372,14 @@ func AdminGetShardID(c *cli.Context) {
 func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
-	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
-	category := enumsgenpb.TaskCategory(categoryInt)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := commongenpb.TaskCategory(categoryInt)
+	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit("Task type Unspecified is currently not supported", nil)
+	}
 
 	pFactory := CreatePersistenceFactory(c)
 	executionManager, err := pFactory.NewExecutionManager(sid)
@@ -493,12 +497,16 @@ func AdminListTasks(c *cli.Context) {
 // AdminRemoveTask describes history host
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
-
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	categoryFlag := strings.Title(c.String(FlagTaskType))
-	categoryInt := enumsgenpb.TaskCategory_value[categoryFlag]
-	category := enumsgenpb.TaskCategory(categoryInt)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse Task Type", err)
+	}
+	category := commongenpb.TaskCategory(categoryInt)
+	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+		ErrorAndExit("Task type Unspecified is currently not supported", nil)
+	}
 	var visibilityTimestamp int64
 	if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
@@ -514,7 +522,7 @@ func AdminRemoveTask(c *cli.Context) {
 		VisibilityTimestamp: visibilityTimestamp,
 	}
 
-	_, err := adminClient.RemoveTask(ctx, req)
+	_, err = adminClient.RemoveTask(ctx, req)
 	if err != nil {
 		ErrorAndExit("Remove task has failed", err)
 	}
