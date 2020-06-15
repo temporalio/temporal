@@ -372,12 +372,12 @@ func AdminGetShardID(c *cli.Context) {
 func AdminDescribeTask(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
 	tid := getRequiredIntOption(c, FlagTaskID)
-	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), enumspb.TaskCategory_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse Task Type", err)
 	}
-	category := commongenpb.TaskCategory(categoryInt)
-	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+	category := enumspb.TaskCategory(categoryInt)
+	if category == enumspb.TASK_CATEGORY_UNSPECIFIED {
 		ErrorAndExit("Task type Unspecified is currently not supported", nil)
 	}
 
@@ -387,7 +387,7 @@ func AdminDescribeTask(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == enumsgenpb.TASK_CATEGORY_TIMER {
+	if category == enumspb.TASK_CATEGORY_TIMER {
 		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
 		task, err := executionManager.GetTimerTask(req)
@@ -395,14 +395,14 @@ func AdminDescribeTask(c *cli.Context) {
 			ErrorAndExit("Failed to get Timer Task", err)
 		}
 		prettyPrintJSONObject(task)
-	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
+	} else if category == enumspb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
 		task, err := executionManager.GetReplicationTask(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Replication Task", err)
 		}
 		prettyPrintJSONObject(task)
-	} else if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
+	} else if category == enumspb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
 		task, err := executionManager.GetTransferTask(req)
 		if err != nil {
@@ -417,12 +417,12 @@ func AdminDescribeTask(c *cli.Context) {
 // AdminListTasks outputs a list of a tasks for given Shard and Task Type
 func AdminListTasks(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), enumspb.TaskCategory_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse Task Type", err)
 	}
-	category := commongenpb.TaskCategory(categoryInt)
-	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+	category := enumspb.TaskCategory(categoryInt)
+	if category == enumspb.TASK_CATEGORY_UNSPECIFIED {
 		ErrorAndExit("Task type Unspecified is currently not supported", nil)
 	}
 
@@ -432,7 +432,7 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
+	if category == enumspb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTasksRequest{}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -472,7 +472,7 @@ func AdminListTasks(c *cli.Context) {
 			return items, token, nil
 		}
 		paginate(c, paginationFunc)
-	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
+	} else if category == enumspb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
@@ -499,16 +499,16 @@ func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), commongenpb.TaskCategory_value)
+	categoryInt, err := mapToEnumValue(c.String(FlagTaskType), enumspb.TaskCategory_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse Task Type", err)
 	}
-	category := commongenpb.TaskCategory(categoryInt)
-	if category == commongenpb.TASK_CATEGORY_UNSPECIFIED {
+	category := enumspb.TaskCategory(categoryInt)
+	if category == enumspb.TASK_CATEGORY_UNSPECIFIED {
 		ErrorAndExit("Task type Unspecified is currently not supported", nil)
 	}
 	var visibilityTimestamp int64
-	if category == enumsgenpb.TASK_CATEGORY_TIMER {
+	if category == enumspb.TASK_CATEGORY_TIMER {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 

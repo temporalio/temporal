@@ -43,12 +43,12 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), tasklistpb.TaskListType_value)
+	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), enumspb.TaskListType_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
-	tlType := tasklistpb.TaskListType(tlTypeInt)
-	if tlType == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED {
+	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
 		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
 	}
 	ctx, cancel := newContext(c)
@@ -117,12 +117,12 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.Task
 func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), tasklistpb.TaskListType_value)
+	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), enumspb.TaskListType_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
-	tlType := tasklistpb.TaskListType(tlTypeInt)
-	if tlType == tasklistpb.TASK_LIST_TYPE_UNSPECIFIED {
+	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
 		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
 	}
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
