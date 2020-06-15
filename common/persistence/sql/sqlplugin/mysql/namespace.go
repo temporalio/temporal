@@ -33,8 +33,8 @@ import (
 
 const (
 	createNamespaceQuery = `INSERT INTO 
- namespaces (id, name, is_global, data, data_encoding, notification_version)
- VALUES(?, ?, ?, ?, ?, ?)`
+ namespaces (shard_id, id, name, is_global, data, data_encoding, notification_version)
+ VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
  SET name = ?, data = ?, data_encoding = ?, notification_version = ?
@@ -64,7 +64,7 @@ var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
 func (mdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+	return mdb.conn.Exec(createNamespaceQuery, shardID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table

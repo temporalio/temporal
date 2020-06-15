@@ -1,5 +1,5 @@
 CREATE TABLE namespaces(
-  shard_id INT NOT NULL DEFAULT 54321,
+  shard_id INT NOT NULL,
   id BINARY(16) NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   notification_version BIGINT NOT NULL,
