@@ -32,7 +32,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -44,8 +47,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

@@ -30,14 +30,12 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -713,18 +711,18 @@ func createTransferTasks(
 		recordVisibility := false
 
 		switch task.GetType() {
-		case commongenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+		case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskList = task.(*p.ActivityTask).TaskList
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case commongenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+		case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskList = task.(*p.DecisionTask).TaskList
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
-		case commongenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+		case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
@@ -732,7 +730,7 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
-		case commongenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+		case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
@@ -740,15 +738,15 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
-		case commongenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+		case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case commongenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			commongenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			commongenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
-			commongenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+			enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
+			enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// No explicit property needs to be set
 
 		default:
@@ -818,7 +816,7 @@ func createReplicationTasks(
 		resetWorkflow := false
 
 		switch task.GetType() {
-		case commongenpb.TASK_TYPE_REPLICATION_HISTORY:
+		case enumsgenpb.TASK_TYPE_REPLICATION_HISTORY:
 			histTask := task.(*p.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
@@ -831,7 +829,7 @@ func createReplicationTasks(
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
-		case commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		case enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
@@ -973,8 +971,8 @@ func createOrUpdateCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	state executiongenpb.WorkflowExecutionState,
-	status executionpb.WorkflowExecutionStatus,
+	state enumsgenpb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1040,7 +1038,7 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			previousRunID,
 			previousLastWriteVersion,
-			executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		)
 	case p.CreateWorkflowModeBrandNew:
 		batch.Query(templateCreateCurrentWorkflowExecutionQuery,

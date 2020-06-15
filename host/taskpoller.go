@@ -31,13 +31,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	failurepb "go.temporal.io/temporal-proto/failure"
-	querypb "go.temporal.io/temporal-proto/query"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	querypb "go.temporal.io/temporal-proto/query/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -49,7 +50,7 @@ import (
 
 type (
 	decisionTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error)
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error)
 	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
 
@@ -164,7 +165,7 @@ Loop:
 			continue Loop
 		}
 
-		var events []*eventpb.HistoryEvent
+		var events []*historypb.HistoryEvent
 		if response.Query == nil || !pollStickyTaskList {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
@@ -219,11 +220,11 @@ Loop:
 
 			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
 			if err != nil {
-				completeType := querypb.QUERY_RESULT_TYPE_FAILED
+				completeType := enumspb.QUERY_RESULT_TYPE_FAILED
 				completeRequest.CompletedType = completeType
 				completeRequest.ErrorMessage = err.Error()
 			} else {
-				completeType := querypb.QUERY_RESULT_TYPE_ANSWERED
+				completeType := enumspb.QUERY_RESULT_TYPE_ANSWERED
 				completeRequest.CompletedType = completeType
 				completeRequest.QueryResult = blob
 			}
@@ -233,9 +234,9 @@ Loop:
 		}
 
 		// handle normal decision task / non query task response
-		var lastDecisionScheduleEvent *eventpb.HistoryEvent
+		var lastDecisionScheduleEvent *historypb.HistoryEvent
 		for _, e := range events {
-			if e.GetEventType() == eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED {
 				lastDecisionScheduleEvent = e
 			}
 		}
@@ -248,7 +249,7 @@ Loop:
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Cause:     eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+				Cause:     enumspb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
@@ -275,7 +276,7 @@ Loop:
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
 				Decisions: decisions,
-				StickyAttributes: &decisionpb.StickyExecutionAttributes{
+				StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 					WorkerTaskList:                p.StickyTaskList,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 				},
@@ -299,7 +300,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		return nil, nil
 	}
 
-	var events []*eventpb.HistoryEvent
+	var events []*historypb.HistoryEvent
 	history := response.History
 	if history == nil {
 		p.Logger.Fatal("History is nil")
@@ -316,7 +317,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
-			Cause:     eventpb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+			Cause:     enumspb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(err, false, nil),
 			Identity:  p.Identity,
 		})
@@ -332,7 +333,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Decisions: decisions,
-			StickyAttributes: &decisionpb.StickyExecutionAttributes{
+			StickyAttributes: &tasklistpb.StickyExecutionAttributes{
 				WorkerTaskList:                p.StickyTaskList,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 			},

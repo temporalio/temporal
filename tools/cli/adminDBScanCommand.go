@@ -34,13 +34,12 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -104,7 +103,7 @@ type (
 		NextEventID                int64
 		TreeID                     primitives.UUID
 		BranchID                   primitives.UUID
-		CloseStatus                executionpb.WorkflowExecutionStatus
+		CloseStatus                enumspb.WorkflowExecutionStatus
 		CorruptedExceptionMetadata CorruptedExceptionMetadata
 	}
 
@@ -536,7 +535,7 @@ func verifyFirstHistoryEvent(
 			},
 		})
 		return VerificationResultDetectedCorruption
-	} else if firstBatch[0].GetEventType() != eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+	} else if firstBatch[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
 			NamespaceID: execution.NamespaceID,
@@ -549,7 +548,7 @@ func verifyFirstHistoryEvent(
 			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
 				CorruptionType: InvalidFirstEvent,
 				Note:           "got unexpected first eventType",
-				Details:        fmt.Sprintf("expected: %v but got %v", eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED.String(), firstBatch[0].GetEventType().String()),
+				Details:        fmt.Sprintf("expected: %v but got %v", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED.String(), firstBatch[0].GetEventType().String()),
 			},
 		})
 		return VerificationResultDetectedCorruption
@@ -848,5 +847,5 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 }
 
 func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	return execution.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

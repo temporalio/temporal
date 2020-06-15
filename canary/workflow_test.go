@@ -128,7 +128,7 @@ func (s *workflowTestSuite) TestVisibilityWorkflow() {
 	// 	}
 	// 	resp := newMockOpenWorkflowResponse(activityInfo.WorkflowExecution.ID, activityInfo.WorkflowExecution.RunID)
 	// 	mockClient.client.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(resp, nil)
-	// 	history := &eventpb.History{Events: []*eventpb.HistoryEvent{{}}}
+	// 	history := &historypb.History{Events: []*historypb.HistoryEvent{{}}}
 	// 	mockClient.client.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything).Return(history, nil)
 	// })
 	// s.env.SetWorkerOptions(newTestWorkerOptions(newMockActivityContext(mockClient)))

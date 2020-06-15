@@ -29,9 +29,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute
@@ -50,8 +50,8 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]commonpb.IndexedValueType{
-			key: commonpb.IndexedValueType(valType),
+		SearchAttribute: map[string]enumspb.IndexedValueType{
+			key: enumspb.IndexedValueType(valType),
 		},
 		SecurityToken: c.String(FlagSecurityToken),
 	}

@@ -29,10 +29,11 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -272,12 +273,12 @@ func (d *DataBlob) ToProto() *commonpb.DataBlob {
 	switch d.Encoding {
 	case common.EncodingTypeJSON:
 		return &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_JSON,
+			EncodingType: enumspb.ENCODING_TYPE_JSON,
 			Data:         d.Data,
 		}
 	case common.EncodingTypeProto3:
 		return &commonpb.DataBlob{
-			EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         d.Data,
 		}
 	default:

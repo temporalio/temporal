@@ -32,12 +32,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -79,13 +80,13 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	serializer := NewPayloadSerializer()
 
-	eventType := eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
-	event0 := &eventpb.HistoryEvent{
+	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
+	event0 := &historypb.HistoryEvent{
 		EventId:   999,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventType,
-		Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
+		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
 				Result:           payloads.EncodeString("result-1-event-1"),
 				ScheduledEventId: 4,
 				StartedEventId:   5,
@@ -94,15 +95,15 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	history0 := &eventpb.History{Events: []*eventpb.HistoryEvent{event0, event0}}
+	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
 
 	memoFields := map[string]*commonpb.Payload{
 		"TestField": payload.EncodeString("Test binary"),
 	}
 	memo0 := &commonpb.Memo{Fields: memoFields}
 
-	resetPoints0 := &executionpb.ResetPoints{
-		Points: []*executionpb.ResetPointInfo{
+	resetPoints0 := &workflowpb.ResetPoints{
+		Points: []*workflowpb.ResetPointInfo{
 			{
 				BinaryChecksum:           "bad-binary-cs",
 				RunId:                    "test-run-id",
@@ -124,11 +125,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	histories := &eventgenpb.VersionHistories{
-		Histories: []*eventgenpb.VersionHistory{
+	histories := &historygenpb.VersionHistories{
+		Histories: []*historygenpb.VersionHistory{
 			{
 				BranchToken: []byte{1},
-				Items: []*eventgenpb.VersionHistoryItem{
+				Items: []*historygenpb.VersionHistoryItem{
 					{
 						EventId: 1,
 						Version: 0,
@@ -141,7 +142,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			},
 			{
 				BranchToken: []byte{2},
-				Items: []*eventgenpb.VersionHistoryItem{
+				Items: []*historygenpb.VersionHistoryItem{
 					{
 						EventId: 2,
 						Version: 0,
@@ -274,17 +275,17 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeBatchEvents(dsJSON)
-			history1 := &eventpb.History{Events: events}
+			history1 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history1))
 
 			events, err = serializer.DeserializeBatchEvents(dsProto)
-			history2 := &eventpb.History{Events: events}
+			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
 
 			events, err = serializer.DeserializeBatchEvents(dsEmpty)
-			history3 := &eventpb.History{Events: events}
+			history3 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history3))
 
@@ -332,11 +333,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilResetPoints1, err := serializer.DeserializeResetPoints(nil)
 			s.Nil(err)
-			s.Equal(&executionpb.ResetPoints{}, dNilResetPoints1)
+			s.Equal(&workflowpb.ResetPoints{}, dNilResetPoints1)
 
 			dNilResetPoints2, err := serializer.DeserializeResetPoints(nilResetPoints)
 			s.Nil(err)
-			s.Equal(&executionpb.ResetPoints{}, dNilResetPoints2)
+			s.Equal(&workflowpb.ResetPoints{}, dNilResetPoints2)
 
 			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJSON)
 			s.Nil(err)
@@ -399,11 +400,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
 			s.Nil(err)
-			s.Equal(&eventgenpb.VersionHistories{}, dNilHistories)
+			s.Equal(&historygenpb.VersionHistories{}, dNilHistories)
 
 			dNilHistories2, err := serializer.DeserializeVersionHistories(nilHistories)
 			s.Nil(err)
-			s.Equal(&eventgenpb.VersionHistories{}, dNilHistories2)
+			s.Equal(&historygenpb.VersionHistories{}, dNilHistories2)
 
 			dHistoriesJSON, err := serializer.DeserializeVersionHistories(historiesJSON)
 			s.Nil(err)

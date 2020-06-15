@@ -30,8 +30,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cache"
@@ -48,8 +49,8 @@ type (
 			namespaceID string,
 			requestID string,
 			execution commonpb.WorkflowExecution,
-			history []*eventpb.HistoryEvent,
-			newRunHistory []*eventpb.HistoryEvent,
+			history []*historypb.HistoryEvent,
+			newRunHistory []*historypb.HistoryEvent,
 			newRunNDC bool,
 		) (mutableState, error)
 	}
@@ -93,8 +94,8 @@ func (b *stateBuilderImpl) applyEvents(
 	namespaceID string,
 	requestID string,
 	execution commonpb.WorkflowExecution,
-	history []*eventpb.HistoryEvent,
-	newRunHistory []*eventpb.HistoryEvent,
+	history []*historypb.HistoryEvent,
+	newRunHistory []*historypb.HistoryEvent,
 	newRunNDC bool,
 ) (mutableState, error) {
 
@@ -136,7 +137,7 @@ func (b *stateBuilderImpl) applyEvents(
 		b.mutableState.GetExecutionInfo().LastEventTaskID = event.GetTaskId()
 
 		switch event.GetEventType() {
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
 			var parentNamespaceID string
 			if attributes.GetParentWorkflowNamespace() != "" {
@@ -192,7 +193,7 @@ func (b *stateBuilderImpl) applyEvents(
 				b.mutableState.GetReplicationState().StartVersion = event.GetVersion()
 			}
 
-		case eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
+		case enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
 			attributes := event.GetDecisionTaskScheduledEventAttributes()
 			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			decision, err := b.mutableState.ReplicateDecisionTaskScheduledEvent(
@@ -218,7 +219,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_DECISION_TASK_STARTED:
+		case enumspb.EVENT_TYPE_DECISION_TASK_STARTED:
 			attributes := event.GetDecisionTaskStartedEventAttributes()
 			decision, err := b.mutableState.ReplicateDecisionTaskStartedEvent(
 				nil,
@@ -239,14 +240,14 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED:
+		case enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED:
 			if err := b.mutableState.ReplicateDecisionTaskCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
+		case enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
 			if err := b.mutableState.ReplicateDecisionTaskTimedOutEvent(
 				event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType(),
 			); err != nil {
@@ -271,7 +272,7 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 			}
 
-		case eventpb.EVENT_TYPE_DECISION_TASK_FAILED:
+		case enumspb.EVENT_TYPE_DECISION_TASK_FAILED:
 			if err := b.mutableState.ReplicateDecisionTaskFailedEvent(); err != nil {
 				return nil, err
 			}
@@ -294,7 +295,7 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 			if _, err := b.mutableState.ReplicateActivityTaskScheduledEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -309,76 +310,76 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 			if err := b.mutableState.ReplicateActivityTaskStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			if err := b.mutableState.ReplicateActivityTaskCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			if err := b.mutableState.ReplicateActivityTaskFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			if err := b.mutableState.ReplicateActivityTaskTimedOutEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateActivityTaskCancelRequestedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			if err := b.mutableState.ReplicateActivityTaskCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
+		case enumspb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
 			// No mutable state action is needed
 
-		case eventpb.EVENT_TYPE_TIMER_STARTED:
+		case enumspb.EVENT_TYPE_TIMER_STARTED:
 			if _, err := b.mutableState.ReplicateTimerStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_TIMER_FIRED:
+		case enumspb.EVENT_TYPE_TIMER_FIRED:
 			if err := b.mutableState.ReplicateTimerFiredEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_TIMER_CANCELED:
+		case enumspb.EVENT_TYPE_TIMER_CANCELED:
 			if err := b.mutableState.ReplicateTimerCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CANCEL_TIMER_FAILED:
+		case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
 			// no mutable state action is needed
 
-		case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 			if _, err := b.mutableState.ReplicateStartChildWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -396,56 +397,56 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateStartChildWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionStartedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCanceledEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTimedOutEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTerminatedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+		case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 			if _, err := b.mutableState.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -463,21 +464,21 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+		case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+		case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateExternalWorkflowExecutionCancelRequested(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+		case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 			// Create a new request ID which is used by transfer queue processor if namespace is failed over at this point
 			signalRequestID := uuid.New()
 			if _, err := b.mutableState.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(
@@ -495,38 +496,38 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
+		case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateSignalExternalWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
+		case enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED:
 			if err := b.mutableState.ReplicateExternalWorkflowExecutionSignaled(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_MARKER_RECORDED:
+		case enumspb.EVENT_TYPE_MARKER_RECORDED:
 			// No mutable state action is needed
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			if err := b.mutableState.ReplicateWorkflowExecutionSignaled(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCancelRequestedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 			if err := taskGenerator.generateWorkflowSearchAttrTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
@@ -534,7 +535,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCompletedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -548,7 +549,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 			if err := b.mutableState.ReplicateWorkflowExecutionFailedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -562,7 +563,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 			if err := b.mutableState.ReplicateWorkflowExecutionTimedoutEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -576,7 +577,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 			if err := b.mutableState.ReplicateWorkflowExecutionCanceledEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -590,7 +591,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 			if err := b.mutableState.ReplicateWorkflowExecutionTerminatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -604,7 +605,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {
@@ -659,7 +660,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		default:
-			return nil, serviceerror.NewInvalidArgument("Unknown event type")
+			return nil, serviceerror.NewInvalidArgument("Unknown event type: %v").MessageArgs(event.GetEventType())
 		}
 	}
 

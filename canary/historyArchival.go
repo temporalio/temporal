@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"

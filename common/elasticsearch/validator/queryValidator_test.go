@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"

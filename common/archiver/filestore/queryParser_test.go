@@ -29,8 +29,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
 	"github.com/temporalio/temporal/common/convert"
-	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type queryParserSuite struct {
@@ -154,28 +155,28 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'TIMED_OUT'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -205,7 +206,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = 3",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -317,7 +318,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             convert.StringPtr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{

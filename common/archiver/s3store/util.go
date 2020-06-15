@@ -39,13 +39,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.uber.org/multierr"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/codec"
 )
@@ -239,7 +239,7 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 	return body, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
@@ -263,8 +263,8 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
-	return &executionpb.WorkflowExecutionInfo{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),

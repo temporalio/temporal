@@ -33,15 +33,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -168,7 +170,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
@@ -181,7 +183,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+			TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -194,7 +196,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
@@ -207,7 +209,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenpb.TASK_TYPE_REPLICATION_HISTORY,
+			TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_HISTORY,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -219,7 +221,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
-	events := []*eventpb.HistoryEvent{
+	events := []*historypb.HistoryEvent{
 		{
 			EventId: 1,
 			Version: 1,
@@ -229,13 +231,13 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.NoError(err)
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			Events: &commonpb.DataBlob{
-				EncodingType: commonpb.ENCODING_TYPE_PROTO3,
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         data.Data,
 			},
 		}},
@@ -246,7 +248,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
-			TaskType:     commongenpb.TASK_TYPE_REPLICATION_HISTORY,
+			TaskType:     enumsgenpb.TASK_TYPE_REPLICATION_HISTORY,
 			FirstEventId: 1,
 			NextEventId:  1,
 			Version:      1,

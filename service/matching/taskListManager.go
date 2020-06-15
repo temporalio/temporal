@@ -33,13 +33,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -62,7 +63,7 @@ type (
 	addTaskParams struct {
 		execution     *commonpb.WorkflowExecution
 		taskInfo      *persistenceblobs.TaskInfo
-		source        commongenpb.TaskSource
+		source        enumsgenpb.TaskSource
 		forwardedFrom string
 	}
 
@@ -93,7 +94,7 @@ type (
 	// Single task list in memory state
 	taskListManagerImpl struct {
 		taskListID       *taskListID
-		taskListKind     tasklistpb.TaskListKind // sticky taskList has different process in persistence
+		taskListKind     enumspb.TaskListKind // sticky taskList has different process in persistence
 		config           *taskListConfig
 		db               *taskListDB
 		engine           *matchingEngineImpl
@@ -135,7 +136,7 @@ var errRemoteSyncMatchFailed = errors.New("remote sync match failed")
 func newTaskListManager(
 	e *matchingEngineImpl,
 	taskList *taskListID,
-	taskListKind tasklistpb.TaskListKind,
+	taskListKind enumspb.TaskListKind,
 	config *Config,
 ) (taskListManager, error) {
 
@@ -380,7 +381,7 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matc
 
 func (c *taskListManagerImpl) String() string {
 	buf := new(bytes.Buffer)
-	if c.taskListID.taskType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
+	if c.taskListID.taskType == enumspb.TASK_LIST_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
 	} else {
 		buf.WriteString("Decision")
@@ -536,8 +537,8 @@ func (c *taskListManagerImpl) newChildContext(
 	return context.WithTimeout(parent, timeout)
 }
 
-func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind tasklistpb.TaskListKind) bool {
-	return !taskList.IsRoot() && kind != tasklistpb.TASK_LIST_KIND_STICKY
+func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind enumspb.TaskListKind) bool {
+	return !taskList.IsRoot() && kind != enumspb.TASK_LIST_KIND_STICKY
 }
 
 func (c *taskListManagerImpl) metricScope() metrics.Scope {

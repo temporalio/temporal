@@ -25,9 +25,10 @@
 package persistence
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
 	"github.com/temporalio/temporal/common/definition"
 )
@@ -65,7 +66,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             executionpb.WorkflowExecutionStatus
+		Status             enumspb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
@@ -115,7 +116,7 @@ type (
 
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
-		Executions []*executionpb.WorkflowExecutionInfo
+		Executions []*workflowpb.WorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -151,7 +152,7 @@ type (
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
 		ListWorkflowExecutionsRequest
-		Status executionpb.WorkflowExecutionStatus
+		Status enumspb.WorkflowExecutionStatus
 	}
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
@@ -163,7 +164,7 @@ type (
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
 	GetClosedWorkflowExecutionResponse struct {
-		Execution *executionpb.WorkflowExecutionInfo
+		Execution *workflowpb.WorkflowExecutionInfo
 	}
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call

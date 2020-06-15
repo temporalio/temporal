@@ -31,7 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	querypb "go.temporal.io/temporal-proto/query"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	querypb "go.temporal.io/temporal-proto/query/v1"
 
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -118,7 +119,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
-			ResultType: querypb.QUERY_RESULT_TYPE_ANSWERED,
+			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeBytes(make([]byte, resultSize, resultSize)),
 		}
 	}

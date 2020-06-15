@@ -35,15 +35,15 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	querypb "go.temporal.io/temporal-proto/query"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -172,7 +172,7 @@ func (e *matchingEngineImpl) String() string {
 
 // Returns taskListManager for a task list. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind tasklistpb.TaskListKind) (taskListManager, error) {
+func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind enumspb.TaskListKind) (taskListManager, error) {
 	// The first check is an optimization so almost all requests will have a task list manager
 	// and return avoiding the write lock
 	e.taskListsLock.RLock()
@@ -235,7 +235,7 @@ func (e *matchingEngineImpl) AddDecisionTask(
 			addRequest.Execution.GetRunId(),
 			addRequest.GetScheduleToStartTimeoutSeconds()))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
+	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return false, err
 	}
@@ -283,7 +283,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
@@ -333,7 +333,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
+		taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +422,7 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+		taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_ACTIVITY)
 		if err != nil {
 			return nil, err
 		}
@@ -483,7 +483,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	namespaceID := queryRequest.GetNamespaceId()
 	taskListName := queryRequest.TaskList.GetName()
 	taskListKind := queryRequest.TaskList.GetKind()
-	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TASK_LIST_TYPE_DECISION)
+	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
@@ -515,9 +515,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 		workerResponse := result.workerResponse
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
-		case querypb.QUERY_RESULT_TYPE_ANSWERED:
+		case enumspb.QUERY_RESULT_TYPE_ANSWERED:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
-		case querypb.QUERY_RESULT_TYPE_FAILED:
+		case enumspb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
@@ -575,10 +575,7 @@ func (e *matchingEngineImpl) DescribeTaskList(
 	request *matchingservice.DescribeTaskListRequest,
 ) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := tasklistpb.TASK_LIST_TYPE_DECISION
-	if request.DescRequest.GetTaskListType() == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
-		taskListType = tasklistpb.TASK_LIST_TYPE_ACTIVITY
-	}
+	taskListType := request.DescRequest.GetTaskListType()
 	taskListName := request.DescRequest.TaskList.GetName()
 	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
 	if err != nil {
@@ -597,11 +594,11 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	hCtx *handlerContext,
 	request *matchingservice.ListTaskListPartitionsRequest,
 ) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	activityTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TASK_LIST_TYPE_ACTIVITY)
+	activityTaskListInfo, err := e.listTaskListPartitions(request, enumspb.TASK_LIST_TYPE_ACTIVITY)
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TASK_LIST_TYPE_DECISION)
+	decisionTaskListInfo, err := e.listTaskListPartitions(request, enumspb.TASK_LIST_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +609,7 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType tasklistpb.TaskListType) ([]*tasklistpb.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType enumspb.TaskListType) ([]*tasklistpb.TaskListPartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetNamespace(),
 		*request.TaskList,
@@ -649,14 +646,14 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 func (e *matchingEngineImpl) getAllPartitions(
 	namespace string,
 	taskList tasklistpb.TaskList,
-	taskListType tasklistpb.TaskListType,
+	taskListType enumspb.TaskListType,
 ) ([]string, error) {
 	var partitionKeys []string
 	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), tasklistpb.TASK_LIST_TYPE_DECISION)
+	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), enumspb.TASK_LIST_TYPE_DECISION)
 	rootPartition := taskListID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)
@@ -676,7 +673,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 // Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
-	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind tasklistpb.TaskListKind,
+	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind enumspb.TaskListKind,
 ) (*internalTask, error) {
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {

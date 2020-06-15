@@ -34,11 +34,13 @@ import (
 	"testing"
 	"time"
 
-	failurepb "go.temporal.io/temporal-proto/failure"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 
-	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -47,18 +49,17 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -216,14 +217,14 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	versions := []int64{101, 1, 201, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 	for _, version := range versions {
 		runID := uuid.New()
-		var historyBatch []*eventpb.History
+		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
-			historyEvents := &eventpb.History{}
+			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
@@ -247,7 +248,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	workflowID string,
 	runID string,
-	historyBatch []*eventpb.History,
+	historyBatch []*historypb.History,
 ) error {
 	// get replicated history events from passive side
 	passiveClient := s.active.GetFrontendClient()
@@ -262,7 +263,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 			MaximumPageSize:        1000,
 			NextPageToken:          nil,
 			WaitForNewEvent:        false,
-			HistoryEventFilterType: filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 		},
 	)
 
@@ -282,7 +283,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 		}
 		originEvent := batch[eventIndex]
 		eventIndex++
-		if eventpb.EventType(originEvent.GetEventType()) != event.GetEventType() {
+		if enumspb.EventType(originEvent.GetEventType()) != event.GetEventType() {
 			return fmt.Errorf("the replicated event (%v) and the origin event (%v) are not the same",
 				originEvent.GetEventType().String(), event.GetEventType().String())
 		}
@@ -306,42 +307,42 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	for _, version := range versions {
 		runID := uuid.New()
 
-		var baseBranch []*eventpb.History
+		var baseBranch []*historypb.History
 		baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, version)
 		baseGenerator.SetVersion(version)
 
 		for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
 			events := baseGenerator.GetNextVertices()
-			historyEvents := &eventpb.History{}
+			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			baseBranch = append(baseBranch, historyEvents)
 		}
 		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 
-		var branch1 []*eventpb.History
+		var branch1 []*historypb.History
 		branchVersionHistory1 := baseVersionHistory.Duplicate()
 		branchGenerator1 := baseGenerator.DeepCopy()
 		for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
 			events := branchGenerator1.GetNextVertices()
-			historyEvents := &eventpb.History{}
+			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			branch1 = append(branch1, historyEvents)
 		}
 		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
-		var branch2 []*eventpb.History
+		var branch2 []*historypb.History
 		branchVersionHistory2 := baseVersionHistory.Duplicate()
 		branchGenerator2 := baseGenerator.DeepCopy()
 		branchGenerator2.SetVersion(branchGenerator2.GetVersion() + 1)
 		for i := 0; i < 10 && branchGenerator2.HasNextVertex(); i++ {
 			events := branchGenerator2.GetNextVertices()
-			historyEvents := &eventpb.History{}
+			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			branch2 = append(branch2, historyEvents)
 		}
@@ -390,50 +391,51 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
 
-	eventsBatch1 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch1 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
 				EventId:   2,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 2,
 					StartedEventId:   3,
 					Identity:         identity,
@@ -442,8 +444,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   5,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_MARKER_RECORDED,
-				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
+				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
 					MarkerName: "some marker name",
 					Details: map[string]*commonpb.Payloads{
 						"data": payloads.EncodeString("some random data"),
@@ -454,8 +456,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   6,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
@@ -468,12 +470,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -481,12 +483,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
 					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
@@ -495,32 +497,32 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   9,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 9,
 					StartedEventId:   10,
 					Identity:         identity,
@@ -529,8 +531,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   12,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
 					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
@@ -539,8 +541,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   13,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
@@ -549,8 +551,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   14,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -559,41 +561,41 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		}},
 	}
 
-	eventsBatch2 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch2 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   31,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					RetryStatus: commonpb.RETRY_STATUS_TIMEOUT,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
+					RetryStatus: enumspb.RETRY_STATUS_TIMEOUT,
 				}},
 			},
 		}},
 	}
 
-	eventsBatch3 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch3 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &historypb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      commonpb.TIMEOUT_TYPE_START_TO_CLOSE,
+					TimeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 				}},
 			},
 			{
 				EventId:   16,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
 					Failure: &failurepb.Failure{
 						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-							TimeoutType: commonpb.TIMEOUT_TYPE_START_TO_CLOSE,
+							TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 						}},
 					},
 				}},
@@ -601,32 +603,32 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   17,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 17,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 8,
 					StartedEventId:   9,
 					Identity:         identity,
@@ -635,8 +637,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			{
 				EventId:   20,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
 					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
@@ -700,50 +702,51 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
 
-	eventsBatch1 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch1 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
 				EventId:   2,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 2,
 					StartedEventId:   3,
 					Identity:         identity,
@@ -752,8 +755,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   5,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_MARKER_RECORDED,
-				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
+				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
 					MarkerName: "some marker name",
 					Details: map[string]*commonpb.Payloads{
 						"data": payloads.EncodeString("some random data"),
@@ -764,8 +767,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   6,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
@@ -778,12 +781,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -791,12 +794,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
 					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
@@ -805,32 +808,32 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   9,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 9,
 					StartedEventId:   10,
 					Identity:         identity,
@@ -839,8 +842,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   12,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
 					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
@@ -849,8 +852,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   13,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
@@ -859,8 +862,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   14,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -869,13 +872,13 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		}},
 	}
 
-	eventsBatch2 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch2 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   32,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 8,
 					StartedEventId:   9,
 					Identity:         identity,
@@ -885,13 +888,13 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		// need to keep the workflow open for testing
 	}
 
-	eventsBatch3 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch3 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 8,
 					StartedEventId:   9,
 					Identity:         identity,
@@ -900,8 +903,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			{
 				EventId:   16,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 					NewExecutionRunId:            uuid.New(),
 					WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
 					TaskList:                     &tasklistpb.TaskList{Name: tasklist},
@@ -909,7 +912,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					WorkflowRunTimeoutSeconds:    1000,
 					WorkflowTaskTimeoutSeconds:   1000,
 					DecisionTaskCompletedEventId: 19,
-					Initiator:                    commonpb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+					Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 		}},
@@ -970,14 +973,14 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 
 	version := int64(101)
 	runID := uuid.New()
-	historyBatch := []*eventpb.History{}
+	historyBatch := []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &eventpb.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -995,16 +998,16 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 
 	version = int64(1)
 	runID = uuid.New()
-	historyBatch = []*eventpb.History{}
+	historyBatch = []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 	// verify two batches of zombie workflow are call reapply API
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
-		historyEvents := &eventpb.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -1033,22 +1036,22 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	historyClient := s.active.GetHistoryClient()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
-	baseBranch := []*eventpb.History{}
+	baseBranch := []*historypb.History{}
 	var taskID int64
 	for i := 0; i < 4 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
-		historyEvents := &eventpb.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			historyEvent := event.GetData().(*eventpb.HistoryEvent)
+			historyEvent := event.GetData().(*historypb.HistoryEvent)
 			taskID = historyEvent.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, historyEvent)
 			switch historyEvent.GetEventType() {
-			case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-				eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-				eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
-				eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-				eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-				eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 				isWorkflowFinished = true
 			}
 		}
@@ -1073,14 +1076,14 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	)
 
 	newGenerator := s.generator.DeepCopy()
-	newBranch := []*eventpb.History{}
+	newBranch := []*historypb.History{}
 	newVersionHistory := versionHistory.Duplicate()
 	newGenerator.SetVersion(newGenerator.GetVersion() + 1) // simulate events from other cluster
 	for i := 0; i < 4 && newGenerator.HasNextVertex(); i++ {
 		events := newGenerator.GetNextVertices()
-		historyEvents := &eventpb.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			history := event.GetData().(*eventpb.HistoryEvent)
+			history := event.GetData().(*historypb.HistoryEvent)
 			taskID = history.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, history)
 		}
@@ -1101,16 +1104,16 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
-	staleBranch := []*eventpb.History{
+	staleBranch := []*historypb.History{
 		{
-			Events: []*eventpb.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   baseBranchLastEvent.GetEventId() + 1,
-					EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 					Timestamp: time.Now().UnixNano(),
 					Version:   baseBranchLastEvent.GetVersion(), // dummy event from other cluster
 					TaskId:    taskID,
-					Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: "signal",
 						Input:      payloads.EncodeBytes([]byte{}),
 						Identity:   "ndc_integration_test",
@@ -1169,50 +1172,51 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		})
 	}
 
-	eventsBatch1 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch1 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstDecisionTaskBackoffSeconds: 100,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 				}},
 			},
 			{
 				EventId:   2,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 2,
 					StartedEventId:   3,
 					Identity:         identity,
@@ -1221,8 +1225,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   5,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_MARKER_RECORDED,
-				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
+				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
 					MarkerName: "some marker name",
 					Details: map[string]*commonpb.Payloads{
 						"data": payloads.EncodeString("some random data"),
@@ -1233,8 +1237,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   6,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
@@ -1247,12 +1251,12 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -1260,12 +1264,12 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
 					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
@@ -1274,32 +1278,32 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   9,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 9,
 					StartedEventId:   10,
 					Identity:         identity,
@@ -1308,8 +1312,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   12,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
 					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
@@ -1318,8 +1322,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   13,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
@@ -1328,8 +1332,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   14,
 				Version:   21,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
 					RequestId:        uuid.New(),
@@ -1338,13 +1342,13 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		}},
 	}
 
-	eventsBatch2 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch2 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   31,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 9,
 					StartedEventId:   10,
 					Identity:         identity,
@@ -1353,8 +1357,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   16,
 				Version:   31,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
@@ -1369,28 +1373,28 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		}},
 	}
 
-	eventsBatch3 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch3 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &historypb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      commonpb.TIMEOUT_TYPE_START_TO_CLOSE,
+					TimeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 				}},
 			},
 			{
 				EventId:   16,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
 					Failure: &failurepb.Failure{
 						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-							TimeoutType: commonpb.TIMEOUT_TYPE_START_TO_CLOSE,
+							TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 						}},
 					},
 				}},
@@ -1398,32 +1402,32 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   17,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_STARTED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
 					ScheduledEventId: 17,
 					Identity:         identity,
 					RequestId:        uuid.New(),
 				}},
 			},
 		}},
-		{Events: []*eventpb.HistoryEvent{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-				Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
 					ScheduledEventId: 8,
 					StartedEventId:   9,
 					Identity:         identity,
@@ -1432,8 +1436,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			{
 				EventId:   20,
 				Version:   30,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
 					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
@@ -1441,14 +1445,14 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		}},
 	}
 
-	eventsBatch4 := []*eventpb.History{
-		{Events: []*eventpb.HistoryEvent{
+	eventsBatch4 := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   17,
 				Version:   32,
-				EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
-				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					RetryStatus: commonpb.RETRY_STATUS_TIMEOUT,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
+					RetryStatus: enumspb.RETRY_STATUS_TIMEOUT,
 				}},
 			},
 		}},
@@ -1627,7 +1631,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 }
 
 func (s *nDCIntegrationTestSuite) generateNewRunHistory(
-	event *eventpb.HistoryEvent,
+	event *historypb.HistoryEvent,
 	namespace string,
 	workflowID string,
 	runID string,
@@ -1645,13 +1649,13 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 
 	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = uuid.New()
 
-	newRunFirstEvent := &eventpb.HistoryEvent{
+	newRunFirstEvent := &historypb.HistoryEvent{
 		EventId:   common.FirstEventID,
 		Timestamp: time.Now().UnixNano(),
-		EventType: eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Version:   version,
 		TaskId:    1,
-		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:            &commonpb.WorkflowType{Name: workflowType},
 			ParentWorkflowNamespace: namespace,
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
@@ -1661,12 +1665,12 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 			ParentInitiatedEventId: event.GetEventId(),
 			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: tasklistpb.TASK_LIST_KIND_NORMAL,
+				Kind: enumspb.TASK_LIST_KIND_NORMAL,
 			},
 			WorkflowRunTimeoutSeconds:            10,
 			WorkflowTaskTimeoutSeconds:           10,
 			ContinuedExecutionRunId:              runID,
-			Initiator:                            commonpb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+			Initiator:                            enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 			OriginalExecutionRunId:               runID,
 			Identity:                             "NDC-test",
 			FirstExecutionRunId:                  runID,
@@ -1675,7 +1679,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents([]*eventpb.HistoryEvent{newRunFirstEvent}, common.EncodingTypeProto3)
+	eventBlob, err := s.serializer.SerializeBatchEvents([]*historypb.HistoryEvent{newRunFirstEvent}, common.EncodingTypeProto3)
 	s.NoError(err)
 
 	return eventBlob
@@ -1689,10 +1693,10 @@ func (s *nDCIntegrationTestSuite) toProtoDataBlob(
 		return nil
 	}
 
-	var encodingType commonpb.EncodingType
+	var encodingType enumspb.EncodingType
 	switch blob.GetEncoding() {
 	case common.EncodingTypeProto3:
-		encodingType = commonpb.ENCODING_TYPE_PROTO3
+		encodingType = enumspb.ENCODING_TYPE_PROTO3
 	case common.EncodingTypeJSON,
 		common.EncodingTypeGob,
 		common.EncodingTypeUnknown,
@@ -1713,7 +1717,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	runID string,
 	workflowType string,
 	tasklist string,
-	batch *eventpb.History,
+	batch *historypb.History,
 ) (*serialization.DataBlob, *serialization.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
@@ -1734,7 +1738,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	workflowType string,
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*eventpb.History,
+	eventBatches []*historypb.History,
 	historyClient host.HistoryClient,
 ) {
 	for _, batch := range eventBatches {
@@ -1765,12 +1769,12 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	workflowType string,
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*eventpb.History,
+	eventBatches []*historypb.History,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 
-		taskType := replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
+		taskType := enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
 		replicationTask := &replicationgenpb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
@@ -1793,7 +1797,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 
 func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*eventpb.History,
+	eventBatches []*historypb.History,
 ) *persistence.VersionHistory {
 
 	// TODO temporary code to generate version history
@@ -1817,7 +1821,7 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 
 func (s *nDCIntegrationTestSuite) toProtoVersionHistoryItems(
 	versionHistory *persistence.VersionHistory,
-) []*eventgenpb.VersionHistoryItem {
+) []*historygenpb.VersionHistoryItem {
 	if versionHistory == nil {
 		return nil
 	}

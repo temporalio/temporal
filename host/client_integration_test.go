@@ -38,8 +38,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
 	"go.temporal.io/temporal/worker"
@@ -299,10 +299,10 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	for iter.HasNext() {
 		event, err := iter.Next()
 		s.NoError(err)
-		if event.GetEventType() == eventpb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 			completedAct++
 		}
-		if event.GetEventType() == eventpb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
 			failedAct++
 			s.NotNil(event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
 			s.True(strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))

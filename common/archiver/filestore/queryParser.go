@@ -33,10 +33,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xwb1989/sqlparser"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
-	"github.com/xwb1989/sqlparser"
-	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (
@@ -53,7 +54,7 @@ type (
 		workflowID        *string
 		runID             *string
 		workflowTypeName  *string
-		status            *executionpb.WorkflowExecutionStatus
+		status            *enumspb.WorkflowExecutionStatus
 		emptyResult       bool
 	}
 )
@@ -246,19 +247,19 @@ func convertToTimestamp(timeStr string) (int64, error) {
 	return parsedTime.UnixNano(), nil
 }
 
-func convertStatusStr(statusStr string) (executionpb.WorkflowExecutionStatus, error) {
+func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
 	switch statusStr {
-	case "completed", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
-		return executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
-	case "failed", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_FAILED)):
-		return executionpb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
-	case "canceled", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
-		return executionpb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
-	case "continuedasnew", "continued_as_new", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
-		return executionpb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
-	case "timedout", "timed_out", strconv.Itoa(int(executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
-		return executionpb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
+	case "completed", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
+	case "failed", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
+	case "canceled", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "continuedasnew", "continued_as_new", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
+	case "timedout", "timed_out", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

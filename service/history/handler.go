@@ -32,16 +32,16 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -78,16 +78,17 @@ var (
 	_ EngineFactory                       = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
-	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
-	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
-	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
-	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
-	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
-	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
-	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
-	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
+	errNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errContinueAsNewInitiatorNotSet = serviceerror.NewInvalidArgument("ContinueAsNewInitiator not set on request.")
+	errWorkflowExecutionNotSet      = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
+	errTaskListNotSet               = serviceerror.NewInvalidArgument("Task list not set.")
+	errWorkflowIDNotSet             = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errRunIDNotValid                = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
+	errSourceClusterNotSet          = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
+	errShardIDNotSet                = serviceerror.NewInvalidArgument("ShardId not set on request.")
+	errTimestampNotSet              = serviceerror.NewInvalidArgument("Timestamp not set on request.")
+	errInvalidTaskType              = serviceerror.NewInvalidArgument("Invalid task type")
+	errDeserializeTaskToken         = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
 	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
 	errShuttingDown        = serviceerror.NewInternal("Shutting down")
@@ -590,7 +591,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest != nil && failedRequest.GetCause() == eventpb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
+	if failedRequest.GetCause() == enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
@@ -636,6 +637,9 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
+	}
+	if request.GetContinueAsNewInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		return nil, h.error(errContinueAsNewInitiatorNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
@@ -694,16 +698,16 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	}
 
 	switch request.GetCategory() {
-	case commongenpb.TASK_CATEGORY_TRANSFER:
+	case enumsgenpb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case commongenpb.TASK_CATEGORY_TIMER:
+	case enumsgenpb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
 			TaskID:              request.GetTaskId(),
 		})
-	case commongenpb.TASK_CATEGORY_REPLICATION:
+	case enumsgenpb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})

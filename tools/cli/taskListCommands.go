@@ -27,8 +27,9 @@ package cli
 import (
 	"os"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -55,7 +56,7 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == tasklistpb.TASK_LIST_TYPE_ACTIVITY {
+	if taskListType == enumspb.TASK_LIST_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

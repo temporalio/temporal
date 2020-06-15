@@ -33,7 +33,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 )
 
 type (
@@ -71,7 +72,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	taskType := enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replicationgenpb.ReplicationTask{
@@ -147,7 +148,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	taskType := enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replicationgenpb.ReplicationTask{

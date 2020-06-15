@@ -31,9 +31,10 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	eventpb "go.temporal.io/temporal-proto/event"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	"go.temporal.io/temporal-proto/workflowservice"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	filterpb "go.temporal.io/temporal-proto/filter/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -127,13 +128,13 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	return nil
 }
 
-func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*eventpb.HistoryEvent, error) {
+func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*historypb.HistoryEvent, error) {
 	scope.Counter(getWorkflowHistoryCount).Inc(1)
 	sw := scope.Timer(getWorkflowHistoryLatency).Start()
 	defer sw.Stop()
 
-	var events []*eventpb.HistoryEvent
-	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, filterpb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	var events []*historypb.HistoryEvent
+	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
 	for iter.HasNext() {
 		event, err := iter.Next()

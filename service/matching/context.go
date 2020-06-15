@@ -28,10 +28,12 @@ import (
 	"context"
 	"sync"
 
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
 	"github.com/temporalio/temporal/common/metrics"
 
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 )
 
 type handlerContext struct {
@@ -57,7 +59,7 @@ func newHandlerContext(
 func newPerTaskListScope(
 	namespace string,
 	taskListName string,
-	taskListKind tasklistpb.TaskListKind,
+	taskListKind enumspb.TaskListKind,
 	client metrics.Client,
 	scopeIdx int,
 ) metrics.Scope {
@@ -66,10 +68,10 @@ func newPerTaskListScope(
 	if namespace != "" {
 		namespaceTag = metrics.NamespaceTag(namespace)
 	}
-	if taskListName != "" && taskListKind != tasklistpb.TASK_LIST_KIND_STICKY {
+	if taskListName != "" && taskListKind != enumspb.TASK_LIST_KIND_STICKY {
 		taskListTag = metrics.TaskListTag(taskListName)
 	}
-	if taskListKind == tasklistpb.TASK_LIST_KIND_STICKY {
+	if taskListKind == enumspb.TASK_LIST_KIND_STICKY {
 		taskListTag = stickyTaskListMetricTag
 	}
 	return client.Scope(scopeIdx, namespaceTag, taskListTag)

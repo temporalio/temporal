@@ -32,8 +32,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/temporalio/temporal/common/convert"
 	"github.com/xwb1989/sqlparser"
+
+	"github.com/temporalio/temporal/common/convert"
 )
 
 type (

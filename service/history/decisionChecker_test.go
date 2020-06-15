@@ -30,12 +30,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -508,7 +509,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 
 func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
 	taskList := func(name string) *tasklistpb.TaskList {
-		return &tasklistpb.TaskList{Name: name, Kind: tasklistpb.TASK_LIST_KIND_NORMAL}
+		return &tasklistpb.TaskList{Name: name, Kind: enumspb.TASK_LIST_KIND_NORMAL}
 	}
 
 	testCases := []struct {

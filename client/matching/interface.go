@@ -25,7 +25,7 @@
 package matching
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 )
 
 // Client is the interface exposed by matching service client

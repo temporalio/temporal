@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	commonpb "go.temporal.io/temporal-proto/common"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -64,7 +64,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
 
 	// no retry if cancel requested
 	ai.HasRetryPolicy = true
@@ -81,7 +81,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
 
 	// no retry if both MaximumAttempts and WorkflowExpirationTime are not set
 	ai.CancelRequested = false
@@ -97,7 +97,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET, retryStatus)
 
 	// no retry if MaximumAttempts is 1 (for initial attempt)
 	ai.InitialInterval = 1
@@ -114,7 +114,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, retryStatus)
 
 	// backoff retry, intervals: 1s, 2s, 4s, 8s.
 	ai.MaximumAttempts = 5
@@ -131,7 +131,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	interval, retryStatus = getBackoffInterval(
@@ -146,7 +146,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*2, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	interval, retryStatus = getBackoffInterval(
@@ -161,7 +161,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*4, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	// test non-retryable error
@@ -178,7 +178,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_NON_RETRYABLE_FAILURE, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, retryStatus)
 
 	reason = failure.NewServerFailure("good-reason", false)
 
@@ -194,7 +194,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*8, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	// no retry as max attempt reached
@@ -211,7 +211,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, retryStatus)
 
 	// increase max attempts, with max interval cap at 10s
 	ai.MaximumAttempts = 6
@@ -228,7 +228,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	// no retry because expiration time before next interval
@@ -246,7 +246,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(commonpb.RETRY_STATUS_TIMEOUT, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_TIMEOUT, retryStatus)
 
 	// extend expiration, next interval should be 10s
 	ai.ExpirationTime = now.Add(time.Minute)
@@ -262,7 +262,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 
 	// with big max retry, math.Pow() could overflow, verify that it uses the MaxInterval
@@ -280,6 +280,6 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
-	a.Equal(commonpb.RETRY_STATUS_IN_PROGRESS, retryStatus)
+	a.Equal(enumspb.RETRY_STATUS_IN_PROGRESS, retryStatus)
 	ai.Attempt++
 }

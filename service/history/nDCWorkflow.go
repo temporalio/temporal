@@ -30,15 +30,13 @@ import (
 	"context"
 	"fmt"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/payloads"
-
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 )
 
 type (
@@ -131,21 +129,21 @@ func (r *nDCWorkflowImpl) happensAfter(
 func (r *nDCWorkflowImpl) revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
-	if state != executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if state != enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
-	} else if state == executiongenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	} else if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// workflow already finished
 		return nil
 	}
 
 	// workflow is in zombie state, need to set the state correctly accordingly
-	state = executiongenpb.WORKFLOW_EXECUTION_STATE_CREATED
+	state = enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED
 	if r.mutableState.HasProcessedOrPendingDecision() {
-		state = executiongenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+		state = enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 
@@ -233,7 +231,7 @@ func (r *nDCWorkflowImpl) failDecision(
 	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		eventpb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil,
 		identityHistoryService,
 		"",
@@ -275,8 +273,8 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
-		executiongenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-		executionpb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }
 

@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 

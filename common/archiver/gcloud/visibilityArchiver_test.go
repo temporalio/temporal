@@ -34,15 +34,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	"github.com/uber-go/tally"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.uber.org/zap"
+
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.uber.org/zap"
 )
 
 const (
@@ -66,7 +67,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1580896574804475000,
 			CloseTimestamp:   1580896575946478000,
-			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			HistoryLength:    36,
 		},
 	}
@@ -189,7 +190,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:      int64(101),
 	}
 

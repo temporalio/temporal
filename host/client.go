@@ -27,10 +27,10 @@ package host
 import (
 	"google.golang.org/grpc"
 
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 )
 
 // AdminClient is the interface exposed by admin service client

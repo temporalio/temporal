@@ -31,11 +31,11 @@ import (
 	"math/rand"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/log"
@@ -77,7 +77,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             executionpb.WorkflowExecutionStatus
+		Status             enumspb.WorkflowExecutionStatus
 		HistoryLength      int64
 		Memo               *commonpb.Memo
 		SearchAttributes   map[string]*commonpb.Payload

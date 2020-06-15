@@ -25,11 +25,11 @@
 package matching
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 )
 
 type (
@@ -57,7 +57,7 @@ type (
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        string
-		source           commongenpb.TaskSource
+		source           enumsgenpb.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint int64
@@ -67,7 +67,7 @@ type (
 func newInternalTask(
 	info *persistenceblobs.AllocatedTaskInfo,
 	completionFunc func(*persistenceblobs.AllocatedTaskInfo, error),
-	source commongenpb.TaskSource,
+	source enumsgenpb.TaskSource,
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {

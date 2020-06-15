@@ -27,7 +27,7 @@ package matching
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 )
 
 // Disable lint due to missing comments.

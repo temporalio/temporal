@@ -34,11 +34,11 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
@@ -327,8 +327,8 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 	return true
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
-	return &executionpb.WorkflowExecutionInfo{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *workflowpb.WorkflowExecutionInfo {
+	return &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),

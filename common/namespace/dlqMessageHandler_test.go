@@ -34,7 +34,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -92,7 +93,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
 		},
 	}
@@ -114,7 +115,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
 		},
 	}
@@ -194,7 +195,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,
@@ -225,7 +226,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: int64(messageID),
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,
@@ -279,14 +280,14 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	}
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID1,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID2,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute2,
@@ -323,14 +324,14 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	}
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID1,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID2,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute2,
@@ -363,7 +364,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 
 	tasks := []*replicationgenpb.ReplicationTask{
 		{
-			TaskType:     replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID,
 			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,

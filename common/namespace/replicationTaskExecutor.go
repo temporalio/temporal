@@ -27,12 +27,13 @@
 package namespace
 
 import (
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -93,9 +94,9 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationgenpb.Na
 	}
 
 	switch task.GetNamespaceOperation() {
-	case replicationgenpb.NAMESPACE_OPERATION_CREATE:
+	case enumsgenpb.NAMESPACE_OPERATION_CREATE:
 		return h.handleNamespaceCreationReplicationTask(task)
-	case replicationgenpb.NAMESPACE_OPERATION_UPDATE:
+	case enumsgenpb.NAMESPACE_OPERATION_UPDATE:
 		return h.handleNamespaceUpdateReplicationTask(task)
 	default:
 		return ErrInvalidNamespaceOperation
@@ -287,9 +288,9 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input namespacepb.NamespaceStatus) error {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceStatus) error {
 	switch input {
-	case namespacepb.NAMESPACE_STATUS_REGISTERED, namespacepb.NAMESPACE_STATUS_DEPRECATED:
+	case enumspb.NAMESPACE_STATUS_REGISTERED, enumspb.NAMESPACE_STATUS_DEPRECATED:
 		return nil
 	default:
 		return ErrInvalidNamespaceStatus

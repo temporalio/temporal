@@ -33,10 +33,11 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -209,7 +210,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	resp.NamespaceInfo.Id = ""
 	s.Equal(&namespacepb.NamespaceInfo{
 		Name:        namespace,
-		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 		Description: "",
 		OwnerEmail:  "",
 		Data:        map[string]string{},
@@ -218,9 +219,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	s.Equal(&namespacepb.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: false},
-		HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 		HistoryArchivalURI:                     "",
-		VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}, resp.Configuration)
@@ -277,7 +278,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	resp.NamespaceInfo.Id = ""
 	s.Equal(&namespacepb.NamespaceInfo{
 		Name:        namespace,
-		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 		Description: description,
 		OwnerEmail:  email,
 		Data:        data,
@@ -286,9 +287,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	s.Equal(&namespacepb.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: emitMetric},
-		HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 		HistoryArchivalURI:                     "",
-		VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}, resp.Configuration)
@@ -333,7 +334,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
 			Name:        namespace,
-			Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+			Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
@@ -342,9 +343,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 		s.Equal(&namespacepb.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 			HistoryArchivalURI:                     "",
-			VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
@@ -415,7 +416,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
 			Name:        namespace,
-			Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+			Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
@@ -424,9 +425,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		s.Equal(&namespacepb.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 			HistoryArchivalURI:                     "",
-			VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
@@ -448,9 +449,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		Configuration: &namespacepb.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  namespacepb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
 			HistoryArchivalURI:                     "",
-			VisibilityArchivalStatus:               namespacepb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		},

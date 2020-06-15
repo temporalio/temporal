@@ -32,9 +32,10 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/payload"
@@ -456,7 +457,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	})
 	s.Nil(err2)
 
@@ -465,7 +466,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -480,7 +481,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			EarliestStartTime: startTime,
 			LatestStartTime:   startTime,
 		},
-		Status: executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -519,7 +520,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -556,7 +557,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   time.Now().Add(time.Second * -5).UnixNano(),
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -586,7 +587,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -640,7 +641,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
 			StartTimestamp:   startTime,
-			Status:           executionpb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			CloseTimestamp:   time.Now().UnixNano(),
 			HistoryLength:    3,
 		}
@@ -722,7 +723,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 }
 
 func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
-	req *p.RecordWorkflowExecutionClosedRequest, resp *executionpb.WorkflowExecutionInfo) {
+	req *p.RecordWorkflowExecutionClosedRequest, resp *workflowpb.WorkflowExecutionInfo) {
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
@@ -733,13 +734,13 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
-	req *p.RecordWorkflowExecutionStartedRequest, resp *executionpb.WorkflowExecutionInfo) {
+	req *p.RecordWorkflowExecutionStartedRequest, resp *workflowpb.WorkflowExecutionInfo) {
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, executionpb.WORKFLOW_EXECUTION_STATUS_UNKNOWN)
+	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED)
 	s.Zero(resp.HistoryLength)
 }
 

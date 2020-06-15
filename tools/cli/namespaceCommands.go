@@ -35,10 +35,11 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common/namespace"
 )
@@ -448,16 +449,16 @@ func clustersToString(clusters []*replicationpb.ClusterReplicationConfiguration)
 	return res
 }
 
-func archivalStatus(c *cli.Context, statusFlagName string) namespacepb.ArchivalStatus {
+func archivalStatus(c *cli.Context, statusFlagName string) enumspb.ArchivalStatus {
 	if c.IsSet(statusFlagName) {
 		switch c.String(statusFlagName) {
 		case "disabled":
-			return namespacepb.ARCHIVAL_STATUS_DISABLED
+			return enumspb.ARCHIVAL_STATUS_DISABLED
 		case "enabled":
-			return namespacepb.ARCHIVAL_STATUS_ENABLED
+			return enumspb.ARCHIVAL_STATUS_ENABLED
 		default:
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
-	return namespacepb.ARCHIVAL_STATUS_DEFAULT
+	return enumspb.ARCHIVAL_STATUS_UNSPECIFIED
 }

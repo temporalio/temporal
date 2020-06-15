@@ -25,7 +25,7 @@
 package common
 
 import (
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
 )
 
 type (

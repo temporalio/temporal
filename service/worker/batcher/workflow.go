@@ -30,18 +30,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/temporal"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
+	"golang.org/x/time/rate"
+
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
-	"golang.org/x/time/rate"
 )
 
 const (

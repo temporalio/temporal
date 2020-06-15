@@ -29,14 +29,15 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	decisionpb "go.temporal.io/temporal-proto/decision/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/failure"
@@ -88,19 +89,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TASK_TYPE_USER_TIMER:
+	case enumsgenpb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_DECISION_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case commongenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -189,7 +190,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(commonpb.TIMEOUT_TYPE_HEARTBEAT)
+	isHeartBeatTask := task.TimeoutType == int32(enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -220,13 +221,13 @@ Loop:
 		}
 
 		timeoutFailure := failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType))
-		var retryStatus commonpb.RetryStatus
+		var retryStatus enumspb.RetryStatus
 		if retryStatus, err = mutableState.RetryActivity(
 			activityInfo,
 			timeoutFailure,
 		); err != nil {
 			return err
-		} else if retryStatus == commonpb.RETRY_STATUS_IN_PROGRESS {
+		} else if retryStatus == enumspb.RETRY_STATUS_IN_PROGRESS {
 			updateMutableState = true
 			continue Loop
 		}
@@ -234,8 +235,8 @@ Loop:
 		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
 		// If retryStatus is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
-		if retryStatus == commonpb.RETRY_STATUS_TIMEOUT {
-			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = commonpb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if retryStatus == enumspb.RETRY_STATUS_TIMEOUT {
+			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
@@ -284,7 +285,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TASK_TYPE_DECISION_TIMEOUT))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsgenpb.TASK_TYPE_DECISION_TIMEOUT))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -297,7 +298,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(commonpb.TimeoutType(task.TimeoutType)) {
+	switch timerTypeFromProto(enumspb.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
@@ -485,16 +486,16 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutFailure := failure.NewTimeoutFailure(commonpb.TIMEOUT_TYPE_START_TO_CLOSE)
+	timeoutFailure := failure.NewTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval, retryStatus := mutableState.GetRetryBackoffDuration(timeoutFailure)
-	continueAsNewInitiator := commonpb.CONTINUE_AS_NEW_INITIATOR_RETRY
+	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
 		backoffInterval, err = mutableState.GetCronBackoffDuration()
 		if err != nil {
 			return err
 		}
-		continueAsNewInitiator = commonpb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+		continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
 	if backoffInterval == backoff.NoBackoff {
 		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryStatus); err != nil {

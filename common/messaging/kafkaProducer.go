@@ -31,8 +31,9 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -98,27 +99,27 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicationgenpb.Replicat
 	}
 
 	switch task.GetTaskType() {
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
 		// the messaging layer perspective
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-		replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-		replicationgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		enumsgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		return nil
 	default:
 		panic(fmt.Sprintf("encounter unsupported replication task type: %v", task.GetTaskType()))

@@ -35,13 +35,14 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -241,7 +242,7 @@ func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 }
 
 // PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *eventpb.History, logger log.Logger) {
+func PrettyPrintHistory(history *historypb.History, logger log.Logger) {
 	fmt.Println("******************************************")
 	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")
@@ -398,12 +399,14 @@ func CreateHistoryStartWorkflowRequest(
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceID,
 		StartRequest: startRequest,
+		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
 		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
+
 	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
@@ -493,26 +496,30 @@ func IsJustOrderByClause(clause string) bool {
 
 // ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
 // Because different implementation of dynamic config client may lead to different types
-func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) commonpb.IndexedValueType {
+func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enumspb.IndexedValueType {
 	switch t := fieldType.(type) {
 	case float64:
-		return commonpb.IndexedValueType(fieldType.(float64))
+		return enumspb.IndexedValueType(t)
 	case int:
-		return commonpb.IndexedValueType(fieldType.(int))
-	case commonpb.IndexedValueType:
-		return fieldType.(commonpb.IndexedValueType)
-	default:
-		// Unknown fieldType, please make sure dynamic config return correct value type
-		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
-		return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
+		return enumspb.IndexedValueType(t)
+	case string:
+		if ivt, ok := enumspb.IndexedValueType_value[t]; ok{
+			return enumspb.IndexedValueType(ivt)
+		}
+	case enumspb.IndexedValueType:
+		return t
 	}
+
+	// Unknown fieldType, please make sure dynamic config return correct value type
+	logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(fieldType))
+	return fieldType.(enumspb.IndexedValueType) // it will panic and been captured by logger
 }
 
 // DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
 // unmarshal the value into a concrete type and return the value
-func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb.IndexedValueType) (interface{}, error) {
+func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType enumspb.IndexedValueType) (interface{}, error) {
 	switch valueType {
-	case commonpb.INDEXED_VALUE_TYPE_STRING, commonpb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		var val string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
@@ -520,7 +527,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.INDEXED_VALUE_TYPE_INT:
+	case enumspb.INDEXED_VALUE_TYPE_INT:
 		var val int64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
@@ -528,7 +535,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.INDEXED_VALUE_TYPE_DOUBLE:
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		var val float64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
@@ -536,7 +543,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.INDEXED_VALUE_TYPE_BOOL:
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		var val bool
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
@@ -544,7 +551,7 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 			return listVal, err
 		}
 		return val, nil
-	case commonpb.INDEXED_VALUE_TYPE_DATETIME:
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		var val time.Time
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time

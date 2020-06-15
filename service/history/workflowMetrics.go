@@ -27,7 +27,8 @@ package history
 import (
 	"time"
 
-	eventpb "go.temporal.io/temporal-proto/event"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -115,7 +116,7 @@ func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	namespace string,
 	taskList string,
-	event *eventpb.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
@@ -124,15 +125,15 @@ func emitWorkflowCompletionStats(
 	)
 
 	switch event.EventType {
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		scope.IncCounter(metrics.WorkflowCancelCount)
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		scope.IncCounter(metrics.WorkflowFailedCount)
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case eventpb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		scope.IncCounter(metrics.WorkflowTerminateCount)
 	}
 }

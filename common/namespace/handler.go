@@ -33,13 +33,14 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	replicationpb "go.temporal.io/temporal-proto/replication"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -202,7 +203,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          uuid.New(),
 		Name:        registerRequest.GetName(),
-		Status:      namespacepb.NAMESPACE_STATUS_REGISTERED,
+		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
@@ -262,7 +263,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
-			replicationgenpb.NAMESPACE_OPERATION_CREATE,
+			enumsgenpb.NAMESPACE_OPERATION_CREATE,
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
@@ -560,7 +561,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	if isGlobalNamespace {
-		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NAMESPACE_OPERATION_UPDATE,
+		err = d.namespaceReplicator.HandleTransmissionTask(enumsgenpb.NAMESPACE_OPERATION_UPDATE,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err
@@ -607,7 +608,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	}
 
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	getResponse.Namespace.Info.Status = namespacepb.NAMESPACE_STATUS_DEPRECATED
+	getResponse.Namespace.Info.Status = enumspb.NAMESPACE_STATUS_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info:                        getResponse.Namespace.Info,
@@ -699,9 +700,9 @@ func (d *HandlerImpl) mergeNamespaceData(
 }
 
 func (d *HandlerImpl) toArchivalRegisterEvent(
-	status namespacepb.ArchivalStatus,
+	status enumspb.ArchivalStatus,
 	URI string,
-	defaultStatus namespacepb.ArchivalStatus,
+	defaultStatus enumspb.ArchivalStatus,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
@@ -710,7 +711,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == namespacepb.ARCHIVAL_STATUS_DEFAULT {
+	if event.status == enumspb.ARCHIVAL_STATUS_UNSPECIFIED {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {
@@ -720,7 +721,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *HandlerImpl) toArchivalUpdateEvent(
-	status namespacepb.ArchivalStatus,
+	status enumspb.ArchivalStatus,
 	URI string,
 	defaultURI string,
 ) (*ArchivalEvent, error) {

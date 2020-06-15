@@ -36,10 +36,10 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
@@ -421,7 +421,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 	replicationTask *replicationgenpb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
-	case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -430,12 +430,12 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:  taskAttributes.GetWorkflowId(),
 				RunId:       taskAttributes.GetRunId(),
 				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    commongenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+				TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
 
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -444,7 +444,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:          taskAttributes.GetWorkflowId(),
 				RunId:               taskAttributes.GetRunId(),
 				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            commongenpb.TASK_TYPE_REPLICATION_HISTORY,
+				TaskType:            enumsgenpb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId:        taskAttributes.GetFirstEventId(),
 				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
@@ -452,7 +452,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
-	case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
 		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())
@@ -473,7 +473,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:   taskAttributes.GetWorkflowId(),
 				RunId:        taskAttributes.GetRunId(),
 				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     commongenpb.TASK_TYPE_REPLICATION_HISTORY,
+				TaskType:     enumsgenpb.TASK_TYPE_REPLICATION_HISTORY,
 				FirstEventId: events[0].GetEventId(),
 				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),

@@ -33,7 +33,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"

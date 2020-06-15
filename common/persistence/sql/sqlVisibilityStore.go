@@ -30,14 +30,15 @@ import (
 	"fmt"
 	"time"
 
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/service/config"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -278,7 +279,7 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
 	}
 	if row.Status != nil {
-		status := executionpb.WorkflowExecutionStatus(*row.Status)
+		status := enumspb.WorkflowExecutionStatus(*row.Status)
 		info.Status = &status
 		info.CloseTime = *row.CloseTime
 		info.HistoryLength = *row.HistoryLength

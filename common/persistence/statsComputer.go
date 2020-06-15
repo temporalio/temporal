@@ -24,7 +24,7 @@
 
 package persistence
 
-import "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+import "github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 
 type (
 	// statsComputer is to computing struct sizes after serialization

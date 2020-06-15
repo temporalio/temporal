@@ -32,8 +32,9 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -214,23 +215,23 @@ SubmitLoop:
 	for {
 		var scope int
 		switch replicationTask.GetTaskType() {
-		case replicationgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
 			logger = logger.WithTags(tag.WorkflowNamespaceID(replicationTask.GetNamespaceTaskAttributes().GetId()))
 			scope = metrics.NamespaceReplicationTaskScope
 			err = p.handleNamespaceReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 			scope = metrics.SyncShardTaskScope
 			err = p.handleSyncShardTask(replicationTask, msg, logger)
-		case replicationgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 			scope = metrics.SyncActivityTaskScope
 			err = p.handleActivityTask(replicationTask, msg, logger)
-		case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 			scope = metrics.HistoryReplicationTaskScope
 			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+		case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 			scope = metrics.HistoryReplicationV2TaskScope
 			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
 		default:

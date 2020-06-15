@@ -32,7 +32,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 

@@ -31,12 +31,12 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/service/worker/scanner/executor"
-	// tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	// tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
 )
 
 type handlerStatus = executor.TaskStatus
