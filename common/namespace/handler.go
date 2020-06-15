@@ -212,9 +212,9 @@ func (d *HandlerImpl) RegisterNamespace(
 		RetentionDays:            registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
 		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
-		HistoryArchivalURI:       nextHistoryArchivalState.URI,
+		HistoryArchivalUri:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
-		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
+		VisibilityArchivalUri:    nextVisibilityArchivalState.URI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -381,7 +381,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	currentHistoryArchivalState := &ArchivalState{
 		Status: config.HistoryArchivalStatus,
-		URI:    config.HistoryArchivalURI,
+		URI:    config.HistoryArchivalUri,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
 	historyArchivalConfigChanged := false
@@ -400,7 +400,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	currentVisibilityArchivalState := &ArchivalState{
 		Status: config.VisibilityArchivalStatus,
-		URI:    config.VisibilityArchivalURI,
+		URI:    config.VisibilityArchivalUri,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	visibilityArchivalConfigChanged := false
@@ -451,12 +451,12 @@ func (d *HandlerImpl) UpdateNamespace(
 		if historyArchivalConfigChanged {
 			configurationChanged = true
 			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
-			config.HistoryArchivalURI = nextHistoryArchivalState.URI
+			config.HistoryArchivalUri = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
 			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
-			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
+			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
@@ -647,9 +647,9 @@ func (d *HandlerImpl) createResponse(
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-		HistoryArchivalURI:                     config.HistoryArchivalURI,
+		HistoryArchivalURI:                     config.HistoryArchivalUri,
 		VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+		VisibilityArchivalURI:                  config.VisibilityArchivalUri,
 		BadBinaries:                            config.BadBinaries,
 	}
 

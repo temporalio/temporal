@@ -128,7 +128,7 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceConfig{
 		RetentionDays:            1,
 		VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-		VisibilityArchivalURI:    "test:///visibility/archival",
+		VisibilityArchivalUri:    "test:///visibility/archival",
 	},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,

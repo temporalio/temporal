@@ -263,7 +263,7 @@ func (s *shardContextImpl) GetReplicatorDLQAckLevel(sourceCluster string) int64 
 	s.RLock()
 	defer s.RUnlock()
 
-	if ackLevel, ok := s.shardInfo.ReplicationDLQAckLevel[sourceCluster]; ok {
+	if ackLevel, ok := s.shardInfo.ReplicationDlqAckLevel[sourceCluster]; ok {
 		return ackLevel
 	}
 	return -1
@@ -277,7 +277,7 @@ func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.ReplicationDLQAckLevel[sourceCluster] = ackLevel
+	s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	if err := s.updateShardInfoLocked(); err != nil {
 		return err

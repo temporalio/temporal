@@ -87,9 +87,9 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-				HistoryArchivalURI:                     config.HistoryArchivalURI,
+				HistoryArchivalURI:                     config.HistoryArchivalUri,
 				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-				VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+				VisibilityArchivalURI:                  config.VisibilityArchivalUri,
 				BadBinaries:                            config.BadBinaries,
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{

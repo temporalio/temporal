@@ -161,7 +161,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
-		HistoryArchivalURI: request.URI,
+		HistoryArchivalUri: request.URI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {
 		return nil

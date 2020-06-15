@@ -916,9 +916,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:       "",
+			HistoryArchivalUri:       "",
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -936,9 +936,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-			HistoryArchivalURI:       "uri without scheme",
+			HistoryArchivalUri:       "uri without scheme",
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -956,9 +956,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-			HistoryArchivalURI:       testHistoryArchivalURI,
+			HistoryArchivalUri:       testHistoryArchivalURI,
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -1088,7 +1088,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "uri without scheme",
+			VisibilityArchivalUri:    "uri without scheme",
 		},
 		"",
 		nil,
@@ -1107,7 +1107,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-			VisibilityArchivalURI:    testVisibilityArchivalURI,
+			VisibilityArchivalUri:    testVisibilityArchivalURI,
 		},
 		"",
 		nil,
@@ -1368,9 +1368,9 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 				RetentionDays:            1,
 				EmitMetric:               true,
 				HistoryArchivalStatus:    historyArchivalState.Status,
-				HistoryArchivalURI:       historyArchivalState.URI,
+				HistoryArchivalUri:       historyArchivalState.URI,
 				VisibilityArchivalStatus: visibilityArchivalState.Status,
-				VisibilityArchivalURI:    visibilityArchivalState.URI,
+				VisibilityArchivalUri:    visibilityArchivalState.URI,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,

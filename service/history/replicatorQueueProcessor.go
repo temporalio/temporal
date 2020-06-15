@@ -699,7 +699,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					if err != nil {
 						return nil, err
 					}
-					replicationTask.GetHistoryTaskAttributes().NewRunNDC = isNDCWorkflow
+					replicationTask.GetHistoryTaskAttributes().NewRunNdc = isNDCWorkflow
 				}
 
 				return replicationTask, err

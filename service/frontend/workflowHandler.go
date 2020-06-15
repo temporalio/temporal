@@ -2612,7 +2612,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 
-	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalURI)
+	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalUri)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3594,7 +3594,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	URIString := entry.GetConfig().HistoryArchivalURI
+	URIString := entry.GetConfig().HistoryArchivalUri
 	if URIString == "" {
 		// if URI is empty, it means the namespace has never enabled for archival.
 		// the error is not "workflow has passed retention period", because

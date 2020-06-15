@@ -106,9 +106,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -184,9 +184,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -232,9 +232,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -309,9 +309,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,

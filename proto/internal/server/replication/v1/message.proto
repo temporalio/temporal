@@ -112,7 +112,7 @@ message HistoryTaskAttributes {
     int32 event_store_version = 11;
     int32 new_run_event_store_version = 12;
     bool reset_workflow = 13;
-    bool new_run_n_d_c = 14;
+    bool new_run_ndc = 14;
 }
 
 message HistoryMetadataTaskAttributes {

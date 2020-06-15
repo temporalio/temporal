@@ -259,7 +259,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
-		HistoryArchivalURI: request.ArchiveRequest.URI,
+		HistoryArchivalUri: request.ArchiveRequest.URI,
 	})
 }
 

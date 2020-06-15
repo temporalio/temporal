@@ -125,9 +125,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 				EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 				HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-				HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
+				HistoryArchivalUri:       task.Config.GetHistoryArchivalURI(),
 				VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-				VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
+				VisibilityArchivalUri:    task.Config.GetVisibilityArchivalURI(),
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
@@ -237,9 +237,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
+			HistoryArchivalUri:       task.Config.GetHistoryArchivalURI(),
 			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
+			VisibilityArchivalUri:    task.Config.GetVisibilityArchivalURI(),
 		}
 		if task.Config.GetBadBinaries() != nil {
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
