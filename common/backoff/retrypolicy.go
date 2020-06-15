@@ -93,6 +93,13 @@ func NewExponentialRetryPolicy(initialInterval time.Duration) *ExponentialRetryP
 
 // NewRetrier is used for creating a new instance of Retrier
 func NewRetrier(policy RetryPolicy, clock Clock) Retrier {
+	if policy == nil {
+		panic("Retry policy cannot be nil.")
+	}
+	if clock == nil {
+		panic("Retry clock cannot be nil.")
+	}
+
 	return &retrierImpl{
 		policy:         policy,
 		clock:          clock,
