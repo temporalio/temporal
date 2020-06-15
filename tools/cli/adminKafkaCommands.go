@@ -810,6 +810,36 @@ func AdminMergeDLQ(c *cli.Context) {
 	}
 }
 
+// AdminListDLQ outputs a list of a tasks for given Shard and Task Type
+func AdminListDLQ(c *cli.Context) {
+	cluster := getRequiredOption(c, FlagCluster)
+	sid := getRequiredIntOption(c, FlagShardID)
+
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager(sid)
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
+
+	taskReq := persistence.GetReplicationTasksRequest{}
+	req := &persistence.GetReplicationTasksFromDLQRequest{SourceClusterName: cluster, GetReplicationTasksRequest: taskReq}
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req.GetReplicationTasksRequest.NextPageToken = paginationToken
+		response, err := executionManager.GetReplicationTasksFromDLQ(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		token := response.NextPageToken
+
+		var items []interface{}
+		for _, task := range response.Tasks {
+			items = append(items, task)
+		}
+		return items, token, nil
+	}
+	paginate(c, paginationFunc)
+}
+
 func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, group, fromTopic string) *cluster.Consumer {
 	config := cluster.NewConfig()
 	config.Consumer.Return.Errors = true
