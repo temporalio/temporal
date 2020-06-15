@@ -226,6 +226,11 @@ const (
 	FlagFailoverTypeWithAlias             = FlagFailoverType + ", ft"
 	FlagFailoverTimeout                   = "failover_timeout_seconds"
 	FlagFailoverTimeoutWithAlias          = FlagFailoverTimeout + ", fts"
+	FlagRetryInterval                     = "retry_interval"
+	FlagRetryAttempts                     = "retry_attempts"
+	FlagRetryExpiration                   = "retry_expiration"
+	FlagRetryBackoff                      = "retry_backoff"
+	FlagRetryMaxInterval                  = "retry_max_interval"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -353,6 +358,28 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
 				"If value is array, use json array like [\"a\",\"b\"], [1,2], [\"true\",\"false\"], [\"2019-06-07T17:16:34-08:00\",\"2019-06-07T18:16:34-08:00\"]. " +
 				"Use 'cluster get-search-attr' cmd to list legal keys and value types",
+		},
+		cli.IntFlag{
+			Name:  FlagRetryExpiration,
+			Usage: "Optional retry expiration in seconds. If set workflow will be retried for the specified period of time.",
+		},
+		cli.IntFlag{
+			Name:  FlagRetryAttempts,
+			Usage: "Optional retry attempts. If set workflow will be retried the specified amount of times.",
+		},
+		cli.IntFlag{
+			Name:  FlagRetryInterval,
+			Value: 10,
+			Usage: "Optional retry interval in seconds.",
+		},
+		cli.Float64Flag{
+			Name:  FlagRetryBackoff,
+			Value: 1.0,
+			Usage: "Optional retry backoff coeficient. Must be or equal or greater than 1.",
+		},
+		cli.IntFlag{
+			Name:  FlagRetryMaxInterval,
+			Usage: "Optional retry maximum interval in seconds. If set will give an upper bound for retry interval. Must be equal or greater than retry interval.",
 		},
 	}
 }
