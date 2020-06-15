@@ -169,9 +169,9 @@ func (s *IntegrationBase) registerNamespace(
 		Description:                            namespace,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		HistoryArchivalStatus:                  historyArchivalStatus,
-		HistoryArchivalURI:                     historyArchivalURI,
+		HistoryArchivalUri:                     historyArchivalURI,
 		VisibilityArchivalStatus:               visibilityArchivalStatus,
-		VisibilityArchivalURI:                  visibilityArchivalURI,
+		VisibilityArchivalUri:                  visibilityArchivalURI,
 	})
 
 	return err

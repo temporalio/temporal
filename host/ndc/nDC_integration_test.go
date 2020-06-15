@@ -95,7 +95,7 @@ type (
 
 var (
 	clusterName              = []string{"active", "standby", "other"}
-	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfiguration{
+	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
 		{ClusterName: clusterName[2]},

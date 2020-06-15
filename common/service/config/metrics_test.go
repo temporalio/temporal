@@ -62,7 +62,7 @@ func (s *MetricsSuite) TestStatsd() {
 }
 
 func (s *MetricsSuite) TestM3() {
-	m3 := &m3.Configuration{
+	m3 := &m3.Config{
 		HostPort: "127.0.0.1:8125",
 		Service:  "testM3",
 		Env:      "devel",
@@ -74,7 +74,7 @@ func (s *MetricsSuite) TestM3() {
 }
 
 func (s *MetricsSuite) TestPrometheus() {
-	prom := &prometheus.Configuration{
+	prom := &prometheus.Config{
 		OnError:       "panic",
 		TimerType:     "histogram",
 		ListenAddress: "127.0.0.1:0",

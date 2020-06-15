@@ -125,9 +125,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 				EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 				HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-				HistoryArchivalUri:       task.Config.GetHistoryArchivalURI(),
+				HistoryArchivalUri:       task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-				VisibilityArchivalUri:    task.Config.GetVisibilityArchivalURI(),
+				VisibilityArchivalUri:    task.Config.GetVisibilityArchivalUri(),
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
@@ -237,9 +237,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-			HistoryArchivalUri:       task.Config.GetHistoryArchivalURI(),
+			HistoryArchivalUri:       task.Config.GetHistoryArchivalUri(),
 			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-			VisibilityArchivalUri:    task.Config.GetVisibilityArchivalURI(),
+			VisibilityArchivalUri:    task.Config.GetVisibilityArchivalUri(),
 		}
 		if task.Config.GetBadBinaries() != nil {
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
@@ -279,7 +279,7 @@ func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
-	input []*replicationpb.ClusterReplicationConfiguration) []string {
+	input []*replicationpb.ClusterReplicationConfig) []string {
 	output := []string{}
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()

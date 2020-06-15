@@ -164,13 +164,13 @@ var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse
 		Description: "a test namespace",
 		OwnerEmail:  "test@uber.com",
 	},
-	Configuration: &namespacepb.NamespaceConfiguration{
+	Config: &namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: 3,
 		EmitMetric:                             &types.BoolValue{Value: true},
 	},
-	ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+	ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: "active",
-		Clusters: []*replicationpb.ClusterReplicationConfiguration{
+		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: "active",
 			},

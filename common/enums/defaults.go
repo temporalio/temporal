@@ -28,20 +28,20 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 )
 
-func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy){
-	if *f == enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED{
+func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy) {
+	if *f == enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED {
 		*f = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 }
 
-func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType){
-	if *f == enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED{
+func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType) {
+	if *f == enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED {
 		*f = enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT
 	}
 }
 
-func SetDefaultTaskListKind(f *enumspb.TaskListKind){
-	if *f == enumspb.TASK_LIST_KIND_UNSPECIFIED{
+func SetDefaultTaskListKind(f *enumspb.TaskListKind) {
+	if *f == enumspb.TASK_LIST_KIND_UNSPECIFIED {
 		*f = enumspb.TASK_LIST_KIND_NORMAL
 	}
 }

@@ -3034,10 +3034,10 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: response.GetExecutionConfiguration(),
-		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),
-		PendingActivities:      response.GetPendingActivities(),
-		PendingChildren:        response.GetPendingChildren(),
+		ExecutionConfig:       response.GetExecutionConfig(),
+		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
+		PendingActivities:     response.GetPendingActivities(),
+		PendingChildren:       response.GetPendingChildren(),
 	}, nil
 }
 
@@ -3559,7 +3559,7 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 }
 
 func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateNamespaceRequest) bool {
-	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
+	return updateRequest.ReplicationConfig != nil && updateRequest.ReplicationConfig.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID string) bool {

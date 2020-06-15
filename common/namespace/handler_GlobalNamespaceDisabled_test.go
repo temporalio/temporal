@@ -129,7 +129,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := cluster.TestCurrentClusterName
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: activeClusterName,
 		},
@@ -160,7 +160,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := cluster.TestAlternativeClusterName
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: activeClusterName,
 		},
@@ -186,9 +186,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
-	var clusters []*replicationpb.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfig
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: cluster,
 		})
 	}
@@ -216,19 +216,19 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 		Data:        map[string]string{},
 		Id:          "",
 	}, resp.NamespaceInfo)
-	s.Equal(&namespacepb.NamespaceConfiguration{
+	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
-		HistoryArchivalURI:                     "",
+		HistoryArchivalUri:                     "",
 		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
-		VisibilityArchivalURI:                  "",
+		VisibilityArchivalUri:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-	}, resp.Configuration)
-	s.Equal(&replicationpb.NamespaceReplicationConfiguration{
+	}, resp.Config)
+	s.Equal(&replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		Clusters:          clusters,
-	}, resp.ReplicationConfiguration)
+	}, resp.ReplicationConfig)
 	s.Equal(common.EmptyVersion, resp.GetFailoverVersion())
 	s.False(resp.GetIsGlobalNamespace())
 }
@@ -240,17 +240,17 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := cluster.TestCurrentClusterName
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
-		&replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
+		&replicationpb.ClusterReplicationConfig{
 			ClusterName: activeClusterName,
 		},
 	}
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := false
 
-	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
+	var expectedClusters []*replicationpb.ClusterReplicationConfig
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
+		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: cluster,
 		})
 	}
@@ -284,19 +284,19 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 		Data:        data,
 		Id:          "",
 	}, resp.NamespaceInfo)
-	s.Equal(&namespacepb.NamespaceConfiguration{
+	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
-		HistoryArchivalURI:                     "",
+		HistoryArchivalUri:                     "",
 		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
-		VisibilityArchivalURI:                  "",
+		VisibilityArchivalUri:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-	}, resp.Configuration)
-	s.Equal(&replicationpb.NamespaceReplicationConfiguration{
+	}, resp.Config)
+	s.Equal(&replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		Clusters:          expectedClusters,
-	}, resp.ReplicationConfiguration)
+	}, resp.ReplicationConfig)
 	s.Equal(common.EmptyVersion, resp.GetFailoverVersion())
 	s.Equal(isGlobalNamespace, resp.GetIsGlobalNamespace())
 }
@@ -308,9 +308,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	retention := int32(7)
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
-	var clusters []*replicationpb.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfig
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: cluster,
 		})
 	}
@@ -328,8 +328,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	fnTest := func(info *namespacepb.NamespaceInfo, config *namespacepb.NamespaceConfiguration,
-		replicationConfig *replicationpb.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
+	fnTest := func(info *namespacepb.NamespaceInfo, config *namespacepb.NamespaceConfig,
+		replicationConfig *replicationpb.NamespaceReplicationConfig, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetId())
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
@@ -340,16 +340,16 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 			Data:        data,
 			Id:          "",
 		}, info)
-		s.Equal(&namespacepb.NamespaceConfiguration{
+		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:                     "",
+			HistoryArchivalUri:                     "",
 			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:                  "",
+			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&replicationpb.NamespaceReplicationConfiguration{
+		s.Equal(&replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters:          clusters,
 		}, replicationConfig)
@@ -363,8 +363,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	s.NoError(err)
 	fnTest(
 		updateResp.NamespaceInfo,
-		updateResp.Configuration,
-		updateResp.ReplicationConfiguration,
+		updateResp.Config,
+		updateResp.ReplicationConfig,
 		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
@@ -375,8 +375,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	s.NoError(err)
 	fnTest(
 		getResp.NamespaceInfo,
-		getResp.Configuration,
-		getResp.ReplicationConfiguration,
+		getResp.Config,
+		getResp.ReplicationConfig,
 		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
@@ -396,22 +396,22 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := cluster.TestCurrentClusterName
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
-		&replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
+		&replicationpb.ClusterReplicationConfig{
 			ClusterName: activeClusterName,
 		},
 	}
 	data := map[string]string{"some random key": "some random value"}
 
-	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
+	var expectedClusters []*replicationpb.ClusterReplicationConfig
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
+		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: cluster,
 		})
 	}
 
-	fnTest := func(info *namespacepb.NamespaceInfo, config *namespacepb.NamespaceConfiguration,
-		replicationConfig *replicationpb.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
+	fnTest := func(info *namespacepb.NamespaceInfo, config *namespacepb.NamespaceConfig,
+		replicationConfig *replicationpb.NamespaceReplicationConfig, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetId())
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
@@ -422,16 +422,16 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 			Data:        data,
 			Id:          "",
 		}, info)
-		s.Equal(&namespacepb.NamespaceConfiguration{
+		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:                     "",
+			HistoryArchivalUri:                     "",
 			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:                  "",
+			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&replicationpb.NamespaceReplicationConfiguration{
+		s.Equal(&replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters:          expectedClusters,
 		}, replicationConfig)
@@ -446,22 +446,22 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 			OwnerEmail:  email,
 			Data:        data,
 		},
-		Configuration: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:                     "",
+			HistoryArchivalUri:                     "",
 			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:                  "",
+			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		},
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: activeClusterName,
 			Clusters:          clusters,
 		},
 	})
 	s.NoError(err)
-	fnTest(updateResp.NamespaceInfo, updateResp.Configuration, updateResp.ReplicationConfiguration, updateResp.GetIsGlobalNamespace(), updateResp.GetFailoverVersion())
+	fnTest(updateResp.NamespaceInfo, updateResp.Config, updateResp.ReplicationConfig, updateResp.GetIsGlobalNamespace(), updateResp.GetFailoverVersion())
 
 	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Name: namespace,
@@ -469,8 +469,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	s.NoError(err)
 	fnTest(
 		getResp.NamespaceInfo,
-		getResp.Configuration,
-		getResp.ReplicationConfiguration,
+		getResp.Config,
+		getResp.ReplicationConfig,
 		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)

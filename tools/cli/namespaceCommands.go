@@ -115,14 +115,14 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 		activeClusterName = c.String(FlagActiveClusterName)
 	}
 
-	var clusters []*replicationpb.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfig
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: clusterStr,
 		})
 		for _, clusterStr := range c.Args() {
-			clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 				ClusterName: clusterStr,
 			})
 		}
@@ -138,9 +138,9 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 		ActiveClusterName:                      activeClusterName,
 		SecurityToken:                          securityToken,
 		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
-		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
+		HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
 		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
-		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
+		VisibilityArchivalUri:                  c.String(FlagVisibilityArchivalURI),
 		IsGlobalNamespace:                      isGlobalNamespace,
 	}
 
@@ -169,12 +169,12 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 	if c.IsSet(FlagActiveClusterName) {
 		activeCluster := c.String(FlagActiveClusterName)
 		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
-		replicationConfig := &replicationpb.NamespaceReplicationConfiguration{
+		replicationConfig := &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: activeCluster,
 		}
 		updateRequest = &workflowservice.UpdateNamespaceRequest{
-			Name:                     namespace,
-			ReplicationConfiguration: replicationConfig,
+			Name:              namespace,
+			ReplicationConfig: replicationConfig,
 		}
 	} else {
 		resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
@@ -191,9 +191,9 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 
 		description := resp.NamespaceInfo.GetDescription()
 		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
-		retentionDays := resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays()
-		emitMetric := resp.Configuration.GetEmitMetric().GetValue()
-		var clusters []*replicationpb.ClusterReplicationConfiguration
+		retentionDays := resp.Config.GetWorkflowExecutionRetentionPeriodInDays()
+		emitMetric := resp.Config.GetEmitMetric().GetValue()
+		var clusters []*replicationpb.ClusterReplicationConfig
 
 		if c.IsSet(FlagDescription) {
 			description = c.String(FlagDescription)
@@ -214,11 +214,11 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		}
 		if c.IsSet(FlagClusters) {
 			clusterStr := c.String(FlagClusters)
-			clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 				ClusterName: clusterStr,
 			})
 			for _, clusterStr := range c.Args() {
-				clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+				clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 					ClusterName: clusterStr,
 				})
 			}
@@ -252,24 +252,24 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			OwnerEmail:  ownerEmail,
 			Data:        namespaceData,
 		}
-		updateConfig := &namespacepb.NamespaceConfiguration{
+		updateConfig := &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
-			HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
+			HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
 			VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
-			VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
+			VisibilityArchivalUri:                  c.String(FlagVisibilityArchivalURI),
 			BadBinaries:                            binBinaries,
 		}
-		replicationConfig := &replicationpb.NamespaceReplicationConfiguration{
+		replicationConfig := &replicationpb.NamespaceReplicationConfig{
 			Clusters: clusters,
 		}
 		updateRequest = &workflowservice.UpdateNamespaceRequest{
-			Name:                     namespace,
-			UpdatedInfo:              updateInfo,
-			Configuration:            updateConfig,
-			ReplicationConfiguration: replicationConfig,
-			DeleteBadBinary:          badBinaryToDelete,
+			Name:              namespace,
+			UpdateInfo:        updateInfo,
+			Config:            updateConfig,
+			ReplicationConfig: replicationConfig,
+			DeleteBadBinary:   badBinaryToDelete,
 		}
 	}
 
@@ -321,24 +321,24 @@ func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 		resp.NamespaceInfo.GetOwnerEmail(),
 		resp.NamespaceInfo.Data,
 		resp.NamespaceInfo.GetStatus(),
-		resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
-		resp.Configuration.GetEmitMetric().GetValue(),
-		resp.ReplicationConfiguration.GetActiveClusterName(),
-		clustersToString(resp.ReplicationConfiguration.Clusters),
-		resp.Configuration.GetHistoryArchivalStatus().String(),
+		resp.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+		resp.Config.GetEmitMetric().GetValue(),
+		resp.ReplicationConfig.GetActiveClusterName(),
+		clustersToString(resp.ReplicationConfig.Clusters),
+		resp.Config.GetHistoryArchivalStatus().String(),
 	}
-	if resp.Configuration.GetHistoryArchivalURI() != "" {
+	if resp.Config.GetHistoryArchivalUri() != "" {
 		formatStr = formatStr + "HistoryArchivalURI: %v\n"
-		descValues = append(descValues, resp.Configuration.GetHistoryArchivalURI())
+		descValues = append(descValues, resp.Config.GetHistoryArchivalUri())
 	}
 	formatStr = formatStr + "VisibilityArchivalStatus: %v\n"
-	descValues = append(descValues, resp.Configuration.GetVisibilityArchivalStatus().String())
-	if resp.Configuration.GetVisibilityArchivalURI() != "" {
+	descValues = append(descValues, resp.Config.GetVisibilityArchivalStatus().String())
+	if resp.Config.GetVisibilityArchivalUri() != "" {
 		formatStr = formatStr + "VisibilityArchivalURI: %v\n"
-		descValues = append(descValues, resp.Configuration.GetVisibilityArchivalURI())
+		descValues = append(descValues, resp.Config.GetVisibilityArchivalUri())
 	}
 	fmt.Printf(formatStr, descValues...)
-	if resp.Configuration.BadBinaries != nil {
+	if resp.Config.BadBinaries != nil {
 		fmt.Println("Bad binaries to reset:")
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetBorder(true)
@@ -347,10 +347,10 @@ func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 		headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 		table.SetHeader(header)
 		table.SetHeaderColor(headerColor...)
-		for cs, bin := range resp.Configuration.BadBinaries.Binaries {
+		for cs, bin := range resp.Config.BadBinaries.Binaries {
 			row := []string{cs}
 			row = append(row, bin.GetOperator())
-			row = append(row, time.Unix(0, bin.GetCreatedTimeNano()).String())
+			row = append(row, time.Unix(0, bin.GetCreateTimeNano()).String())
 			row = append(row, bin.GetReason())
 			table.Append(row)
 		}
@@ -437,7 +437,7 @@ func (d *namespaceCLIImpl) describeNamespace(
 	return resp, err
 }
 
-func clustersToString(clusters []*replicationpb.ClusterReplicationConfiguration) string {
+func clustersToString(clusters []*replicationpb.ClusterReplicationConfig) string {
 	var res string
 	for i, cluster := range clusters {
 		if i == 0 {
