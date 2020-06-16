@@ -51,9 +51,9 @@ const (
 	deleteNamespaceByIDQuery   = `DELETE FROM namespaces WHERE shard_id=? AND id = ?`
 	deleteNamespaceByNameQuery = `DELETE FROM namespaces WHERE shard_id=? AND name = ?`
 
-	getNamespaceMetadataQuery    = `SELECT notification_version FROM namespace_metadata`
-	lockNamespaceMetadataQuery   = `SELECT notification_version FROM namespace_metadata FOR UPDATE`
-	updateNamespaceMetadataQuery = `UPDATE namespace_metadata SET notification_version = ? WHERE notification_version = ?`
+	getNamespaceMetadataQuery    = `SELECT notification_version FROM namespace_metadata WHERE shard_id = 54321`
+	lockNamespaceMetadataQuery   = `SELECT notification_version FROM namespace_metadata WHERE shard_id = 54321 FOR UPDATE`
+	updateNamespaceMetadataQuery = `UPDATE namespace_metadata SET notification_version = ? WHERE notification_version = ? AND shard_id = 54321`
 )
 
 const (

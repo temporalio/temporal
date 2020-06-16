@@ -11,7 +11,9 @@ CREATE TABLE namespaces(
 );
 
 CREATE TABLE namespace_metadata (
-  notification_version BIGINT NOT NULL
+  shard_id INT NOT NULL,
+  notification_version BIGINT NOT NULL,
+  PRIMARY KEY(shard_id)
 );
 
 INSERT INTO namespace_metadata (notification_version) VALUES (1);
