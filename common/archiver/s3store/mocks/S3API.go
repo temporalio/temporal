@@ -453,21 +453,21 @@ func (_m *S3API) DeleteBucket(_a0 *s3.DeleteBucketInput) (*s3.DeleteBucketOutput
 	return r0, r1
 }
 
-// DeleteBucketAnalyticsConfig provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketAnalyticsConfig(_a0 *s3.DeleteBucketAnalyticsConfigInput) (*s3.DeleteBucketAnalyticsConfigOutput, error) {
+// DeleteBucketAnalyticsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketAnalyticsConfiguration(_a0 *s3.DeleteBucketAnalyticsConfigurationInput) (*s3.DeleteBucketAnalyticsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.DeleteBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketAnalyticsConfigInput) *s3.DeleteBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.DeleteBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketAnalyticsConfigurationInput) *s3.DeleteBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketAnalyticsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketAnalyticsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -476,12 +476,12 @@ func (_m *S3API) DeleteBucketAnalyticsConfig(_a0 *s3.DeleteBucketAnalyticsConfig
 	return r0, r1
 }
 
-// DeleteBucketAnalyticsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketAnalyticsConfigRequest(_a0 *s3.DeleteBucketAnalyticsConfigInput) (*request.Request, *s3.DeleteBucketAnalyticsConfigOutput) {
+// DeleteBucketAnalyticsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketAnalyticsConfigurationRequest(_a0 *s3.DeleteBucketAnalyticsConfigurationInput) (*request.Request, *s3.DeleteBucketAnalyticsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketAnalyticsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketAnalyticsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -489,20 +489,20 @@ func (_m *S3API) DeleteBucketAnalyticsConfigRequest(_a0 *s3.DeleteBucketAnalytic
 		}
 	}
 
-	var r1 *s3.DeleteBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketAnalyticsConfigInput) *s3.DeleteBucketAnalyticsConfigOutput); ok {
+	var r1 *s3.DeleteBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketAnalyticsConfigurationInput) *s3.DeleteBucketAnalyticsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.DeleteBucketAnalyticsConfigOutput)
+			r1 = ret.Get(1).(*s3.DeleteBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// DeleteBucketAnalyticsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) DeleteBucketAnalyticsConfigWithContext(_a0 context.Context, _a1 *s3.DeleteBucketAnalyticsConfigInput, _a2 ...request.Option) (*s3.DeleteBucketAnalyticsConfigOutput, error) {
+// DeleteBucketAnalyticsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) DeleteBucketAnalyticsConfigurationWithContext(_a0 context.Context, _a1 *s3.DeleteBucketAnalyticsConfigurationInput, _a2 ...request.Option) (*s3.DeleteBucketAnalyticsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -512,17 +512,17 @@ func (_m *S3API) DeleteBucketAnalyticsConfigWithContext(_a0 context.Context, _a1
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.DeleteBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketAnalyticsConfigInput, ...request.Option) *s3.DeleteBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.DeleteBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketAnalyticsConfigurationInput, ...request.Option) *s3.DeleteBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketAnalyticsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketAnalyticsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -687,21 +687,21 @@ func (_m *S3API) DeleteBucketEncryptionWithContext(_a0 context.Context, _a1 *s3.
 	return r0, r1
 }
 
-// DeleteBucketInventoryConfig provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketInventoryConfig(_a0 *s3.DeleteBucketInventoryConfigInput) (*s3.DeleteBucketInventoryConfigOutput, error) {
+// DeleteBucketInventoryConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketInventoryConfiguration(_a0 *s3.DeleteBucketInventoryConfigurationInput) (*s3.DeleteBucketInventoryConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.DeleteBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketInventoryConfigInput) *s3.DeleteBucketInventoryConfigOutput); ok {
+	var r0 *s3.DeleteBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketInventoryConfigurationInput) *s3.DeleteBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketInventoryConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketInventoryConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -710,12 +710,12 @@ func (_m *S3API) DeleteBucketInventoryConfig(_a0 *s3.DeleteBucketInventoryConfig
 	return r0, r1
 }
 
-// DeleteBucketInventoryConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketInventoryConfigRequest(_a0 *s3.DeleteBucketInventoryConfigInput) (*request.Request, *s3.DeleteBucketInventoryConfigOutput) {
+// DeleteBucketInventoryConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketInventoryConfigurationRequest(_a0 *s3.DeleteBucketInventoryConfigurationInput) (*request.Request, *s3.DeleteBucketInventoryConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketInventoryConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketInventoryConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -723,20 +723,20 @@ func (_m *S3API) DeleteBucketInventoryConfigRequest(_a0 *s3.DeleteBucketInventor
 		}
 	}
 
-	var r1 *s3.DeleteBucketInventoryConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketInventoryConfigInput) *s3.DeleteBucketInventoryConfigOutput); ok {
+	var r1 *s3.DeleteBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketInventoryConfigurationInput) *s3.DeleteBucketInventoryConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.DeleteBucketInventoryConfigOutput)
+			r1 = ret.Get(1).(*s3.DeleteBucketInventoryConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// DeleteBucketInventoryConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) DeleteBucketInventoryConfigWithContext(_a0 context.Context, _a1 *s3.DeleteBucketInventoryConfigInput, _a2 ...request.Option) (*s3.DeleteBucketInventoryConfigOutput, error) {
+// DeleteBucketInventoryConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) DeleteBucketInventoryConfigurationWithContext(_a0 context.Context, _a1 *s3.DeleteBucketInventoryConfigurationInput, _a2 ...request.Option) (*s3.DeleteBucketInventoryConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -746,17 +746,17 @@ func (_m *S3API) DeleteBucketInventoryConfigWithContext(_a0 context.Context, _a1
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.DeleteBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketInventoryConfigInput, ...request.Option) *s3.DeleteBucketInventoryConfigOutput); ok {
+	var r0 *s3.DeleteBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketInventoryConfigurationInput, ...request.Option) *s3.DeleteBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketInventoryConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketInventoryConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -843,21 +843,21 @@ func (_m *S3API) DeleteBucketLifecycleWithContext(_a0 context.Context, _a1 *s3.D
 	return r0, r1
 }
 
-// DeleteBucketMetricsConfig provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketMetricsConfig(_a0 *s3.DeleteBucketMetricsConfigInput) (*s3.DeleteBucketMetricsConfigOutput, error) {
+// DeleteBucketMetricsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketMetricsConfiguration(_a0 *s3.DeleteBucketMetricsConfigurationInput) (*s3.DeleteBucketMetricsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.DeleteBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketMetricsConfigInput) *s3.DeleteBucketMetricsConfigOutput); ok {
+	var r0 *s3.DeleteBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketMetricsConfigurationInput) *s3.DeleteBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketMetricsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketMetricsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -866,12 +866,12 @@ func (_m *S3API) DeleteBucketMetricsConfig(_a0 *s3.DeleteBucketMetricsConfigInpu
 	return r0, r1
 }
 
-// DeleteBucketMetricsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) DeleteBucketMetricsConfigRequest(_a0 *s3.DeleteBucketMetricsConfigInput) (*request.Request, *s3.DeleteBucketMetricsConfigOutput) {
+// DeleteBucketMetricsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) DeleteBucketMetricsConfigurationRequest(_a0 *s3.DeleteBucketMetricsConfigurationInput) (*request.Request, *s3.DeleteBucketMetricsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketMetricsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.DeleteBucketMetricsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -879,20 +879,20 @@ func (_m *S3API) DeleteBucketMetricsConfigRequest(_a0 *s3.DeleteBucketMetricsCon
 		}
 	}
 
-	var r1 *s3.DeleteBucketMetricsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketMetricsConfigInput) *s3.DeleteBucketMetricsConfigOutput); ok {
+	var r1 *s3.DeleteBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.DeleteBucketMetricsConfigurationInput) *s3.DeleteBucketMetricsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.DeleteBucketMetricsConfigOutput)
+			r1 = ret.Get(1).(*s3.DeleteBucketMetricsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// DeleteBucketMetricsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) DeleteBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.DeleteBucketMetricsConfigInput, _a2 ...request.Option) (*s3.DeleteBucketMetricsConfigOutput, error) {
+// DeleteBucketMetricsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) DeleteBucketMetricsConfigurationWithContext(_a0 context.Context, _a1 *s3.DeleteBucketMetricsConfigurationInput, _a2 ...request.Option) (*s3.DeleteBucketMetricsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -902,17 +902,17 @@ func (_m *S3API) DeleteBucketMetricsConfigWithContext(_a0 context.Context, _a1 *
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.DeleteBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketMetricsConfigInput, ...request.Option) *s3.DeleteBucketMetricsConfigOutput); ok {
+	var r0 *s3.DeleteBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.DeleteBucketMetricsConfigurationInput, ...request.Option) *s3.DeleteBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.DeleteBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.DeleteBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketMetricsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.DeleteBucketMetricsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -1600,21 +1600,21 @@ func (_m *S3API) DeletePublicAccessBlockWithContext(_a0 context.Context, _a1 *s3
 	return r0, r1
 }
 
-// GetBucketAccelerateConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketAccelerateConfig(_a0 *s3.GetBucketAccelerateConfigInput) (*s3.GetBucketAccelerateConfigOutput, error) {
+// GetBucketAccelerateConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketAccelerateConfiguration(_a0 *s3.GetBucketAccelerateConfigurationInput) (*s3.GetBucketAccelerateConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketAccelerateConfigInput) *s3.GetBucketAccelerateConfigOutput); ok {
+	var r0 *s3.GetBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketAccelerateConfigurationInput) *s3.GetBucketAccelerateConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketAccelerateConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketAccelerateConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketAccelerateConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -1623,12 +1623,12 @@ func (_m *S3API) GetBucketAccelerateConfig(_a0 *s3.GetBucketAccelerateConfigInpu
 	return r0, r1
 }
 
-// GetBucketAccelerateConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketAccelerateConfigRequest(_a0 *s3.GetBucketAccelerateConfigInput) (*request.Request, *s3.GetBucketAccelerateConfigOutput) {
+// GetBucketAccelerateConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketAccelerateConfigurationRequest(_a0 *s3.GetBucketAccelerateConfigurationInput) (*request.Request, *s3.GetBucketAccelerateConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketAccelerateConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketAccelerateConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -1636,20 +1636,20 @@ func (_m *S3API) GetBucketAccelerateConfigRequest(_a0 *s3.GetBucketAccelerateCon
 		}
 	}
 
-	var r1 *s3.GetBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketAccelerateConfigInput) *s3.GetBucketAccelerateConfigOutput); ok {
+	var r1 *s3.GetBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketAccelerateConfigurationInput) *s3.GetBucketAccelerateConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetBucketAccelerateConfigOutput)
+			r1 = ret.Get(1).(*s3.GetBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketAccelerateConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketAccelerateConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketAccelerateConfigInput, _a2 ...request.Option) (*s3.GetBucketAccelerateConfigOutput, error) {
+// GetBucketAccelerateConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketAccelerateConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketAccelerateConfigurationInput, _a2 ...request.Option) (*s3.GetBucketAccelerateConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -1659,17 +1659,17 @@ func (_m *S3API) GetBucketAccelerateConfigWithContext(_a0 context.Context, _a1 *
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketAccelerateConfigInput, ...request.Option) *s3.GetBucketAccelerateConfigOutput); ok {
+	var r0 *s3.GetBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketAccelerateConfigurationInput, ...request.Option) *s3.GetBucketAccelerateConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketAccelerateConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketAccelerateConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketAccelerateConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -1756,21 +1756,21 @@ func (_m *S3API) GetBucketAclWithContext(_a0 context.Context, _a1 *s3.GetBucketA
 	return r0, r1
 }
 
-// GetBucketAnalyticsConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketAnalyticsConfig(_a0 *s3.GetBucketAnalyticsConfigInput) (*s3.GetBucketAnalyticsConfigOutput, error) {
+// GetBucketAnalyticsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketAnalyticsConfiguration(_a0 *s3.GetBucketAnalyticsConfigurationInput) (*s3.GetBucketAnalyticsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketAnalyticsConfigInput) *s3.GetBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.GetBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketAnalyticsConfigurationInput) *s3.GetBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketAnalyticsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketAnalyticsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -1779,12 +1779,12 @@ func (_m *S3API) GetBucketAnalyticsConfig(_a0 *s3.GetBucketAnalyticsConfigInput)
 	return r0, r1
 }
 
-// GetBucketAnalyticsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketAnalyticsConfigRequest(_a0 *s3.GetBucketAnalyticsConfigInput) (*request.Request, *s3.GetBucketAnalyticsConfigOutput) {
+// GetBucketAnalyticsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketAnalyticsConfigurationRequest(_a0 *s3.GetBucketAnalyticsConfigurationInput) (*request.Request, *s3.GetBucketAnalyticsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketAnalyticsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketAnalyticsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -1792,20 +1792,20 @@ func (_m *S3API) GetBucketAnalyticsConfigRequest(_a0 *s3.GetBucketAnalyticsConfi
 		}
 	}
 
-	var r1 *s3.GetBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketAnalyticsConfigInput) *s3.GetBucketAnalyticsConfigOutput); ok {
+	var r1 *s3.GetBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketAnalyticsConfigurationInput) *s3.GetBucketAnalyticsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetBucketAnalyticsConfigOutput)
+			r1 = ret.Get(1).(*s3.GetBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketAnalyticsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketAnalyticsConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketAnalyticsConfigInput, _a2 ...request.Option) (*s3.GetBucketAnalyticsConfigOutput, error) {
+// GetBucketAnalyticsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketAnalyticsConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketAnalyticsConfigurationInput, _a2 ...request.Option) (*s3.GetBucketAnalyticsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -1815,17 +1815,17 @@ func (_m *S3API) GetBucketAnalyticsConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketAnalyticsConfigInput, ...request.Option) *s3.GetBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.GetBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketAnalyticsConfigurationInput, ...request.Option) *s3.GetBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketAnalyticsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketAnalyticsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -1990,21 +1990,21 @@ func (_m *S3API) GetBucketEncryptionWithContext(_a0 context.Context, _a1 *s3.Get
 	return r0, r1
 }
 
-// GetBucketInventoryConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketInventoryConfig(_a0 *s3.GetBucketInventoryConfigInput) (*s3.GetBucketInventoryConfigOutput, error) {
+// GetBucketInventoryConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketInventoryConfiguration(_a0 *s3.GetBucketInventoryConfigurationInput) (*s3.GetBucketInventoryConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketInventoryConfigInput) *s3.GetBucketInventoryConfigOutput); ok {
+	var r0 *s3.GetBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketInventoryConfigurationInput) *s3.GetBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketInventoryConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketInventoryConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -2013,12 +2013,12 @@ func (_m *S3API) GetBucketInventoryConfig(_a0 *s3.GetBucketInventoryConfigInput)
 	return r0, r1
 }
 
-// GetBucketInventoryConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketInventoryConfigRequest(_a0 *s3.GetBucketInventoryConfigInput) (*request.Request, *s3.GetBucketInventoryConfigOutput) {
+// GetBucketInventoryConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketInventoryConfigurationRequest(_a0 *s3.GetBucketInventoryConfigurationInput) (*request.Request, *s3.GetBucketInventoryConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketInventoryConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketInventoryConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -2026,20 +2026,20 @@ func (_m *S3API) GetBucketInventoryConfigRequest(_a0 *s3.GetBucketInventoryConfi
 		}
 	}
 
-	var r1 *s3.GetBucketInventoryConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketInventoryConfigInput) *s3.GetBucketInventoryConfigOutput); ok {
+	var r1 *s3.GetBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketInventoryConfigurationInput) *s3.GetBucketInventoryConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetBucketInventoryConfigOutput)
+			r1 = ret.Get(1).(*s3.GetBucketInventoryConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketInventoryConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketInventoryConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketInventoryConfigInput, _a2 ...request.Option) (*s3.GetBucketInventoryConfigOutput, error) {
+// GetBucketInventoryConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketInventoryConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketInventoryConfigurationInput, _a2 ...request.Option) (*s3.GetBucketInventoryConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -2049,17 +2049,17 @@ func (_m *S3API) GetBucketInventoryConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketInventoryConfigInput, ...request.Option) *s3.GetBucketInventoryConfigOutput); ok {
+	var r0 *s3.GetBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketInventoryConfigurationInput, ...request.Option) *s3.GetBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketInventoryConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketInventoryConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -2091,21 +2091,21 @@ func (_m *S3API) GetBucketLifecycle(_a0 *s3.GetBucketLifecycleInput) (*s3.GetBuc
 	return r0, r1
 }
 
-// GetBucketLifecycleConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketLifecycleConfig(_a0 *s3.GetBucketLifecycleConfigInput) (*s3.GetBucketLifecycleConfigOutput, error) {
+// GetBucketLifecycleConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketLifecycleConfiguration(_a0 *s3.GetBucketLifecycleConfigurationInput) (*s3.GetBucketLifecycleConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketLifecycleConfigInput) *s3.GetBucketLifecycleConfigOutput); ok {
+	var r0 *s3.GetBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketLifecycleConfigurationInput) *s3.GetBucketLifecycleConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketLifecycleConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketLifecycleConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketLifecycleConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -2114,12 +2114,12 @@ func (_m *S3API) GetBucketLifecycleConfig(_a0 *s3.GetBucketLifecycleConfigInput)
 	return r0, r1
 }
 
-// GetBucketLifecycleConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketLifecycleConfigRequest(_a0 *s3.GetBucketLifecycleConfigInput) (*request.Request, *s3.GetBucketLifecycleConfigOutput) {
+// GetBucketLifecycleConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketLifecycleConfigurationRequest(_a0 *s3.GetBucketLifecycleConfigurationInput) (*request.Request, *s3.GetBucketLifecycleConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketLifecycleConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketLifecycleConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -2127,20 +2127,20 @@ func (_m *S3API) GetBucketLifecycleConfigRequest(_a0 *s3.GetBucketLifecycleConfi
 		}
 	}
 
-	var r1 *s3.GetBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketLifecycleConfigInput) *s3.GetBucketLifecycleConfigOutput); ok {
+	var r1 *s3.GetBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketLifecycleConfigurationInput) *s3.GetBucketLifecycleConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetBucketLifecycleConfigOutput)
+			r1 = ret.Get(1).(*s3.GetBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketLifecycleConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketLifecycleConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketLifecycleConfigInput, _a2 ...request.Option) (*s3.GetBucketLifecycleConfigOutput, error) {
+// GetBucketLifecycleConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketLifecycleConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketLifecycleConfigurationInput, _a2 ...request.Option) (*s3.GetBucketLifecycleConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -2150,17 +2150,17 @@ func (_m *S3API) GetBucketLifecycleConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketLifecycleConfigInput, ...request.Option) *s3.GetBucketLifecycleConfigOutput); ok {
+	var r0 *s3.GetBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketLifecycleConfigurationInput, ...request.Option) *s3.GetBucketLifecycleConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketLifecycleConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketLifecycleConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketLifecycleConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -2380,21 +2380,21 @@ func (_m *S3API) GetBucketLoggingWithContext(_a0 context.Context, _a1 *s3.GetBuc
 	return r0, r1
 }
 
-// GetBucketMetricsConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketMetricsConfig(_a0 *s3.GetBucketMetricsConfigInput) (*s3.GetBucketMetricsConfigOutput, error) {
+// GetBucketMetricsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketMetricsConfiguration(_a0 *s3.GetBucketMetricsConfigurationInput) (*s3.GetBucketMetricsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketMetricsConfigInput) *s3.GetBucketMetricsConfigOutput); ok {
+	var r0 *s3.GetBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketMetricsConfigurationInput) *s3.GetBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketMetricsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketMetricsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -2403,12 +2403,12 @@ func (_m *S3API) GetBucketMetricsConfig(_a0 *s3.GetBucketMetricsConfigInput) (*s
 	return r0, r1
 }
 
-// GetBucketMetricsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketMetricsConfigRequest(_a0 *s3.GetBucketMetricsConfigInput) (*request.Request, *s3.GetBucketMetricsConfigOutput) {
+// GetBucketMetricsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketMetricsConfigurationRequest(_a0 *s3.GetBucketMetricsConfigurationInput) (*request.Request, *s3.GetBucketMetricsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketMetricsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketMetricsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -2416,20 +2416,20 @@ func (_m *S3API) GetBucketMetricsConfigRequest(_a0 *s3.GetBucketMetricsConfigInp
 		}
 	}
 
-	var r1 *s3.GetBucketMetricsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketMetricsConfigInput) *s3.GetBucketMetricsConfigOutput); ok {
+	var r1 *s3.GetBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketMetricsConfigurationInput) *s3.GetBucketMetricsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetBucketMetricsConfigOutput)
+			r1 = ret.Get(1).(*s3.GetBucketMetricsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketMetricsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketMetricsConfigInput, _a2 ...request.Option) (*s3.GetBucketMetricsConfigOutput, error) {
+// GetBucketMetricsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketMetricsConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketMetricsConfigurationInput, _a2 ...request.Option) (*s3.GetBucketMetricsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -2439,17 +2439,17 @@ func (_m *S3API) GetBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketMetricsConfigInput, ...request.Option) *s3.GetBucketMetricsConfigOutput); ok {
+	var r0 *s3.GetBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketMetricsConfigurationInput, ...request.Option) *s3.GetBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.GetBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketMetricsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketMetricsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -2459,20 +2459,20 @@ func (_m *S3API) GetBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.
 }
 
 // GetBucketNotification provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketNotification(_a0 *s3.GetBucketNotificationConfigRequest) (*s3.NotificationConfigDeprecated, error) {
+func (_m *S3API) GetBucketNotification(_a0 *s3.GetBucketNotificationConfigurationRequest) (*s3.NotificationConfigurationDeprecated, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.NotificationConfigDeprecated
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigRequest) *s3.NotificationConfigDeprecated); ok {
+	var r0 *s3.NotificationConfigurationDeprecated
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigurationRequest) *s3.NotificationConfigurationDeprecated); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.NotificationConfigDeprecated)
+			r0 = ret.Get(0).(*s3.NotificationConfigurationDeprecated)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigurationRequest) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -2481,21 +2481,21 @@ func (_m *S3API) GetBucketNotification(_a0 *s3.GetBucketNotificationConfigReques
 	return r0, r1
 }
 
-// GetBucketNotificationConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketNotificationConfig(_a0 *s3.GetBucketNotificationConfigRequest) (*s3.NotificationConfig, error) {
+// GetBucketNotificationConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketNotificationConfiguration(_a0 *s3.GetBucketNotificationConfigurationRequest) (*s3.NotificationConfiguration, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.NotificationConfig
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigRequest) *s3.NotificationConfig); ok {
+	var r0 *s3.NotificationConfiguration
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigurationRequest) *s3.NotificationConfiguration); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.NotificationConfig)
+			r0 = ret.Get(0).(*s3.NotificationConfiguration)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigurationRequest) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -2504,12 +2504,12 @@ func (_m *S3API) GetBucketNotificationConfig(_a0 *s3.GetBucketNotificationConfig
 	return r0, r1
 }
 
-// GetBucketNotificationConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketNotificationConfigRequest(_a0 *s3.GetBucketNotificationConfigRequest) (*request.Request, *s3.NotificationConfig) {
+// GetBucketNotificationConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetBucketNotificationConfigurationRequest(_a0 *s3.GetBucketNotificationConfigurationRequest) (*request.Request, *s3.NotificationConfiguration) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigRequest) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigurationRequest) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -2517,20 +2517,20 @@ func (_m *S3API) GetBucketNotificationConfigRequest(_a0 *s3.GetBucketNotificatio
 		}
 	}
 
-	var r1 *s3.NotificationConfig
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigRequest) *s3.NotificationConfig); ok {
+	var r1 *s3.NotificationConfiguration
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigurationRequest) *s3.NotificationConfiguration); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.NotificationConfig)
+			r1 = ret.Get(1).(*s3.NotificationConfiguration)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetBucketNotificationConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketNotificationConfigWithContext(_a0 context.Context, _a1 *s3.GetBucketNotificationConfigRequest, _a2 ...request.Option) (*s3.NotificationConfig, error) {
+// GetBucketNotificationConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetBucketNotificationConfigurationWithContext(_a0 context.Context, _a1 *s3.GetBucketNotificationConfigurationRequest, _a2 ...request.Option) (*s3.NotificationConfiguration, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -2540,17 +2540,17 @@ func (_m *S3API) GetBucketNotificationConfigWithContext(_a0 context.Context, _a1
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.NotificationConfig
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketNotificationConfigRequest, ...request.Option) *s3.NotificationConfig); ok {
+	var r0 *s3.NotificationConfiguration
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketNotificationConfigurationRequest, ...request.Option) *s3.NotificationConfiguration); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.NotificationConfig)
+			r0 = ret.Get(0).(*s3.NotificationConfiguration)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketNotificationConfigRequest, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketNotificationConfigurationRequest, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -2560,11 +2560,11 @@ func (_m *S3API) GetBucketNotificationConfigWithContext(_a0 context.Context, _a1
 }
 
 // GetBucketNotificationRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetBucketNotificationRequest(_a0 *s3.GetBucketNotificationConfigRequest) (*request.Request, *s3.NotificationConfigDeprecated) {
+func (_m *S3API) GetBucketNotificationRequest(_a0 *s3.GetBucketNotificationConfigurationRequest) (*request.Request, *s3.NotificationConfigurationDeprecated) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigRequest) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetBucketNotificationConfigurationRequest) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -2572,12 +2572,12 @@ func (_m *S3API) GetBucketNotificationRequest(_a0 *s3.GetBucketNotificationConfi
 		}
 	}
 
-	var r1 *s3.NotificationConfigDeprecated
-	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigRequest) *s3.NotificationConfigDeprecated); ok {
+	var r1 *s3.NotificationConfigurationDeprecated
+	if rf, ok := ret.Get(1).(func(*s3.GetBucketNotificationConfigurationRequest) *s3.NotificationConfigurationDeprecated); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.NotificationConfigDeprecated)
+			r1 = ret.Get(1).(*s3.NotificationConfigurationDeprecated)
 		}
 	}
 
@@ -2585,7 +2585,7 @@ func (_m *S3API) GetBucketNotificationRequest(_a0 *s3.GetBucketNotificationConfi
 }
 
 // GetBucketNotificationWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetBucketNotificationWithContext(_a0 context.Context, _a1 *s3.GetBucketNotificationConfigRequest, _a2 ...request.Option) (*s3.NotificationConfigDeprecated, error) {
+func (_m *S3API) GetBucketNotificationWithContext(_a0 context.Context, _a1 *s3.GetBucketNotificationConfigurationRequest, _a2 ...request.Option) (*s3.NotificationConfigurationDeprecated, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -2595,17 +2595,17 @@ func (_m *S3API) GetBucketNotificationWithContext(_a0 context.Context, _a1 *s3.G
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.NotificationConfigDeprecated
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketNotificationConfigRequest, ...request.Option) *s3.NotificationConfigDeprecated); ok {
+	var r0 *s3.NotificationConfigurationDeprecated
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetBucketNotificationConfigurationRequest, ...request.Option) *s3.NotificationConfigurationDeprecated); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.NotificationConfigDeprecated)
+			r0 = ret.Get(0).(*s3.NotificationConfigurationDeprecated)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketNotificationConfigRequest, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetBucketNotificationConfigurationRequest, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -3339,21 +3339,21 @@ func (_m *S3API) GetObjectLegalHoldWithContext(_a0 context.Context, _a1 *s3.GetO
 	return r0, r1
 }
 
-// GetObjectLockConfig provides a mock function with given fields: _a0
-func (_m *S3API) GetObjectLockConfig(_a0 *s3.GetObjectLockConfigInput) (*s3.GetObjectLockConfigOutput, error) {
+// GetObjectLockConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) GetObjectLockConfiguration(_a0 *s3.GetObjectLockConfigurationInput) (*s3.GetObjectLockConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.GetObjectLockConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.GetObjectLockConfigInput) *s3.GetObjectLockConfigOutput); ok {
+	var r0 *s3.GetObjectLockConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.GetObjectLockConfigurationInput) *s3.GetObjectLockConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetObjectLockConfigOutput)
+			r0 = ret.Get(0).(*s3.GetObjectLockConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.GetObjectLockConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.GetObjectLockConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -3362,12 +3362,12 @@ func (_m *S3API) GetObjectLockConfig(_a0 *s3.GetObjectLockConfigInput) (*s3.GetO
 	return r0, r1
 }
 
-// GetObjectLockConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) GetObjectLockConfigRequest(_a0 *s3.GetObjectLockConfigInput) (*request.Request, *s3.GetObjectLockConfigOutput) {
+// GetObjectLockConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) GetObjectLockConfigurationRequest(_a0 *s3.GetObjectLockConfigurationInput) (*request.Request, *s3.GetObjectLockConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.GetObjectLockConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.GetObjectLockConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -3375,20 +3375,20 @@ func (_m *S3API) GetObjectLockConfigRequest(_a0 *s3.GetObjectLockConfigInput) (*
 		}
 	}
 
-	var r1 *s3.GetObjectLockConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.GetObjectLockConfigInput) *s3.GetObjectLockConfigOutput); ok {
+	var r1 *s3.GetObjectLockConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.GetObjectLockConfigurationInput) *s3.GetObjectLockConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.GetObjectLockConfigOutput)
+			r1 = ret.Get(1).(*s3.GetObjectLockConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// GetObjectLockConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) GetObjectLockConfigWithContext(_a0 context.Context, _a1 *s3.GetObjectLockConfigInput, _a2 ...request.Option) (*s3.GetObjectLockConfigOutput, error) {
+// GetObjectLockConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) GetObjectLockConfigurationWithContext(_a0 context.Context, _a1 *s3.GetObjectLockConfigurationInput, _a2 ...request.Option) (*s3.GetObjectLockConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -3398,17 +3398,17 @@ func (_m *S3API) GetObjectLockConfigWithContext(_a0 context.Context, _a1 *s3.Get
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.GetObjectLockConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetObjectLockConfigInput, ...request.Option) *s3.GetObjectLockConfigOutput); ok {
+	var r0 *s3.GetObjectLockConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.GetObjectLockConfigurationInput, ...request.Option) *s3.GetObjectLockConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.GetObjectLockConfigOutput)
+			r0 = ret.Get(0).(*s3.GetObjectLockConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetObjectLockConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.GetObjectLockConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -3940,21 +3940,21 @@ func (_m *S3API) HeadObjectWithContext(_a0 context.Context, _a1 *s3.HeadObjectIn
 	return r0, r1
 }
 
-// ListBucketAnalyticsConfigs provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketAnalyticsConfigs(_a0 *s3.ListBucketAnalyticsConfigsInput) (*s3.ListBucketAnalyticsConfigsOutput, error) {
+// ListBucketAnalyticsConfigurations provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketAnalyticsConfigurations(_a0 *s3.ListBucketAnalyticsConfigurationsInput) (*s3.ListBucketAnalyticsConfigurationsOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.ListBucketAnalyticsConfigsOutput
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketAnalyticsConfigsInput) *s3.ListBucketAnalyticsConfigsOutput); ok {
+	var r0 *s3.ListBucketAnalyticsConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketAnalyticsConfigurationsInput) *s3.ListBucketAnalyticsConfigurationsOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketAnalyticsConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketAnalyticsConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketAnalyticsConfigsInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketAnalyticsConfigurationsInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -3963,12 +3963,12 @@ func (_m *S3API) ListBucketAnalyticsConfigs(_a0 *s3.ListBucketAnalyticsConfigsIn
 	return r0, r1
 }
 
-// ListBucketAnalyticsConfigsRequest provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketAnalyticsConfigsRequest(_a0 *s3.ListBucketAnalyticsConfigsInput) (*request.Request, *s3.ListBucketAnalyticsConfigsOutput) {
+// ListBucketAnalyticsConfigurationsRequest provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketAnalyticsConfigurationsRequest(_a0 *s3.ListBucketAnalyticsConfigurationsInput) (*request.Request, *s3.ListBucketAnalyticsConfigurationsOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketAnalyticsConfigsInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketAnalyticsConfigurationsInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -3976,20 +3976,20 @@ func (_m *S3API) ListBucketAnalyticsConfigsRequest(_a0 *s3.ListBucketAnalyticsCo
 		}
 	}
 
-	var r1 *s3.ListBucketAnalyticsConfigsOutput
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketAnalyticsConfigsInput) *s3.ListBucketAnalyticsConfigsOutput); ok {
+	var r1 *s3.ListBucketAnalyticsConfigurationsOutput
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketAnalyticsConfigurationsInput) *s3.ListBucketAnalyticsConfigurationsOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.ListBucketAnalyticsConfigsOutput)
+			r1 = ret.Get(1).(*s3.ListBucketAnalyticsConfigurationsOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// ListBucketAnalyticsConfigsWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) ListBucketAnalyticsConfigsWithContext(_a0 context.Context, _a1 *s3.ListBucketAnalyticsConfigsInput, _a2 ...request.Option) (*s3.ListBucketAnalyticsConfigsOutput, error) {
+// ListBucketAnalyticsConfigurationsWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) ListBucketAnalyticsConfigurationsWithContext(_a0 context.Context, _a1 *s3.ListBucketAnalyticsConfigurationsInput, _a2 ...request.Option) (*s3.ListBucketAnalyticsConfigurationsOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -3999,17 +3999,17 @@ func (_m *S3API) ListBucketAnalyticsConfigsWithContext(_a0 context.Context, _a1 
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.ListBucketAnalyticsConfigsOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketAnalyticsConfigsInput, ...request.Option) *s3.ListBucketAnalyticsConfigsOutput); ok {
+	var r0 *s3.ListBucketAnalyticsConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketAnalyticsConfigurationsInput, ...request.Option) *s3.ListBucketAnalyticsConfigurationsOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketAnalyticsConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketAnalyticsConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketAnalyticsConfigsInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketAnalyticsConfigurationsInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -4018,21 +4018,21 @@ func (_m *S3API) ListBucketAnalyticsConfigsWithContext(_a0 context.Context, _a1 
 	return r0, r1
 }
 
-// ListBucketInventoryConfigs provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketInventoryConfigs(_a0 *s3.ListBucketInventoryConfigsInput) (*s3.ListBucketInventoryConfigsOutput, error) {
+// ListBucketInventoryConfigurations provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketInventoryConfigurations(_a0 *s3.ListBucketInventoryConfigurationsInput) (*s3.ListBucketInventoryConfigurationsOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.ListBucketInventoryConfigsOutput
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketInventoryConfigsInput) *s3.ListBucketInventoryConfigsOutput); ok {
+	var r0 *s3.ListBucketInventoryConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketInventoryConfigurationsInput) *s3.ListBucketInventoryConfigurationsOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketInventoryConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketInventoryConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketInventoryConfigsInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketInventoryConfigurationsInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -4041,12 +4041,12 @@ func (_m *S3API) ListBucketInventoryConfigs(_a0 *s3.ListBucketInventoryConfigsIn
 	return r0, r1
 }
 
-// ListBucketInventoryConfigsRequest provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketInventoryConfigsRequest(_a0 *s3.ListBucketInventoryConfigsInput) (*request.Request, *s3.ListBucketInventoryConfigsOutput) {
+// ListBucketInventoryConfigurationsRequest provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketInventoryConfigurationsRequest(_a0 *s3.ListBucketInventoryConfigurationsInput) (*request.Request, *s3.ListBucketInventoryConfigurationsOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketInventoryConfigsInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketInventoryConfigurationsInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -4054,20 +4054,20 @@ func (_m *S3API) ListBucketInventoryConfigsRequest(_a0 *s3.ListBucketInventoryCo
 		}
 	}
 
-	var r1 *s3.ListBucketInventoryConfigsOutput
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketInventoryConfigsInput) *s3.ListBucketInventoryConfigsOutput); ok {
+	var r1 *s3.ListBucketInventoryConfigurationsOutput
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketInventoryConfigurationsInput) *s3.ListBucketInventoryConfigurationsOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.ListBucketInventoryConfigsOutput)
+			r1 = ret.Get(1).(*s3.ListBucketInventoryConfigurationsOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// ListBucketInventoryConfigsWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) ListBucketInventoryConfigsWithContext(_a0 context.Context, _a1 *s3.ListBucketInventoryConfigsInput, _a2 ...request.Option) (*s3.ListBucketInventoryConfigsOutput, error) {
+// ListBucketInventoryConfigurationsWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) ListBucketInventoryConfigurationsWithContext(_a0 context.Context, _a1 *s3.ListBucketInventoryConfigurationsInput, _a2 ...request.Option) (*s3.ListBucketInventoryConfigurationsOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -4077,17 +4077,17 @@ func (_m *S3API) ListBucketInventoryConfigsWithContext(_a0 context.Context, _a1 
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.ListBucketInventoryConfigsOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketInventoryConfigsInput, ...request.Option) *s3.ListBucketInventoryConfigsOutput); ok {
+	var r0 *s3.ListBucketInventoryConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketInventoryConfigurationsInput, ...request.Option) *s3.ListBucketInventoryConfigurationsOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketInventoryConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketInventoryConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketInventoryConfigsInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketInventoryConfigurationsInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -4096,21 +4096,21 @@ func (_m *S3API) ListBucketInventoryConfigsWithContext(_a0 context.Context, _a1 
 	return r0, r1
 }
 
-// ListBucketMetricsConfigs provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketMetricsConfigs(_a0 *s3.ListBucketMetricsConfigsInput) (*s3.ListBucketMetricsConfigsOutput, error) {
+// ListBucketMetricsConfigurations provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketMetricsConfigurations(_a0 *s3.ListBucketMetricsConfigurationsInput) (*s3.ListBucketMetricsConfigurationsOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.ListBucketMetricsConfigsOutput
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketMetricsConfigsInput) *s3.ListBucketMetricsConfigsOutput); ok {
+	var r0 *s3.ListBucketMetricsConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketMetricsConfigurationsInput) *s3.ListBucketMetricsConfigurationsOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketMetricsConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketMetricsConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketMetricsConfigsInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketMetricsConfigurationsInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -4119,12 +4119,12 @@ func (_m *S3API) ListBucketMetricsConfigs(_a0 *s3.ListBucketMetricsConfigsInput)
 	return r0, r1
 }
 
-// ListBucketMetricsConfigsRequest provides a mock function with given fields: _a0
-func (_m *S3API) ListBucketMetricsConfigsRequest(_a0 *s3.ListBucketMetricsConfigsInput) (*request.Request, *s3.ListBucketMetricsConfigsOutput) {
+// ListBucketMetricsConfigurationsRequest provides a mock function with given fields: _a0
+func (_m *S3API) ListBucketMetricsConfigurationsRequest(_a0 *s3.ListBucketMetricsConfigurationsInput) (*request.Request, *s3.ListBucketMetricsConfigurationsOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.ListBucketMetricsConfigsInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.ListBucketMetricsConfigurationsInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -4132,20 +4132,20 @@ func (_m *S3API) ListBucketMetricsConfigsRequest(_a0 *s3.ListBucketMetricsConfig
 		}
 	}
 
-	var r1 *s3.ListBucketMetricsConfigsOutput
-	if rf, ok := ret.Get(1).(func(*s3.ListBucketMetricsConfigsInput) *s3.ListBucketMetricsConfigsOutput); ok {
+	var r1 *s3.ListBucketMetricsConfigurationsOutput
+	if rf, ok := ret.Get(1).(func(*s3.ListBucketMetricsConfigurationsInput) *s3.ListBucketMetricsConfigurationsOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.ListBucketMetricsConfigsOutput)
+			r1 = ret.Get(1).(*s3.ListBucketMetricsConfigurationsOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// ListBucketMetricsConfigsWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) ListBucketMetricsConfigsWithContext(_a0 context.Context, _a1 *s3.ListBucketMetricsConfigsInput, _a2 ...request.Option) (*s3.ListBucketMetricsConfigsOutput, error) {
+// ListBucketMetricsConfigurationsWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) ListBucketMetricsConfigurationsWithContext(_a0 context.Context, _a1 *s3.ListBucketMetricsConfigurationsInput, _a2 ...request.Option) (*s3.ListBucketMetricsConfigurationsOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -4155,17 +4155,17 @@ func (_m *S3API) ListBucketMetricsConfigsWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.ListBucketMetricsConfigsOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketMetricsConfigsInput, ...request.Option) *s3.ListBucketMetricsConfigsOutput); ok {
+	var r0 *s3.ListBucketMetricsConfigurationsOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.ListBucketMetricsConfigurationsInput, ...request.Option) *s3.ListBucketMetricsConfigurationsOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.ListBucketMetricsConfigsOutput)
+			r0 = ret.Get(0).(*s3.ListBucketMetricsConfigurationsOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketMetricsConfigsInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.ListBucketMetricsConfigurationsInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -4817,21 +4817,21 @@ func (_m *S3API) ListPartsWithContext(_a0 context.Context, _a1 *s3.ListPartsInpu
 	return r0, r1
 }
 
-// PutBucketAccelerateConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketAccelerateConfig(_a0 *s3.PutBucketAccelerateConfigInput) (*s3.PutBucketAccelerateConfigOutput, error) {
+// PutBucketAccelerateConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketAccelerateConfiguration(_a0 *s3.PutBucketAccelerateConfigurationInput) (*s3.PutBucketAccelerateConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketAccelerateConfigInput) *s3.PutBucketAccelerateConfigOutput); ok {
+	var r0 *s3.PutBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketAccelerateConfigurationInput) *s3.PutBucketAccelerateConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketAccelerateConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketAccelerateConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketAccelerateConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -4840,12 +4840,12 @@ func (_m *S3API) PutBucketAccelerateConfig(_a0 *s3.PutBucketAccelerateConfigInpu
 	return r0, r1
 }
 
-// PutBucketAccelerateConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketAccelerateConfigRequest(_a0 *s3.PutBucketAccelerateConfigInput) (*request.Request, *s3.PutBucketAccelerateConfigOutput) {
+// PutBucketAccelerateConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketAccelerateConfigurationRequest(_a0 *s3.PutBucketAccelerateConfigurationInput) (*request.Request, *s3.PutBucketAccelerateConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketAccelerateConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketAccelerateConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -4853,20 +4853,20 @@ func (_m *S3API) PutBucketAccelerateConfigRequest(_a0 *s3.PutBucketAccelerateCon
 		}
 	}
 
-	var r1 *s3.PutBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketAccelerateConfigInput) *s3.PutBucketAccelerateConfigOutput); ok {
+	var r1 *s3.PutBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketAccelerateConfigurationInput) *s3.PutBucketAccelerateConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketAccelerateConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketAccelerateConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketAccelerateConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketAccelerateConfigInput, _a2 ...request.Option) (*s3.PutBucketAccelerateConfigOutput, error) {
+// PutBucketAccelerateConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketAccelerateConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketAccelerateConfigurationInput, _a2 ...request.Option) (*s3.PutBucketAccelerateConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -4876,17 +4876,17 @@ func (_m *S3API) PutBucketAccelerateConfigWithContext(_a0 context.Context, _a1 *
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketAccelerateConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketAccelerateConfigInput, ...request.Option) *s3.PutBucketAccelerateConfigOutput); ok {
+	var r0 *s3.PutBucketAccelerateConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketAccelerateConfigurationInput, ...request.Option) *s3.PutBucketAccelerateConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketAccelerateConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketAccelerateConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketAccelerateConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketAccelerateConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -4973,21 +4973,21 @@ func (_m *S3API) PutBucketAclWithContext(_a0 context.Context, _a1 *s3.PutBucketA
 	return r0, r1
 }
 
-// PutBucketAnalyticsConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketAnalyticsConfig(_a0 *s3.PutBucketAnalyticsConfigInput) (*s3.PutBucketAnalyticsConfigOutput, error) {
+// PutBucketAnalyticsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketAnalyticsConfiguration(_a0 *s3.PutBucketAnalyticsConfigurationInput) (*s3.PutBucketAnalyticsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketAnalyticsConfigInput) *s3.PutBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.PutBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketAnalyticsConfigurationInput) *s3.PutBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketAnalyticsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketAnalyticsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -4996,12 +4996,12 @@ func (_m *S3API) PutBucketAnalyticsConfig(_a0 *s3.PutBucketAnalyticsConfigInput)
 	return r0, r1
 }
 
-// PutBucketAnalyticsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketAnalyticsConfigRequest(_a0 *s3.PutBucketAnalyticsConfigInput) (*request.Request, *s3.PutBucketAnalyticsConfigOutput) {
+// PutBucketAnalyticsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketAnalyticsConfigurationRequest(_a0 *s3.PutBucketAnalyticsConfigurationInput) (*request.Request, *s3.PutBucketAnalyticsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketAnalyticsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketAnalyticsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -5009,20 +5009,20 @@ func (_m *S3API) PutBucketAnalyticsConfigRequest(_a0 *s3.PutBucketAnalyticsConfi
 		}
 	}
 
-	var r1 *s3.PutBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketAnalyticsConfigInput) *s3.PutBucketAnalyticsConfigOutput); ok {
+	var r1 *s3.PutBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketAnalyticsConfigurationInput) *s3.PutBucketAnalyticsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketAnalyticsConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketAnalyticsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketAnalyticsConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketAnalyticsConfigInput, _a2 ...request.Option) (*s3.PutBucketAnalyticsConfigOutput, error) {
+// PutBucketAnalyticsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketAnalyticsConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketAnalyticsConfigurationInput, _a2 ...request.Option) (*s3.PutBucketAnalyticsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -5032,17 +5032,17 @@ func (_m *S3API) PutBucketAnalyticsConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketAnalyticsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketAnalyticsConfigInput, ...request.Option) *s3.PutBucketAnalyticsConfigOutput); ok {
+	var r0 *s3.PutBucketAnalyticsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketAnalyticsConfigurationInput, ...request.Option) *s3.PutBucketAnalyticsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketAnalyticsConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketAnalyticsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketAnalyticsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketAnalyticsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -5207,21 +5207,21 @@ func (_m *S3API) PutBucketEncryptionWithContext(_a0 context.Context, _a1 *s3.Put
 	return r0, r1
 }
 
-// PutBucketInventoryConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketInventoryConfig(_a0 *s3.PutBucketInventoryConfigInput) (*s3.PutBucketInventoryConfigOutput, error) {
+// PutBucketInventoryConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketInventoryConfiguration(_a0 *s3.PutBucketInventoryConfigurationInput) (*s3.PutBucketInventoryConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketInventoryConfigInput) *s3.PutBucketInventoryConfigOutput); ok {
+	var r0 *s3.PutBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketInventoryConfigurationInput) *s3.PutBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketInventoryConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketInventoryConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -5230,12 +5230,12 @@ func (_m *S3API) PutBucketInventoryConfig(_a0 *s3.PutBucketInventoryConfigInput)
 	return r0, r1
 }
 
-// PutBucketInventoryConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketInventoryConfigRequest(_a0 *s3.PutBucketInventoryConfigInput) (*request.Request, *s3.PutBucketInventoryConfigOutput) {
+// PutBucketInventoryConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketInventoryConfigurationRequest(_a0 *s3.PutBucketInventoryConfigurationInput) (*request.Request, *s3.PutBucketInventoryConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketInventoryConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketInventoryConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -5243,20 +5243,20 @@ func (_m *S3API) PutBucketInventoryConfigRequest(_a0 *s3.PutBucketInventoryConfi
 		}
 	}
 
-	var r1 *s3.PutBucketInventoryConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketInventoryConfigInput) *s3.PutBucketInventoryConfigOutput); ok {
+	var r1 *s3.PutBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketInventoryConfigurationInput) *s3.PutBucketInventoryConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketInventoryConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketInventoryConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketInventoryConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketInventoryConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketInventoryConfigInput, _a2 ...request.Option) (*s3.PutBucketInventoryConfigOutput, error) {
+// PutBucketInventoryConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketInventoryConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketInventoryConfigurationInput, _a2 ...request.Option) (*s3.PutBucketInventoryConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -5266,17 +5266,17 @@ func (_m *S3API) PutBucketInventoryConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketInventoryConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketInventoryConfigInput, ...request.Option) *s3.PutBucketInventoryConfigOutput); ok {
+	var r0 *s3.PutBucketInventoryConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketInventoryConfigurationInput, ...request.Option) *s3.PutBucketInventoryConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketInventoryConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketInventoryConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketInventoryConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketInventoryConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -5308,21 +5308,21 @@ func (_m *S3API) PutBucketLifecycle(_a0 *s3.PutBucketLifecycleInput) (*s3.PutBuc
 	return r0, r1
 }
 
-// PutBucketLifecycleConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketLifecycleConfig(_a0 *s3.PutBucketLifecycleConfigInput) (*s3.PutBucketLifecycleConfigOutput, error) {
+// PutBucketLifecycleConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketLifecycleConfiguration(_a0 *s3.PutBucketLifecycleConfigurationInput) (*s3.PutBucketLifecycleConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketLifecycleConfigInput) *s3.PutBucketLifecycleConfigOutput); ok {
+	var r0 *s3.PutBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketLifecycleConfigurationInput) *s3.PutBucketLifecycleConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketLifecycleConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketLifecycleConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketLifecycleConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -5331,12 +5331,12 @@ func (_m *S3API) PutBucketLifecycleConfig(_a0 *s3.PutBucketLifecycleConfigInput)
 	return r0, r1
 }
 
-// PutBucketLifecycleConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketLifecycleConfigRequest(_a0 *s3.PutBucketLifecycleConfigInput) (*request.Request, *s3.PutBucketLifecycleConfigOutput) {
+// PutBucketLifecycleConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketLifecycleConfigurationRequest(_a0 *s3.PutBucketLifecycleConfigurationInput) (*request.Request, *s3.PutBucketLifecycleConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketLifecycleConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketLifecycleConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -5344,20 +5344,20 @@ func (_m *S3API) PutBucketLifecycleConfigRequest(_a0 *s3.PutBucketLifecycleConfi
 		}
 	}
 
-	var r1 *s3.PutBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketLifecycleConfigInput) *s3.PutBucketLifecycleConfigOutput); ok {
+	var r1 *s3.PutBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketLifecycleConfigurationInput) *s3.PutBucketLifecycleConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketLifecycleConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketLifecycleConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketLifecycleConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketLifecycleConfigInput, _a2 ...request.Option) (*s3.PutBucketLifecycleConfigOutput, error) {
+// PutBucketLifecycleConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketLifecycleConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketLifecycleConfigurationInput, _a2 ...request.Option) (*s3.PutBucketLifecycleConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -5367,17 +5367,17 @@ func (_m *S3API) PutBucketLifecycleConfigWithContext(_a0 context.Context, _a1 *s
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketLifecycleConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketLifecycleConfigInput, ...request.Option) *s3.PutBucketLifecycleConfigOutput); ok {
+	var r0 *s3.PutBucketLifecycleConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketLifecycleConfigurationInput, ...request.Option) *s3.PutBucketLifecycleConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketLifecycleConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketLifecycleConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketLifecycleConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketLifecycleConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -5519,21 +5519,21 @@ func (_m *S3API) PutBucketLoggingWithContext(_a0 context.Context, _a1 *s3.PutBuc
 	return r0, r1
 }
 
-// PutBucketMetricsConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketMetricsConfig(_a0 *s3.PutBucketMetricsConfigInput) (*s3.PutBucketMetricsConfigOutput, error) {
+// PutBucketMetricsConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketMetricsConfiguration(_a0 *s3.PutBucketMetricsConfigurationInput) (*s3.PutBucketMetricsConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketMetricsConfigInput) *s3.PutBucketMetricsConfigOutput); ok {
+	var r0 *s3.PutBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketMetricsConfigurationInput) *s3.PutBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketMetricsConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketMetricsConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -5542,12 +5542,12 @@ func (_m *S3API) PutBucketMetricsConfig(_a0 *s3.PutBucketMetricsConfigInput) (*s
 	return r0, r1
 }
 
-// PutBucketMetricsConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketMetricsConfigRequest(_a0 *s3.PutBucketMetricsConfigInput) (*request.Request, *s3.PutBucketMetricsConfigOutput) {
+// PutBucketMetricsConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketMetricsConfigurationRequest(_a0 *s3.PutBucketMetricsConfigurationInput) (*request.Request, *s3.PutBucketMetricsConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketMetricsConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketMetricsConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -5555,20 +5555,20 @@ func (_m *S3API) PutBucketMetricsConfigRequest(_a0 *s3.PutBucketMetricsConfigInp
 		}
 	}
 
-	var r1 *s3.PutBucketMetricsConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketMetricsConfigInput) *s3.PutBucketMetricsConfigOutput); ok {
+	var r1 *s3.PutBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketMetricsConfigurationInput) *s3.PutBucketMetricsConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketMetricsConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketMetricsConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketMetricsConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketMetricsConfigInput, _a2 ...request.Option) (*s3.PutBucketMetricsConfigOutput, error) {
+// PutBucketMetricsConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketMetricsConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketMetricsConfigurationInput, _a2 ...request.Option) (*s3.PutBucketMetricsConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -5578,17 +5578,17 @@ func (_m *S3API) PutBucketMetricsConfigWithContext(_a0 context.Context, _a1 *s3.
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketMetricsConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketMetricsConfigInput, ...request.Option) *s3.PutBucketMetricsConfigOutput); ok {
+	var r0 *s3.PutBucketMetricsConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketMetricsConfigurationInput, ...request.Option) *s3.PutBucketMetricsConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketMetricsConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketMetricsConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketMetricsConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketMetricsConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -5620,21 +5620,21 @@ func (_m *S3API) PutBucketNotification(_a0 *s3.PutBucketNotificationInput) (*s3.
 	return r0, r1
 }
 
-// PutBucketNotificationConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketNotificationConfig(_a0 *s3.PutBucketNotificationConfigInput) (*s3.PutBucketNotificationConfigOutput, error) {
+// PutBucketNotificationConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketNotificationConfiguration(_a0 *s3.PutBucketNotificationConfigurationInput) (*s3.PutBucketNotificationConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutBucketNotificationConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketNotificationConfigInput) *s3.PutBucketNotificationConfigOutput); ok {
+	var r0 *s3.PutBucketNotificationConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketNotificationConfigurationInput) *s3.PutBucketNotificationConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketNotificationConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketNotificationConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketNotificationConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketNotificationConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -5643,12 +5643,12 @@ func (_m *S3API) PutBucketNotificationConfig(_a0 *s3.PutBucketNotificationConfig
 	return r0, r1
 }
 
-// PutBucketNotificationConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutBucketNotificationConfigRequest(_a0 *s3.PutBucketNotificationConfigInput) (*request.Request, *s3.PutBucketNotificationConfigOutput) {
+// PutBucketNotificationConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutBucketNotificationConfigurationRequest(_a0 *s3.PutBucketNotificationConfigurationInput) (*request.Request, *s3.PutBucketNotificationConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutBucketNotificationConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutBucketNotificationConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -5656,20 +5656,20 @@ func (_m *S3API) PutBucketNotificationConfigRequest(_a0 *s3.PutBucketNotificatio
 		}
 	}
 
-	var r1 *s3.PutBucketNotificationConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutBucketNotificationConfigInput) *s3.PutBucketNotificationConfigOutput); ok {
+	var r1 *s3.PutBucketNotificationConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutBucketNotificationConfigurationInput) *s3.PutBucketNotificationConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutBucketNotificationConfigOutput)
+			r1 = ret.Get(1).(*s3.PutBucketNotificationConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutBucketNotificationConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutBucketNotificationConfigWithContext(_a0 context.Context, _a1 *s3.PutBucketNotificationConfigInput, _a2 ...request.Option) (*s3.PutBucketNotificationConfigOutput, error) {
+// PutBucketNotificationConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutBucketNotificationConfigurationWithContext(_a0 context.Context, _a1 *s3.PutBucketNotificationConfigurationInput, _a2 ...request.Option) (*s3.PutBucketNotificationConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -5679,17 +5679,17 @@ func (_m *S3API) PutBucketNotificationConfigWithContext(_a0 context.Context, _a1
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutBucketNotificationConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketNotificationConfigInput, ...request.Option) *s3.PutBucketNotificationConfigOutput); ok {
+	var r0 *s3.PutBucketNotificationConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutBucketNotificationConfigurationInput, ...request.Option) *s3.PutBucketNotificationConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutBucketNotificationConfigOutput)
+			r0 = ret.Get(0).(*s3.PutBucketNotificationConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketNotificationConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutBucketNotificationConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
@@ -6400,21 +6400,21 @@ func (_m *S3API) PutObjectLegalHoldWithContext(_a0 context.Context, _a1 *s3.PutO
 	return r0, r1
 }
 
-// PutObjectLockConfig provides a mock function with given fields: _a0
-func (_m *S3API) PutObjectLockConfig(_a0 *s3.PutObjectLockConfigInput) (*s3.PutObjectLockConfigOutput, error) {
+// PutObjectLockConfiguration provides a mock function with given fields: _a0
+func (_m *S3API) PutObjectLockConfiguration(_a0 *s3.PutObjectLockConfigurationInput) (*s3.PutObjectLockConfigurationOutput, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *s3.PutObjectLockConfigOutput
-	if rf, ok := ret.Get(0).(func(*s3.PutObjectLockConfigInput) *s3.PutObjectLockConfigOutput); ok {
+	var r0 *s3.PutObjectLockConfigurationOutput
+	if rf, ok := ret.Get(0).(func(*s3.PutObjectLockConfigurationInput) *s3.PutObjectLockConfigurationOutput); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutObjectLockConfigOutput)
+			r0 = ret.Get(0).(*s3.PutObjectLockConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*s3.PutObjectLockConfigInput) error); ok {
+	if rf, ok := ret.Get(1).(func(*s3.PutObjectLockConfigurationInput) error); ok {
 		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
@@ -6423,12 +6423,12 @@ func (_m *S3API) PutObjectLockConfig(_a0 *s3.PutObjectLockConfigInput) (*s3.PutO
 	return r0, r1
 }
 
-// PutObjectLockConfigRequest provides a mock function with given fields: _a0
-func (_m *S3API) PutObjectLockConfigRequest(_a0 *s3.PutObjectLockConfigInput) (*request.Request, *s3.PutObjectLockConfigOutput) {
+// PutObjectLockConfigurationRequest provides a mock function with given fields: _a0
+func (_m *S3API) PutObjectLockConfigurationRequest(_a0 *s3.PutObjectLockConfigurationInput) (*request.Request, *s3.PutObjectLockConfigurationOutput) {
 	ret := _m.Called(_a0)
 
 	var r0 *request.Request
-	if rf, ok := ret.Get(0).(func(*s3.PutObjectLockConfigInput) *request.Request); ok {
+	if rf, ok := ret.Get(0).(func(*s3.PutObjectLockConfigurationInput) *request.Request); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -6436,20 +6436,20 @@ func (_m *S3API) PutObjectLockConfigRequest(_a0 *s3.PutObjectLockConfigInput) (*
 		}
 	}
 
-	var r1 *s3.PutObjectLockConfigOutput
-	if rf, ok := ret.Get(1).(func(*s3.PutObjectLockConfigInput) *s3.PutObjectLockConfigOutput); ok {
+	var r1 *s3.PutObjectLockConfigurationOutput
+	if rf, ok := ret.Get(1).(func(*s3.PutObjectLockConfigurationInput) *s3.PutObjectLockConfigurationOutput); ok {
 		r1 = rf(_a0)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*s3.PutObjectLockConfigOutput)
+			r1 = ret.Get(1).(*s3.PutObjectLockConfigurationOutput)
 		}
 	}
 
 	return r0, r1
 }
 
-// PutObjectLockConfigWithContext provides a mock function with given fields: _a0, _a1, _a2
-func (_m *S3API) PutObjectLockConfigWithContext(_a0 context.Context, _a1 *s3.PutObjectLockConfigInput, _a2 ...request.Option) (*s3.PutObjectLockConfigOutput, error) {
+// PutObjectLockConfigurationWithContext provides a mock function with given fields: _a0, _a1, _a2
+func (_m *S3API) PutObjectLockConfigurationWithContext(_a0 context.Context, _a1 *s3.PutObjectLockConfigurationInput, _a2 ...request.Option) (*s3.PutObjectLockConfigurationOutput, error) {
 	_va := make([]interface{}, len(_a2))
 	for _i := range _a2 {
 		_va[_i] = _a2[_i]
@@ -6459,17 +6459,17 @@ func (_m *S3API) PutObjectLockConfigWithContext(_a0 context.Context, _a1 *s3.Put
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
-	var r0 *s3.PutObjectLockConfigOutput
-	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutObjectLockConfigInput, ...request.Option) *s3.PutObjectLockConfigOutput); ok {
+	var r0 *s3.PutObjectLockConfigurationOutput
+	if rf, ok := ret.Get(0).(func(context.Context, *s3.PutObjectLockConfigurationInput, ...request.Option) *s3.PutObjectLockConfigurationOutput); ok {
 		r0 = rf(_a0, _a1, _a2...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*s3.PutObjectLockConfigOutput)
+			r0 = ret.Get(0).(*s3.PutObjectLockConfigurationOutput)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutObjectLockConfigInput, ...request.Option) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *s3.PutObjectLockConfigurationInput, ...request.Option) error); ok {
 		r1 = rf(_a0, _a1, _a2...)
 	} else {
 		r1 = ret.Error(1)
