@@ -82,7 +82,7 @@ const (
 
 var (
 	clusterName              = []string{"active", "standby"}
-	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfiguration{
+	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterName[0],
 		},
@@ -166,14 +166,14 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	updated := false
@@ -181,7 +181,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	for i := 0; i < 30; i++ {
 		resp3, err = client2.DescribeNamespace(host.NewContext(), descReq)
 		s.NoError(err)
-		if resp3.ReplicationConfiguration.GetActiveClusterName() == clusterName[1] {
+		if resp3.ReplicationConfig.GetActiveClusterName() == clusterName[1] {
 			updated = true
 			break
 		}
@@ -423,14 +423,14 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
@@ -651,14 +651,14 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -684,14 +684,14 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Update namespace to fail over back
 	updateReq = &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[0],
 		},
 	}
 	updateResp, err = client2.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[0], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[0], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(10), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessDecisionTask(true, false)
@@ -796,14 +796,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
@@ -941,14 +941,14 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
@@ -1133,14 +1133,14 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
@@ -1273,14 +1273,14 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -1491,14 +1491,14 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -1665,14 +1665,14 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -1822,14 +1822,14 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -1915,14 +1915,14 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
@@ -2022,14 +2022,14 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName[1],
 		},
 	}
 	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change

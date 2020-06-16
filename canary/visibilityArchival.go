@@ -94,14 +94,14 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 		return err
 	}
 
-	if resp.Configuration != nil &&
-		resp.Configuration.GetVisibilityArchivalStatus() == enumspb.ARCHIVAL_STATUS_DISABLED {
+	if resp.Config != nil &&
+		resp.Config.GetVisibilityArchivalStatus() == enumspb.ARCHIVAL_STATUS_DISABLED {
 		return errors.New("namespace not configured for visibility archival")
 	}
 
 	visArchivalURI := ""
-	if resp.Configuration != nil {
-		visArchivalURI = resp.Configuration.GetVisibilityArchivalURI()
+	if resp.Config != nil {
+		visArchivalURI = resp.Config.GetVisibilityArchivalUri()
 	}
 
 	var validator visibilityArchivalValidator

@@ -231,7 +231,7 @@ type Config struct {
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// The following are used by consistent query
-	MaxBufferedQueryCount            dynamicconfig.IntPropertyFn
+	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
 
 	// Data integrity check related config knobs
 	MutableStateChecksumGenProbability    dynamicconfig.IntPropertyFnWithNamespaceFilter

@@ -207,7 +207,7 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:     true,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:   true,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: true,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:   true,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  true,
 	}
 )
 
@@ -473,7 +473,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
-			//nolint:errcheck
+			// nolint:errcheck
 			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].GetNotificationVersion() + 1)
 		},
 	)
@@ -770,7 +770,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) //nolint:errcheck
+		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, namespaceID, execution)
 		if err != nil {
@@ -1248,7 +1248,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: &workflowpb.WorkflowExecutionConfiguration{
+		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskList:                        &tasklistpb.TaskList{Name: executionInfo.TaskList},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
@@ -1346,7 +1346,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			p := &workflowpb.PendingChildExecutionInfo{
 				WorkflowId:        ch.StartedWorkflowID,
 				RunId:             ch.StartedRunID,
-				WorkflowTypName:   ch.WorkflowTypeName,
+				WorkflowTypeName:  ch.WorkflowTypeName,
 				InitiatedId:       ch.InitiatedID,
 				ParentClosePolicy: enumspb.ParentClosePolicy(ch.ParentClosePolicy),
 			}

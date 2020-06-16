@@ -128,7 +128,7 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceConfig{
 		RetentionDays:            1,
 		VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-		VisibilityArchivalURI:    "test:///visibility/archival",
+		VisibilityArchivalUri:    "test:///visibility/archival",
 	},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -527,9 +527,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -561,9 +561,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -575,9 +575,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
 		},
 	}
 	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -612,7 +612,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 			Execution: &execution,
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -650,7 +650,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 			Execution: &execution,
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
@@ -712,8 +712,8 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -769,8 +769,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -832,8 +832,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})

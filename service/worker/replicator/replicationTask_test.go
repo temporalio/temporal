@@ -516,7 +516,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				NewRunHistory:     replicationAttr.NewRunHistory,
 				ForceBufferEvents: false,
 				ResetWorkflow:     replicationAttr.ResetWorkflow,
-				NewRunNDC:         replicationAttr.NewRunNDC,
+				NewRunNdc:         replicationAttr.NewRunNdc,
 			},
 			historyRereplicator: s.mockRereplicator,
 		},

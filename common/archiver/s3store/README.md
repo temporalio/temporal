@@ -1,5 +1,5 @@
 # Amazon S3 blobstore
-## Configuration
+## Config
 See https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials on how to set up authentication against s3
 
 Enabling archival is done by using the configuration below. `Region` and `bucket URI` are required

@@ -607,11 +607,11 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() 
 
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal("", result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal("", result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal("", result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal("", result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
@@ -630,11 +630,11 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
@@ -718,11 +718,11 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredForArchival() {
@@ -745,11 +745,11 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredF
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal("some random history URI", result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal("some random visibility URI", result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal("some random history URI", result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal("some random visibility URI", result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
@@ -782,11 +782,11 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_DISABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnabled() {
@@ -818,11 +818,11 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnab
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledToEnabled() {
@@ -855,11 +855,11 @@ func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledT
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Configuration)
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetHistoryArchivalStatus())
-	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Configuration.GetVisibilityArchivalStatus())
-	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
+	s.NotNil(result.Config)
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetHistoryArchivalStatus())
+	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATUS_ENABLED, result.Config.GetVisibilityArchivalStatus())
+	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *workflowHandlerSuite) TestHistoryArchived() {
@@ -916,9 +916,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:       "",
+			HistoryArchivalUri:       "",
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -936,9 +936,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-			HistoryArchivalURI:       "uri without scheme",
+			HistoryArchivalUri:       "uri without scheme",
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -956,9 +956,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-			HistoryArchivalURI:       testHistoryArchivalURI,
+			HistoryArchivalUri:       testHistoryArchivalURI,
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		"",
 		nil)
@@ -1088,7 +1088,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "uri without scheme",
+			VisibilityArchivalUri:    "uri without scheme",
 		},
 		"",
 		nil,
@@ -1107,7 +1107,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
 		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-			VisibilityArchivalURI:    testVisibilityArchivalURI,
+			VisibilityArchivalUri:    testVisibilityArchivalURI,
 		},
 		"",
 		nil,
@@ -1344,11 +1344,11 @@ func updateRequest(
 ) *workflowservice.UpdateNamespaceRequest {
 	return &workflowservice.UpdateNamespaceRequest{
 		Name: "test-name",
-		Configuration: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 		},
 	}
 }
@@ -1368,9 +1368,9 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 				RetentionDays:            1,
 				EmitMetric:               true,
 				HistoryArchivalStatus:    historyArchivalState.Status,
-				HistoryArchivalURI:       historyArchivalState.URI,
+				HistoryArchivalUri:       historyArchivalState.URI,
 				VisibilityArchivalStatus: visibilityArchivalState.Status,
-				VisibilityArchivalURI:    visibilityArchivalState.URI,
+				VisibilityArchivalUri:    visibilityArchivalState.URI,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -1399,7 +1399,7 @@ func registerNamespaceRequest(
 		OwnerEmail:                             "test-owner-email",
 		WorkflowExecutionRetentionPeriodInDays: 10,
 		EmitMetric:                             true,
-		Clusters: []*replicationpb.ClusterReplicationConfiguration{
+		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: cluster.TestCurrentClusterName,
 			},
@@ -1408,9 +1408,9 @@ func registerNamespaceRequest(
 		Data:                     make(map[string]string),
 		SecurityToken:            "token",
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		IsGlobalNamespace:        false,
 	}
 }

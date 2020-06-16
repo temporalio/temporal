@@ -92,8 +92,8 @@ message NamespaceTaskAttributes {
     server.enums.v1.NamespaceOperation namespace_operation = 1;
     string id = 2;
     temporal.namespace.v1.NamespaceInfo info = 3;
-    temporal.namespace.v1.NamespaceConfiguration config = 4;
-    temporal.replication.v1.NamespaceReplicationConfiguration replication_config = 5;
+    temporal.namespace.v1.NamespaceConfig config = 4;
+    temporal.replication.v1.NamespaceReplicationConfig replication_config = 5;
     int64 config_version = 6;
     int64 failover_version = 7;
 }
@@ -112,7 +112,7 @@ message HistoryTaskAttributes {
     int32 event_store_version = 11;
     int32 new_run_event_store_version = 12;
     bool reset_workflow = 13;
-    bool new_run_n_d_c = 14;
+    bool new_run_ndc = 14;
 }
 
 message HistoryMetadataTaskAttributes {

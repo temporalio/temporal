@@ -30,9 +30,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/temporal-proto/history/v1"
-	reflect "reflect"
 )
 
 // MockworkflowResetter is a mock of workflowResetter interface

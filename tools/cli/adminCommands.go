@@ -154,8 +154,8 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if ms.ExecutionInfo.AutoResetPoints != nil {
 			fmt.Println("auto-reset-points:")
 			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := time.Unix(0, p.GetCreatedTimeNano())
-				expireT := time.Unix(0, p.GetExpiringTimeNano())
+				createT := time.Unix(0, p.GetCreateTimeNano())
+				expireT := time.Unix(0, p.GetExpireTimeNano())
 				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}

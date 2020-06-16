@@ -30,10 +30,11 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	definition "github.com/temporalio/temporal/common/definition"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	definition "github.com/temporalio/temporal/common/definition"
 )
 
 // MocknDCStateRebuilder is a mock of nDCStateRebuilder interface

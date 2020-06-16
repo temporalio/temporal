@@ -4129,15 +4129,15 @@ func TestFindAutoResetPoint(t *testing.T) {
 	expiredNowNano := time.Now().UnixNano() - int64(time.Hour)
 	notExpiredNowNano := time.Now().UnixNano() + int64(time.Hour)
 	pt4 := &workflowpb.ResetPointInfo{
-		BinaryChecksum:   "expired",
-		Resettable:       true,
-		ExpiringTimeNano: expiredNowNano,
+		BinaryChecksum: "expired",
+		Resettable:     true,
+		ExpireTimeNano: expiredNowNano,
 	}
 
 	pt5 := &workflowpb.ResetPointInfo{
-		BinaryChecksum:   "notExpired",
-		Resettable:       true,
-		ExpiringTimeNano: notExpiredNowNano,
+		BinaryChecksum: "notExpired",
+		Resettable:     true,
+		ExpireTimeNano: notExpiredNowNano,
 	}
 
 	// case 3: two intersection

@@ -108,8 +108,8 @@ func (s *temporalSerializerSuite) TestSerializer() {
 				BinaryChecksum:           "bad-binary-cs",
 				RunId:                    "test-run-id",
 				FirstDecisionCompletedId: 123,
-				CreatedTimeNano:          456,
-				ExpiringTimeNano:         789,
+				CreateTimeNano:           456,
+				ExpireTimeNano:           789,
 				Resettable:               true,
 			},
 		},
@@ -118,9 +118,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	badBinaries0 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"bad-binary-cs": {
-				CreatedTimeNano: 456,
-				Operator:        "test-operattor",
-				Reason:          "test-reason",
+				CreateTimeNano: 456,
+				Operator:       "test-operattor",
+				Reason:         "test-reason",
 			},
 		},
 	}

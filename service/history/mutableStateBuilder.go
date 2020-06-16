@@ -121,7 +121,7 @@ type (
 
 		bufferedEvents       []*historypb.HistoryEvent // buffered history events that are already persisted
 		updateBufferedEvents []*historypb.HistoryEvent // buffered history events that needs to be persisted
-		clearBufferedEvents  bool                    // delete buffered events from persistence
+		clearBufferedEvents  bool                      // delete buffered events from persistence
 
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		versionHistories *persistence.VersionHistories
@@ -2021,7 +2021,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		BinaryChecksum:           binChecksum,
 		RunId:                    exeInfo.RunID,
 		FirstDecisionCompletedId: event.GetEventId(),
-		CreatedTimeNano:          e.timeSource.Now().UnixNano(),
+		CreateTimeNano:           e.timeSource.Now().UnixNano(),
 		Resettable:               resettable,
 	}
 	currResetPoints = append(currResetPoints, info)
@@ -3417,10 +3417,10 @@ func rolloverAutoResetPointsWithExpiringTime(
 		return resetPoints
 	}
 	newPoints := make([]*workflowpb.ResetPointInfo, 0, len(resetPoints.Points))
-	expiringTimeNano := nowNano + int64(time.Duration(namespaceRetentionDays)*time.Hour*24)
+	ExpireTimeNano := nowNano + int64(time.Duration(namespaceRetentionDays)*time.Hour*24)
 	for _, rp := range resetPoints.Points {
 		if rp.GetRunId() == prevRunID {
-			rp.ExpiringTimeNano = expiringTimeNano
+			rp.ExpireTimeNano = ExpireTimeNano
 		}
 		newPoints = append(newPoints, rp)
 	}

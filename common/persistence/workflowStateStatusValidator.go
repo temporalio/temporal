@@ -43,13 +43,13 @@ var (
 	}
 
 	validWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:        {},
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:      {},
-		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:         {},
-		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:       {},
-		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:     {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:          {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:        {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:           {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:         {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:       {},
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: {},
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:       {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:        {},
 	}
 )
 
