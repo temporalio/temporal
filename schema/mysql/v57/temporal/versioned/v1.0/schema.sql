@@ -1,5 +1,5 @@
 CREATE TABLE namespaces(
-  shard_id INT NOT NULL,
+  ptn_id INT NOT NULL,
   id BINARY(16) NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   notification_version BIGINT NOT NULL,
@@ -7,16 +7,16 @@ CREATE TABLE namespaces(
   data BLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   is_global TINYINT(1) NOT NULL,
-  PRIMARY KEY(shard_id, id)
+  PRIMARY KEY(ptn_id, id)
 );
 
 CREATE TABLE namespace_metadata (
-  shard_id INT NOT NULL,
+  ptn_id INT NOT NULL,
   notification_version BIGINT NOT NULL,
-  PRIMARY KEY(shard_id)
+  PRIMARY KEY(ptn_id)
 );
 
-INSERT INTO namespace_metadata (notification_version) VALUES (1);
+INSERT INTO namespace_metadata (ptn_id, notification_version) VALUES (54321, 1);
 
 CREATE TABLE shards (
   shard_id INT NOT NULL,
