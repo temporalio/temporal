@@ -151,7 +151,7 @@ func newHistoryReplicator(
 			)
 		},
 	}
-	replicator.resetor = newWorkflowResetor(historyEngine)
+	replicator.resetor = reset.NewWorkflowResetor(shard, executionCache, logger)
 
 	return replicator
 }

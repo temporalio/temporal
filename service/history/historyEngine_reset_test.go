@@ -126,13 +126,14 @@ func (s *resetorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
+	executionCache := execution.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
-		executionCache:       execution.NewCache(s.mockShard),
+		executionCache:       executionCache,
 		logger:               s.logger,
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
@@ -143,7 +144,8 @@ func (s *resetorSuite) SetupTest() {
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
-	s.resetor = newWorkflowResetor(h)
+	// TODO: replace depreciated workflowResetor once ndc and workflowRestter ready.
+	s.resetor = reset.NewWorkflowResetor(s.mockShard, executionCache, s.logger)
 	h.resetor = s.resetor
 	s.historyEngine = h
 }
