@@ -197,3 +197,12 @@ func (adh *AdminNilCheckHandler) RefreshWorkflowTasks(ctx context.Context, reque
 	}
 	return resp, err
 }
+
+// ResendReplicationTasks requests replication task from remote cluster
+func (adh *AdminNilCheckHandler) ResendReplicationTasks(ctx context.Context, request *adminservice.ResendReplicationTasksRequest) (_ *adminservice.ResendReplicationTasksResponse, err error) {
+	resp, err := adh.parentHandler.ResendReplicationTasks(ctx, request)
+	if resp == nil && err == nil {
+		resp = &adminservice.ResendReplicationTasksResponse{}
+	}
+	return resp, err
+}

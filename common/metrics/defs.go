@@ -482,6 +482,8 @@ const (
 	AdminClientMergeDLQMessagesScope
 	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
 	AdminClientRefreshWorkflowTasksScope
+	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
+	AdminClientResendReplicationTasksScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -683,6 +685,8 @@ const (
 	AdminReapplyEventsScope
 	// AdminRefreshWorkflowTasksScope is the metric scope for admin.RefreshWorkflowTasks
 	AdminRefreshWorkflowTasksScope
+	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
+	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
