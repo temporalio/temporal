@@ -71,7 +71,7 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 	}
 
 	if strings.ToLower(commonName) == "localhost" {
-		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127,0 ,0, 1)}
+		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
 		template.DNSNames = []string{"localhost"}
 	}
 
@@ -120,7 +120,7 @@ func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Cer
 	}
 
 	if strings.ToLower(commonName) == "localhost" {
-		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127,0 ,0, 1)}
+		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
 		template.DNSNames = []string{"localhost"}
 	}
 

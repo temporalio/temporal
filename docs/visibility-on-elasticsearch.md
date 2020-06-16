@@ -56,7 +56,7 @@ tctl --ns samples-namespace wf list -q 'CustomKeywordField in ("keyword2", "keyw
 - Kafka - message queue for visibility data 
 - ElasticSearch v6+ - for data search (early ES version may not support some queries)
 
-## Configuration
+## Config
 ```
 persistence:
   ...

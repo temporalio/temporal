@@ -162,8 +162,8 @@ func (s *conflictResolverSuite) TestReset() {
 	branchToken := []byte("some random branch token")
 
 	event1 := &historypb.HistoryEvent{
-		EventId: 1,
-		Version: version,
+		EventId:   1,
+		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
@@ -177,7 +177,7 @@ func (s *conflictResolverSuite) TestReset() {
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
@@ -284,8 +284,8 @@ func (s *conflictResolverSuite) TestReset() {
 		Execution:   execution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
-			ExecutionInfo:  &persistence.WorkflowExecutionInfo{
-				State: enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+			ExecutionInfo: &persistence.WorkflowExecutionInfo{
+				State:  enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			ExecutionStats: &persistence.ExecutionStats{},

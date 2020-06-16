@@ -30,9 +30,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	reflect "reflect"
 )
 
 // MocknDCActivityReplicator is a mock of nDCActivityReplicator interface

@@ -103,8 +103,8 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 		shardInfo.ClusterReplicationLevel = make(map[string]int64)
 	}
 
-	if shardInfo.GetReplicationDLQAckLevel() == nil {
-		shardInfo.ReplicationDLQAckLevel = make(map[string]int64)
+	if shardInfo.GetReplicationDlqAckLevel() == nil {
+		shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 	}
 
 	return shardInfo, nil

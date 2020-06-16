@@ -29,9 +29,10 @@
 package persistence
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	repication "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	reflect "reflect"
 )
 
 // MockNamespaceReplicationQueue is a mock of NamespaceReplicationQueue interface

@@ -99,7 +99,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
 			ShardId:                0,
 			RangeId:                1,
-			ReplicationDLQAckLevel: map[string]int64{"test": -1},
+			ReplicationDlqAckLevel: map[string]int64{"test": -1},
 		}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,

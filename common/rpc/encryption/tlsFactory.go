@@ -58,7 +58,7 @@ const (
 	providerTypeSelfSigned providerType = "selfsigned"
 )
 
-// NewTLSConfigProviderFromConfig creates a new TLS Configuration provider from RootTLS config
+// NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
 func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS) (TLSConfigProvider, error) {
 	/* if || encryptionSettings.Provider == ""  {
 		return nil, nil

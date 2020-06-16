@@ -206,7 +206,7 @@ func newHistoryReplicationTask(
 			NewRunHistory:     attr.NewRunHistory,
 			ForceBufferEvents: false,
 			ResetWorkflow:     attr.ResetWorkflow,
-			NewRunNDC:         attr.NewRunNDC,
+			NewRunNdc:         attr.NewRunNdc,
 		},
 		historyRereplicator: historyRereplicator,
 	}

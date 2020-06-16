@@ -209,9 +209,9 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{
 						"abc": {
-							Reason:          "test reason",
-							Operator:        "test operator",
-							CreatedTimeNano: 123,
+							Reason:         "test reason",
+							Operator:       "test operator",
+							CreateTimeNano: 123,
 						},
 					},
 				}},

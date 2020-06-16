@@ -164,7 +164,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			Namespace:            namespaceCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			URI:                  namespaceCacheEntry.GetConfig().HistoryArchivalURI,
+			URI:                  namespaceCacheEntry.GetConfig().HistoryArchivalUri,
 			NextEventID:          msBuilder.GetNextEventID(),
 			BranchToken:          branchToken,
 			CloseFailoverVersion: closeFailoverVersion,

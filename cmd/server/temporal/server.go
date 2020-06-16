@@ -190,11 +190,11 @@ func (s *server) startService() common.Daemon {
 		}
 
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
-			HostPort:     s.cfg.PublicClient.HostPort,
-			Namespace:    common.SystemLocalNamespace,
-			MetricsScope: params.MetricScope,
-			Logger:       zapLogger,
-			ConnectionOptions: sdkclient.ConnectionOptions{ TLS: options },
+			HostPort:          s.cfg.PublicClient.HostPort,
+			Namespace:         common.SystemLocalNamespace,
+			MetricsScope:      params.MetricScope,
+			Logger:            zapLogger,
+			ConnectionOptions: sdkclient.ConnectionOptions{TLS: options},
 		})
 		if err != nil {
 			log.Fatalf("failed to create public client: %v", err)

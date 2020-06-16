@@ -60,5 +60,5 @@ message ArchiveVisibilityRequest {
     int64 history_length = 10;
     temporal.common.v1.Memo memo = 11;
     map<string, string> search_attributes = 12;
-    string history_archival_u_r_i = 13;
+    string history_archival_uri = 13;
 }

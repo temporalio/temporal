@@ -397,8 +397,8 @@ func CreateHistoryStartWorkflowRequest(
 ) *historyservice.StartWorkflowExecutionRequest {
 	now := time.Now()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:  namespaceID,
-		StartRequest: startRequest,
+		NamespaceId:            namespaceID,
+		StartRequest:           startRequest,
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
@@ -503,7 +503,7 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 	case int:
 		return enumspb.IndexedValueType(t)
 	case string:
-		if ivt, ok := enumspb.IndexedValueType_value[t]; ok{
+		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
 			return enumspb.IndexedValueType(ivt)
 		}
 	case enumspb.IndexedValueType:

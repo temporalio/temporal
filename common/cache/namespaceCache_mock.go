@@ -29,8 +29,9 @@
 package cache
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockNamespaceCache is a mock of NamespaceCache interface
