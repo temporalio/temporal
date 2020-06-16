@@ -988,6 +988,23 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
 }
 
+// ResendReplicationTasks requests replication task from remote cluster
+func (adh *AdminHandler) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+) (_ *adminservice.ResendReplicationTasksResponse, err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminResendReplicationTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	// TODO: not implemented!
+	return nil, nil
+}
+
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
