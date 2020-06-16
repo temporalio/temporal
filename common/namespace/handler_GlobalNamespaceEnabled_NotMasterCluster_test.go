@@ -381,7 +381,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		UpdatedInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
@@ -604,7 +604,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		UpdatedInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
