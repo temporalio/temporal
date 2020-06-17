@@ -31,6 +31,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -273,6 +275,15 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	if _, ok := err.(*serviceerror.NotFound); ok {
+		return nil
+	}
+
+	if transferTask, ok := task.task.(*persistenceblobs.TransferTaskInfo); ok &&
+		transferTask.TaskType == enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
+		err == ErrMissingWorkflowStartEvent &&
+		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceCache
+		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
+		task.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 

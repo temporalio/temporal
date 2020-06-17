@@ -311,6 +311,7 @@ func NewEngineWithShardContext(
 			return historyEngImpl.ReplicateEventsV2(ctx, request)
 		},
 		shard.GetService().GetPayloadSerializer(),
+		nil,
 		shard.GetLogger(),
 	)
 	historyRereplicator := xdc.NewHistoryRereplicator(
@@ -334,6 +335,7 @@ func NewEngineWithShardContext(
 		shard.GetMetricsClient(),
 		shard.GetLogger(),
 	)
+
 	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(
@@ -367,7 +369,9 @@ func (e *historyEngineImpl) Start() {
 	e.timerProcessor.Start()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC {
+	if e.replicatorProcessor != nil &&
+		(clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC ||
+			e.config.EnableKafkaReplication()) {
 		e.replicatorProcessor.Start()
 	}
 
@@ -2950,6 +2954,10 @@ func (e *historyEngineImpl) ReapplyEvents(
 	reapplyEvents []*historypb.HistoryEvent,
 ) error {
 
+	if e.config.SkipReapplicationByNamespaceId(namespaceUUID) {
+		return nil
+	}
+
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
 	if err != nil {
 		return err
@@ -2966,7 +2974,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 		currentExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			// Filter out reapply event from the same cluster
-			toReapplyEvents := make([]*historypb.HistoryEvent, len(reapplyEvents))
+			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err

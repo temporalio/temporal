@@ -171,6 +171,7 @@ func initializeLoggerForTask(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
 		tag.TaskVisibilityTimestamp(t.UnixNano()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().GetSeconds()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
 		tag.WorkflowNamespaceID(task.GetNamespaceId()),

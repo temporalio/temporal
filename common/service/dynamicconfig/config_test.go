@@ -200,6 +200,15 @@ func (s *configSuite) TestGetBoolProperty() {
 	s.Equal(false, value())
 }
 
+func (s *configSuite) TestGetBoolPropertyFilteredByNamespaceID() {
+	key := testGetBoolPropertyFilteredByNamespaceIDKey
+	namespaceID := "testNamespaceID"
+	value := s.cln.GetBoolPropertyFnWithNamespaceIDFilter(key, true)
+	s.Equal(true, value(namespaceID))
+	s.client.SetValue(key, false)
+	s.Equal(false, value(namespaceID))
+}
+
 func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
 	key := testGetBoolPropertyFilteredByTaskListInfoKey
 	namespace := "testNamespace"

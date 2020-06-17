@@ -32,20 +32,18 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
+	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
-
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -542,6 +540,15 @@ type (
 		LastWorkerIdentity     string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
+	}
+
+	// TimerInfo details - metadata about user timer info.
+	TimerInfo struct {
+		Version    int64
+		TimerID    string
+		StartedID  int64
+		ExpiryTime time.Time
+		TaskStatus int64
 	}
 
 	// ChildExecutionInfo has details for pending child executions.
