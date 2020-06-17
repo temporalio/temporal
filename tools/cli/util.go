@@ -920,7 +920,7 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 		}
 
 		pageItems = append(pageItems, item)
-		if len(pageItems) == pageSize {
+		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
 				printTable(pageItems)
 			} else {
@@ -939,12 +939,15 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 
 func printTable(items []interface{}) error {
 	if len(items) == 0 {
-		fmt.Println("no items to print")
 		return nil
 	}
 
+	e := reflect.ValueOf(items[0])
+	for e.Type().Kind() == reflect.Ptr {
+		e = e.Elem()
+	}
+
 	var fields []string
-	e := reflect.ValueOf(items[0]).Elem()
 	t := e.Type()
 	for i := 0; i < e.NumField(); i++ {
 		fields = append(fields, t.Field(i).Name)
@@ -956,7 +959,10 @@ func printTable(items []interface{}) error {
 	table.SetHeader(fields)
 	table.SetHeaderLine(false)
 	for i := 0; i < len(items); i++ {
-		item := reflect.ValueOf(items[i]).Elem()
+		item := reflect.ValueOf(items[i])
+		for item.Type().Kind() == reflect.Ptr {
+			item = item.Elem()
+		}
 		var columns []string
 		for j := 0; j < len(fields); j++ {
 			col := item.Field(j)
