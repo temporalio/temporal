@@ -51,6 +51,10 @@ name = :name AND
 task_type = :task_type
 `
 
+	listTaskQueueWithShardRangeQry = `SELECT shard_id, namespace_id, range_id, name, task_type, data, data_encoding ` +
+		`FROM task_queues ` +
+		`WHERE shard_id >= ? AND shard_id <= ? AND namespace_id > ? AND name > ? AND task_type > ? ORDER BY shard_id, namespace_id,name,task_type LIMIT ?`
+
 	listTaskQueueQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_queues ` +
 		`WHERE shard_id = ? AND namespace_id > ? AND name > ? AND task_type > ? ORDER BY namespace_id,name,task_type LIMIT ?`
@@ -139,6 +143,9 @@ func (mdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error
 func (mdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.NamespaceID != nil && filter.Name != nil && filter.TaskType != nil:
+		if filter.ShardIDLessThanEqualTo != 0 || filter.ShardIDGreaterThanEqualTo != 0 {
+			return nil, fmt.Errorf("shardID range not supported for specific selection")
+		}
 		return mdb.selectFromTaskQueues(filter)
 	case filter.NamespaceIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
 		return mdb.rangeSelectFromTaskQueues(filter)
@@ -160,14 +167,19 @@ func (mdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 func (mdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
-	err = mdb.conn.Select(&rows, listTaskQueueQry,
-		filter.ShardID, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+
+	if filter.ShardIDLessThanEqualTo != 0 {
+		err = mdb.conn.Select(&rows, listTaskQueueWithShardRangeQry,
+			filter.ShardIDGreaterThanEqualTo, filter.ShardIDLessThanEqualTo, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	} else {
+		err = mdb.conn.Select(&rows, listTaskQueueQry,
+			filter.ShardID, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	for i := range rows {
-		rows[i].ShardID = filter.ShardID
-	}
+
 	return rows, nil
 }
 

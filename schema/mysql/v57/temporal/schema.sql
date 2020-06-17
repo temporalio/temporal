@@ -89,7 +89,7 @@ CREATE TABLE tasks (
 );
 
 CREATE TABLE task_queues (
-  shard_id INT NOT NULL,
+  shard_id INT UNSIGNED NOT NULL,
   namespace_id BINARY(16) NOT NULL,
   name VARCHAR(255) NOT NULL,
   task_type TINYINT NOT NULL, -- {Activity, Decision}

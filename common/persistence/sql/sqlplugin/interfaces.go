@@ -229,7 +229,7 @@ type (
 
 	// TaskQueuesRow represents a row in task_queues table
 	TaskQueuesRow struct {
-		ShardID      int
+		ShardID      uint32
 		NamespaceID  primitives.UUID
 		Name         string
 		TaskType     int64
@@ -241,15 +241,17 @@ type (
 	// TaskQueuesFilter contains the column names within task_queues table that
 	// can be used to filter results through a WHERE clause
 	TaskQueuesFilter struct {
-		ShardID                int
-		NamespaceID            *primitives.UUID
-		Name                   *string
-		TaskType               *int64
-		NamespaceIDGreaterThan *primitives.UUID
-		NameGreaterThan        *string
-		TaskTypeGreaterThan    *int64
-		RangeID                *int64
-		PageSize               *int
+		ShardID                   uint32
+		ShardIDGreaterThanEqualTo uint32
+		ShardIDLessThanEqualTo    uint32
+		NamespaceID               *primitives.UUID
+		Name                      *string
+		TaskType                  *int64
+		NamespaceIDGreaterThan    *primitives.UUID
+		NameGreaterThan           *string
+		TaskTypeGreaterThan       *int64
+		RangeID                   *int64
+		PageSize                  *int
 	}
 
 	// ReplicationTasksRow represents a row in replication_tasks table

@@ -54,6 +54,9 @@ namespace_id = :namespace_id AND
 name = :name AND
 task_type = :task_type
 `
+	listTaskQueueWithShardRangeQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
+		`FROM task_queues ` +
+		`WHERE shard_id >= $1 AND shard_id >= $2 AND namespace_id > $3 AND name > $4 AND task_type > $5 ORDER BY namespace_id,name,task_type LIMIT $6`
 
 	listTaskQueueQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_queues ` +
@@ -144,6 +147,9 @@ func (pdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error
 func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.NamespaceID != nil && filter.Name != nil && filter.TaskType != nil:
+		if filter.ShardIDLessThanEqualTo != 0 || filter.ShardIDGreaterThanEqualTo != 0 {
+			return nil, fmt.Errorf("shardID range not supported for specific selection")
+		}
 		return pdb.selectFromTaskQueues(filter)
 	case filter.NamespaceIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
 		return pdb.rangeSelectFromTaskQueues(filter)
@@ -165,8 +171,13 @@ func (pdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 func (pdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
-	err = pdb.conn.Select(&rows, listTaskQueueQry,
-		filter.ShardID, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	if filter.ShardIDLessThanEqualTo > 0 {
+		err = pdb.conn.Select(&rows, listTaskQueueWithShardRangeQry,
+			filter.ShardIDGreaterThanEqualTo, filter.ShardIDLessThanEqualTo, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	} else {
+		err = pdb.conn.Select(&rows, listTaskQueueQry,
+			filter.ShardID, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	}
 	if err != nil {
 		return nil, err
 	}
