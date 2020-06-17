@@ -29,37 +29,36 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common/v1"
 	history "go.temporal.io/temporal-proto/history/v1"
+	reflect "reflect"
 )
 
-// MockstateBuilder is a mock of stateBuilder interface
+// MockstateBuilder is a mock of stateBuilder interface.
 type MockstateBuilder struct {
 	ctrl     *gomock.Controller
 	recorder *MockstateBuilderMockRecorder
 }
 
-// MockstateBuilderMockRecorder is the mock recorder for MockstateBuilder
+// MockstateBuilderMockRecorder is the mock recorder for MockstateBuilder.
 type MockstateBuilderMockRecorder struct {
 	mock *MockstateBuilder
 }
 
-// NewMockstateBuilder creates a new mock instance
+// NewMockstateBuilder creates a new mock instance.
 func NewMockstateBuilder(ctrl *gomock.Controller) *MockstateBuilder {
 	mock := &MockstateBuilder{ctrl: ctrl}
 	mock.recorder = &MockstateBuilderMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockstateBuilder) EXPECT() *MockstateBuilderMockRecorder {
 	return m.recorder
 }
 
-// applyEvents mocks base method
+// applyEvents mocks base method.
 func (m *MockstateBuilder) applyEvents(namespaceID, requestID string, execution common.WorkflowExecution, history, newRunHistory []*history.HistoryEvent, newRunNDC bool) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "applyEvents", namespaceID, requestID, execution, history, newRunHistory, newRunNDC)
@@ -68,7 +67,7 @@ func (m *MockstateBuilder) applyEvents(namespaceID, requestID string, execution 
 	return ret0, ret1
 }
 
-// applyEvents indicates an expected call of applyEvents
+// applyEvents indicates an expected call of applyEvents.
 func (mr *MockstateBuilderMockRecorder) applyEvents(namespaceID, requestID, execution, history, newRunHistory, newRunNDC interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "applyEvents", reflect.TypeOf((*MockstateBuilder)(nil).applyEvents), namespaceID, requestID, execution, history, newRunHistory, newRunNDC)
