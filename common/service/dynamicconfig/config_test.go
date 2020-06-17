@@ -26,6 +26,7 @@ package dynamicconfig
 
 import (
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -273,7 +274,7 @@ func (s *configSuite) TestUpdateConfig() {
 func TestDynamicConfigKeyIsMapped(t *testing.T) {
 	for i := unknownKey; i < lastKeyForTest; i++ {
 		key, ok := keys[i]
-		require.True(t, ok)
+		require.True(t, ok, fmt.Sprintf("key %d is not mapped", i))
 		require.NotEmpty(t, key)
 	}
 }

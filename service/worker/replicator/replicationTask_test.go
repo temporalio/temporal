@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -677,6 +678,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 			nextEventID:         replicationAttr.GetNextEventId(),
 			historyRereplicator: s.mockRereplicator,
 			nDCHistoryResender:  s.mockNDCResender,
+			version:             replicationAttr.GetVersion(),
 		},
 		metadataTask,
 	)
@@ -851,6 +853,7 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		RunId:          "some random run ID",
 		FirstEventId:   728,
 		NextEventId:    1015,
+		Version:        common.EmptyVersion,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
 		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
