@@ -87,6 +87,7 @@ type jsonType int
 const (
 	jsonTypeInput jsonType = iota
 	jsonTypeMemo
+	jsonTypeHeader
 )
 
 var (

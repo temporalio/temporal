@@ -231,6 +231,9 @@ const (
 	FlagRetryExpiration                   = "retry_expiration"
 	FlagRetryBackoff                      = "retry_backoff"
 	FlagRetryMaxInterval                  = "retry_max_interval"
+	FlagHeaderKey                         = "header_key"
+	FlagHeaderValue                       = "header_value"
+	FlagHeaderFile                        = "header_file"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -347,6 +350,20 @@ func getFlagsForStart() []cli.Flag {
 			Name: FlagMemoFile,
 			Usage: "Optional info that can be listed in list workflow, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"The order must be same as memo_key",
+		},
+		cli.StringFlag{
+			Name:  FlagHeaderKey,
+			Usage: "Optional key of header. If there are multiple keys, concatenate them and separate by space",
+		},
+		cli.StringFlag{
+			Name: FlagHeaderValue,
+			Usage: "Optional info to propogate via workflow context, in JSON format. If there are multiple JSON, concatenate them and separate by space. " +
+				"The order must be same as " + FlagHeaderKey,
+		},
+		cli.StringFlag{
+			Name: FlagHeaderFile,
+			Usage: "Optional info to propogate via workflow context, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+				"The order must be same as " + FlagHeaderKey,
 		},
 		cli.StringFlag{
 			Name: FlagSearchAttributesKey,

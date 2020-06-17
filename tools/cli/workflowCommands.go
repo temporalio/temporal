@@ -39,7 +39,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 
@@ -221,6 +220,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		}
 	}
 
+	headerFields := processHeader(c)
+	if len(headerFields) != 0 {
+		startRequest.Header = &s.Header{Fields: headerFields}
+	}
+
 	memoFields := processMemo(c)
 	if len(memoFields) != 0 {
 		startRequest.Memo = &s.Memo{Fields: memoFields}
@@ -311,33 +315,26 @@ func processSearchAttr(c *cli.Context) map[string][]byte {
 	return fields
 }
 
+func processHeader(c *cli.Context) map[string][]byte {
+	headerKeys := processMultipleKeys(c.String(FlagHeaderKey), " ")
+	headerValues := processMultipleJSONValues(processJSONInputHelper(c, jsonTypeHeader))
+
+	if len(headerKeys) != len(headerValues) {
+		ErrorAndExit("Number of header keys and values are not equal.", nil)
+	}
+
+	return mapFromKeysValues(headerKeys, headerValues)
+}
+
 func processMemo(c *cli.Context) map[string][]byte {
-	rawMemoKey := c.String(FlagMemoKey)
-	var memoKeys []string
-	if strings.TrimSpace(rawMemoKey) != "" {
-		memoKeys = strings.Split(rawMemoKey, " ")
-	}
+	memoKeys := processMultipleKeys(c.String(FlagMemoKey), " ")
+	memoValues := processMultipleJSONValues(processJSONInputHelper(c, jsonTypeMemo))
 
-	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
-	var memoValues []string
-
-	var sc fastjson.Scanner
-	sc.Init(rawMemoValue)
-	for sc.Next() {
-		memoValues = append(memoValues, sc.Value().String())
-	}
-	if err := sc.Error(); err != nil {
-		ErrorAndExit("Parse json error.", err)
-	}
 	if len(memoKeys) != len(memoValues) {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
 
-	fields := map[string][]byte{}
-	for i, key := range memoKeys {
-		fields[key] = []byte(memoValues[i])
-	}
-	return fields
+	return mapFromKeysValues(memoKeys, memoValues)
 }
 
 func getPrintableMemo(memo *s.Memo) string {
