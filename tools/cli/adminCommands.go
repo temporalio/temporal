@@ -185,6 +185,32 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 	return resp
 }
 
+// AdminListNamespaces outputs a list of all namespaces
+func AdminListNamespaces(c *cli.Context) {
+	pFactory := CreatePersistenceFactory(c)
+	metadataManager, err := pFactory.NewMetadataManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize metadata manager", err)
+	}
+
+	req := &persistence.ListNamespacesRequest{}
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req.NextPageToken = paginationToken
+		response, err := metadataManager.ListNamespaces(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		token := response.NextPageToken
+
+		var items []interface{}
+		for _, task := range response.Namespaces {
+			items = append(items, task)
+		}
+		return items, token, nil
+	}
+	paginate(c, paginationFunc)
+}
+
 // AdminDeleteWorkflow delete a workflow execution for admin
 func AdminDeleteWorkflow(c *cli.Context) {
 	wid := getRequiredOption(c, FlagWorkflowID)
