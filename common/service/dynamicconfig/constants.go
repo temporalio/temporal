@@ -221,6 +221,7 @@ var keys = map[Key]string{
 	TransferProcessorVisibilityArchivalTimeLimit:           "history.transferProcessorVisibilityArchivalTimeLimit",
 	ReplicatorTaskBatchSize:                                "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                              "history.replicatorTaskWorkerCount",
+	ReplicatorReadTaskMaxRetryCount:                        "history.replicatorReadTaskMaxRetryCount",
 	ReplicatorTaskMaxRetryCount:                            "history.replicatorTaskMaxRetryCount",
 	ReplicatorProcessorMaxPollRPS:                          "history.replicatorProcessorMaxPollRPS",
 	ReplicatorProcessorUpdateShardTaskCount:                "history.replicatorProcessorUpdateShardTaskCount",
@@ -665,6 +666,8 @@ const (
 	ReplicatorTaskBatchSize
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
 	ReplicatorTaskWorkerCount
+	// ReplicatorReadTaskMaxRetryCount is the number of read replication task retry time
+	ReplicatorReadTaskMaxRetryCount
 	// ReplicatorTaskMaxRetryCount is max times of retry for ReplicatorProcessor
 	ReplicatorTaskMaxRetryCount
 	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor

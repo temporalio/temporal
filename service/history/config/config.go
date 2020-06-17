@@ -147,6 +147,7 @@ type Config struct {
 	ReplicatorTaskBatchSize                                dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                              dynamicconfig.IntPropertyFn
 	ReplicatorTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	ReplicatorReadTaskMaxRetryCount                        dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
@@ -377,6 +378,7 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		ReplicatorTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
 		ReplicatorTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
+		ReplicatorReadTaskMaxRetryCount:                        dc.GetIntProperty(dynamicconfig.ReplicatorReadTaskMaxRetryCount, 3),
 		ReplicatorProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 20),
 		ReplicatorProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),

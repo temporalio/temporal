@@ -683,7 +683,7 @@ func (adh *AdminHandler) GetReplicationMessages(
 		return nil, adh.error(errClusterNameNotSet, scope)
 	}
 
-	resp, err = adh.GetHistoryClient().GetReplicationMessages(ctx, request)
+	resp, err = adh.GetHistoryRawClient().GetReplicationMessages(ctx, request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}

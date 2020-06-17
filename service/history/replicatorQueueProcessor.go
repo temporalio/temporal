@@ -105,7 +105,7 @@ func newReplicatorQueueProcessor(
 	}
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetMaximumAttempts(10)
+	retryPolicy.SetMaximumAttempts(config.ReplicatorReadTaskMaxRetryCount())
 	retryPolicy.SetBackoffCoefficient(1)
 
 	processor := &replicatorQueueProcessorImpl{
