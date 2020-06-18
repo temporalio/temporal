@@ -535,7 +535,7 @@ func doRereplicate(
 			if _, err := adminClient.ResendReplicationTasks(
 				ctx,
 				&adminservice.ResendReplicationTasksRequest{
-					DomainId:      namespaceID,
+					NamespaceId:   namespaceID,
 					WorkflowId:    wid,
 					RunId:         rid,
 					RemoteCluster: targets[0],

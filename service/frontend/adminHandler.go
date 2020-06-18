@@ -1020,7 +1020,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.GetLogger(),
 	)
 	return nil, resender.SendSingleWorkflowHistory(
-		request.GetDomainId(),
+		request.GetNamespaceId(),
 		request.GetWorkflowId(),
 		request.GetRunId(),
 		resendStartEventID,
