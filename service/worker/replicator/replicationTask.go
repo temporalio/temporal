@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	"github.com/temporalio/temporal/client/history"
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -79,7 +80,9 @@ type (
 		sourceCluster       string
 		firstEventID        int64
 		nextEventID         int64
+		version             int64
 		historyRereplicator xdc.HistoryRereplicator
+		nDCHistoryResender  xdc.NDCHistoryResender
 	}
 
 	historyReplicationV2Task struct {
@@ -222,6 +225,7 @@ func newHistoryMetadataReplicationTask(
 	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
+	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyMetadataReplicationTask {
 
 	attr := replicationTask.GetHistoryMetadataTaskAttributes()
@@ -230,6 +234,7 @@ func newHistoryMetadataReplicationTask(
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
 		tag.WorkflowNextEventID(attr.GetNextEventId()))
+
 	return &historyMetadataReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{
 			metricsScope: metrics.HistoryMetadataReplicationTaskScope,
@@ -250,7 +255,9 @@ func newHistoryMetadataReplicationTask(
 		sourceCluster:       sourceCluster,
 		firstEventID:        attr.GetFirstEventId(),
 		nextEventID:         attr.GetNextEventId(),
+		version:             attr.GetVersion(),
 		historyRereplicator: historyRereplicator,
+		nDCHistoryResender:  nDCHistoryResender,
 	}
 }
 
@@ -416,11 +423,22 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	return t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.NamespaceID, t.queueID.WorkflowID,
-		t.queueID.RunID, t.firstEventID,
-		t.queueID.RunID, t.nextEventID,
-	)
+	if t.version != common.EmptyVersion {
+		return t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.queueID.NamespaceID,
+			t.queueID.WorkflowID,
+			t.queueID.RunID,
+			t.firstEventID-1, //NDC resend API is exclusive-exclusive.
+			t.version,
+			t.nextEventID,
+			t.version)
+	} else {
+		return t.historyRereplicator.SendMultiWorkflowHistory(
+			t.queueID.NamespaceID, t.queueID.WorkflowID,
+			t.queueID.RunID, t.firstEventID,
+			t.queueID.RunID, t.nextEventID,
+		)
+	}
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(
