@@ -827,8 +827,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
-	queryConsistencyLevel := enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-
 	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
@@ -846,32 +844,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 					},
 				},
 			}, nil
-		}
-	}
-
-	if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
-		// query cannot be processed unless at least one decision task has finished
-		// if first decision task has not finished wait for up to a second for it to complete
-		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
-			if ctxWaitTime > queryFirstDecisionTaskWaitTime {
-				queryFirstDecisionTaskWaitTime = ctxWaitTime
-			}
-		}
-		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-			<-time.After(queryFirstDecisionTaskCheckInterval)
-			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-			return nil, ErrQueryWorkflowBeforeFirstDecision
 		}
 	}
 
@@ -894,16 +866,14 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// These decision tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to decider is directly through matching; in this approach queries can be
 	// dispatched to decider immediately even if there are outstanding events that came before the query. The following logic
-	// is used to determine if a query can be safely dispatched directly through matching or if given the desired consistency
-	// level must be dispatched on a decision task. There are four cases in which a query can be dispatched directly through
-	// matching safely, without violating the desired consistency level:
+	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a decision task.
+	//
+	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
 	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. the client requested eventual consistency, in this case there are no consistency requirements so dispatching directly through matching is safe
-	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
+	// 3. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)

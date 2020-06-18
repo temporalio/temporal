@@ -252,8 +252,6 @@ var keys = map[Key]string{
 	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
 	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
 	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
-	EnableConsistentQuery:                                  "history.EnableConsistentQuery",
-	EnableConsistentQueryByNamespace:                       "history.EnableConsistentQueryByNamespace",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                     "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
@@ -771,10 +769,6 @@ const (
 	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
 	HistoryEnableCleanupReplicationTask
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
-	EnableConsistentQuery
-	// EnableConsistentQueryByNamespace indicates if consistent query is enabled for a namespace
-	EnableConsistentQueryByNamespace
-	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
 	MutableStateChecksumGenProbability
