@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -565,13 +564,12 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 			// Only autofoward consistent queries, this is done for two reasons:
 			// 1. Query is meant to be fast, autoforwarding all queries will increase latency.
 			// 2. If eventual consistency was requested then the results from running out of local dc will be fine.
-			queryConsistencyLevel := enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-			if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_STRONG {
-				remoteClient := handler.GetRemoteFrontendClient(targetDC)
-				resp, err = remoteClient.QueryWorkflow(ctx, request)
-			} else {
-				resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
-			}
+			// if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_STRONG {
+			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.QueryWorkflow(ctx, request)
+			// } else {
+			// 	resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
+			// }
 		}
 		return err
 	})

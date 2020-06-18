@@ -827,8 +827,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
-	queryConsistencyLevel := enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-
 	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
@@ -849,31 +847,31 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
-		// query cannot be processed unless at least one decision task has finished
-		// if first decision task has not finished wait for up to a second for it to complete
-		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
-			if ctxWaitTime > queryFirstDecisionTaskWaitTime {
-				queryFirstDecisionTaskWaitTime = ctxWaitTime
-			}
-		}
-		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-			<-time.After(queryFirstDecisionTaskCheckInterval)
-			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-			return nil, ErrQueryWorkflowBeforeFirstDecision
-		}
-	}
+	// if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
+	// 	// query cannot be processed unless at least one decision task has finished
+	// 	// if first decision task has not finished wait for up to a second for it to complete
+	// 	queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
+	// 	ctxDeadline, ok := ctx.Deadline()
+	// 	if ok {
+	// 		ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
+	// 		if ctxWaitTime > queryFirstDecisionTaskWaitTime {
+	// 			queryFirstDecisionTaskWaitTime = ctxWaitTime
+	// 		}
+	// 	}
+	// 	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
+	// 	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
+	// 		<-time.After(queryFirstDecisionTaskCheckInterval)
+	// 		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 	}
+	//
+	// 	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+	// 		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
+	// 		return nil, ErrQueryWorkflowBeforeFirstDecision
+	// 	}
+	// }
 
 	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
 	if err != nil {
@@ -899,11 +897,10 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// matching safely, without violating the desired consistency level:
 	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. the client requested eventual consistency, in this case there are no consistency requirements so dispatching directly through matching is safe
-	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
+	// 3. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
+		// queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)
