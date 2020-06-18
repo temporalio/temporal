@@ -33,13 +33,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
@@ -52,6 +47,9 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
+	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 )
 
 const maxEventID = 9999
