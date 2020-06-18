@@ -122,6 +122,8 @@ var (
 	ComponentBatcher                  = component("batcher")
 	ComponentWorker                   = component("worker")
 	ComponentServiceResolver          = component("service-resolver")
+	ComponentFailoverCoordinator      = component("failover-coordinator")
+	ComponentFailoverMarkerNotifier   = component("failover-marker-notifier")
 )
 
 // Pre-defined values for TagSysLifecycle

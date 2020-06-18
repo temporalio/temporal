@@ -257,6 +257,7 @@ type (
 		TimerFailoverLevels       map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
 		ClusterReplicationLevel   map[string]int64                 `json:"cluster_replication_level"`
 		DomainNotificationVersion int64                            `json:"domain_notification_version"`
+		PendingFailoverMarkers    *DataBlob                        `json:"pending_failover_markers"`
 	}
 
 	// TransferFailoverLevel contains corresponding start / end level

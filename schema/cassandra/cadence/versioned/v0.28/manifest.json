@@ -1,9 +1,10 @@
 {
   "CurrVersion": "0.28",
   "MinCompatibleVersion": "0.27",
-  "Description": "Add creation timestamp in replication task type",
+  "Description": "Add creation timestamp in replication task type and update shard info type",
   "SchemaUpdateCqlFiles": [
     "replication_task_creation_time.cql",
-    "previous_failover_version.cql"
+    "previous_failover_version.cql",
+    "shard_info_marker.cql"
   ]
 }

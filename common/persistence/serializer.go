@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/codec"
@@ -56,6 +57,10 @@ type (
 		// serialize/deserialize version histories
 		SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*DataBlob, error)
 		DeserializeVersionHistories(data *DataBlob) (*workflow.VersionHistories, error)
+
+		// serialize/deserialize pending failover markers
+		SerializePendingFailoverMarkers(markers []*replicator.FailoverMarkerAttributes, encodingType common.EncodingType) (*DataBlob, error)
+		DeserializePendingFailoverMarkers(data *DataBlob) ([]*replicator.FailoverMarkerAttributes, error)
 	}
 
 	// CadenceSerializationError is an error type for cadence serialization
@@ -171,6 +176,32 @@ func (t *serializerImpl) DeserializeVersionHistories(data *DataBlob) (*workflow.
 	return &histories, err
 }
 
+func (t *serializerImpl) SerializePendingFailoverMarkers(
+	markers []*replicator.FailoverMarkerAttributes,
+	encodingType common.EncodingType,
+) (*DataBlob, error) {
+
+	if markers == nil {
+		return nil, nil
+	}
+	return t.serialize(markers, encodingType)
+}
+
+func (t *serializerImpl) DeserializePendingFailoverMarkers(
+	data *DataBlob,
+) ([]*replicator.FailoverMarkerAttributes, error) {
+
+	if data == nil {
+		return nil, nil
+	}
+	var markers []*replicator.FailoverMarkerAttributes
+	if data != nil && len(data.Data) == 0 {
+		return markers, nil
+	}
+	err := t.deserialize(data, &markers)
+	return markers, err
+}
+
 func (t *serializerImpl) serialize(input interface{}, encodingType common.EncodingType) (*DataBlob, error) {
 	if input == nil {
 		return nil, nil
@@ -209,6 +240,8 @@ func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
+	case []*replicator.FailoverMarkerAttributes:
+		return t.thriftrwEncoder.Encode(&replicator.FailoverMarkers{FailoverMarkers: input.([]*replicator.FailoverMarkerAttributes)})
 	default:
 		return nil, nil
 	}
@@ -257,6 +290,13 @@ func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Decode(data, target)
+	case *[]*replicator.FailoverMarkerAttributes:
+		markers := replicator.FailoverMarkers{FailoverMarkers: *target}
+		if err := t.thriftrwEncoder.Decode(data, &markers); err != nil {
+			return err
+		}
+		*target = markers.GetFailoverMarkers()
+		return nil
 	default:
 		return nil
 	}

@@ -29,23 +29,19 @@ import (
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
-	"github.com/uber/cadence/service/history/failover"
 )
 
 // Resource is the interface which expose common history resources
 type Resource interface {
 	resource.Resource
 	GetEventCache() events.Cache
-	GetFailoverCoordinator() failover.Coordinator
 }
 
 type resourceImpl struct {
 	status int32
 
 	resource.Resource
-	config              *config.Config
-	eventCache          events.Cache
-	failoverCoordinator failover.Coordinator
+	eventCache events.Cache
 }
 
 // Start starts all resources
@@ -60,9 +56,6 @@ func (h *resourceImpl) Start() {
 	}
 
 	h.Resource.Start()
-	if h.config.EnableGracefulFailover() {
-		h.failoverCoordinator.Start()
-	}
 	h.GetLogger().Info("history resource started", tag.LifeCycleStarted)
 }
 
@@ -78,18 +71,12 @@ func (h *resourceImpl) Stop() {
 	}
 
 	h.Resource.Stop()
-	h.failoverCoordinator.Stop()
 	h.GetLogger().Info("history resource stopped", tag.LifeCycleStopped)
 }
 
 // GetEventCache return event cache
 func (h *resourceImpl) GetEventCache() events.Cache {
 	return h.eventCache
-}
-
-// GetFailoverCoordinator return failover coordinator
-func (h *resourceImpl) GetFailoverCoordinator() failover.Coordinator {
-	return h.failoverCoordinator
 }
 
 // New create a new resource containing common history dependencies
@@ -120,20 +107,10 @@ func New(
 		params.MetricsClient,
 		uint64(config.EventsCacheMaxSize()),
 	)
-	coordinator := failover.NewCoordinator(
-		serviceResource.GetMetadataManager(),
-		serviceResource.GetHistoryClient(),
-		serviceResource.GetTimeSource(),
-		config,
-		serviceResource.GetMetricsClient(),
-		serviceResource.GetLogger(),
-	)
 
 	historyResource = &resourceImpl{
-		Resource:            serviceResource,
-		config:              config,
-		eventCache:          eventCache,
-		failoverCoordinator: coordinator,
+		Resource:   serviceResource,
+		eventCache: eventCache,
 	}
 	return
 }

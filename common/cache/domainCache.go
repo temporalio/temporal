@@ -799,8 +799,8 @@ func (entry *DomainCacheEntry) IsDomainActive() bool {
 // IsDomainPendingActive returns whether the domain is in pending active state
 func (entry *DomainCacheEntry) IsDomainPendingActive() bool {
 	if !entry.isGlobalDomain {
-		// domain is not a global domain, meaning domain is always "active" within each cluster
-		return true
+		// domain is not a global domain, meaning domain can never be in pending active state
+		return false
 	}
 	return entry.failoverEndTime != nil
 }

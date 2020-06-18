@@ -556,8 +556,11 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 		}
 		return task, err
 	case persistence.ReplicationTaskTypeFailoverMarker:
-		//TODO: add function to generate failover marker task
-		return nil, nil
+		task := p.generateFailoverMarkerTask(task)
+		if task != nil {
+			task.SourceTaskId = common.Int64Ptr(qTask.GetTaskID())
+		}
+		return task, nil
 	default:
 		return nil, errUnknownReplicationTask
 	}
@@ -725,6 +728,21 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			return replicationTask, nil
 		},
 	)
+}
+
+func (p *replicatorQueueProcessorImpl) generateFailoverMarkerTask(
+	taskInfo *persistence.ReplicationTaskInfo,
+) *replicator.ReplicationTask {
+
+	return &replicator.ReplicationTask{
+		TaskType:     replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeFailoverMarker),
+		SourceTaskId: common.Int64Ptr(taskInfo.GetTaskID()),
+		FailoverMarkerAttributes: &replicator.FailoverMarkerAttributes{
+			DomainID:        common.StringPtr(taskInfo.GetDomainID()),
+			FailoverVersion: common.Int64Ptr(taskInfo.GetVersion()),
+			CreationTime:    common.Int64Ptr(taskInfo.GetVisibilityTimestamp().UnixNano()),
+		},
+	}
 }
 
 func (p *replicatorQueueProcessorImpl) getEventsBlob(

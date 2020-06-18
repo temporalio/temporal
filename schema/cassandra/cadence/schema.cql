@@ -1,24 +1,28 @@
 CREATE TYPE shard (
-  shard_id                    int,
-  owner                       text, -- Host identifier processing the shard
+  shard_id                          int,
+  owner                             text, -- Host identifier processing the shard
   -- Range identifier used for generating ack ids for tasks within shard.
   -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
-  range_id                    bigint,
+  range_id                          bigint,
   -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
-  stolen_since_renew          int,
-  updated_at                  timestamp,
-  replication_ack_level       bigint,
-  transfer_ack_level          bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
-  timer_ack_level             timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
+  stolen_since_renew                int,
+  updated_at                        timestamp,
+  replication_ack_level             bigint,
+  transfer_ack_level                bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
+  timer_ack_level                   timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
   -- Mapping of cluster to corresponding transfer ack level
-  cluster_transfer_ack_level  map<text, bigint>,
+  cluster_transfer_ack_level        map<text, bigint>,
   -- Mapping of cluster to corresponding timer ack level
-  cluster_timer_ack_level     map<text, timestamp>,
-  domain_notification_version bigint, -- the global domain change version this shard is aware of
+  cluster_timer_ack_level           map<text, timestamp>,
+  domain_notification_version       bigint, -- the global domain change version this shard is aware of
   -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
-  cluster_replication_level   map<text, bigint>,
+  cluster_replication_level         map<text, bigint>,
   -- Mapping of (remote) cluster to corresponding replication DLQ ack level (last replicated task_id)
-  replication_dlq_ack_level   map<text, bigint>,
+  replication_dlq_ack_level         map<text, bigint>,
+  -- Data blob of pending failover markers
+  pending_failover_markers          blob,
+  pending_failover_markers_encoding text
+
 );
 
 --- Workflow execution and mutable state ---

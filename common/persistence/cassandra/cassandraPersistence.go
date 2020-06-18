@@ -110,7 +110,9 @@ const (
 		`cluster_transfer_ack_level: ?, ` +
 		`cluster_timer_ack_level: ?, ` +
 		`domain_notification_version: ?, ` +
-		`cluster_replication_level: ? ` +
+		`cluster_replication_level: ?, ` +
+		`pending_failover_markers: ?,` +
+		`pending_failover_markers_encoding: ? ` +
 		`}`
 
 	templateWorkflowExecutionType = `{` +
@@ -950,6 +952,7 @@ func (d *cassandraPersistence) GetShardID() int {
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
+	markerData, markerEncoding := p.FromDataBlob(shardInfo.PendingFailoverMarkers)
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -970,6 +973,8 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		markerData,
+		markerEncoding,
 		shardInfo.RangeID)
 
 	previous := make(map[string]interface{})
@@ -1032,6 +1037,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
+	markerData, markerEncoding := p.FromDataBlob(shardInfo.PendingFailoverMarkers)
 
 	query := d.session.Query(templateUpdateShardQuery,
 		shardInfo.ShardID,
@@ -1046,6 +1052,8 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		markerData,
+		markerEncoding,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
 		rowTypeShard,

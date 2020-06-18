@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/engine"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -45,6 +46,7 @@ type (
 
 	taskExecutorImpl struct {
 		currentCluster      string
+		shard               shard.Context
 		domainCache         cache.DomainCache
 		nDCHistoryResender  xdc.NDCHistoryResender
 		historyRereplicator xdc.HistoryRereplicator
@@ -60,7 +62,7 @@ var _ TaskExecutor = (*taskExecutorImpl)(nil)
 // NewTaskExecutor creates an replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
-	currentCluster string,
+	shard shard.Context,
 	domainCache cache.DomainCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyRereplicator xdc.HistoryRereplicator,
@@ -69,7 +71,8 @@ func NewTaskExecutor(
 	logger log.Logger,
 ) TaskExecutor {
 	return &taskExecutorImpl{
-		currentCluster:      currentCluster,
+		currentCluster:      shard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:               shard,
 		domainCache:         domainCache,
 		nDCHistoryResender:  nDCHistoryResender,
 		historyRereplicator: historyRereplicator,
@@ -103,6 +106,9 @@ func (e *taskExecutorImpl) execute(
 	case r.ReplicationTaskTypeHistoryV2:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
+	case r.ReplicationTaskTypeFailoverMarker:
+		scope = metrics.HistoryFailoverMarkerScope
+		err = e.handleFailoverReplicationTask(replicationTask)
 	default:
 		e.logger.Error("Unknown task type.")
 		scope = metrics.ReplicatorScope
@@ -302,6 +308,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 	}
 
 	return e.historyEngine.ReplicateEventsV2(ctx, request)
+}
+
+func (e *taskExecutorImpl) handleFailoverReplicationTask(
+	task *r.ReplicationTask,
+) error {
+	failoverAttributes := task.GetFailoverMarkerAttributes()
+	return e.shard.AddingPendingFailoverMarker(failoverAttributes)
 }
 
 func (e *taskExecutorImpl) filterTask(

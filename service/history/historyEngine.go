@@ -115,7 +115,7 @@ type (
 		rawMatchingClient         matching.Client
 		clientChecker             client.VersionChecker
 		replicationDLQHandler     replication.DLQHandler
-		failoverCoordinator       failover.Coordinator
+		failoverMarkerNotifier    failover.MarkerNotifier
 	}
 )
 
@@ -182,6 +182,7 @@ func NewEngineWithShardContext(
 	executionManager := shard.GetExecutionManager()
 	historyV2Manager := shard.GetHistoryManager()
 	executionCache := execution.NewCache(shard)
+	failoverMarkerNotifier := failover.NewMarkerNotifier(shard, config, failoverCoordinator)
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName:   currentClusterName,
 		shard:                shard,
@@ -215,12 +216,12 @@ func NewEngineWithShardContext(
 			executionCache,
 			logger,
 		),
-		publicClient:        publicClient,
-		matchingClient:      matching,
-		rawMatchingClient:   rawMatchingClient,
-		queueTaskProcessor:  queueTaskProcessor,
-		clientChecker:       client.NewVersionChecker(),
-		failoverCoordinator: failoverCoordinator,
+		publicClient:           publicClient,
+		matchingClient:         matching,
+		rawMatchingClient:      rawMatchingClient,
+		queueTaskProcessor:     queueTaskProcessor,
+		clientChecker:          client.NewVersionChecker(),
+		failoverMarkerNotifier: failoverMarkerNotifier,
 	}
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
@@ -305,7 +306,7 @@ func NewEngineWithShardContext(
 		shard.GetLogger(),
 	)
 	replicationTaskExecutor := replication.NewTaskExecutor(
-		currentClusterName,
+		shard,
 		shard.GetDomainCache(),
 		nDCHistoryResender,
 		historyRereplicator,
@@ -355,6 +356,9 @@ func (e *historyEngineImpl) Start() {
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Start()
 	}
+	if e.config.EnableGracefulFailover() {
+		e.failoverMarkerNotifier.Start()
+	}
 }
 
 // Stop the service.
@@ -375,6 +379,8 @@ func (e *historyEngineImpl) Stop() {
 	if e.queueTaskProcessor != nil {
 		e.queueTaskProcessor.StopShardProcessor(e.shard)
 	}
+
+	e.failoverMarkerNotifier.Stop()
 
 	// unset the failover callback
 	e.shard.GetDomainCache().UnregisterDomainChangeCallback(e.shard.GetShardID())
@@ -476,7 +482,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 			}
 
 			if len(failoverMarkerTasks) > 0 {
-				if err := e.shard.InsertFailoverMarkers(
+				if err := e.shard.ReplicateFailoverMarkers(
 					failoverMarkerTasks,
 				); err != nil {
 					e.logger.Error("Failed to insert failover marker to replication queue.", tag.Error(err))

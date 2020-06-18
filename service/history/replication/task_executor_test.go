@@ -117,7 +117,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 
 	s.taskHandler = NewTaskExecutor(
-		s.currentCluster,
+		s.mockShard,
 		s.mockDomainCache,
 		s.nDCHistoryResender,
 		s.historyRereplicator,
@@ -166,7 +166,7 @@ func (s *taskExecutorSuite) TestFilterTask() {
 			&persistence.DomainReplicationConfig{
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{
-						ClusterName: "test",
+						ClusterName: "active",
 					},
 				}},
 			0,

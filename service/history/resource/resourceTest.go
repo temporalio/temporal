@@ -26,15 +26,13 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/service/history/events"
-	"github.com/uber/cadence/service/history/failover"
 )
 
 type (
 	// Test is the test implementation used for testing
 	Test struct {
 		*resource.Test
-		EventCache          *events.MockCache
-		FailoverCoordinator *failover.MockCoordinator
+		EventCache *events.MockCache
 	}
 )
 
@@ -46,18 +44,12 @@ func NewTest(
 	serviceMetricsIndex metrics.ServiceIdx,
 ) *Test {
 	return &Test{
-		Test:                resource.NewTest(controller, serviceMetricsIndex),
-		EventCache:          events.NewMockCache(controller),
-		FailoverCoordinator: failover.NewMockCoordinator(controller),
+		Test:       resource.NewTest(controller, serviceMetricsIndex),
+		EventCache: events.NewMockCache(controller),
 	}
 }
 
 // GetEventCache for testing
 func (s *Test) GetEventCache() events.Cache {
 	return s.EventCache
-}
-
-// GetFailoverCoordinator return failover coordinator
-func (s *Test) GetFailoverCoordinator() failover.Coordinator {
-	return s.FailoverCoordinator
 }

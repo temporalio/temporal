@@ -23,7 +23,7 @@
 package failover
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -89,16 +89,18 @@ func (s *coordinatorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
 	s.coordinator.Stop()
+	s.mockMetadataManager.AssertExpectations(s.T())
 }
 
 func (s *coordinatorSuite) TestNotifyFailoverMarkers() {
+	doneCh := make(chan struct{})
 	attributes := &replicator.FailoverMarkerAttributes{
 		DomainID:        common.StringPtr(uuid.New()),
 		FailoverVersion: common.Int64Ptr(1),
 		CreationTime:    common.Int64Ptr(1),
 	}
 	s.historyClient.EXPECT().NotifyFailoverMarkers(
-		ctx.Background(), &history.NotifyFailoverMarkersRequest{
+		context.Background(), &history.NotifyFailoverMarkersRequest{
 			FailoverMarkerTokens: []*history.FailoverMarkerToken{
 				{
 					ShardIDs:       []int32{1, 2},
@@ -106,33 +108,31 @@ func (s *coordinatorSuite) TestNotifyFailoverMarkers() {
 				},
 			},
 		},
-	).Return(nil).Times(1)
-	respCh1 := s.coordinator.NotifyFailoverMarkers(
+	).DoAndReturn(func(ctx context.Context, request *history.NotifyFailoverMarkersRequest) error {
+		close(doneCh)
+		return nil
+	}).Times(1)
+	s.coordinator.NotifyFailoverMarkers(
 		1,
 		[]*replicator.FailoverMarkerAttributes{attributes},
 	)
-	respCh2 := s.coordinator.NotifyFailoverMarkers(
+	s.coordinator.NotifyFailoverMarkers(
 		2,
 		[]*replicator.FailoverMarkerAttributes{attributes},
 	)
 	s.coordinator.Start()
-	err1 := <-respCh1
-	err2 := <-respCh2
-	s.NoError(err1)
-	s.NoError(err2)
+	<-doneCh
 }
 
 func (s *coordinatorSuite) TestNotifyRemoteCoordinator_Empty() {
 	requestByMarker := make(map[*replicator.FailoverMarkerAttributes]*receiveRequest)
-	channelsByMarker := make(map[*replicator.FailoverMarkerAttributes][]chan error)
-	s.historyClient.EXPECT().NotifyFailoverMarkers(ctx.Background(), gomock.Any()).Times(0)
-	s.coordinator.notifyRemoteCoordinator(requestByMarker, channelsByMarker)
+	s.historyClient.EXPECT().NotifyFailoverMarkers(context.Background(), gomock.Any()).Times(0)
+	s.coordinator.notifyRemoteCoordinator(requestByMarker)
 }
 
 func (s *coordinatorSuite) TestNotifyRemoteCoordinator() {
 
 	requestByMarker := make(map[*replicator.FailoverMarkerAttributes]*receiveRequest)
-	channelsByMarker := make(map[*replicator.FailoverMarkerAttributes][]chan error)
 	attributes := &replicator.FailoverMarkerAttributes{
 		DomainID:        common.StringPtr(uuid.New()),
 		FailoverVersion: common.Int64Ptr(1),
@@ -142,13 +142,9 @@ func (s *coordinatorSuite) TestNotifyRemoteCoordinator() {
 		shardIDs: []int32{1, 2, 3},
 		marker:   attributes,
 	}
-	chan1 := make(chan error, 1)
-	chan2 := make(chan error, 1)
-	chan3 := make(chan error, 1)
-	channelsByMarker[attributes] = []chan error{chan1, chan2, chan3}
 
 	s.historyClient.EXPECT().NotifyFailoverMarkers(
-		ctx.Background(), &history.NotifyFailoverMarkersRequest{
+		context.Background(), &history.NotifyFailoverMarkersRequest{
 			FailoverMarkerTokens: []*history.FailoverMarkerToken{
 				{
 					ShardIDs:       []int32{1, 2, 3},
@@ -157,20 +153,12 @@ func (s *coordinatorSuite) TestNotifyRemoteCoordinator() {
 			},
 		},
 	).Return(nil).Times(1)
-	s.coordinator.notifyRemoteCoordinator(requestByMarker, channelsByMarker)
-	err1 := <-chan1
-	s.NoError(err1)
-	err2 := <-chan2
-	s.NoError(err2)
-	err3 := <-chan3
-	s.NoError(err3)
+	s.coordinator.notifyRemoteCoordinator(requestByMarker)
 	s.Equal(0, len(requestByMarker))
-	s.Equal(0, len(channelsByMarker))
 }
 
 func (s *coordinatorSuite) TestAggregateNotificationRequests() {
 	requestByMarker := make(map[*replicator.FailoverMarkerAttributes]*receiveRequest)
-	channelsByMarker := make(map[*replicator.FailoverMarkerAttributes][]chan error)
 	attributes1 := &replicator.FailoverMarkerAttributes{
 		DomainID:        common.StringPtr(uuid.New()),
 		FailoverVersion: common.Int64Ptr(1),
@@ -184,23 +172,18 @@ func (s *coordinatorSuite) TestAggregateNotificationRequests() {
 	request1 := &notificationRequest{
 		shardID: 1,
 		markers: []*replicator.FailoverMarkerAttributes{attributes1},
-		respCh:  make(chan error, 1),
 	}
-	aggregateNotificationRequests(request1, requestByMarker, channelsByMarker)
+	aggregateNotificationRequests(request1, requestByMarker)
 	request2 := &notificationRequest{
 		shardID: 2,
 		markers: []*replicator.FailoverMarkerAttributes{attributes1},
-		respCh:  make(chan error, 1),
 	}
-	aggregateNotificationRequests(request2, requestByMarker, channelsByMarker)
+	aggregateNotificationRequests(request2, requestByMarker)
 	request3 := &notificationRequest{
 		shardID: 3,
 		markers: []*replicator.FailoverMarkerAttributes{attributes1, attributes2},
-		respCh:  make(chan error, 1),
 	}
-	aggregateNotificationRequests(request3, requestByMarker, channelsByMarker)
-	s.Equal(3, len(channelsByMarker[attributes1]))
-	s.Equal(1, len(channelsByMarker[attributes2]))
+	aggregateNotificationRequests(request3, requestByMarker)
 	s.Equal([]int32{1, 2, 3}, requestByMarker[attributes1].shardIDs)
 	s.Equal([]int32{3}, requestByMarker[attributes2].shardIDs)
 }
