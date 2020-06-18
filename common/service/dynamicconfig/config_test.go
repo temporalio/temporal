@@ -26,6 +26,7 @@ package dynamicconfig
 
 import (
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -200,6 +201,15 @@ func (s *configSuite) TestGetBoolProperty() {
 	s.Equal(false, value())
 }
 
+func (s *configSuite) TestGetBoolPropertyFilteredByNamespaceID() {
+	key := testGetBoolPropertyFilteredByNamespaceIDKey
+	namespaceID := "testNamespaceID"
+	value := s.cln.GetBoolPropertyFnWithNamespaceIDFilter(key, true)
+	s.Equal(true, value(namespaceID))
+	s.client.SetValue(key, false)
+	s.Equal(false, value(namespaceID))
+}
+
 func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
 	key := testGetBoolPropertyFilteredByTaskListInfoKey
 	namespace := "testNamespace"
@@ -264,7 +274,7 @@ func (s *configSuite) TestUpdateConfig() {
 func TestDynamicConfigKeyIsMapped(t *testing.T) {
 	for i := unknownKey; i < lastKeyForTest; i++ {
 		key, ok := keys[i]
-		require.True(t, ok)
+		require.True(t, ok, fmt.Sprintf("key %d is not mapped", i))
 		require.NotEmpty(t, key)
 	}
 }

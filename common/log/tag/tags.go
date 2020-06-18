@@ -361,6 +361,11 @@ func HostID(hid string) Tag {
 	return newStringTag("hostId", hid)
 }
 
+// Env return tag for runtime environment
+func Env(env string) Tag {
+	return newStringTag("env", env)
+}
+
 // Key returns tag for Key
 func Key(k string) Tag {
 	return newStringTag("key", k)
@@ -441,6 +446,11 @@ func Bool(b bool) Tag {
 // ShardID returns tag for ShardID
 func ShardID(shardID int) Tag {
 	return newInt("shard-id", shardID)
+}
+
+// ShardItem returns tag for ShardItem
+func ShardItem(shardItem interface{}) Tag {
+	return newObjectTag("shard-item", shardItem)
 }
 
 // ShardTime returns tag for ShardTime

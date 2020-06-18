@@ -55,6 +55,7 @@ var keys = map[Key]string{
 	testGetDurationPropertyFilteredByNamespaceKey:    "testGetDurationPropertyFilteredByNamespaceKey",
 	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
 	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
+	testGetBoolPropertyFilteredByNamespaceIDKey:      "testGetBoolPropertyFilteredByNamespaceIDKey",
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
@@ -78,6 +79,7 @@ var keys = map[Key]string{
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
+	EnableAuthorization:                    "system.enableAuthorization",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -107,6 +109,8 @@ var keys = map[Key]string{
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
 	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
+	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
+	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -181,7 +185,7 @@ var keys = map[Key]string{
 	TimerProcessorEnablePriorityTaskProcessor:              "history.timerProcessorEnablePriorityTaskProcessor",
 	TimerProcessorMaxTimeShift:                             "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                 "history.timerProcessorHistoryArchivalSizeLimit",
-	TimerProcessorArchivalTimeLimit:                        "history.TimerProcessorArchivalTimeLimit",
+	TimerProcessorArchivalTimeLimit:                        "history.timerProcessorArchivalTimeLimit",
 	TransferTaskBatchSize:                                  "history.transferTaskBatchSize",
 	TransferProcessorFailoverMaxPollRPS:                    "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                            "history.transferProcessorMaxPollRPS",
@@ -245,11 +249,18 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
+	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
+	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
+	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
+	EnableConsistentQuery:                                  "history.EnableConsistentQuery",
+	EnableConsistentQueryByNamespace:                       "history.EnableConsistentQueryByNamespace",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                     "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                  "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                   "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
+	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
+	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -262,6 +273,7 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
 	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
+	WorkerEnableRPCReplication:                      "worker.enableWorkerRPCReplication",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -297,6 +309,7 @@ const (
 	testGetDurationPropertyFilteredByNamespaceKey
 	testGetIntPropertyFilteredByTaskListInfoKey
 	testGetDurationPropertyFilteredByTaskListInfoKey
+	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskListInfoKey
 
 	// EnableGlobalNamespace is key for enable global namespace
@@ -338,7 +351,8 @@ const (
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor
 	EnablePriorityTaskProcessor
-
+	// EnableAuthorization is the key to enable authorization for a namespace
+	EnableAuthorization
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -393,6 +407,10 @@ const (
 	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory
+	// FrontendEnableRPCReplication is a feature flag for rpc replication
+	FrontendEnableRPCReplication
+	// FrontendEnableCleanupReplicationTask is a feature flag for rpc replication cleanup
+	FrontendEnableCleanupReplicationTask
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
@@ -654,6 +672,11 @@ const (
 	// DefaultWorkflowTaskTimeout for a decision task
 	DefaultWorkflowTaskTimeout
 
+	// EnableDropStuckTaskByNamespaceID is whether stuck timer/transfer task should be dropped for a namespace
+	EnableDropStuckTaskByNamespaceID
+	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
+	SkipReapplicationByNamespaceId
+
 	// key for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
@@ -678,6 +701,8 @@ const (
 	WorkerReplicationTaskContextDuration
 	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
 	WorkerReReplicationContextTimeout
+	// WorkerEnableRPCReplication is the feature flag for RPC replication
+	WorkerEnableRPCReplication
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -721,7 +746,7 @@ const (
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery
 
-	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
+	// ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
 	ReplicationTaskFetcherParallelism
 	// ReplicationTaskFetcherAggregationInterval determines how frequently the fetch requests are sent
 	ReplicationTaskFetcherAggregationInterval
@@ -739,6 +764,16 @@ const (
 	ReplicationTaskProcessorCleanupInterval
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient
+	// HistoryEnableRPCReplication is the feature flag for RPC replication
+	HistoryEnableRPCReplication
+	// HistoryEnableKafkaReplication is the migration flag for Kafka replication
+	HistoryEnableKafkaReplication
+	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
+	HistoryEnableCleanupReplicationTask
+	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
+	EnableConsistentQuery
+	// EnableConsistentQueryByNamespace indicates if consistent query is enabled for a namespace
+	EnableConsistentQueryByNamespace
 	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
@@ -748,7 +783,7 @@ const (
 	// MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded
 	MutableStateChecksumInvalidateBefore
 
-	//ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
+	// ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
 	ReplicationEventsFromCurrentCluster
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
@@ -771,18 +806,21 @@ var filters = []string{
 	"namespaceID",
 	"taskListName",
 	"taskType",
+	"shardID",
 }
 
 const (
 	unknownFilter Filter = iota
 	// Namespace is the namespace name
 	Namespace
-	// NamespaceID is the namespace id
+	// NamespaceID is the namespace Id
 	NamespaceID
 	// TaskListName is the tasklist name
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
 	TaskType
+	// ShardID is the shard id
+	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose
 	lastFilterTypeForTest
@@ -816,5 +854,12 @@ func NamespaceIDFilter(namespaceID string) FilterOption {
 func TaskTypeFilter(taskType enumspb.TaskListType) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
+	}
+}
+
+// ShardIDFilter filters by shard id
+func ShardIDFilter(shardID int) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[ShardID] = shardID
 	}
 }

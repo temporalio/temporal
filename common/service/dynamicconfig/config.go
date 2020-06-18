@@ -92,8 +92,14 @@ type IntPropertyFnWithNamespaceFilter func(namespace string) int
 // IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskList, taskType
 type IntPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) int
 
+// IntPropertyFnWithShardIDFilter is a wrapper to get int property from dynamic config with shardID as filter
+type IntPropertyFnWithShardIDFilter func(shardID int) int
+
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
+
+// FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
+type FloatPropertyFnWithShardIDFilter func(shardID int) float64
 
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
@@ -107,6 +113,9 @@ type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Durat
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskList, taskType
 type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) time.Duration
 
+// DurationPropertyFnWithShardIDFilter is a wrapper to get duration property from dynamic config with shardID as filter
+type DurationPropertyFnWithShardIDFilter func(shardID int) time.Duration
+
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
 
@@ -119,8 +128,11 @@ type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
 // StringPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithNamespaceFilter func(namespace string) string
 
-// BoolPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
+// BoolPropertyFnWithNamespaceFilter is a wrapper to get bool property from dynamic config
 type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
+
+// BoolPropertyFnWithNamespaceIDFilter is a wrapper to get bool property from dynamic config
+type BoolPropertyFnWithNamespaceIDFilter func(id string) bool
 
 // BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskList, taskType
 type BoolPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) bool
@@ -186,10 +198,42 @@ func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue 
 	}
 }
 
+// GetIntPropertyFilteredByShardID gets property with shardID as filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue int) IntPropertyFnWithShardIDFilter {
+	return func(shardID int) int {
+		val, err := c.client.GetIntValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, intCompareEquals)
+		return val
+	}
+}
+
 // GetFloat64Property gets property and asserts that it's a float64
 func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatPropertyFn {
 	return func(opts ...FilterOption) float64 {
 		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, float64CompareEquals)
+		return val
+	}
+}
+
+// GetFloat64PropertyFilteredByShardID gets property with shardID filter and asserts that it's a float64
+func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue float64) FloatPropertyFnWithShardIDFilter {
+	return func(shardID int) float64 {
+		val, err := c.client.GetFloatValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
+			defaultValue,
+		)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -240,6 +284,22 @@ func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultV
 		val, err := c.client.GetDurationValue(
 			key,
 			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, durationCompareEquals)
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByShardID gets property with shardID id as filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue time.Duration) DurationPropertyFnWithShardIDFilter {
+	return func(shardID int) time.Duration {
+		val, err := c.client.GetDurationValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
 			defaultValue,
 		)
 		if err != nil {
@@ -302,6 +362,18 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue bool) BoolPropertyFnWithNamespaceFilter {
 	return func(namespace string) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, boolCompareEquals)
+		return val
+	}
+}
+
+// GetBoolPropertyFnWithNamespaceIDFilter gets property with namespaceID filter and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValue bool) BoolPropertyFnWithNamespaceIDFilter {
+	return func(id string) bool {
+		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceIDFilter(id)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
