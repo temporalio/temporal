@@ -77,7 +77,7 @@ func composeConnectionString(user, password, host, port, dbName string) string {
 	composeSegment := func(paramName string, paramValue string) string {
 		paramValue = strings.TrimSpace(paramValue)
 		if paramValue != "" {
-			return paramName + "=" + paramValue + " "
+			return fmt.Sprintf("%s=%s ", paramName, paramValue)
 		}
 		return ""
 	}
