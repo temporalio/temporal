@@ -347,7 +347,7 @@ message NamespaceConfig {
     string visibility_archival_uri = 21;
 }
 
-// ReplicationData represents mutable state information for global domains.
+// ReplicationData represents mutable state information for global namespaces.
 // This information is used by replication protocol when applying events from remote clusters
 // only used in cassandra
 message ReplicationData {
