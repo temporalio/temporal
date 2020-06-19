@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -2279,16 +2280,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(
 		return nil, wh.error(err, scope)
 	}
 
-	op := func() error {
-		var err error
-		resp, err = wh.GetHistoryClient().SignalWithStartWorkflowExecution(ctx, &h.SignalWithStartWorkflowExecutionRequest{
-			DomainUUID:             common.StringPtr(domainID),
-			SignalWithStartRequest: signalWithStartRequest,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	resp, err = wh.GetHistoryClient().SignalWithStartWorkflowExecution(ctx, &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID:             common.StringPtr(domainID),
+		SignalWithStartRequest: signalWithStartRequest,
+	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3209,17 +3204,10 @@ func (wh *WorkflowHandler) DescribeTaskList(
 		return nil, err
 	}
 
-	var response *gen.DescribeTaskListResponse
-	op := func() error {
-		var err error
-		response, err = wh.GetMatchingClient().DescribeTaskList(ctx, &m.DescribeTaskListRequest{
-			DomainUUID:  common.StringPtr(domainID),
-			DescRequest: request,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	response, err := wh.GetMatchingClient().DescribeTaskList(ctx, &m.DescribeTaskListRequest{
+		DomainUUID:  common.StringPtr(domainID),
+		DescRequest: request,
+	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3493,7 +3481,10 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 			return err
 		}
 	}
-
+	if errors.Is(err, context.DeadlineExceeded) {
+		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+		return err
+	}
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
 		tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
