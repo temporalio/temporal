@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -44,17 +43,20 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := enumspb.TASK_LIST_TYPE_DECISION
-	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = enumspb.TASK_LIST_TYPE_ACTIVITY
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
-
+	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.DescribeTaskListRequest{
 		Namespace:             namespace,
 		TaskList:              &tasklistpb.TaskList{Name: taskList},
-		TaskListType:          taskListType,
+		TaskListType:          tlType,
 		IncludeTaskListStatus: true,
 	}
 
@@ -74,7 +76,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	if len(pollers) == 0 {
 		ErrorAndExit(colorMagenta("No poller for tasklist: "+taskList), nil)
 	}
-	printPollerInfo(pollers, taskListType)
+	printPollerInfo(pollers, tlType)
 }
 
 func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
@@ -115,9 +117,14 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.Task
 func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
-	tlTypeFlag := strings.Title(c.String(FlagTaskListType))
-	tlTypeInt := enumspb.TaskListType_value[tlTypeFlag]
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse TaskList Type", err)
+	}
 	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	}
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
 

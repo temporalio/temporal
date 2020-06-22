@@ -976,6 +976,22 @@ func printTable(items []interface{}) error {
 	return nil
 }
 
+func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+	if search == "" {
+		return 0, nil
+	}
+
+	var candidateNames []string
+	for key, value := range candidates {
+		if strings.EqualFold(key, search) {
+			return value, nil
+		}
+		candidateNames = append(candidateNames, key)
+	}
+
+	return 0, fmt.Errorf("Could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
+}
+
 // prompt will show input msg, then waiting user input y/yes to continue
 func prompt(msg string, autoConfirm bool) {
 	reader := bufio.NewReader(os.Stdin)

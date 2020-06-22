@@ -742,37 +742,6 @@ func (s *cliAppSuite) TestIsAttributeName() {
 	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
 }
 
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
-	res := getWorkflowIDReusePolicy(1)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
-	res = getWorkflowIDReusePolicy(2)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
-	res = getWorkflowIDReusePolicy(3)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
-}
-
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
-	oldOsExit := osExit
-	defer func() { osExit = oldOsExit }()
-	var errorCode int
-	osExit = func(code int) {
-		errorCode = code
-	}
-	getWorkflowIDReusePolicy(2147483647)
-	s.Equal(1, errorCode)
-}
-
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
-	oldOsExit := osExit
-	defer func() { osExit = oldOsExit }()
-	var errorCode int
-	osExit = func(code int) {
-		errorCode = code
-	}
-	getWorkflowIDReusePolicy(-1)
-	s.Equal(1, errorCode)
-}
-
 func (s *cliAppSuite) TestGetSearchAttributes() {
 	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
 	err := s.app.Run([]string{"", "cluster", "get-search-attr"})
