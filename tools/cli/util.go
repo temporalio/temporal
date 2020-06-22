@@ -976,11 +976,10 @@ func printTable(items []interface{}) error {
 	return nil
 }
 
-func mapToEnumValue(search string, candidates map[string]int32) (int32, error) {
-	search = strings.ToLower(search)
+func stringToEnum(search string, candidates map[string]int32) (int32, error) {
 	var candidateNames []string
 	for key, value := range candidates {
-		if search == strings.ToLower(key) {
+		if strings.EqualFold(key, search) {
 			return value, nil
 		}
 		candidateNames = append(candidateNames, key)

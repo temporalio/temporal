@@ -195,7 +195,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 	reusePolicy := defaultWorkflowIDReusePolicy
 	if c.IsSet(FlagWorkflowIDReusePolicy) {
-		reusePolicyInt, err := mapToEnumValue(c.String(FlagWorkflowIDReusePolicy), enumspb.WorkflowIdReusePolicy_value)
+		reusePolicyInt, err := stringToEnum(c.String(FlagWorkflowIDReusePolicy), enumspb.WorkflowIdReusePolicy_value)
 		if err != nil {
 			ErrorAndExit("Failed to parse Reuse Policy", err)
 		}

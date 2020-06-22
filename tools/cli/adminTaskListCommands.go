@@ -43,7 +43,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
@@ -117,7 +117,7 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.Task
 func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := mapToEnumValue(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
