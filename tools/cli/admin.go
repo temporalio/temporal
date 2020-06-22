@@ -522,6 +522,29 @@ clusters:
 			},
 		},
 		{
+			Name:  "list_dlq",
+			Usage: "List replication tasks from dlq",
+			Flags: append(append(
+				getDBFlags(),
+				getFlagsForList()...),
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardId",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster for reading DLQ topic for ReplicationTask",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListDLQ(c)
+			},
+		},
+		{
 			Name:    "rereplicate",
 			Aliases: []string{"rrp"},
 			Usage:   "Rereplicate replication tasks to target topic from history tables",
