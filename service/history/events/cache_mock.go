@@ -84,15 +84,3 @@ func (mr *MockCacheMockRecorder) PutEvent(domainID, workflowID, runID, eventID, 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), domainID, workflowID, runID, eventID, event)
 }
-
-// DeleteEvent mocks base method
-func (m *MockCache) DeleteEvent(domainID, workflowID, runID string, eventID int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteEvent", domainID, workflowID, runID, eventID)
-}
-
-// DeleteEvent indicates an expected call of DeleteEvent
-func (mr *MockCacheMockRecorder) DeleteEvent(domainID, workflowID, runID, eventID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), domainID, workflowID, runID, eventID)
-}

@@ -946,8 +946,6 @@ const (
 	EventsCacheGetEventScope
 	// EventsCachePutEventScope is the scope used by events cache
 	EventsCachePutEventScope
-	// EventsCacheDeleteEventScope is the scope used by events cache
-	EventsCacheDeleteEventScope
 	// EventsCacheGetFromStoreScope is the scope used by events cache
 	EventsCacheGetFromStoreScope
 	// ExecutionSizeStatsScope is the scope used for emiting workflow execution size related stats
@@ -1472,7 +1470,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryCacheGetCurrentExecutionScope:                   {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		EventsCacheGetEventScope:                               {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCachePutEventScope:                               {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		EventsCacheDeleteEventScope:                            {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCacheGetFromStoreScope:                           {operation: "EventsCacheGetFromStore", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		ExecutionSizeStatsScope:                                {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
 		ExecutionCountStatsScope:                               {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
