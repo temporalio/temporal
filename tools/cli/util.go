@@ -985,7 +985,7 @@ func stringToEnum(search string, candidates map[string]int32) (int32, error) {
 		candidateNames = append(candidateNames, key)
 	}
 
-	return 0, fmt.Errorf("Could not find corresponding candidate for %v. Possible candidates: %q", search, candidateNames)
+	return 0, fmt.Errorf("Could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue
