@@ -977,6 +977,10 @@ func printTable(items []interface{}) error {
 }
 
 func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+	if search == "" {
+		return 0, nil
+	}
+
 	var candidateNames []string
 	for key, value := range candidates {
 		if strings.EqualFold(key, search) {

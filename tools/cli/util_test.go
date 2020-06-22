@@ -78,7 +78,7 @@ func (s *utilSuite) TestStringToEnum_MapEmptyValue() {
 	}
 
 	result, err := stringToEnum("", enumValues)
-	s.Error(err)
+	s.NoError(err)
 	s.Equal(result, int32(0))
 }
 
