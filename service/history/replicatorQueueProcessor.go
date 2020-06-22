@@ -219,29 +219,55 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	}
 
 	err = p.replicator.Publish(replicationTask)
-	if err == messaging.ErrMessageSizeLimit && replicationTask.GetHistoryTaskAttributes() != nil {
+	if err == messaging.ErrMessageSizeLimit {
 		// message size exceeds the server messaging size limit
 		// for this specific case, just send out a metadata message and
 		// let receiver fetch from source (for the concrete history events)
-		err = p.replicator.Publish(p.generateHistoryMetadataTask(replicationTask.GetHistoryTaskAttributes().TargetClusters, task))
+		if metadataTask := p.generateHistoryMetadataTask(
+			task,
+			replicationTask,
+		); metadataTask != nil {
+			err = p.replicator.Publish(metadataTask)
+		}
 	}
 	return err
 }
 
-func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistenceblobs.ReplicationTaskInfo) *replicationgenpb.ReplicationTask {
-	return &replicationgenpb.ReplicationTask{
-		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{
-			HistoryMetadataTaskAttributes: &replicationgenpb.HistoryMetadataTaskAttributes{
-				TargetClusters: targetClusters,
-				NamespaceId:    task.GetNamespaceId(),
-				WorkflowId:     task.GetWorkflowId(),
-				RunId:          task.GetRunId(),
-				FirstEventId:   task.GetFirstEventId(),
-				NextEventId:    task.GetNextEventId(),
+func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
+	task *persistenceblobs.ReplicationTaskInfo,
+	replicationTask *replicationgenpb.ReplicationTask,
+) *replicationgenpb.ReplicationTask {
+
+	if replicationTask.GetHistoryTaskAttributes() != nil {
+		return &replicationgenpb.ReplicationTask{
+			TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+			Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{
+				HistoryMetadataTaskAttributes: &replicationgenpb.HistoryMetadataTaskAttributes{
+					TargetClusters: replicationTask.GetHistoryTaskAttributes().GetTargetClusters(),
+					NamespaceId:    task.GetNamespaceId(),
+					WorkflowId:     task.GetWorkflowId(),
+					RunId:          task.GetRunId(),
+					FirstEventId:   task.GetFirstEventId(),
+					NextEventId:    task.GetNextEventId(),
+					Version:        common.EmptyVersion,
+				},
 			},
-		},
+		}
+	} else if replicationTask.GetHistoryTaskV2Attributes() != nil {
+		return &replicationgenpb.ReplicationTask{
+			TaskType: enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+			Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{
+				HistoryMetadataTaskAttributes: &replicationgenpb.HistoryMetadataTaskAttributes{
+					NamespaceId:  task.GetNamespaceId(),
+					WorkflowId:   task.GetWorkflowId(),
+					RunId:        task.GetRunId(),
+					FirstEventId: task.GetFirstEventId(),
+					NextEventId:  task.GetNextEventId(),
+					Version:      task.GetVersion(),
+				}},
+		}
 	}
+	return nil
 }
 
 // GenerateReplicationTask generate replication task
@@ -316,6 +342,15 @@ func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskIn
 
 func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	err := p.shard.UpdateReplicatorAckLevel(ackLevel)
+
+	// TODO: Remove this after enabled the rpc replication
+	clusterMetadata := p.shard.GetClusterMetadata()
+	for name, cluster := range clusterMetadata.GetAllClusterInfo() {
+		if !cluster.Enabled || clusterMetadata.GetCurrentClusterName() == name {
+			continue
+		}
+		p.shard.UpdateClusterReplicationLevel(name, ackLevel)
+	}
 
 	// this is a hack, since there is not dedicated ticker on the queue processor
 	// to periodically send out sync shard message, put it here

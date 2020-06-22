@@ -365,10 +365,10 @@ func (s *esProcessorSuite) TestGetMsgInfo_Error() {
 	mockKafkaMsg.On("Value").Return([]byte{}).Once()
 	mapVal := newKafkaMessageWithMetrics(mockKafkaMsg, &testStopWatch)
 	s.esProcessor.mapToKafkaMsg.Put(testKey, mapVal)
-	wid, rid, domainID := s.esProcessor.getMsgWithInfo(testKey)
+	wid, rid, namespaceID := s.esProcessor.getMsgWithInfo(testKey)
 	s.Equal("", wid)
 	s.Equal("", rid)
-	s.Equal("", domainID)
+	s.Equal("", namespaceID)
 }
 
 func (s *esProcessorSuite) TestGetKeyForKafkaMsg() {

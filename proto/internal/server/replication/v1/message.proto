@@ -51,7 +51,6 @@ message ReplicationTask {
         // TODO: deprecate once kafka deprecation is done.
         HistoryMetadataTaskAttributes history_metadata_task_attributes = 7;
         HistoryTaskV2Attributes history_task_v2_attributes = 8;
-        FailoverMarkerAttributes failover_marker_attributes = 9;
     }
 }
 
@@ -158,11 +157,4 @@ message HistoryTaskV2Attributes {
     temporal.common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
     temporal.common.v1.DataBlob new_run_events = 7;
-}
-
-message FailoverMarkerAttributes{
-    string domain_id = 1;
-    int64 failover_version = 2;
-    string source_cluster = 3;
-    int64 creation_time = 4;
 }

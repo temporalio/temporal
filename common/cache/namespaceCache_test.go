@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/cluster"
@@ -41,6 +42,8 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (
@@ -671,4 +674,40 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 
 	d.info.Data[SampleRateKey] = "invalid-value"
 	require.False(t, d.IsSampledForLongerRetention(wid))
+}
+
+func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
+	clusterMetadata := cluster.NewMetadata(
+		loggerimpl.NewNopLogger(),
+		dynamicconfig.GetBoolPropertyFn(true),
+		int64(10),
+		cluster.TestCurrentClusterName,
+		cluster.TestCurrentClusterName,
+		cluster.TestAllClusterInfo,
+		&config.ReplicationConsumerConfig{
+			Type: config.ReplicationConsumerTypeRPC,
+		},
+	)
+	namespaceEntry := NewGlobalNamespaceCacheEntryForTest(
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		&persistenceblobs.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1234,
+		clusterMetadata,
+	)
+
+	require.Nil(t, namespaceEntry.GetNamespaceNotActiveErr())
+
+	// update to become not active
+	namespaceEntry.replicationConfig.ActiveClusterName = cluster.TestAlternativeClusterName
+	err := namespaceEntry.GetNamespaceNotActiveErr()
+	require.NotNil(t, err)
+	_, ok := err.(*serviceerror.NamespaceNotActive)
+	require.True(t, ok)
 }
