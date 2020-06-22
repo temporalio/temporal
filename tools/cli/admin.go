@@ -346,6 +346,14 @@ func newAdminHistoryHostCommands() []cli.Command {
 func newAdminNamespaceCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:  "list",
+			Usage: "List namespaces",
+			Flags: append(getDBFlags(), getFlagsForList()...),
+			Action: func(c *cli.Context) {
+				AdminListNamespaces(c)
+			},
+		},
+		{
 			Name:    "register",
 			Aliases: []string{"re"},
 			Usage:   "Register workflow namespace",
