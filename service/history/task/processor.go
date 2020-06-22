@@ -79,15 +79,19 @@ func NewProcessor(
 		return nil, err
 	}
 
-	shardOptions, err := newSchedulerOptions(
-		config.TaskSchedulerType(),
-		config.TaskSchedulerShardQueueSize(),
-		config.TaskSchedulerShardWorkerCount(),
-		1,
-		config.TaskSchedulerRoundRobinWeights,
-	)
-	if err != nil {
-		return nil, err
+	shardWorkerCount := config.TaskSchedulerShardWorkerCount()
+	var shardOptions *schedulerOptions
+	if shardWorkerCount > 0 {
+		shardOptions, err = newSchedulerOptions(
+			config.TaskSchedulerType(),
+			config.TaskSchedulerShardQueueSize(),
+			shardWorkerCount,
+			1,
+			config.TaskSchedulerRoundRobinWeights,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	scheduler, err := createTaskScheduler(options, logger, metricsClient)
@@ -173,7 +177,12 @@ func (p *processorImpl) Submit(
 		return err
 	}
 
-	return shardScheduler.Submit(task)
+	if shardScheduler != nil {
+		return shardScheduler.Submit(task)
+	}
+
+	// if shard level scheduler is disabled
+	return p.hostScheduler.Submit(task)
 }
 
 func (p *processorImpl) TrySubmit(
@@ -197,12 +206,21 @@ func (p *processorImpl) TrySubmit(
 		return false, err
 	}
 
-	return shardScheduler.TrySubmit(task)
+	if shardScheduler != nil {
+		return shardScheduler.TrySubmit(task)
+	}
+
+	// if shard level scheduler is disabled
+	return false, nil
 }
 
 func (p *processorImpl) getOrCreateShardTaskScheduler(
 	shard shard.Context,
 ) (task.Scheduler, error) {
+	if p.shardOptions == nil {
+		return nil, nil
+	}
+
 	p.RLock()
 	if scheduler, ok := p.shardSchedulers[shard]; ok {
 		p.RUnlock()
