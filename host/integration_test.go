@@ -845,7 +845,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("1"),
+			"CustomKeywordField": payload.EncodeString(`"1"`),
 		},
 	}
 
@@ -1050,7 +1050,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("1"),
+			"CustomKeywordField": payload.EncodeString(`"1"`),
 		},
 	}
 

@@ -872,7 +872,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
 			var row []string
 			row = append(row, pt.GetBinaryChecksum())
-			row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
+			row = append(row, time.Unix(0, pt.GetCreateTimeNano()).String())
 			row = append(row, pt.GetRunId())
 			row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
 			table.Append(row)
@@ -925,10 +925,10 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	}
 
 	return &cligenpb.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: resp.ExecutionConfiguration,
-		WorkflowExecutionInfo:  executionInfo,
-		PendingActivities:      pendingActs,
-		PendingChildren:        resp.PendingChildren,
+		ExecutionConfig:       resp.ExecutionConfig,
+		WorkflowExecutionInfo: executionInfo,
+		PendingActivities:     pendingActs,
+		PendingChildren:       resp.PendingChildren,
 	}
 }
 

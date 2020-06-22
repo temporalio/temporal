@@ -97,7 +97,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -116,15 +116,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -166,7 +166,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -185,15 +185,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -219,9 +219,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Equal(retention, resp.Namespace.Config.RetentionDays)
 	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.Namespace.ConfigVersion)
@@ -252,7 +252,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(12)
 	failoverVersion := int64(59)
 	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -271,15 +271,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  ownerEmail,
 			Data:        namespaceData,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -305,9 +305,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(retention, resp.Namespace.Config.RetentionDays)
 	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.Namespace.ConfigVersion)
@@ -334,7 +334,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -353,15 +353,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -388,7 +388,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion + 1
-	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -406,15 +406,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
-			HistoryArchivalURI:                     updateHistoryArchivalURI,
+			HistoryArchivalUri:                     updateHistoryArchivalURI,
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
-			VisibilityArchivalURI:                  updateVisibilityArchivalURI,
+			VisibilityArchivalUri:                  updateVisibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -438,9 +438,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
 	s.Equal(updateEmitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(updateHistoryArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(updateVisibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(updateClusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.Namespace.ConfigVersion)
@@ -467,7 +467,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -486,15 +486,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -521,7 +521,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion - 1
-	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -539,15 +539,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updateData,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
-			HistoryArchivalURI:                     updateHistoryArchivalURI,
+			HistoryArchivalUri:                     updateHistoryArchivalURI,
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
-			VisibilityArchivalURI:                  updateVisibilityArchivalURI,
+			VisibilityArchivalUri:                  updateVisibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -571,9 +571,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
 	s.Equal(updateEmitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(updateHistoryArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(updateVisibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.Namespace.ConfigVersion)
@@ -600,7 +600,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -619,15 +619,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -650,7 +650,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion + 1
-	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -668,15 +668,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -700,9 +700,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(retention, resp.Namespace.Config.RetentionDays)
 	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(updateClusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.Namespace.ConfigVersion)
@@ -729,7 +729,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*replicationpb.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
 		},
@@ -748,15 +748,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -781,7 +781,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion - 1
-	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -799,15 +799,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
-			HistoryArchivalURI:                     historyArchivalURI,
+			HistoryArchivalUri:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
-			VisibilityArchivalURI:                  visibilityArchivalURI,
+			VisibilityArchivalUri:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -828,9 +828,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(retention, resp.Namespace.Config.RetentionDays)
 	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
 	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.Namespace.ConfigVersion)

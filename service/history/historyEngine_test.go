@@ -89,6 +89,8 @@ type (
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
+		mockEventsReapplier      *MocknDCEventsReapplier
+		mockWorkflowResetter     *MockworkflowResetter
 
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *mocks.ExecutionManager
@@ -128,7 +130,7 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceConfig{
 		RetentionDays:            1,
 		VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-		VisibilityArchivalURI:    "test:///visibility/archival",
+		VisibilityArchivalUri:    "test:///visibility/archival",
 	},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -210,6 +212,8 @@ func (s *engineSuite) SetupTest() {
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
+	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -265,6 +269,8 @@ func (s *engineSuite) SetupTest() {
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 		versionChecker:       headers.NewVersionChecker(),
+		eventsReapplier:      s.mockEventsReapplier,
+		workflowResetter:     s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
@@ -527,9 +533,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -561,9 +567,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -575,9 +581,9 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
+			Execution:            &execution,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
 		},
 	}
 	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -612,7 +618,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 			Execution: &execution,
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -650,7 +656,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 			Execution: &execution,
 			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
@@ -712,8 +718,8 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -769,8 +775,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -832,8 +838,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			Execution:             &execution,
-			Query:                 &querypb.WorkflowQuery{},
+			Execution: &execution,
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -4715,6 +4721,121 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 
 	err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.Nil(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-reapply",
+		RunId:      testRunID,
+	}
+	history := []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+			Version:   1,
+		},
+	}
+	msBuilder := newMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+	)
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+	err := s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		testNamespaceID,
+		workflowExecution.GetWorkflowId(),
+		workflowExecution.GetRunId(),
+		history,
+	)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-reapply-same-version",
+		RunId:      testRunID,
+	}
+	history := []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
+			Version:   common.EmptyVersion,
+		},
+	}
+	msBuilder := newMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+	)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		testNamespaceID,
+		workflowExecution.GetWorkflowId(),
+		workflowExecution.GetRunId(),
+		history,
+	)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "test-reapply-reset-workflow",
+		RunId:      testRunID,
+	}
+	history := []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+			Version:   100,
+		},
+	}
+	msBuilder := newMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+	)
+	ms := createMutableState(msBuilder)
+	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.LastProcessedEvent = 1
+	token, err := msBuilder.GetCurrentBranchToken()
+	s.NoError(err)
+	item := persistence.NewVersionHistoryItem(1, 1)
+	versionHistory := persistence.NewVersionHistory(token, []*persistence.VersionHistoryItem{item})
+	ms.VersionHistories = persistence.NewVersionHistories(versionHistory)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: testRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockWorkflowResetter.EXPECT().resetWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(nil).Times(1)
+	err = s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		testNamespaceID,
+		workflowExecution.GetWorkflowId(),
+		workflowExecution.GetRunId(),
+		history,
+	)
+	s.NoError(err)
 }
 
 func (s *engineSuite) getBuilder(testNamespaceID string, we commonpb.WorkflowExecution) mutableState {

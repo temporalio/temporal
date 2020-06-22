@@ -35,30 +35,30 @@ import (
 	reflect "reflect"
 )
 
-// MockconflictResolver is a mock of conflictResolver interface
+// MockconflictResolver is a mock of conflictResolver interface.
 type MockconflictResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockconflictResolverMockRecorder
 }
 
-// MockconflictResolverMockRecorder is the mock recorder for MockconflictResolver
+// MockconflictResolverMockRecorder is the mock recorder for MockconflictResolver.
 type MockconflictResolverMockRecorder struct {
 	mock *MockconflictResolver
 }
 
-// NewMockconflictResolver creates a new mock instance
+// NewMockconflictResolver creates a new mock instance.
 func NewMockconflictResolver(ctrl *gomock.Controller) *MockconflictResolver {
 	mock := &MockconflictResolver{ctrl: ctrl}
 	mock.recorder = &MockconflictResolverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockconflictResolver) EXPECT() *MockconflictResolverMockRecorder {
 	return m.recorder
 }
 
-// reset mocks base method
+// reset mocks base method.
 func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState enums.WorkflowExecutionState, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reset", prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition)
@@ -67,7 +67,7 @@ func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int6
 	return ret0, ret1
 }
 
-// reset indicates an expected call of reset
+// reset indicates an expected call of reset.
 func (mr *MockconflictResolverMockRecorder) reset(prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reset", reflect.TypeOf((*MockconflictResolver)(nil).reset), prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition)

@@ -263,7 +263,7 @@ func (s *shardContextImpl) GetReplicatorDLQAckLevel(sourceCluster string) int64 
 	s.RLock()
 	defer s.RUnlock()
 
-	if ackLevel, ok := s.shardInfo.ReplicationDLQAckLevel[sourceCluster]; ok {
+	if ackLevel, ok := s.shardInfo.ReplicationDlqAckLevel[sourceCluster]; ok {
 		return ackLevel
 	}
 	return -1
@@ -277,7 +277,7 @@ func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.ReplicationDLQAckLevel[sourceCluster] = ackLevel
+	s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	if err := s.updateShardInfoLocked(); err != nil {
 		return err
@@ -896,13 +896,15 @@ func (s *shardContextImpl) closeShard() {
 		return
 	}
 
+	s.logger.Info("Close shard")
+
 	go func() {
 		s.closeCallback(s.shardID, s.shardItem)
 	}()
 
 	// fails any writes that may start after this point.
 	s.shardInfo.RangeId = -1
-	atomic.StoreInt64(&s.rangeID, s.shardInfo.GetRangeId())
+	atomic.StoreInt64(&s.rangeID, s.shardInfo.RangeId)
 }
 
 func (s *shardContextImpl) generateTransferTaskIDLocked() (int64, error) {
@@ -935,32 +937,34 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
+		// Failure in updating shard to grab new RangeID
+		s.logger.Error("Persistent store operation failure",
+			tag.StoreOperationUpdateShard,
+			tag.Error(err),
+			tag.ShardRangeID(updatedShardInfo.GetRangeId()),
+			tag.PreviousShardRangeID(s.shardInfo.GetRangeId()),
+		)
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
 			s.closeShard()
-		} else {
-			// Failure in updating shard to grab new RangeID
-			s.logger.Error("Persistent store operation failure",
-				tag.StoreOperationUpdateShard,
-				tag.Error(err),
-				tag.ShardRangeID(updatedShardInfo.GetRangeId()),
-				tag.PreviousShardRangeID(s.shardInfo.GetRangeId()))
 		}
 		return err
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
+	s.logger.Info("Range updated for shardID",
+		tag.ShardRangeID(updatedShardInfo.RangeId),
+		tag.PreviousShardRangeID(s.shardInfo.RangeId),
+		tag.Number(s.transferSequenceNumber),
+		tag.NextNumber(s.maxTransferSequenceNumber),
+	)
+
 	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
 	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
 	atomic.StoreInt64(&s.rangeID, updatedShardInfo.GetRangeId())
 	s.shardInfo = updatedShardInfo
 
-	s.logger.Info("Range updated for shardID",
-		tag.ShardID(int(s.shardInfo.GetShardId())),
-		tag.ShardRangeID(s.shardInfo.GetRangeId()),
-		tag.Number(s.transferSequenceNumber),
-		tag.NextNumber(s.maxTransferSequenceNumber))
 	return nil
 }
 
@@ -1276,6 +1280,8 @@ func acquireShard(
 	if err1 != nil {
 		return nil, err1
 	}
+
+	shardItem.logger.Info("Acquired shard")
 
 	return shardContext, nil
 }

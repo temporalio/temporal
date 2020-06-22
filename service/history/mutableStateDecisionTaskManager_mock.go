@@ -37,30 +37,30 @@ import (
 	reflect "reflect"
 )
 
-// MockmutableStateDecisionTaskManager is a mock of mutableStateDecisionTaskManager interface
+// MockmutableStateDecisionTaskManager is a mock of mutableStateDecisionTaskManager interface.
 type MockmutableStateDecisionTaskManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockmutableStateDecisionTaskManagerMockRecorder
 }
 
-// MockmutableStateDecisionTaskManagerMockRecorder is the mock recorder for MockmutableStateDecisionTaskManager
+// MockmutableStateDecisionTaskManagerMockRecorder is the mock recorder for MockmutableStateDecisionTaskManager.
 type MockmutableStateDecisionTaskManagerMockRecorder struct {
 	mock *MockmutableStateDecisionTaskManager
 }
 
-// NewMockmutableStateDecisionTaskManager creates a new mock instance
+// NewMockmutableStateDecisionTaskManager creates a new mock instance.
 func NewMockmutableStateDecisionTaskManager(ctrl *gomock.Controller) *MockmutableStateDecisionTaskManager {
 	mock := &MockmutableStateDecisionTaskManager{ctrl: ctrl}
 	mock.recorder = &MockmutableStateDecisionTaskManagerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockmutableStateDecisionTaskManager) EXPECT() *MockmutableStateDecisionTaskManagerMockRecorder {
 	return m.recorder
 }
 
-// ReplicateDecisionTaskScheduledEvent mocks base method
+// ReplicateDecisionTaskScheduledEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskScheduledEvent", version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
@@ -69,13 +69,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskScheduledEven
 	return ret0, ret1
 }
 
-// ReplicateDecisionTaskScheduledEvent indicates an expected call of ReplicateDecisionTaskScheduledEvent
+// ReplicateDecisionTaskScheduledEvent indicates an expected call of ReplicateDecisionTaskScheduledEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskScheduledEvent(version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskScheduledEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskScheduledEvent), version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
-// ReplicateTransientDecisionTaskScheduled mocks base method
+// ReplicateTransientDecisionTaskScheduled mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateTransientDecisionTaskScheduled")
@@ -84,13 +84,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateTransientDecisionTaskSche
 	return ret0, ret1
 }
 
-// ReplicateTransientDecisionTaskScheduled indicates an expected call of ReplicateTransientDecisionTaskScheduled
+// ReplicateTransientDecisionTaskScheduled indicates an expected call of ReplicateTransientDecisionTaskScheduled.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateTransientDecisionTaskScheduled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateTransientDecisionTaskScheduled", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateTransientDecisionTaskScheduled))
 }
 
-// ReplicateDecisionTaskStartedEvent mocks base method
+// ReplicateDecisionTaskStartedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskStartedEvent(decision *decisionInfo, version, scheduleID, startedID int64, requestID string, timestamp int64) (*decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskStartedEvent", decision, version, scheduleID, startedID, requestID, timestamp)
@@ -99,13 +99,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskStartedEvent(
 	return ret0, ret1
 }
 
-// ReplicateDecisionTaskStartedEvent indicates an expected call of ReplicateDecisionTaskStartedEvent
+// ReplicateDecisionTaskStartedEvent indicates an expected call of ReplicateDecisionTaskStartedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskStartedEvent(decision, version, scheduleID, startedID, requestID, timestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskStartedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskStartedEvent), decision, version, scheduleID, startedID, requestID, timestamp)
 }
 
-// ReplicateDecisionTaskCompletedEvent mocks base method
+// ReplicateDecisionTaskCompletedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskCompletedEvent(event *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskCompletedEvent", event)
@@ -113,13 +113,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskCompletedEven
 	return ret0
 }
 
-// ReplicateDecisionTaskCompletedEvent indicates an expected call of ReplicateDecisionTaskCompletedEvent
+// ReplicateDecisionTaskCompletedEvent indicates an expected call of ReplicateDecisionTaskCompletedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskCompletedEvent(event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskCompletedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskCompletedEvent), event)
 }
 
-// ReplicateDecisionTaskFailedEvent mocks base method
+// ReplicateDecisionTaskFailedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskFailedEvent() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskFailedEvent")
@@ -127,13 +127,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskFailedEvent()
 	return ret0
 }
 
-// ReplicateDecisionTaskFailedEvent indicates an expected call of ReplicateDecisionTaskFailedEvent
+// ReplicateDecisionTaskFailedEvent indicates an expected call of ReplicateDecisionTaskFailedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskFailedEvent() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskFailedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskFailedEvent))
 }
 
-// ReplicateDecisionTaskTimedOutEvent mocks base method
+// ReplicateDecisionTaskTimedOutEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent(timeoutType enums.TimeoutType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskTimedOutEvent", timeoutType)
@@ -141,13 +141,13 @@ func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent
 	return ret0
 }
 
-// ReplicateDecisionTaskTimedOutEvent indicates an expected call of ReplicateDecisionTaskTimedOutEvent
+// ReplicateDecisionTaskTimedOutEvent indicates an expected call of ReplicateDecisionTaskTimedOutEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskTimedOutEvent(timeoutType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskTimedOutEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskTimedOutEvent), timeoutType)
 }
 
-// AddDecisionTaskScheduleToStartTimeoutEvent mocks base method
+// AddDecisionTaskScheduleToStartTimeoutEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskScheduleToStartTimeoutEvent", scheduleEventID)
@@ -156,13 +156,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduleToStartTime
 	return ret0, ret1
 }
 
-// AddDecisionTaskScheduleToStartTimeoutEvent indicates an expected call of AddDecisionTaskScheduleToStartTimeoutEvent
+// AddDecisionTaskScheduleToStartTimeoutEvent indicates an expected call of AddDecisionTaskScheduleToStartTimeoutEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskScheduleToStartTimeoutEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskScheduleToStartTimeoutEvent), scheduleEventID)
 }
 
-// AddDecisionTaskScheduledEventAsHeartbeat mocks base method
+// AddDecisionTaskScheduledEventAsHeartbeat mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskScheduledEventAsHeartbeat", bypassTaskGeneration, originalScheduledTimestamp)
@@ -171,13 +171,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduledEventAsHea
 	return ret0, ret1
 }
 
-// AddDecisionTaskScheduledEventAsHeartbeat indicates an expected call of AddDecisionTaskScheduledEventAsHeartbeat
+// AddDecisionTaskScheduledEventAsHeartbeat indicates an expected call of AddDecisionTaskScheduledEventAsHeartbeat.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration, originalScheduledTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskScheduledEventAsHeartbeat", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskScheduledEventAsHeartbeat), bypassTaskGeneration, originalScheduledTimestamp)
 }
 
-// AddDecisionTaskScheduledEvent mocks base method
+// AddDecisionTaskScheduledEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskScheduledEvent", bypassTaskGeneration)
@@ -186,13 +186,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduledEvent(bypa
 	return ret0, ret1
 }
 
-// AddDecisionTaskScheduledEvent indicates an expected call of AddDecisionTaskScheduledEvent
+// AddDecisionTaskScheduledEvent indicates an expected call of AddDecisionTaskScheduledEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskScheduledEvent(bypassTaskGeneration interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskScheduledEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskScheduledEvent), bypassTaskGeneration)
 }
 
-// AddFirstDecisionTaskScheduled mocks base method
+// AddFirstDecisionTaskScheduled mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddFirstDecisionTaskScheduled(startEvent *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddFirstDecisionTaskScheduled", startEvent)
@@ -200,13 +200,13 @@ func (m *MockmutableStateDecisionTaskManager) AddFirstDecisionTaskScheduled(star
 	return ret0
 }
 
-// AddFirstDecisionTaskScheduled indicates an expected call of AddFirstDecisionTaskScheduled
+// AddFirstDecisionTaskScheduled indicates an expected call of AddFirstDecisionTaskScheduled.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddFirstDecisionTaskScheduled(startEvent interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstDecisionTaskScheduled", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddFirstDecisionTaskScheduled), startEvent)
 }
 
-// AddDecisionTaskStartedEvent mocks base method
+// AddDecisionTaskStartedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollForDecisionTaskRequest) (*history.HistoryEvent, *decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskStartedEvent", scheduleEventID, requestID, request)
@@ -216,13 +216,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskStartedEvent(schedu
 	return ret0, ret1, ret2
 }
 
-// AddDecisionTaskStartedEvent indicates an expected call of AddDecisionTaskStartedEvent
+// AddDecisionTaskStartedEvent indicates an expected call of AddDecisionTaskStartedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskStartedEvent(scheduleEventID, requestID, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskStartedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskStartedEvent), scheduleEventID, requestID, request)
 }
 
-// AddDecisionTaskCompletedEvent mocks base method
+// AddDecisionTaskCompletedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64, request *workflowservice.RespondDecisionTaskCompletedRequest, maxResetPoints int) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskCompletedEvent", scheduleEventID, startedEventID, request, maxResetPoints)
@@ -231,13 +231,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskCompletedEvent(sche
 	return ret0, ret1
 }
 
-// AddDecisionTaskCompletedEvent indicates an expected call of AddDecisionTaskCompletedEvent
+// AddDecisionTaskCompletedEvent indicates an expected call of AddDecisionTaskCompletedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID, request, maxResetPoints interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskCompletedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskCompletedEvent), scheduleEventID, startedEventID, request, maxResetPoints)
 }
 
-// AddDecisionTaskFailedEvent mocks base method
+// AddDecisionTaskFailedEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause enums.DecisionTaskFailedCause, failure *failure.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
@@ -246,13 +246,13 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(schedul
 	return ret0, ret1
 }
 
-// AddDecisionTaskFailedEvent indicates an expected call of AddDecisionTaskFailedEvent
+// AddDecisionTaskFailedEvent indicates an expected call of AddDecisionTaskFailedEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskFailedEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskFailedEvent), scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
 }
 
-// AddDecisionTaskTimedOutEvent mocks base method
+// AddDecisionTaskTimedOutEvent mocks base method.
 func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskTimedOutEvent", scheduleEventID, startedEventID)
@@ -261,49 +261,49 @@ func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskTimedOutEvent(sched
 	return ret0, ret1
 }
 
-// AddDecisionTaskTimedOutEvent indicates an expected call of AddDecisionTaskTimedOutEvent
+// AddDecisionTaskTimedOutEvent indicates an expected call of AddDecisionTaskTimedOutEvent.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskTimedOutEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).AddDecisionTaskTimedOutEvent), scheduleEventID, startedEventID)
 }
 
-// FailDecision mocks base method
+// FailDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) FailDecision(incrementAttempt bool) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "FailDecision", incrementAttempt)
 }
 
-// FailDecision indicates an expected call of FailDecision
+// FailDecision indicates an expected call of FailDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) FailDecision(incrementAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).FailDecision), incrementAttempt)
 }
 
-// DeleteDecision mocks base method
+// DeleteDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) DeleteDecision() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DeleteDecision")
 }
 
-// DeleteDecision indicates an expected call of DeleteDecision
+// DeleteDecision indicates an expected call of DeleteDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) DeleteDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).DeleteDecision))
 }
 
-// UpdateDecision mocks base method
+// UpdateDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) UpdateDecision(decision *decisionInfo) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UpdateDecision", decision)
 }
 
-// UpdateDecision indicates an expected call of UpdateDecision
+// UpdateDecision indicates an expected call of UpdateDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) UpdateDecision(decision interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).UpdateDecision), decision)
 }
 
-// HasPendingDecision mocks base method
+// HasPendingDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) HasPendingDecision() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasPendingDecision")
@@ -311,13 +311,13 @@ func (m *MockmutableStateDecisionTaskManager) HasPendingDecision() bool {
 	return ret0
 }
 
-// HasPendingDecision indicates an expected call of HasPendingDecision
+// HasPendingDecision indicates an expected call of HasPendingDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) HasPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).HasPendingDecision))
 }
 
-// GetPendingDecision mocks base method
+// GetPendingDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) GetPendingDecision() (*decisionInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPendingDecision")
@@ -326,13 +326,13 @@ func (m *MockmutableStateDecisionTaskManager) GetPendingDecision() (*decisionInf
 	return ret0, ret1
 }
 
-// GetPendingDecision indicates an expected call of GetPendingDecision
+// GetPendingDecision indicates an expected call of GetPendingDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) GetPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).GetPendingDecision))
 }
 
-// HasInFlightDecision mocks base method
+// HasInFlightDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) HasInFlightDecision() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasInFlightDecision")
@@ -340,13 +340,13 @@ func (m *MockmutableStateDecisionTaskManager) HasInFlightDecision() bool {
 	return ret0
 }
 
-// HasInFlightDecision indicates an expected call of HasInFlightDecision
+// HasInFlightDecision indicates an expected call of HasInFlightDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) HasInFlightDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasInFlightDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).HasInFlightDecision))
 }
 
-// GetInFlightDecision mocks base method
+// GetInFlightDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) GetInFlightDecision() (*decisionInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInFlightDecision")
@@ -355,13 +355,13 @@ func (m *MockmutableStateDecisionTaskManager) GetInFlightDecision() (*decisionIn
 	return ret0, ret1
 }
 
-// GetInFlightDecision indicates an expected call of GetInFlightDecision
+// GetInFlightDecision indicates an expected call of GetInFlightDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) GetInFlightDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInFlightDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).GetInFlightDecision))
 }
 
-// HasProcessedOrPendingDecision mocks base method
+// HasProcessedOrPendingDecision mocks base method.
 func (m *MockmutableStateDecisionTaskManager) HasProcessedOrPendingDecision() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasProcessedOrPendingDecision")
@@ -369,13 +369,13 @@ func (m *MockmutableStateDecisionTaskManager) HasProcessedOrPendingDecision() bo
 	return ret0
 }
 
-// HasProcessedOrPendingDecision indicates an expected call of HasProcessedOrPendingDecision
+// HasProcessedOrPendingDecision indicates an expected call of HasProcessedOrPendingDecision.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) HasProcessedOrPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingDecision", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).HasProcessedOrPendingDecision))
 }
 
-// GetDecisionInfo mocks base method
+// GetDecisionInfo mocks base method.
 func (m *MockmutableStateDecisionTaskManager) GetDecisionInfo(scheduleEventID int64) (*decisionInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDecisionInfo", scheduleEventID)
@@ -384,13 +384,13 @@ func (m *MockmutableStateDecisionTaskManager) GetDecisionInfo(scheduleEventID in
 	return ret0, ret1
 }
 
-// GetDecisionInfo indicates an expected call of GetDecisionInfo
+// GetDecisionInfo indicates an expected call of GetDecisionInfo.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) GetDecisionInfo(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDecisionInfo", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).GetDecisionInfo), scheduleEventID)
 }
 
-// CreateTransientDecisionEvents mocks base method
+// CreateTransientDecisionEvents mocks base method.
 func (m *MockmutableStateDecisionTaskManager) CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateTransientDecisionEvents", decision, identity)
@@ -399,7 +399,7 @@ func (m *MockmutableStateDecisionTaskManager) CreateTransientDecisionEvents(deci
 	return ret0, ret1
 }
 
-// CreateTransientDecisionEvents indicates an expected call of CreateTransientDecisionEvents
+// CreateTransientDecisionEvents indicates an expected call of CreateTransientDecisionEvents.
 func (mr *MockmutableStateDecisionTaskManagerMockRecorder) CreateTransientDecisionEvents(decision, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientDecisionEvents", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).CreateTransientDecisionEvents), decision, identity)

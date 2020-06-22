@@ -482,6 +482,8 @@ const (
 	AdminClientMergeDLQMessagesScope
 	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
 	AdminClientRefreshWorkflowTasksScope
+	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
+	AdminClientResendReplicationTasksScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -683,6 +685,8 @@ const (
 	AdminReapplyEventsScope
 	// AdminRefreshWorkflowTasksScope is the metric scope for admin.RefreshWorkflowTasks
 	AdminRefreshWorkflowTasksScope
+	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
+	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
@@ -1246,6 +1250,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:      {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                       {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientReadDLQMessagesScope:                       {operation: "AdminClientReadDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1347,6 +1352,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
+		AdminResendReplicationTasksScope:           {operation: "ResendReplicationTasks"},
 
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollForDecisionTaskScope:                {operation: "PollForDecisionTask"},
@@ -1672,6 +1678,8 @@ const (
 	TaskProcessingLatency
 	TaskQueueLatency
 	TaskRedispatchQueuePendingTasksTimer
+
+	TransferTaskMissingEventCounter
 
 	TransferTaskThrottledCounter
 	TimerTaskThrottledCounter
@@ -2086,6 +2094,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskLimitExceededCounter:                          {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
 		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer},
 		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer},
+		TransferTaskMissingEventCounter:                   {metricName: "transfer_task_missing_event_counter", metricType: Counter},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
 		TaskRedispatchQueuePendingTasksTimer:              {metricName: "task_redispatch_queue_pending_tasks", metricType: Timer},
 		TransferTaskThrottledCounter:                      {metricName: "transfer_task_throttled_counter", metricType: Counter},

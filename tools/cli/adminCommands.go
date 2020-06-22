@@ -33,13 +33,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
@@ -52,6 +47,9 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
+	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
 )
 
 const maxEventID = 9999
@@ -154,8 +152,8 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if ms.ExecutionInfo.AutoResetPoints != nil {
 			fmt.Println("auto-reset-points:")
 			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := time.Unix(0, p.GetCreatedTimeNano())
-				expireT := time.Unix(0, p.GetExpiringTimeNano())
+				createT := time.Unix(0, p.GetCreateTimeNano())
+				expireT := time.Unix(0, p.GetExpireTimeNano())
 				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}
@@ -427,11 +425,22 @@ func AdminListTasks(c *cli.Context) {
 
 	if category == enumsgenpb.TASK_CATEGORY_TRANSFER {
 		req := &persistence.GetTransferTasksRequest{}
-		tasks, err := executionManager.GetTransferTasks(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Transfer Tasks", err)
+
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetTransferTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
 		}
-		prettyPrintJSONObject(tasks)
+		paginate(c, paginationFunc)
 	} else if category == enumsgenpb.TASK_CATEGORY_TIMER {
 		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
 		minVis := time.Unix(0, minVisFlag)
@@ -456,11 +465,21 @@ func AdminListTasks(c *cli.Context) {
 		paginate(c, paginationFunc)
 	} else if category == enumsgenpb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
-		task, err := executionManager.GetReplicationTasks(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Replication Tasks", err)
+		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+			req.NextPageToken = paginationToken
+			response, err := executionManager.GetReplicationTasks(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			token := response.NextPageToken
+
+			var items []interface{}
+			for _, task := range response.Tasks {
+				items = append(items, task)
+			}
+			return items, token, nil
 		}
-		prettyPrintJSONObject(task)
+		paginate(c, paginationFunc)
 	} else {
 		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
 	}

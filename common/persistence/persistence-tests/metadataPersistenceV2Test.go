@@ -127,9 +127,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 			RetentionDays:            retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 			BadBinaries:              badBinaries,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{},
@@ -155,9 +155,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	m.Equal(retention, resp1.Namespace.Config.RetentionDays)
 	m.Equal(emitMetric, resp1.Namespace.Config.EmitMetric)
 	m.Equal(historyArchivalStatus, resp1.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalURI)
+	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalStatus, resp1.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
@@ -180,9 +180,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 			RetentionDays:            100,
 			EmitMetric:               false,
 			HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_DISABLED,
-			HistoryArchivalURI:       "",
+			HistoryArchivalUri:       "",
 			VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalUri:    "",
 		},
 		&persistenceblobs.NamespaceReplicationConfig{},
 		isGlobalNamespace,
@@ -223,9 +223,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:          "test-reason",
-				Operator:        "test-operator",
-				CreatedTimeNano: 123,
+				Reason:         "test-reason",
+				Operator:       "test-operator",
+				CreateTimeNano: 123,
 			},
 		},
 	}
@@ -243,9 +243,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 			RetentionDays:            retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 			BadBinaries:              testBinaries,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
@@ -272,9 +272,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(retention, resp2.Namespace.Config.RetentionDays)
 	m.Equal(emitMetric, resp2.Namespace.Config.EmitMetric)
 	m.Equal(historyArchivalStatus, resp2.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalURI)
+	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalStatus, resp2.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalUri)
 	m.True(reflect.DeepEqual(testBinaries, resp2.Namespace.Config.BadBinaries))
 	m.Equal(clusterActive, resp2.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp2.Namespace.ReplicationConfig.Clusters))
@@ -298,9 +298,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(retention, resp3.Namespace.Config.RetentionDays)
 	m.Equal(emitMetric, resp3.Namespace.Config.EmitMetric)
 	m.Equal(historyArchivalStatus, resp3.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalURI)
+	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalStatus, resp3.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
 	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -346,9 +346,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:          "test-reason",
-				Operator:        "test-operator",
-				CreatedTimeNano: 123,
+				Reason:         "test-reason",
+				Operator:       "test-operator",
+				CreateTimeNano: 123,
 			},
 		},
 	}
@@ -372,9 +372,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 					RetentionDays:            retention,
 					EmitMetric:               emitMetric,
 					HistoryArchivalStatus:    historyArchivalStatus,
-					HistoryArchivalURI:       historyArchivalURI,
+					HistoryArchivalUri:       historyArchivalURI,
 					VisibilityArchivalStatus: visibilityArchivalStatus,
-					VisibilityArchivalURI:    visibilityArchivalURI,
+					VisibilityArchivalUri:    visibilityArchivalURI,
 					BadBinaries:              testBinaries,
 				},
 				&persistenceblobs.NamespaceReplicationConfig{
@@ -404,9 +404,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	m.Equal(retention, resp.Namespace.Config.RetentionDays)
 	m.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
 	m.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	m.True(reflect.DeepEqual(testBinaries, resp.Namespace.Config.BadBinaries))
 	m.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp.Namespace.ReplicationConfig.Clusters))
@@ -461,9 +461,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 			RetentionDays:            retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 			BadBinaries:              badBinaries,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
@@ -487,9 +487,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:          "test-reason",
-				Operator:        "test-operator",
-				CreatedTimeNano: 123,
+				Reason:         "test-reason",
+				Operator:       "test-operator",
+				CreateTimeNano: 123,
 			},
 		},
 	}
@@ -513,9 +513,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 					RetentionDays:            resp2.Namespace.Config.RetentionDays,
 					EmitMetric:               resp2.Namespace.Config.EmitMetric,
 					HistoryArchivalStatus:    resp2.Namespace.Config.HistoryArchivalStatus,
-					HistoryArchivalURI:       resp2.Namespace.Config.HistoryArchivalURI,
+					HistoryArchivalUri:       resp2.Namespace.Config.HistoryArchivalUri,
 					VisibilityArchivalStatus: resp2.Namespace.Config.VisibilityArchivalStatus,
-					VisibilityArchivalURI:    resp2.Namespace.Config.VisibilityArchivalURI,
+					VisibilityArchivalUri:    resp2.Namespace.Config.VisibilityArchivalUri,
 					BadBinaries:              testBinaries,
 				},
 				&persistenceblobs.NamespaceReplicationConfig{
@@ -550,9 +550,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	m.Equal(retention, resp3.Namespace.Config.RetentionDays)
 	m.Equal(emitMetric, resp3.Namespace.Config.EmitMetric)
 	m.Equal(historyArchivalStatus, resp3.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalURI)
+	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalStatus, resp3.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
 	m.True(reflect.DeepEqual(testBinaries, resp3.Namespace.Config.BadBinaries))
 	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
@@ -607,9 +607,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			RetentionDays:            retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -650,9 +650,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:          "test-reason",
-				Operator:        "test-operator",
-				CreatedTimeNano: 123,
+				Reason:         "test-reason",
+				Operator:       "test-operator",
+				CreateTimeNano: 123,
 			},
 		},
 	}
@@ -670,9 +670,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			RetentionDays:            updatedRetention,
 			EmitMetric:               updatedEmitMetric,
 			HistoryArchivalStatus:    updatedHistoryArchivalStatus,
-			HistoryArchivalURI:       updatedHistoryArchivalURI,
+			HistoryArchivalUri:       updatedHistoryArchivalURI,
 			VisibilityArchivalStatus: updatedVisibilityArchivalStatus,
-			VisibilityArchivalURI:    updatedVisibilityArchivalURI,
+			VisibilityArchivalUri:    updatedVisibilityArchivalURI,
 			BadBinaries:              testBinaries,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
@@ -700,9 +700,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedRetention, resp4.Namespace.Config.RetentionDays)
 	m.Equal(updatedEmitMetric, resp4.Namespace.Config.EmitMetric)
 	m.Equal(updatedHistoryArchivalStatus, resp4.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalURI)
+	m.Equal(updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalStatus, resp4.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalUri)
 	m.True(reflect.DeepEqual(testBinaries, resp4.Namespace.Config.BadBinaries))
 	m.Equal(updateClusterActive, resp4.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp4.Namespace.ReplicationConfig.Clusters))
@@ -728,9 +728,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedRetention, resp5.Namespace.Config.RetentionDays)
 	m.Equal(updatedEmitMetric, resp5.Namespace.Config.EmitMetric)
 	m.Equal(updatedHistoryArchivalStatus, resp5.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalURI)
+	m.Equal(updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalStatus, resp5.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(updatedVisibilityArchivalURI, resp5.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(updatedVisibilityArchivalURI, resp5.Namespace.Config.VisibilityArchivalUri)
 	m.Equal(updateClusterActive, resp5.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp5.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -756,9 +756,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			RetentionDays:            updatedRetention,
 			EmitMetric:               updatedEmitMetric,
 			HistoryArchivalStatus:    updatedHistoryArchivalStatus,
-			HistoryArchivalURI:       updatedHistoryArchivalURI,
+			HistoryArchivalUri:       updatedHistoryArchivalURI,
 			VisibilityArchivalStatus: updatedVisibilityArchivalStatus,
-			VisibilityArchivalURI:    updatedVisibilityArchivalURI,
+			VisibilityArchivalUri:    updatedVisibilityArchivalURI,
 			BadBinaries:              testBinaries,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
@@ -786,9 +786,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedRetention, resp6.Namespace.Config.RetentionDays)
 	m.Equal(updatedEmitMetric, resp6.Namespace.Config.EmitMetric)
 	m.Equal(updatedHistoryArchivalStatus, resp6.Namespace.Config.HistoryArchivalStatus)
-	m.Equal(updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalURI)
+	m.Equal(updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalStatus, resp6.Namespace.Config.VisibilityArchivalStatus)
-	m.Equal(updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalURI)
+	m.Equal(updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalUri)
 	m.True(reflect.DeepEqual(testBinaries, resp6.Namespace.Config.BadBinaries))
 	m.Equal(updateClusterActive, resp6.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp6.Namespace.ReplicationConfig.Clusters))
@@ -837,9 +837,9 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 			RetentionDays:            int32(retention),
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -883,9 +883,9 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 			RetentionDays:            int32(retention),
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
-			HistoryArchivalURI:       historyArchivalURI,
+			HistoryArchivalUri:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
-			VisibilityArchivalURI:    visibilityArchivalURI,
+			VisibilityArchivalUri:    visibilityArchivalURI,
 		},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -925,18 +925,18 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	testBinaries1 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:          "test-reason1",
-				Operator:        "test-operator1",
-				CreatedTimeNano: 123,
+				Reason:         "test-reason1",
+				Operator:       "test-operator1",
+				CreateTimeNano: 123,
 			},
 		},
 	}
 	testBinaries2 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"efg": {
-				Reason:          "test-reason2",
-				Operator:        "test-operator2",
-				CreatedTimeNano: 456,
+				Reason:         "test-reason2",
+				Operator:       "test-operator2",
+				CreateTimeNano: 456,
 			},
 		},
 	}
@@ -956,9 +956,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					RetentionDays:            109,
 					EmitMetric:               true,
 					HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-					HistoryArchivalURI:       "test://history/uri",
+					HistoryArchivalUri:       "test://history/uri",
 					VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-					VisibilityArchivalURI:    "test://visibility/uri",
+					VisibilityArchivalUri:    "test://visibility/uri",
 					BadBinaries:              testBinaries1,
 				},
 				ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
@@ -985,9 +985,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					RetentionDays:            326,
 					EmitMetric:               false,
 					HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_DISABLED,
-					HistoryArchivalURI:       "",
+					HistoryArchivalUri:       "",
 					VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_DISABLED,
-					VisibilityArchivalURI:    "",
+					VisibilityArchivalUri:    "",
 					BadBinaries:              testBinaries2,
 				},
 				ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{

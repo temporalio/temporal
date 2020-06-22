@@ -62,11 +62,11 @@ service AdminService {
     rpc GetNamespaceReplicationMessages (GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
     }
 
-    // GetDLQReplicationMessages return replication messages based on dlq info
+    // GetDLQReplicationMessages return replication messages based on DLQ info.
     rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse){
     }
 
-    // ReapplyEvents applies stale events to the current workflow and current run
+    // ReapplyEvents applies stale events to the current workflow and current run.
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 
@@ -74,24 +74,28 @@ service AdminService {
     rpc AddSearchAttribute (AddSearchAttributeRequest) returns (AddSearchAttributeResponse) {
     }
 
-    // DescribeCluster returns information about Temporal cluster
+    // DescribeCluster returns information about Temporal cluster.
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
-    // ReadDLQMessages returns messages from DLQ
+    // ReadDLQMessages returns messages from DLQ.
     rpc ReadDLQMessages(ReadDLQMessagesRequest) returns (ReadDLQMessagesResponse) {
     }
 
-    // PurgeDLQMessages purges messages from DLQ
+    // PurgeDLQMessages purges messages from DLQ.
     rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
     }
 
-    // MergeDLQMessages merges messages from DLQ
+    // MergeDLQMessages merges messages from DLQ.
     rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
     }
 
-    // RefreshWorkflowTasks refreshes all tasks of a workflow
+    // RefreshWorkflowTasks refreshes all tasks of a workflow.
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
+    }
+
+    // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
+    rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
     }
 }
 

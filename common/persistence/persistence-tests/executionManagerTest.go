@@ -811,9 +811,9 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				BinaryChecksum:           "test-binary-checksum",
 				RunId:                    "test-runID",
 				FirstDecisionCompletedId: 123,
-				CreatedTimeNano:          456,
+				CreateTimeNano:           456,
 				Resettable:               true,
-				ExpiringTimeNano:         789,
+				ExpireTimeNano:           789,
 			},
 		},
 	}
@@ -1206,9 +1206,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				BinaryChecksum:           "test-binary-checksum",
 				RunId:                    "test-runID",
 				FirstDecisionCompletedId: 123,
-				CreatedTimeNano:          456,
+				CreateTimeNano:           456,
 				Resettable:               true,
-				ExpiringTimeNano:         789,
+				ExpireTimeNano:           789,
 			},
 		},
 	}
@@ -3005,9 +3005,9 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 				BinaryChecksum:           "test-binary-checksum",
 				RunId:                    "test-runID",
 				FirstDecisionCompletedId: 123,
-				CreatedTimeNano:          456,
+				CreateTimeNano:           456,
 				Resettable:               true,
-				ExpiringTimeNano:         789,
+				ExpireTimeNano:           789,
 			},
 		},
 	}
@@ -5122,7 +5122,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		TransferAckLevel:        currentClusterTransferAck,
 		TimerAckLevel:           currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
-		ReplicationDLQAckLevel:  map[string]int64{},
+		ReplicationDlqAckLevel:  map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5179,7 +5179,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{},
-		ReplicationDLQAckLevel:       map[string]int64{},
+		ReplicationDlqAckLevel:       map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5223,7 +5223,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{cluster.TestAlternativeClusterName: 12345},
-		ReplicationDLQAckLevel:       map[string]int64{},
+		ReplicationDlqAckLevel:       map[string]int64{},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,

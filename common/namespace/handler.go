@@ -166,7 +166,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.HistoryArchivalStatus,
-			registerRequest.GetHistoryArchivalURI(),
+			registerRequest.GetHistoryArchivalUri(),
 			clusterHistoryArchivalConfig.GetNamespaceDefaultStatus(),
 			clusterHistoryArchivalConfig.GetNamespaceDefaultURI(),
 		)
@@ -186,7 +186,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.VisibilityArchivalStatus,
-			registerRequest.GetVisibilityArchivalURI(),
+			registerRequest.GetVisibilityArchivalUri(),
 			clusterVisibilityArchivalConfig.GetNamespaceDefaultStatus(),
 			clusterVisibilityArchivalConfig.GetNamespaceDefaultURI(),
 		)
@@ -212,9 +212,9 @@ func (d *HandlerImpl) RegisterNamespace(
 		RetentionDays:            registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
 		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
-		HistoryArchivalURI:       nextHistoryArchivalState.URI,
+		HistoryArchivalUri:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
-		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
+		VisibilityArchivalUri:    nextVisibilityArchivalState.URI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -310,7 +310,7 @@ func (d *HandlerImpl) ListNamespaces(
 			IsGlobalNamespace: namespace.IsGlobalNamespace,
 			FailoverVersion:   namespace.Namespace.FailoverVersion,
 		}
-		desc.NamespaceInfo, desc.Configuration, desc.ReplicationConfiguration =
+		desc.NamespaceInfo, desc.Config, desc.ReplicationConfig =
 			d.createResponse(ctx,
 				namespace.Namespace.Info,
 				namespace.Namespace.Config,
@@ -346,7 +346,7 @@ func (d *HandlerImpl) DescribeNamespace(
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverVersion:   resp.Namespace.FailoverVersion,
 	}
-	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration =
+	response.NamespaceInfo, response.Config, response.ReplicationConfig =
 		d.createResponse(ctx, resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
 	return response, nil
 }
@@ -381,14 +381,14 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	currentHistoryArchivalState := &ArchivalState{
 		Status: config.HistoryArchivalStatus,
-		URI:    config.HistoryArchivalURI,
+		URI:    config.HistoryArchivalUri,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
 	historyArchivalConfigChanged := false
 	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
-	if updateRequest.Configuration != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
-		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
+	if updateRequest.Config != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
+		cfg := updateRequest.GetConfig()
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalUri(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -400,14 +400,14 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	currentVisibilityArchivalState := &ArchivalState{
 		Status: config.VisibilityArchivalStatus,
-		URI:    config.VisibilityArchivalURI,
+		URI:    config.VisibilityArchivalUri,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	visibilityArchivalConfigChanged := false
 	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
-	if updateRequest.Configuration != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
-		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
+	if updateRequest.Config != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
+		cfg := updateRequest.GetConfig()
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalUri(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -422,8 +422,8 @@ func (d *HandlerImpl) UpdateNamespace(
 	// whether anything other than active cluster is changed
 	configurationChanged := false
 
-	if updateRequest.UpdatedInfo != nil {
-		updatedInfo := updateRequest.UpdatedInfo
+	if updateRequest.UpdateInfo != nil {
+		updatedInfo := updateRequest.UpdateInfo
 		if updatedInfo.GetDescription() != "" {
 			configurationChanged = true
 			info.Description = updatedInfo.GetDescription()
@@ -438,8 +438,8 @@ func (d *HandlerImpl) UpdateNamespace(
 			info.Data = d.mergeNamespaceData(info.Data, updatedInfo.Data)
 		}
 	}
-	if updateRequest.Configuration != nil {
-		updatedConfig := updateRequest.Configuration
+	if updateRequest.Config != nil {
+		updatedConfig := updateRequest.Config
 		if updatedConfig.EmitMetric != nil {
 			configurationChanged = true
 			config.EmitMetric = updatedConfig.GetEmitMetric().GetValue()
@@ -451,12 +451,12 @@ func (d *HandlerImpl) UpdateNamespace(
 		if historyArchivalConfigChanged {
 			configurationChanged = true
 			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
-			config.HistoryArchivalURI = nextHistoryArchivalState.URI
+			config.HistoryArchivalUri = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
 			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
-			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
+			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
@@ -479,8 +479,8 @@ func (d *HandlerImpl) UpdateNamespace(
 		delete(config.BadBinaries.Binaries, binChecksum)
 	}
 
-	if updateRequest.ReplicationConfiguration != nil {
-		updateReplicationConfig := updateRequest.ReplicationConfiguration
+	if updateRequest.ReplicationConfig != nil {
+		updateReplicationConfig := updateRequest.ReplicationConfig
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
 			var clustersNew []string
@@ -572,7 +572,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		IsGlobalNamespace: isGlobalNamespace,
 		FailoverVersion:   failoverVersion,
 	}
-	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, info, config, replicationConfig)
+	response.NamespaceInfo, response.Config, response.ReplicationConfig = d.createResponse(ctx, info, config, replicationConfig)
 
 	d.logger.Info("Update namespace succeeded",
 		tag.WorkflowNamespace(info.Name),
@@ -632,7 +632,7 @@ func (d *HandlerImpl) createResponse(
 	info *persistenceblobs.NamespaceInfo,
 	config *persistenceblobs.NamespaceConfig,
 	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
-) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfiguration, *replicationpb.NamespaceReplicationConfiguration) {
+) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfig, *replicationpb.NamespaceReplicationConfig) {
 
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
@@ -643,23 +643,23 @@ func (d *HandlerImpl) createResponse(
 		Id:          info.Id,
 	}
 
-	configResult := &namespacepb.NamespaceConfiguration{
+	configResult := &namespacepb.NamespaceConfig{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-		HistoryArchivalURI:                     config.HistoryArchivalURI,
+		HistoryArchivalUri:                     config.HistoryArchivalUri,
 		VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+		VisibilityArchivalUri:                  config.VisibilityArchivalUri,
 		BadBinaries:                            config.BadBinaries,
 	}
 
-	var clusters []*replicationpb.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfig
 	for _, cluster := range replicationConfig.Clusters {
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: cluster,
 		})
 	}
-	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
+	replicationConfigResult := &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
 	}
@@ -677,7 +677,7 @@ func (d *HandlerImpl) mergeBadBinaries(
 		old = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	for k, v := range new {
-		v.CreatedTimeNano = createTimeNano
+		v.CreateTimeNano = createTimeNano
 		old[k] = v
 	}
 	return namespacepb.BadBinaries{

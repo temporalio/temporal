@@ -27,6 +27,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -46,8 +47,9 @@ import (
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
@@ -74,11 +76,12 @@ const (
 )
 
 const (
-	bufferSize                 = 8192
-	preambleVersion0      byte = 0x59
-	malformedMessage           = "Input was malformed"
-	chanBufferSize             = 10000
-	maxRereplicateEventID      = 999999
+	bufferSize                       = 8192
+	preambleVersion0            byte = 0x59
+	malformedMessage                 = "Input was malformed"
+	chanBufferSize                   = 10000
+	maxRereplicateEventID            = 999999
+	defaultResendContextTimeout      = 30 * time.Second
 )
 
 var (
@@ -483,7 +486,21 @@ type ClustersConfig struct {
 	TLS      auth.TLS
 }
 
-func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
+func doRereplicate(
+	ctx context.Context,
+	shardID int,
+	namespaceID string,
+	wid string,
+	rid string,
+	minID int64,
+	maxID int64,
+	startVersion int64,
+	targets []string,
+	producer messaging.Producer,
+	session *gocql.Session,
+	adminClient adminservice.AdminServiceClient,
+) {
+
 	if minID <= 0 {
 		minID = 1
 	}
@@ -508,6 +525,26 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		})
 		if err != nil {
 			ErrorAndExit("GetWorkflowExecution error", err)
+		}
+
+		versionHistories := resp.State.VersionHistories
+		if versionHistories != nil {
+			if startVersion == common.EmptyVersion {
+				ErrorAndExit("Use input file to resend NDC workflow is not support", nil)
+			}
+			if _, err := adminClient.ResendReplicationTasks(
+				ctx,
+				&adminservice.ResendReplicationTasksRequest{
+					NamespaceId:   namespaceID,
+					WorkflowId:    wid,
+					RunId:         rid,
+					RemoteCluster: targets[0],
+					StartVersion:  startVersion,
+				},
+			); err != nil {
+				ErrorAndExit("Failed to resend ndc workflow", err)
+			}
+			return
 		}
 
 		currVersion := resp.State.ReplicationState.CurrentVersion
@@ -593,8 +630,23 @@ func AdminRereplicate(c *cli.Context) {
 	target := getRequiredOption(c, FlagTargetCluster)
 	targets := []string{target}
 
-	producer := newKafkaProducer(c)
 	session := connectToCassandra(c)
+	adminClient := cFactory.AdminClient(c)
+	var startVersion int64
+	var producer messaging.Producer
+	if c.IsSet(FlagStartEventVersion) {
+		startVersion = c.Int64(FlagStartEventVersion)
+	} else {
+		startVersion = common.EmptyVersion
+		producer = newKafkaProducer(c)
+	}
+
+	contextTimeout := defaultResendContextTimeout
+	if c.GlobalIsSet(FlagContextTimeout) {
+		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
 
 	if c.IsSet(FlagInputFile) {
 		inFile := c.String(FlagInputFile)
@@ -641,7 +693,7 @@ func AdminRereplicate(c *cli.Context) {
 			}
 
 			shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-			doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
+			doRereplicate(ctx, shardID, namespaceID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
 			fmt.Printf("Done processing line %v ...\n", idx)
 		}
 		if err := scanner.Err(); err != nil {
@@ -653,9 +705,9 @@ func AdminRereplicate(c *cli.Context) {
 		rid := getRequiredOption(c, FlagRunID)
 		minID := c.Int64(FlagMinEventID)
 		maxID := c.Int64(FlagMaxEventID)
-
 		shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-		doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
+
+		doRereplicate(ctx, shardID, namespaceID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
 	}
 }
 

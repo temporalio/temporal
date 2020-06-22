@@ -207,7 +207,7 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:     true,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:   true,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: true,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:   true,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  true,
 	}
 )
 
@@ -311,6 +311,7 @@ func NewEngineWithShardContext(
 			return historyEngImpl.ReplicateEventsV2(ctx, request)
 		},
 		shard.GetService().GetPayloadSerializer(),
+		nil,
 		shard.GetLogger(),
 	)
 	historyRereplicator := xdc.NewHistoryRereplicator(
@@ -334,6 +335,7 @@ func NewEngineWithShardContext(
 		shard.GetMetricsClient(),
 		shard.GetLogger(),
 	)
+
 	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(
@@ -367,7 +369,9 @@ func (e *historyEngineImpl) Start() {
 	e.timerProcessor.Start()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC {
+	if e.replicatorProcessor != nil &&
+		(clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC ||
+			e.config.EnableKafkaReplication()) {
 		e.replicatorProcessor.Start()
 	}
 
@@ -473,7 +477,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
-			//nolint:errcheck
+			// nolint:errcheck
 			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].GetNotificationVersion() + 1)
 		},
 	)
@@ -770,7 +774,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) //nolint:errcheck
+		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, namespaceID, execution)
 		if err != nil {
@@ -823,8 +827,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
-	queryConsistencyLevel := enumspb.QUERY_CONSISTENCY_LEVEL_STRONG
-
 	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
@@ -842,32 +844,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 					},
 				},
 			}, nil
-		}
-	}
-
-	if queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL {
-		// query cannot be processed unless at least one decision task has finished
-		// if first decision task has not finished wait for up to a second for it to complete
-		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
-			if ctxWaitTime > queryFirstDecisionTaskWaitTime {
-				queryFirstDecisionTaskWaitTime = ctxWaitTime
-			}
-		}
-		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-			<-time.After(queryFirstDecisionTaskCheckInterval)
-			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-			return nil, ErrQueryWorkflowBeforeFirstDecision
 		}
 	}
 
@@ -890,16 +866,14 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// These decision tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to decider is directly through matching; in this approach queries can be
 	// dispatched to decider immediately even if there are outstanding events that came before the query. The following logic
-	// is used to determine if a query can be safely dispatched directly through matching or if given the desired consistency
-	// level must be dispatched on a decision task. There are four cases in which a query can be dispatched directly through
-	// matching safely, without violating the desired consistency level:
+	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a decision task.
+	//
+	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
 	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. the client requested eventual consistency, in this case there are no consistency requirements so dispatching directly through matching is safe
-	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
+	// 3. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		queryConsistencyLevel == enumspb.QUERY_CONSISTENCY_LEVEL_EVENTUAL ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)
@@ -1248,7 +1222,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: &workflowpb.WorkflowExecutionConfiguration{
+		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskList:                        &tasklistpb.TaskList{Name: executionInfo.TaskList},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
@@ -1346,7 +1320,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			p := &workflowpb.PendingChildExecutionInfo{
 				WorkflowId:        ch.StartedWorkflowID,
 				RunId:             ch.StartedRunID,
-				WorkflowTypName:   ch.WorkflowTypeName,
+				WorkflowTypeName:  ch.WorkflowTypeName,
 				InitiatedId:       ch.InitiatedID,
 				ParentClosePolicy: enumspb.ParentClosePolicy(ch.ParentClosePolicy),
 			}
@@ -2950,6 +2924,10 @@ func (e *historyEngineImpl) ReapplyEvents(
 	reapplyEvents []*historypb.HistoryEvent,
 ) error {
 
+	if e.config.SkipReapplicationByNamespaceId(namespaceUUID) {
+		return nil
+	}
+
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
 	if err != nil {
 		return err
@@ -2966,7 +2944,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 		currentExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			// Filter out reapply event from the same cluster
-			toReapplyEvents := make([]*historypb.HistoryEvent, len(reapplyEvents))
+			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err

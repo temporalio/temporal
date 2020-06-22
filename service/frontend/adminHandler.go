@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
 	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster/v1"
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
@@ -56,6 +55,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common/xdc"
 	"github.com/temporalio/temporal/service/history"
 )
 
@@ -73,6 +73,7 @@ type (
 		params                *resource.BootstrapParams
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
+		eventSerializder      persistence.PayloadSerializer
 	}
 )
 
@@ -80,6 +81,7 @@ var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 	adminServiceRetryPolicy = common.CreateAdminServiceRetryPolicy()
+	resendStartEventID      = int64(0)
 )
 
 // NewAdminHandler creates a gRPC handler for the workflowservice
@@ -103,17 +105,22 @@ func NewAdminHandler(
 			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
+		eventSerializder: persistence.NewPayloadSerializer(),
 	}
 }
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
 	// Start namespace replication queue cleanup
-	adh.Resource.GetNamespaceReplicationQueue().Start()
+	if adh.config.EnableCleanupReplicationTask() {
+		// If the queue does not start, we can still call stop()
+		adh.Resource.GetNamespaceReplicationQueue().Start()
+	}
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
+	// Calling stop if the queue does not start is ok
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }
 
@@ -986,6 +993,41 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, adh.error(err, scope)
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// ResendReplicationTasks requests replication task from remote cluster
+func (adh *AdminHandler) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+) (_ *adminservice.ResendReplicationTasksResponse, err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminResendReplicationTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	resender := xdc.NewNDCHistoryResender(
+		adh.GetNamespaceCache(),
+		adh.GetRemoteAdminClient(request.GetRemoteCluster()),
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err1 := adh.GetHistoryClient().ReplicateEventsV2(ctx, request)
+			return err1
+		},
+		adh.eventSerializder,
+		nil,
+		adh.GetLogger(),
+	)
+	return nil, resender.SendSingleWorkflowHistory(
+		request.GetNamespaceId(),
+		request.GetWorkflowId(),
+		request.GetRunId(),
+		resendStartEventID,
+		request.StartVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	)
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(

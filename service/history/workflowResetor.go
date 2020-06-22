@@ -1043,7 +1043,7 @@ func FindAutoResetPoint(
 	for _, p := range autoResetPoints.Points {
 		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
 		if ok && p.GetResettable() {
-			if p.GetExpiringTimeNano() > 0 && nowNano > p.GetExpiringTimeNano() {
+			if p.GetExpireTimeNano() > 0 && nowNano > p.GetExpireTimeNano() {
 				// reset point has expired and we may already deleted the history
 				continue
 			}

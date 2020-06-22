@@ -113,7 +113,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 			ShardId:                0,
 			RangeId:                1,
 			ReplicationAckLevel:    0,
-			ReplicationDLQAckLevel: map[string]int64{"test": -1},
+			ReplicationDlqAckLevel: map[string]int64{"test": -1},
 		}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
@@ -267,7 +267,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 		NextEventId:       5,
 		Version:           common.EmptyVersion,
 		ResetWorkflow:     false,
-		NewRunNDC:         false,
+		NewRunNdc:         false,
 	}
 
 	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)

@@ -94,7 +94,7 @@ message ShardInfo {
     map<string, int64> cluster_transfer_ack_level = 10;
     map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11;
     map<string, int64> cluster_replication_level = 12;
-    map<string, int64> replication_d_l_q_ack_level = 13;
+    map<string, int64> replication_dlq_ack_level = 13;
 }
 
 
@@ -342,12 +342,12 @@ message NamespaceConfig {
     string archival_bucket = 3;
     temporal.namespace.v1.BadBinaries bad_binaries = 16;
     temporal.enums.v1.ArchivalStatus history_archival_status = 18;
-    string history_archival_u_r_i = 19;
+    string history_archival_uri = 19;
     temporal.enums.v1.ArchivalStatus visibility_archival_status = 20;
-    string visibility_archival_u_r_i = 21;
+    string visibility_archival_uri = 21;
 }
 
-// ReplicationData represents mutable state information for global domains.
+// ReplicationData represents mutable state information for global namespaces.
 // This information is used by replication protocol when applying events from remote clusters
 // only used in cassandra
 message ReplicationData {

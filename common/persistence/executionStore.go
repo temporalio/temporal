@@ -762,7 +762,6 @@ func (m *executionManagerImpl) DeserializeVersionHistories(
 	}
 	return NewVersionHistoriesFromProto(versionHistories), nil
 }
-
 func (m *executionManagerImpl) DeleteWorkflowExecution(
 	request *DeleteWorkflowExecutionRequest,
 ) error {

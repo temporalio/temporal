@@ -93,7 +93,7 @@ func TestESCrossDCTestSuite(t *testing.T) {
 
 var (
 	clusterNameES              = []string{"active-es", "standby-es"}
-	clusterReplicationConfigES = []*replicationpb.ClusterReplicationConfiguration{
+	clusterReplicationConfigES = []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterNameES[0],
 		},
