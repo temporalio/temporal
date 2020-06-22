@@ -21,7 +21,6 @@
 package config
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/uber/cadence/common"
@@ -287,7 +286,7 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		TaskSchedulerQueueSize:         dc.GetIntProperty(dynamicconfig.TaskSchedulerQueueSize, 10000),
 		TaskSchedulerShardQueueSize:    dc.GetIntProperty(dynamicconfig.TaskSchedulerShardQueueSize, 200),
 		TaskSchedulerDispatcherCount:   dc.GetIntProperty(dynamicconfig.TaskSchedulerDispatcherCount, 10),
-		TaskSchedulerRoundRobinWeights: dc.GetMapProperty(dynamicconfig.TaskSchedulerRoundRobinWeights, convertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
+		TaskSchedulerRoundRobinWeights: dc.GetMapProperty(dynamicconfig.TaskSchedulerRoundRobinWeights, common.ConvertIntMapToDynamicConfigMapProperty(DefaultTaskPriorityWeight)),
 
 		TimerTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
@@ -418,14 +417,4 @@ func NewForTest() *Config {
 // GetShardID return the corresponding shard ID for a given workflow ID
 func (config *Config) GetShardID(workflowID string) int {
 	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
-}
-
-func convertWeightsToDynamicConfigValue(
-	weights map[int]int,
-) map[string]interface{} {
-	weightsForDC := make(map[string]interface{})
-	for priority, weight := range weights {
-		weightsForDC[strconv.Itoa(priority)] = weight
-	}
-	return weightsForDC
 }
