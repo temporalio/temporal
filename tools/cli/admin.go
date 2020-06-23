@@ -756,11 +756,8 @@ func newAdminTaskListCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a tasklist",
-			Flags: append(
-				append(
-					append(
-						getDBFlags(), flagsForExecution...),
-					flagsForPagination...),
+			Flags: append(append(append(getDBFlags(), flagsForExecution...),
+				flagsForPagination...),
 				cli.StringFlag{
 					Name:  FlagNamespaceID,
 					Usage: "Namespace Id",
