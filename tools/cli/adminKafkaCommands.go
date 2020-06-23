@@ -530,7 +530,7 @@ func doRereplicate(
 		versionHistories := resp.State.VersionHistories
 		if versionHistories != nil {
 			if startVersion == nil {
-				ErrorAndExit("Use input file to resend NDC workflow is not support", nil)
+				ErrorAndExit("Start event version is require for NDC enabled workflow", nil)
 			}
 			if err := adminClient.ResendReplicationTasks(
 				ctx,
