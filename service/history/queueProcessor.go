@@ -59,6 +59,7 @@ type (
 		MaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
 		EnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 		MetricScope                         int
+		QueueType                           task.QueueType
 	}
 
 	queueTaskInitializer func(task.Info) task.Task
@@ -72,7 +73,7 @@ type (
 		logger               log.Logger
 		metricsScope         metrics.Scope
 		rateLimiter          quotas.Limiter // Read rate limiter
-		ackMgr               queueAckMgr
+		ackMgr               *queueAckMgrImpl
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   task.Processor
 		redispatchQueue      collection.Queue
@@ -80,7 +81,9 @@ type (
 
 		lastPollTime time.Time
 
-		notifyCh   chan struct{}
+		notifyCh           chan struct{}
+		redispatchNotifyCh chan struct{}
+
 		status     int32
 		shutdownWG sync.WaitGroup
 		shutdownCh chan struct{}
@@ -99,10 +102,10 @@ func newQueueProcessorBase(
 	options *QueueProcessorOptions,
 	processor processor,
 	queueTaskProcessor task.Processor,
-	queueAckMgr queueAckMgr,
-	redispatchQueue collection.Queue,
+	queueAckMgr *queueAckMgrImpl,
 	executionCache *execution.Cache,
-	queueTaskInitializer queueTaskInitializer,
+	taskFilter task.Filter,
+	taskExecutor task.Executor,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *queueProcessorBase {
@@ -127,17 +130,37 @@ func newQueueProcessorBase(
 				return float64(options.MaxPollRPS())
 			},
 		),
-		status:               common.DaemonStatusInitialized,
-		notifyCh:             make(chan struct{}, 1),
-		shutdownCh:           make(chan struct{}),
-		logger:               logger,
-		metricsScope:         metricsScope,
-		ackMgr:               queueAckMgr,
-		lastPollTime:         time.Time{},
-		taskProcessor:        taskProcessor,
-		queueTaskProcessor:   queueTaskProcessor,
-		redispatchQueue:      redispatchQueue,
-		queueTaskInitializer: queueTaskInitializer,
+		status:             common.DaemonStatusInitialized,
+		redispatchNotifyCh: make(chan struct{}, 1),
+		notifyCh:           make(chan struct{}, 1),
+		shutdownCh:         make(chan struct{}),
+		logger:             logger,
+		metricsScope:       metricsScope,
+		ackMgr:             queueAckMgr,
+		lastPollTime:       time.Time{},
+		taskProcessor:      taskProcessor,
+		queueTaskProcessor: queueTaskProcessor,
+		redispatchQueue:    collection.NewConcurrentQueue(),
+	}
+
+	if options.QueueType != task.QueueTypeReplication {
+		p.queueTaskInitializer = func(taskInfo task.Info) task.Task {
+			return task.NewTransferTask(
+				shard,
+				taskInfo,
+				options.QueueType,
+				shard.GetMetricsClient().Scope(
+					getTransferTaskMetricsScope(taskInfo.GetTaskType(), options.QueueType == task.QueueTypeActiveTransfer),
+				),
+				initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+				taskFilter,
+				taskExecutor,
+				p.redispatchSingleTask,
+				p.timeSource,
+				options.MaxRetryCount,
+				p.ackMgr,
+			)
+		}
 	}
 
 	return p
@@ -154,9 +177,15 @@ func (p *queueProcessorBase) Start() {
 	if p.taskProcessor != nil {
 		p.taskProcessor.start()
 	}
-	p.shutdownWG.Add(1)
 	p.notifyNewTask()
+
+	p.shutdownWG.Add(1)
 	go p.processorPump()
+
+	if p.isPriorityTaskProcessorEnabled() {
+		p.shutdownWG.Add(1)
+		go p.redispatchLoop()
+	}
 }
 
 func (p *queueProcessorBase) Stop() {
@@ -187,6 +216,18 @@ func (p *queueProcessorBase) notifyNewTask() {
 	}
 }
 
+func (p *queueProcessorBase) redispatchSingleTask(task task.Task) {
+	p.redispatchQueue.Add(task)
+	p.notifyRedispatch()
+}
+
+func (p *queueProcessorBase) notifyRedispatch() {
+	select {
+	case p.redispatchNotifyCh <- struct{}{}:
+	default:
+	}
+}
+
 func (p *queueProcessorBase) processorPump() {
 	defer p.shutdownWG.Done()
 
@@ -202,19 +243,13 @@ func (p *queueProcessorBase) processorPump() {
 	))
 	defer updateAckTimer.Stop()
 
-	redispatchTimer := time.NewTimer(backoff.JitDuration(
-		p.options.RedispatchInterval(),
-		p.options.RedispatchIntervalJitterCoefficient(),
-	))
-	defer redispatchTimer.Stop()
-
 processorPumpLoop:
 	for {
 		select {
 		case <-p.shutdownCh:
 			break processorPumpLoop
 		case <-p.ackMgr.getFinishedChan():
-			// use a separate gorouting since the caller hold the shutdownWG
+			// use a separate goroutine since the caller hold the shutdownWG
 			go p.Stop()
 		case <-p.notifyCh:
 			if !p.isPriorityTaskProcessorEnabled() || p.redispatchQueue.Len() <= p.options.MaxRedispatchQueueSize() {
@@ -244,16 +279,50 @@ processorPumpLoop:
 				go p.Stop()
 				break processorPumpLoop
 			}
-		case <-redispatchTimer.C:
-			redispatchTimer.Reset(backoff.JitDuration(
-				p.options.RedispatchInterval(),
-				p.options.RedispatchIntervalJitterCoefficient(),
-			))
-			p.redispatchTasks()
 		}
 	}
 
 	p.logger.Info("Queue processor pump shut down.")
+}
+
+func (p *queueProcessorBase) redispatchLoop() {
+	defer p.shutdownWG.Done()
+
+redispatchTaskLoop:
+	for {
+		select {
+		case <-p.shutdownCh:
+			break redispatchTaskLoop
+		case <-p.redispatchNotifyCh:
+			// TODO: revisit the cpu usage and gc activity caused by
+			// creating timers and reading dynamicconfig if it becomes a problem.
+			backoffTimer := time.NewTimer(backoff.JitDuration(
+				p.options.RedispatchInterval(),
+				p.options.RedispatchIntervalJitterCoefficient(),
+			))
+			select {
+			case <-p.shutdownCh:
+				backoffTimer.Stop()
+				break redispatchTaskLoop
+			case <-backoffTimer.C:
+			}
+			backoffTimer.Stop()
+
+			// drain redispatchNotifyCh again
+			select {
+			case <-p.redispatchNotifyCh:
+			default:
+			}
+
+			p.redispatchTasks()
+
+			if !p.redispatchQueue.IsEmpty() {
+				p.notifyRedispatch()
+			}
+		}
+	}
+
+	p.logger.Info("Queue processor task redispatch loop shut down.")
 }
 
 func (p *queueProcessorBase) processBatch() {
@@ -322,7 +391,7 @@ func (p *queueProcessorBase) submitTask(
 		}
 	}
 	if err != nil || !submitted {
-		p.redispatchQueue.Add(queueTask)
+		p.redispatchSingleTask(queueTask)
 	}
 
 	return true
