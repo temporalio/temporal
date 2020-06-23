@@ -424,6 +424,10 @@ clusters:
 					Name:  FlagDomainID,
 					Usage: "DomainID",
 				},
+				cli.StringFlag{
+					Name:  FlagStartEventVersion,
+					Usage: "Workflow start event version",
+				},
 				// kafka
 				cli.StringFlag{
 					Name:  FlagCluster,
