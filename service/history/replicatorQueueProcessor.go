@@ -25,6 +25,7 @@ package history
 import (
 	ctx "context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -461,21 +462,22 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		}
 	}
 
-	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsClient.RecordTimer(
+	replicationScope := p.metricsClient.Scope(
 		metrics.ReplicatorQueueProcessorScope,
+		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
+	)
+
+	replicationScope.RecordTimer(
 		metrics.ReplicationTasksLag,
 		time.Duration(p.shard.GetTransferMaxReadLevel()-readLevel),
 	)
 
-	p.metricsClient.RecordTimer(
-		metrics.ReplicatorQueueProcessorScope,
+	replicationScope.RecordTimer(
 		metrics.ReplicationTasksFetched,
 		time.Duration(len(taskInfoList)),
 	)
 
-	p.metricsClient.RecordTimer(
-		metrics.ReplicatorQueueProcessorScope,
+	replicationScope.RecordTimer(
 		metrics.ReplicationTasksReturned,
 		time.Duration(len(replicationTasks)),
 	)

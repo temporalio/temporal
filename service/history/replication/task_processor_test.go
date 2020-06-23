@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/shard"
@@ -106,6 +107,7 @@ func (s *taskProcessorSuite) SetupTest() {
 
 	s.mockEngine = engine.NewMockEngine(s.controller)
 	s.config = config.NewForTest()
+	s.config.ReplicationTaskProcessorNoTaskRetryWait = dynamicconfig.GetDurationPropertyFnFilteredByTShardID(1 * time.Millisecond)
 	s.historyClient = historyservicetest.NewMockClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.requestChan = make(chan *request, 10)
@@ -129,6 +131,16 @@ func (s *taskProcessorSuite) SetupTest() {
 func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
+}
+
+func (s *taskProcessorSuite) TestProcessResponse_NoTask() {
+	response := &replicator.ReplicationMessages{
+		LastRetrievedMessageId: common.Int64Ptr(100),
+	}
+
+	s.taskProcessor.processResponse(response)
+	s.Equal(int64(100), s.taskProcessor.lastProcessedMessageID)
+	s.Equal(int64(100), s.taskProcessor.lastRetrievedMessageID)
 }
 
 func (s *taskProcessorSuite) TestSendFetchMessageRequest() {
