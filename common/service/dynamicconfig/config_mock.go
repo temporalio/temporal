@@ -69,6 +69,11 @@ func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domai
 	return func(domain string, taskList string, taskType int) time.Duration { return value }
 }
 
+// GetDurationPropertyFnFilteredByTShardID returns value as DurationPropertyFnWithTaskListInfoFilters
+func GetDurationPropertyFnFilteredByTShardID(value time.Duration) func(shardID int) time.Duration {
+	return func(shardID int) time.Duration { return value }
+}
+
 // GetStringPropertyFn returns value as StringPropertyFn
 func GetStringPropertyFn(value string) func(opts ...FilterOption) string {
 	return func(...FilterOption) string { return value }

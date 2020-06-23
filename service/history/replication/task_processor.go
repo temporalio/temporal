@@ -133,7 +133,7 @@ func NewTaskProcessor(
 		dlqRetryPolicy:         dlqRetryPolicy,
 		noTaskRetrier:          noTaskRetrier,
 		requestChan:            taskFetcher.GetRequestChan(),
-		syncShardChan:          make(chan *r.SyncShardStatus),
+		syncShardChan:          make(chan *r.SyncShardStatus, 1),
 		done:                   make(chan struct{}),
 		lastProcessedMessageID: common.EmptyMessageID,
 		lastRetrievedMessageID: common.EmptyMessageID,
@@ -247,7 +247,7 @@ func (p *taskProcessorImpl) cleanupAckedReplicationTasks() error {
 		}
 	}
 
-	p.logger.Info("Cleaning up replication task queue.", tag.ReadLevel(minAckLevel))
+	p.logger.Debug("Cleaning up replication task queue.", tag.ReadLevel(minAckLevel))
 	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
 	p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope,
 		metrics.TargetClusterTag(p.currentCluster),
@@ -278,6 +278,9 @@ func (p *taskProcessorImpl) sendFetchMessageRequest() <-chan *r.ReplicationMessa
 
 func (p *taskProcessorImpl) processResponse(response *r.ReplicationMessages) {
 
+	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
+	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
+
 	p.syncShardChan <- response.GetSyncShardStatus()
 	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
 	// we will receive replication tasks but hasMore is false (meaning that we are always catching up).
@@ -295,9 +298,6 @@ func (p *taskProcessorImpl) processResponse(response *r.ReplicationMessages) {
 			return
 		}
 	}
-
-	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
-	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
 	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	scope.UpdateGauge(metrics.LastRetrievedMessageID, float64(p.lastRetrievedMessageID))
 	p.noTaskRetrier.Reset()
