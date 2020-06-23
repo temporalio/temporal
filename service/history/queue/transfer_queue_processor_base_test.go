@@ -181,7 +181,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_FullRead()
 		),
 	}
 	taskInitializer := func(taskInfo task.Info) task.Task {
-		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, s.metricsScope, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
+		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
 	}
 	updateMaxReadLevel := func() task.Key {
 		return newTransferTaskKey(10000)
@@ -249,7 +249,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_PartialRea
 		),
 	}
 	taskInitializer := func(taskInfo task.Info) task.Task {
-		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, s.metricsScope, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
+		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
 	}
 	updateMaxReadLevel := func() task.Key {
 		return shardMaxLevel
@@ -316,7 +316,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_WithNextPage() {
 		),
 	}
 	taskInitializer := func(taskInfo task.Info) task.Task {
-		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, s.metricsScope, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
+		return task.NewTransferTask(s.mockShard, taskInfo, task.QueueTypeActiveTransfer, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil)
 	}
 	updateMaxReadLevel := func() task.Key {
 		return newTransferTaskKey(10000)

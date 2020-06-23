@@ -448,13 +448,12 @@ func newTransferQueueActiveProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeActiveTransfer,
-			shard.GetMetricsClient().Scope(
-				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
-			),
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TransferTaskMaxRetryCount,
 			nil,
@@ -530,13 +529,13 @@ func newTransferQueueStandbyProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeStandbyTransfer,
-			shard.GetMetricsClient().Scope(
-				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
-			),
+
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TransferTaskMaxRetryCount,
 			nil,
@@ -630,13 +629,12 @@ func newTransferQueueFailoverProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeActiveTransfer,
-			shard.GetMetricsClient().Scope(
-				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
-			),
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TransferTaskMaxRetryCount,
 			nil,

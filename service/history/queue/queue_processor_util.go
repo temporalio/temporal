@@ -105,20 +105,20 @@ func RedispatchTasks(
 		queueTask := redispatchQueue.Remove().(task.Task)
 		submitted, err := taskProcessor.TrySubmit(queueTask)
 		if err != nil {
-			// the only reason error will be returned here is because
-			// task processor has already shutdown. Just return in this case.
-			logger.Error("failed to redispatch task", tag.Error(err))
-			return
-		}
-		if !submitted {
-			// failed to submit, enqueue again
-			redispatchQueue.Add(queueTask)
+			select {
+			case <-shutdownCh:
+				// if error is due to shard shutdown
+				return
+			default:
+				// otherwise it might be error from domain cache etc, add
+				// the task to redispatch queue so that it can be retried
+				logger.Error("failed to redispatch task", tag.Error(err))
+			}
 		}
 
-		select {
-		case <-shutdownCh:
-			return
-		default:
+		if err != nil || !submitted {
+			// failed to submit, enqueue again
+			redispatchQueue.Add(queueTask)
 		}
 	}
 }

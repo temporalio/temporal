@@ -28,7 +28,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -89,15 +88,15 @@ type (
 	timerTask struct {
 		*taskBase
 
-		ackMgr          TimerQueueAckMgr
-		redispatchQueue collection.Queue
+		ackMgr       TimerQueueAckMgr
+		redispatchFn func(task Task)
 	}
 
 	transferTask struct {
 		*taskBase
 
-		ackMgr          QueueAckMgr
-		redispatchQueue collection.Queue
+		ackMgr       QueueAckMgr
+		redispatchFn func(task Task)
 	}
 )
 
@@ -106,11 +105,10 @@ func NewTimerTask(
 	shard shard.Context,
 	taskInfo Info,
 	queueType QueueType,
-	scope metrics.Scope,
 	logger log.Logger,
 	taskFilter Filter,
 	taskExecutor Executor,
-	redispatchQueue collection.Queue,
+	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
 	ackMgr TimerQueueAckMgr,
@@ -120,15 +118,17 @@ func NewTimerTask(
 			shard,
 			taskInfo,
 			queueType,
-			scope,
+			shard.GetMetricsClient().Scope(
+				GetTimerTaskMetricScope(taskInfo.GetTaskType(), queueType == QueueTypeActiveTimer),
+			),
 			logger,
 			taskFilter,
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
 		),
-		ackMgr:          ackMgr,
-		redispatchQueue: redispatchQueue,
+		ackMgr:       ackMgr,
+		redispatchFn: redispatchFn,
 	}
 }
 
@@ -137,11 +137,10 @@ func NewTransferTask(
 	shard shard.Context,
 	taskInfo Info,
 	queueType QueueType,
-	scope metrics.Scope,
 	logger log.Logger,
 	taskFilter Filter,
 	taskExecutor Executor,
-	redispatchQueue collection.Queue,
+	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
 	ackMgr QueueAckMgr,
@@ -151,15 +150,17 @@ func NewTransferTask(
 			shard,
 			taskInfo,
 			queueType,
-			scope,
+			shard.GetMetricsClient().Scope(
+				GetTransferTaskMetricsScope(taskInfo.GetTaskType(), queueType == QueueTypeActiveTransfer),
+			),
 			logger,
 			taskFilter,
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
 		),
-		ackMgr:          ackMgr,
-		redispatchQueue: redispatchQueue,
+		ackMgr:       ackMgr,
+		redispatchFn: redispatchFn,
 	}
 }
 
@@ -208,7 +209,7 @@ func (t *timerTask) Nack() {
 
 	// don't move redispatchQueue to taskBase as we need to
 	// redispatch timeQueueTask, not taskBase
-	t.redispatchQueue.Add(t)
+	t.redispatchFn(t)
 }
 
 func (t *transferTask) Ack() {
@@ -224,7 +225,7 @@ func (t *transferTask) Nack() {
 
 	// don't move redispatchQueue to taskBase as we need to
 	// redispatch transferTask, not taskBase
-	t.redispatchQueue.Add(t)
+	t.redispatchFn(t)
 }
 
 func (t *taskBase) Execute() error {

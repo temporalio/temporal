@@ -22,7 +22,6 @@ package history
 
 import (
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -78,6 +77,7 @@ func newTransferQueueStandbyProcessor(
 		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
+		QueueType:                           task.QueueTypeStandbyTransfer,
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
@@ -134,26 +134,6 @@ func newTransferQueueStandbyProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	transferQueueTaskInitializer := func(taskInfo task.Info) task.Task {
-		return task.NewTransferTask(
-			shard,
-			taskInfo,
-			task.QueueTypeStandbyTransfer,
-			historyService.metricsClient.Scope(
-				task.GetTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
-			),
-			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			transferTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		clusterName,
 		shard,
@@ -161,16 +141,15 @@ func newTransferQueueStandbyProcessor(
 		processor,
 		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyService.executionCache,
-		transferQueueTaskInitializer,
+		transferTaskFilter,
+		processor.taskExecutor,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
 
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
-
 	return processor
 }
 

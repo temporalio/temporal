@@ -97,6 +97,7 @@ func newReplicatorQueueProcessor(
 		MaxRedispatchQueueSize:              config.ReplicatorProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.ReplicatorProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.ReplicatorQueueProcessorScope,
+		QueueType:                           task.QueueTypeReplication,
 	}
 
 	logger = logger.WithTags(tag.ComponentReplicatorQueue)
@@ -132,8 +133,8 @@ func newReplicatorQueueProcessor(
 		processor,
 		nil, // replicator queue processor will soon be deprecated and won't use priority task processor
 		queueAckMgr,
-		nil, // replicator queue processor will soon be deprecated and won't use redispatch queue
 		executionCache,
+		replicationTaskFilter,
 		nil, // there's no queueTask implementation for replication task
 		logger,
 		shard.GetMetricsClient().Scope(metrics.ReplicatorQueueProcessorScope),

@@ -84,7 +84,7 @@ var (
 
 // NewWorkflowResetor create workflow resetor.
 // Deprecated, use WorkflowResetter instead when NDC is applies to all workflows
-func NewWorkflowResetor(shard shard.Context, executionCache *execution.Cache, logger log.Logger) *workflowResetorImpl {
+func NewWorkflowResetor(shard shard.Context, executionCache *execution.Cache, logger log.Logger) WorkflowResetor {
 	return &workflowResetorImpl{
 		shard:          shard,
 		historyV2Mgr:   shard.GetHistoryManager(),

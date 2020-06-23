@@ -421,13 +421,12 @@ func newTimerQueueActiveProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeActiveTimer,
-			shard.GetMetricsClient().Scope(
-				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), true),
-			),
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
 			nil,
@@ -504,13 +503,12 @@ func newTimerQueueStandbyProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeStandbyTimer,
-			shard.GetMetricsClient().Scope(
-				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), false),
-			),
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
 			nil,
@@ -609,13 +607,12 @@ func newTimerQueueFailoverProcessor(
 			shard,
 			taskInfo,
 			task.QueueTypeActiveTimer,
-			shard.GetMetricsClient().Scope(
-				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), true),
-			),
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			redispatchQueue,
+			func(task task.Task) {
+				redispatchQueue.Add(task)
+			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
 			nil,

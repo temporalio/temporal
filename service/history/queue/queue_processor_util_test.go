@@ -81,15 +81,20 @@ func (s *queueProcessorUtilSuite) TestRedispatchTask_ProcessorShutDown() {
 		redispatchQueue.Add(mockTask)
 	}
 
+	shutDownCh := make(chan struct{})
+
 	successfullyRedispatched := 3
 	var calls []*gomock.Call
-	for i := 0; i != successfullyRedispatched; i++ {
+	for i := 0; i != successfullyRedispatched-1; i++ {
 		calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(true, nil))
 	}
+	calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ interface{}) (bool, error) {
+		close(shutDownCh)
+		return true, nil
+	}))
 	calls = append(calls, s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("processor shutdown")))
 	gomock.InOrder(calls...)
 
-	shutDownCh := make(chan struct{})
 	RedispatchTasks(
 		redispatchQueue,
 		s.mockTaskProcessor,

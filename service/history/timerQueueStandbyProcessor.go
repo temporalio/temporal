@@ -23,7 +23,6 @@ package history
 import (
 	"time"
 
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -89,8 +88,6 @@ func newTimerQueueStandbyProcessor(
 		clusterName,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
 	processor := &timerQueueStandbyProcessorImpl{
 		shard:           shard,
 		timerTaskFilter: timerTaskFilter,
@@ -110,24 +107,6 @@ func newTimerQueueStandbyProcessor(
 		),
 	}
 
-	timerQueueTaskInitializer := func(taskInfo task.Info) task.Task {
-		return task.NewTimerTask(
-			shard,
-			taskInfo,
-			task.QueueTypeStandbyTimer,
-			historyService.metricsClient.Scope(
-				task.GetTimerTaskMetricScope(taskInfo.GetTaskType(), false),
-			),
-			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			timerTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			shard.GetConfig().TimerTaskMaxRetryCount,
-			timerQueueAckMgr,
-		)
-	}
-
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
@@ -135,8 +114,8 @@ func newTimerQueueStandbyProcessor(
 		processor,
 		queueTaskProcessor,
 		timerQueueAckMgr,
-		redispatchQueue,
-		timerQueueTaskInitializer,
+		timerTaskFilter,
+		processor.taskExecutor,
 		timerGate,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,
