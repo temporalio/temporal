@@ -124,6 +124,7 @@ func newTimerQueueProcessorBase(
 		lastPollTime:       time.Time{},
 		taskProcessor:      taskProcessor,
 		queueTaskProcessor: queueTaskProcessor,
+		redispatchQueue:    collection.NewConcurrentQueue(),
 		redispatchNotifyCh: make(chan struct{}, 1),
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
