@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
@@ -158,7 +159,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestTrySubmit() {
 }
 
 func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError() {
-	weights, err := convertWeightsFromDynamicConfig(testSchedulerWeights())
+	weights, err := common.ConvertDynamicConfigMapPropertyToIntMap(testSchedulerWeights())
 	s.NoError(err)
 
 	numPriorities := len(weights)
