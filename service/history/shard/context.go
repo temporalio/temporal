@@ -496,6 +496,7 @@ Create_Loop:
 			switch err.(type) {
 			case *shared.WorkflowExecutionAlreadyStartedError,
 				*persistence.WorkflowExecutionAlreadyStartedError,
+				*persistence.CurrentWorkflowConditionFailedError,
 				*shared.ServiceBusyError,
 				*persistence.TimeoutError,
 				*shared.LimitExceededError:
