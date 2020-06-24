@@ -723,8 +723,8 @@ func (e *historyEngineImpl) updateEntityNotExistsErrorOnPassiveCluster(err error
 		if namespaceCacheErr != nil {
 			return err // if could not access namespace cache simply return original error
 		}
-		namespaceNotActiveErr := namespaceCache.GetNamespaceNotActiveErr().(*serviceerror.NamespaceNotActive)
-		if namespaceNotActiveErr != nil {
+
+		if namespaceNotActiveErr, ok := namespaceCache.GetNamespaceNotActiveErr().(*serviceerror.NamespaceNotActive); ok && namespaceNotActiveErr != nil {
 			updatedErr := serviceerror.NewNotFound("Workflow execution not found in non-active cluster")
 			updatedErr.ActiveCluster = namespaceNotActiveErr.ActiveCluster
 			updatedErr.CurrentCluster = namespaceNotActiveErr.CurrentCluster
