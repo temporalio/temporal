@@ -436,6 +436,11 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
 	}
 
+	replicationScope := p.metricsClient.Scope(
+		metrics.ReplicatorQueueProcessorScope,
+		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
+	)
+	taskGeneratedTimer := replicationScope.StartTimer(metrics.ReplicatorLatency)
 	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
 	if err != nil {
 		return nil, err
@@ -463,10 +468,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		}
 	}
 
-	replicationScope := p.metricsClient.Scope(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
-	)
+	taskGeneratedTimer.Stop()
 
 	replicationScope.RecordTimer(
 		metrics.ReplicationTasksLag,
