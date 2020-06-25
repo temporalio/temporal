@@ -242,6 +242,18 @@ var flagsForExecution = []cli.Flag{
 	},
 }
 
+var flagsForPagination = []cli.Flag{
+	cli.BoolFlag{
+		Name:  FlagMoreWithAlias,
+		Usage: "List more pages, default is to list one page of default page size 10",
+	},
+	cli.IntFlag{
+		Name:  FlagPageSizeWithAlias,
+		Value: 10,
+		Usage: "Result page size",
+	},
+}
+
 func getFlagsForShow() []cli.Flag {
 	return append(flagsForExecution, getFlagsForShowID()...)
 }
@@ -405,18 +417,7 @@ func getCommonFlagsForVisibility() []cli.Flag {
 }
 
 func getFlagsForList() []cli.Flag {
-	flagsForList := []cli.Flag{
-		cli.BoolFlag{
-			Name:  FlagMoreWithAlias,
-			Usage: "List more pages, default is to list one page of default page size 10",
-		},
-		cli.IntFlag{
-			Name:  FlagPageSizeWithAlias,
-			Value: 10,
-			Usage: "Result page size",
-		},
-	}
-	flagsForList = append(getFlagsForListAll(), flagsForList...)
+	flagsForList := append(getFlagsForListAll(), flagsForPagination...)
 	return flagsForList
 }
 
