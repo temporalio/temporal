@@ -175,7 +175,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			Usage: "List tasks for given shard Id and task type",
 			Flags: append(append(
 				getDBFlags(),
-				getFlagsForList()...),
+				flagsForPagination...),
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Value: "active",
@@ -756,7 +756,8 @@ func newAdminTaskListCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a tasklist",
-			Flags: append(getDBFlags(),
+			Flags: append(append(append(getDBFlags(), flagsForExecution...),
+				flagsForPagination...),
 				cli.StringFlag{
 					Name:  FlagNamespaceID,
 					Usage: "Namespace Id",

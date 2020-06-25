@@ -127,6 +127,8 @@ func AdminListTaskListTasks(c *cli.Context) {
 	}
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
+	workflowID := c.String(FlagWorkflowID)
+	runID := c.String(FlagRunID)
 
 	pFactory := CreatePersistenceFactory(c)
 	taskManager, err := pFactory.NewTaskManager()
@@ -135,9 +137,35 @@ func AdminListTaskListTasks(c *cli.Context) {
 	}
 
 	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskList: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
-	tasks, err := taskManager.GetTasks(req)
-	if err != nil {
-		ErrorAndExit("Failed to get Tasks", err)
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		response, err := taskManager.GetTasks(req)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		tasks := response.Tasks
+		if workflowID != "" {
+			filteredTasks := tasks[:0]
+
+			for _, task := range tasks {
+				if task.Data.WorkflowId != workflowID {
+					continue
+				}
+				if runID != "" && task.Data.RunId != runID {
+					continue
+				}
+				filteredTasks = append(filteredTasks, task)
+			}
+			
+			tasks = filteredTasks
+		}
+
+		var items []interface{}
+		for _, task := range tasks {
+			items = append(items, task)
+		}
+		return items, nil, nil
 	}
-	prettyPrintJSONObject(tasks)
+
+	paginate(c, paginationFunc)
 }
