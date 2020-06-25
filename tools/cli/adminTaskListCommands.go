@@ -145,18 +145,19 @@ func AdminListTaskListTasks(c *cli.Context) {
 
 		tasks := response.Tasks
 		if workflowID != "" {
-			all := tasks
-			tasks = tasks[:0]
+			filteredTasks := tasks[:0]
 
-			for _, task := range all {
+			for _, task := range tasks {
 				if task.Data.WorkflowId != workflowID {
 					continue
 				}
 				if runID != "" && task.Data.RunId != runID {
 					continue
 				}
-				tasks = append(tasks, task)
+				filteredTasks = append(filteredTasks, task)
 			}
+			
+			tasks = filteredTasks
 		}
 
 		var items []interface{}
