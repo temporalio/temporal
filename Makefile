@@ -6,7 +6,7 @@ install: update-tools proto bins
 all: proto check bins test
 
 # Rebuild binaries.
-bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
+bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 
 # Delete all build artefacts.
 clean: clean-bins clean-proto clean-test-results
@@ -167,7 +167,6 @@ clean-bins:
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
-	@rm -f temporal-canary
 
 temporal-server: proto
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -184,10 +183,6 @@ temporal-cassandra-tool: proto
 temporal-sql-tool: proto
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
-
-temporal-canary: proto
-	@printf $(COLOR) "Build temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o temporal-canary cmd/canary/main.go
 
 ##### Checks #####
 copyright:
@@ -367,9 +362,6 @@ start-cdc-standby: temporal-server
 
 start-cdc-other: temporal-server
 	./temporal-server --zone other start
-
-start-canary: temporal-canary
-	./temporal-canary start
 
 ##### Auxilary #####
 go-generate:
