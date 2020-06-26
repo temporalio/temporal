@@ -44,7 +44,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -190,7 +189,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(enumspb.TIMEOUT_TYPE_HEARTBEAT)
+	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -220,7 +219,7 @@ Loop:
 			break Loop
 		}
 
-		timeoutFailure := failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType))
+		timeoutFailure := failure.NewTimeoutFailure(timerSequenceID.timerType)
 		var retryStatus enumspb.RetryStatus
 		if retryStatus, err = mutableState.RetryActivity(
 			activityInfo,
@@ -298,12 +297,12 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(enumspb.TimeoutType(task.TimeoutType)) {
-	case timerTypeStartToClose:
+	switch task.TimeoutType {
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
 			metrics.TimerActiveTaskDecisionTimeoutScope,
-			timerTypeStartToClose,
+			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddDecisionTaskTimedOutEvent(
 			decision.ScheduleID,
@@ -313,7 +312,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 		}
 		scheduleDecision = true
 
-	case timerTypeScheduleToStart:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		if decision.StartedID != common.EmptyEventID {
 			// decision has already started
 			return nil
@@ -322,7 +321,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
 			metrics.TimerActiveTaskDecisionTimeoutScope,
-			timerTypeScheduleToStart,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
 		_, err := mutableState.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 		if err != nil {
@@ -354,9 +353,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		return nil
 	}
 
-	if task.TimeoutType == persistence.WorkflowBackoffTimeoutTypeRetry {
+	if task.WorkflowBackoffType == enumsgenpb.WORKFLOW_BACKOFF_TYPE_RETRY {
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowRetryBackoffTimerCount)
-	} else {
+	} else if task.WorkflowBackoffType == enumsgenpb.WORKFLOW_BACKOFF_TYPE_CRON {
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
 	}
 
@@ -596,7 +595,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	namespaceID string,
 	scope int,
-	timerType timerType,
+	timerType enumspb.TimeoutType,
 ) {
 
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
@@ -605,13 +604,13 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	}
 	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespaceEntry.GetInfo().Name))
 	switch timerType {
-	case timerTypeScheduleToStart:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		metricsScope.IncCounter(metrics.ScheduleToStartTimeoutCounter)
-	case timerTypeScheduleToClose:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 		metricsScope.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
-	case timerTypeStartToClose:
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		metricsScope.IncCounter(metrics.StartToCloseTimeoutCounter)
-	case timerTypeHeartbeat:
+	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metricsScope.IncCounter(metrics.HeartbeatTimeoutCounter)
 	}
 }

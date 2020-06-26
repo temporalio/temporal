@@ -2414,7 +2414,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 			tag.Bool(ok),
 			tag.WorkflowScheduleID(ai.ScheduleID),
 			tag.WorkflowStartedID(ai.StartedID),
-			tag.WorkflowTimeoutType(int64(timeoutType)))
+			tag.WorkflowTimeoutType(timeoutType))
 		return nil, e.createInternalServerError(opTag)
 	}
 

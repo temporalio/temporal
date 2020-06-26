@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/gogo/protobuf/types"
@@ -192,7 +194,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskId:              int64(59),
 				TaskType:            1,
-				TimeoutType:         2,
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				EventId:             int64(28),
 				ScheduleAttempt:     0,
 			},
@@ -229,7 +231,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskId:              int64(59),
 				TaskType:            1,
-				TimeoutType:         2,
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				EventId:             int64(28),
 				ScheduleAttempt:     0,
 			},
@@ -264,7 +266,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -307,7 +309,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 		Version:             int64(79),
@@ -353,7 +355,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -400,7 +402,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 		Version:             int64(79),
@@ -434,7 +436,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -445,7 +447,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskId:              timer1.GetTaskId() + 1,
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(29),
 		ScheduleAttempt:     0,
 	}
@@ -456,7 +458,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskId:              timer2.GetTaskId() + 1,
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(30),
 		ScheduleAttempt:     0,
 	}
@@ -513,7 +515,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 		VisibilityTimestamp: protoLevel,
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 		Version:             int64(79),
@@ -638,7 +640,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -650,7 +652,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(60),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -742,7 +744,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(28),
 		ScheduleAttempt:     0,
 	}
@@ -753,7 +755,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskId:              timer1.GetTaskId() + 1,
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(29),
 		ScheduleAttempt:     0,
 	}
@@ -764,7 +766,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskId:              timer2.GetTaskId() + 1,
 		TaskType:            1,
-		TimeoutType:         2,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:             int64(30),
 		ScheduleAttempt:     0,
 	}

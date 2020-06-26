@@ -182,7 +182,7 @@ func initializeLoggerForTask(
 	switch task := task.(type) {
 	case *persistenceblobs.TimerTaskInfo:
 		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+			tag.WorkflowTimeoutType(task.TimeoutType),
 		)
 	case *persistenceblobs.TransferTaskInfo:
 		// noop

@@ -121,12 +121,13 @@ message TimerTaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     server.enums.v1.TaskType task_type = 4;
-    int32 timeout_type = 5;
-    int64 version = 6;
-    int64 schedule_attempt = 7;
-    int64 event_id = 8;
-    int64 task_id = 9;
-    google.protobuf.Timestamp visibility_timestamp = 10;
+    temporal.enums.v1.TimeoutType timeout_type = 5;
+    server.enums.v1.WorkflowBackoffType workflow_backoff_type = 6;
+    int64 version = 7;
+    int64 schedule_attempt = 8;
+    int64 event_id = 9;
+    int64 task_id = 10;
+    google.protobuf.Timestamp visibility_timestamp = 11;
 }
 
 message TransferTaskInfo {
