@@ -893,12 +893,12 @@ func createTimerTasks(
 			switch t := task.(type) {
 			case *p.DecisionTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.ScheduleAttempt
 
 			case *p.ActivityTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.Attempt
 
 			case *p.UserTimerTask:
@@ -910,7 +910,7 @@ func createTimerTasks(
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.WorkflowBackoffType = t.WorkflowBackoffType
 
 			case *p.WorkflowTimeoutTask:
 				// noop

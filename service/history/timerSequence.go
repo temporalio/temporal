@@ -41,15 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 )
 
-type timerType int32
-
-const (
-	timerTypeStartToClose    = timerType(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-	timerTypeScheduleToStart = timerType(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
-	timerTypeScheduleToClose = timerType(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
-	timerTypeHeartbeat       = timerType(enumspb.TIMEOUT_TYPE_HEARTBEAT)
-)
-
 const (
 	// activity / user timer task not created
 	timerTaskStatusNone = iota
@@ -69,7 +60,7 @@ type (
 	timerSequenceID struct {
 		eventID      int64
 		timestamp    time.Time
-		timerType    timerType
+		timerType    enumspb.TimeoutType
 		timerCreated bool
 		attempt      int32
 	}
@@ -167,7 +158,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)
-	if firstTimerTask.timerType == timerTypeHeartbeat {
+	if firstTimerTask.timerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 		activityInfo.LastHeartbeatTimeoutVisibilityInSeconds = firstTimerTask.timestamp.Unix()
 	}
 	if err := t.mutableState.UpdateActivity(activityInfo); err != nil {
@@ -176,7 +167,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	t.mutableState.AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: firstTimerTask.timestamp,
-		TimeoutType:         int(firstTimerTask.timerType),
+		TimeoutType:         firstTimerTask.timerType,
 		EventID:             firstTimerTask.eventID,
 		Attempt:             int64(firstTimerTask.attempt),
 		Version:             t.mutableState.GetCurrentVersion(),
@@ -248,7 +239,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	return &timerSequenceID{
 		eventID:      timerInfo.GetStartedId(),
 		timestamp:    expiryTime,
-		timerType:    timerTypeStartToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      0,
 	}
@@ -275,7 +266,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleID,
 		timestamp:    startTimeout,
-		timerType:    timerTypeScheduleToStart,
+		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToStart) > 0,
 		attempt:      activityInfo.Attempt,
 	}
@@ -297,7 +288,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleID,
 		timestamp:    closeTimeout,
-		timerType:    timerTypeScheduleToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedScheduleToClose) > 0,
 		attempt:      activityInfo.Attempt,
 	}
@@ -324,7 +315,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleID,
 		timestamp:    closeTimeout,
-		timerType:    timerTypeStartToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedStartToClose) > 0,
 		attempt:      activityInfo.Attempt,
 	}
@@ -362,63 +353,27 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleID,
 		timestamp:    heartbeatTimeout,
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0,
 		attempt:      activityInfo.Attempt,
 	}
 }
 
 func timerTypeToTimerMask(
-	timerType timerType,
+	timerType enumspb.TimeoutType,
 ) int32 {
 
 	switch timerType {
-	case timerTypeStartToClose:
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		return timerTaskStatusCreatedStartToClose
-	case timerTypeScheduleToStart:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		return timerTaskStatusCreatedScheduleToStart
-	case timerTypeScheduleToClose:
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 		return timerTaskStatusCreatedScheduleToClose
-	case timerTypeHeartbeat:
+	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		return timerTaskStatusCreatedHeartbeat
 	default:
 		panic("invalid timeout type")
-	}
-}
-
-func timerTypeToProto(
-	timerType timerType,
-) enumspb.TimeoutType {
-
-	switch timerType {
-	case timerTypeStartToClose:
-		return enumspb.TIMEOUT_TYPE_START_TO_CLOSE
-	case timerTypeScheduleToStart:
-		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
-	case timerTypeScheduleToClose:
-		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
-	case timerTypeHeartbeat:
-		return enumspb.TIMEOUT_TYPE_HEARTBEAT
-	default:
-		panic(fmt.Sprintf("invalid timer type: %v", timerType))
-	}
-}
-
-func timerTypeFromProto(
-	timerType enumspb.TimeoutType,
-) timerType {
-
-	switch timerType {
-	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		return timerTypeStartToClose
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		return timerTypeScheduleToStart
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		return timerTypeScheduleToClose
-	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		return timerTypeHeartbeat
-	default:
-		panic(fmt.Sprintf("invalid timeout type: %v", timerType))
 	}
 }
 

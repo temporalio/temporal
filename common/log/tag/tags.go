@@ -87,8 +87,8 @@ func workflowListFilterType(listFilterType string) Tag {
 func WorkflowError(error error) Tag { return newErrorTag("wf-error", error) }
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
-func WorkflowTimeoutType(timeoutType int64) Tag {
-	return newInt64("wf-timeout-type", timeoutType)
+func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) Tag {
+	return newStringTag("wf-timeout-type", timeoutType.String())
 }
 
 // WorkflowPollContextTimeout returns tag for WorkflowPollContextTimeout

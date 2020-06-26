@@ -231,7 +231,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_USER_TIMER,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -303,7 +303,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_USER_TIMER,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -379,7 +379,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -460,7 +460,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -547,7 +547,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -636,7 +636,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -724,7 +724,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -801,7 +801,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.insertTimerTasks[0]
-	s.Equal(int(timerTypeHeartbeat), task.(*persistence.ActivityTimeoutTask).TimeoutType)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*persistence.ActivityTimeoutTask).TimeoutType)
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp().Add(-time.Second))
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
@@ -811,7 +811,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_HEARTBEAT),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             scheduledEvent.GetEventId(),
 	}
@@ -859,7 +859,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Fire() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_DECISION_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -915,7 +915,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Noop() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_DECISION_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID - 1,
 	}
@@ -960,7 +960,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
-		TimeoutType:         persistence.WorkflowBackoffTimeoutTypeRetry,
+		WorkflowBackoffType: enumsgenpb.WORKFLOW_BACKOFF_TYPE_RETRY,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             0,
 	}
@@ -1018,7 +1018,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
-		TimeoutType:         persistence.WorkflowBackoffTimeoutTypeRetry,
+		WorkflowBackoffType: enumsgenpb.WORKFLOW_BACKOFF_TYPE_RETRY,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             0,
 	}
@@ -1093,7 +1093,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
-		TimeoutType:         0,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             activityInfo.ScheduleID,
 		ScheduleAttempt:     int64(activityInfo.Attempt),
@@ -1184,7 +1184,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
-		TimeoutType:         0,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             activityInfo.ScheduleID,
 		ScheduleAttempt:     int64(activityInfo.Attempt),
@@ -1235,7 +1235,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1297,7 +1297,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1356,7 +1356,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 		RunId:               execution.GetRunId(),
 		TaskId:              int64(100),
 		TaskType:            enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		TimeoutType:         int32(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: protoTaskTime,
 	}
 

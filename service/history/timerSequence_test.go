@@ -189,7 +189,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 		),
-		TimeoutType: int(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START),
+		TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:     activityInfo.ScheduleID,
 		Attempt:     int64(activityInfo.Attempt),
 		Version:     currentVersion,
@@ -234,7 +234,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
-		TimeoutType:         int(enumspb.TIMEOUT_TYPE_HEARTBEAT),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduleID,
 		Attempt:             int64(activityInfo.Attempt),
 		Version:             currentVersion,
@@ -270,7 +270,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 	s.Equal([]timerSequenceID{{
 		eventID:      timerInfo.GetStartedId(),
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
-		timerType:    timerTypeStartToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
 		attempt:      0,
 	}}, timerSequenceIDs)
@@ -305,14 +305,14 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 		{
 			eventID:      timerInfo1.GetStartedId(),
 			timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      0,
 		},
 		{
 			eventID:      timerInfo2.GetStartedId(),
 			timestamp:    time.Unix(timer2Expiry.Seconds, int64(timer2Expiry.Nanos)).UTC(),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: false,
 			attempt:      0,
 		},
@@ -376,7 +376,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToStart,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -385,7 +385,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -419,7 +419,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.StartedTime.Add(
 				time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
 			),
-			timerType:    timerTypeHeartbeat,
+			timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -428,7 +428,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.StartedTime.Add(
 				time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -437,7 +437,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -471,7 +471,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.StartedTime.Add(
 				time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -480,7 +480,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -514,7 +514,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.LastHeartBeatUpdatedTime.Add(
 				time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
 			),
-			timerType:    timerTypeHeartbeat,
+			timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -523,7 +523,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.StartedTime.Add(
 				time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -532,7 +532,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -566,7 +566,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.StartedTime.Add(
 				time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -575,7 +575,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 			timestamp: activityInfo.ScheduledTime.Add(
 				time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: true,
 			attempt:      activityInfo.Attempt,
 		},
@@ -627,7 +627,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 			timestamp: activityInfo2.ScheduledTime.Add(
 				time.Duration(activityInfo2.ScheduleToStartTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToStart,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			timerCreated: false,
 			attempt:      activityInfo2.Attempt,
 		},
@@ -636,7 +636,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 			timestamp: activityInfo1.StartedTime.Add(
 				time.Duration(activityInfo1.StartToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeStartToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: false,
 			attempt:      activityInfo1.Attempt,
 		},
@@ -645,7 +645,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 			timestamp: activityInfo1.ScheduledTime.Add(
 				time.Duration(activityInfo1.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: false,
 			attempt:      activityInfo1.Attempt,
 		},
@@ -654,7 +654,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 			timestamp: activityInfo2.ScheduledTime.Add(
 				time.Duration(activityInfo2.ScheduleToCloseTimeout) * time.Second,
 			),
-			timerType:    timerTypeScheduleToClose,
+			timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			timerCreated: false,
 			attempt:      activityInfo2.Attempt,
 		},
@@ -675,7 +675,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 	expectedTimerSequence := &timerSequenceID{
 		eventID:      timerInfo.StartedId,
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
-		timerType:    timerTypeStartToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
 		attempt:      0,
 	}
@@ -734,7 +734,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Not
 		timestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 		),
-		timerType:    timerTypeScheduleToStart,
+		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -819,7 +819,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_Scheduled() {
 		timestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToCloseTimeout) * time.Second,
 		),
-		timerType:    timerTypeScheduleToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -878,7 +878,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_Started() {
 		timestamp: activityInfo.StartedTime.Add(
 			time.Duration(activityInfo.StartToCloseTimeout) * time.Second,
 		),
-		timerType:    timerTypeStartToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -937,7 +937,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		timestamp: activityInfo.StartedTime.Add(
 			time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
 		),
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -974,7 +974,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		timestamp: activityInfo.LastHeartBeatUpdatedTime.Add(
 			time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
 		),
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1063,20 +1063,10 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestConversion() {
-	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timerTypeToProto(timerTypeStartToClose))
-	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timerTypeToProto(timerTypeScheduleToStart))
-	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timerTypeToProto(timerTypeScheduleToClose))
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timerTypeToProto(timerTypeHeartbeat))
-
-	s.Equal(timerTypeFromProto(enumspb.TIMEOUT_TYPE_START_TO_CLOSE), timerTypeStartToClose)
-	s.Equal(timerTypeFromProto(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START), timerTypeScheduleToStart)
-	s.Equal(timerTypeFromProto(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE), timerTypeScheduleToClose)
-	s.Equal(timerTypeFromProto(enumspb.TIMEOUT_TYPE_HEARTBEAT), timerTypeHeartbeat)
-
-	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(timerTypeStartToClose))
-	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(timerTypeScheduleToStart))
-	s.Equal(int32(timerTaskStatusCreatedScheduleToClose), timerTypeToTimerMask(timerTypeScheduleToClose))
-	s.Equal(int32(timerTaskStatusCreatedHeartbeat), timerTypeToTimerMask(timerTypeHeartbeat))
+	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(enumspb.TIMEOUT_TYPE_START_TO_CLOSE))
+	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START))
+	s.Equal(int32(timerTaskStatusCreatedScheduleToClose), timerTypeToTimerMask(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE))
+	s.Equal(int32(timerTaskStatusCreatedHeartbeat), timerTypeToTimerMask(enumspb.TIMEOUT_TYPE_HEARTBEAT))
 
 	s.Equal(timerTaskStatusNone, 0)
 	s.Equal(timerTaskStatusCreated, 1)
@@ -1091,7 +1081,7 @@ func (s *timerSequenceSuite) TestLess_CompareTime() {
 	timerSequenceID1 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1099,7 +1089,7 @@ func (s *timerSequenceSuite) TestLess_CompareTime() {
 	timerSequenceID2 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now.Add(time.Second),
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1114,7 +1104,7 @@ func (s *timerSequenceSuite) TestLess_CompareEventID() {
 	timerSequenceID1 := timerSequenceID{
 		eventID:      122,
 		timestamp:    now,
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1122,7 +1112,7 @@ func (s *timerSequenceSuite) TestLess_CompareEventID() {
 	timerSequenceID2 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1137,7 +1127,7 @@ func (s *timerSequenceSuite) TestLess_CompareType() {
 	timerSequenceID1 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
-		timerType:    timerTypeScheduleToClose,
+		timerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timerCreated: true,
 		attempt:      12,
 	}
@@ -1145,7 +1135,7 @@ func (s *timerSequenceSuite) TestLess_CompareType() {
 	timerSequenceID2 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
-		timerType:    timerTypeHeartbeat,
+		timerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		timerCreated: true,
 		attempt:      12,
 	}
