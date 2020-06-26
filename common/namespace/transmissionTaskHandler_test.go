@@ -106,9 +106,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -130,16 +130,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 					OwnerEmail:  ownerEmail,
 					Data:        data,
 				},
-				Config: &namespacepb.NamespaceConfiguration{
+				Config: &namespacepb.NamespaceConfig{
 					WorkflowExecutionRetentionPeriodInDays: retention,
 					EmitMetric:                             &types.BoolValue{Value: emitMetric},
 					HistoryArchivalStatus:                  historyArchivalStatus,
-					HistoryArchivalURI:                     historyArchivalURI,
+					HistoryArchivalUri:                     historyArchivalURI,
 					VisibilityArchivalStatus:               visibilityArchivalStatus,
-					VisibilityArchivalURI:                  visibilityArchivalURI,
+					VisibilityArchivalUri:                  visibilityArchivalURI,
 					BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 				},
-				ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
 				},
@@ -184,9 +184,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -232,9 +232,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
@@ -256,16 +256,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 					OwnerEmail:  ownerEmail,
 					Data:        data,
 				},
-				Config: &namespacepb.NamespaceConfiguration{
+				Config: &namespacepb.NamespaceConfig{
 					WorkflowExecutionRetentionPeriodInDays: retention,
 					EmitMetric:                             &types.BoolValue{Value: emitMetric},
 					HistoryArchivalStatus:                  historyArchivalStatus,
-					HistoryArchivalURI:                     historyArchivalURI,
+					HistoryArchivalUri:                     historyArchivalURI,
 					VisibilityArchivalStatus:               visibilityArchivalStatus,
-					VisibilityArchivalURI:                  visibilityArchivalURI,
+					VisibilityArchivalUri:                  visibilityArchivalURI,
 					BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 				},
-				ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
 				},
@@ -309,9 +309,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		RetentionDays:            retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
-		HistoryArchivalURI:       historyArchivalURI,
+		HistoryArchivalUri:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
-		VisibilityArchivalURI:    visibilityArchivalURI,
+		VisibilityArchivalUri:    visibilityArchivalURI,
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,

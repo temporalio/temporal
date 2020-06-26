@@ -43,7 +43,7 @@ cp config/development_mysql.yaml config/development.yaml
 ./temporal-server start --services=frontend,matching,history,worker
 ```
 
-# Configuration
+# Config
 ## Common to all persistence implementations
 There are two major sub-subsystems within temporal that need persistence - temporal-core and visibility. temporal-core is
 the workflow engine that uses persistence to store state tied to namespaces, workflows, workflow histories, task lists 

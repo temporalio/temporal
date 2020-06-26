@@ -243,12 +243,6 @@ processorPumpLoop:
 				go p.Stop()
 				break processorPumpLoop
 			}
-		case <-redispatchTimer.C:
-			redispatchTimer.Reset(backoff.JitDuration(
-				p.options.RedispatchInterval(),
-				p.options.RedispatchIntervalJitterCoefficient(),
-			))
-			p.redispatchTasks()
 		}
 	}
 

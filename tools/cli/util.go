@@ -43,6 +43,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gogo/protobuf/proto"
+	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/temporal-proto/common/v1"
@@ -904,27 +905,91 @@ func showNextPage() bool {
 // paginate creates an interactive CLI mode to control the printing of items
 func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 	more := c.Bool(FlagMore)
+	isTableView := !c.Bool(FlagPrintJSON)
 	pageSize := c.Int(FlagPageSize)
 	if pageSize == 0 {
 		pageSize = defaultPageSize
 	}
 	iter := collection.NewPagingIterator(paginationFn)
 
-	pageItemsCount := 0
+	var pageItems []interface{}
 	for iter.HasNext() {
-		batch, err := iter.Next()
+		item, err := iter.Next()
 		if err != nil {
 			return err
 		}
 
-		prettyPrintJSONObject(batch)
-		pageItemsCount++
-		if pageItemsCount%pageSize == 0 && (!more || !showNextPage()) {
-			break
+		pageItems = append(pageItems, item)
+		if len(pageItems) == pageSize || !iter.HasNext() {
+			if isTableView {
+				printTable(pageItems)
+			} else {
+				prettyPrintJSONObject(pageItems)
+			}
+
+			if !more || !showNextPage() {
+				break
+			}
+			pageItems = pageItems[:0]
 		}
 	}
 
 	return nil
+}
+
+func printTable(items []interface{}) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	e := reflect.ValueOf(items[0])
+	for e.Type().Kind() == reflect.Ptr {
+		e = e.Elem()
+	}
+
+	var fields []string
+	t := e.Type()
+	for i := 0; i < e.NumField(); i++ {
+		fields = append(fields, t.Field(i).Name)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.SetHeader(fields)
+	table.SetHeaderLine(false)
+	for i := 0; i < len(items); i++ {
+		item := reflect.ValueOf(items[i])
+		for item.Type().Kind() == reflect.Ptr {
+			item = item.Elem()
+		}
+		var columns []string
+		for j := 0; j < len(fields); j++ {
+			col := item.Field(j)
+			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
+		}
+		table.Append(columns)
+	}
+	table.Render()
+	table.ClearRows()
+
+	return nil
+}
+
+func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+	if search == "" {
+		return 0, nil
+	}
+
+	var candidateNames []string
+	for key, value := range candidates {
+		if strings.EqualFold(key, search) {
+			return value, nil
+		}
+		candidateNames = append(candidateNames, key)
+	}
+
+	return 0, fmt.Errorf("Could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue

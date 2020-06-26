@@ -283,6 +283,20 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	return client.RefreshWorkflowTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ResendReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ResendReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ResendReplicationTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ResendReplicationTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }

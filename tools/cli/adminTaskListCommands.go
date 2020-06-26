@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -44,17 +43,20 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := enumspb.TASK_LIST_TYPE_DECISION
-	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = enumspb.TASK_LIST_TYPE_ACTIVITY
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse TaskList Type", err)
 	}
-
+	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.DescribeTaskListRequest{
 		Namespace:             namespace,
 		TaskList:              &tasklistpb.TaskList{Name: taskList},
-		TaskListType:          taskListType,
+		TaskListType:          tlType,
 		IncludeTaskListStatus: true,
 	}
 
@@ -74,7 +76,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	if len(pollers) == 0 {
 		ErrorAndExit(colorMagenta("No poller for tasklist: "+taskList), nil)
 	}
-	printPollerInfo(pollers, taskListType)
+	printPollerInfo(pollers, tlType)
 }
 
 func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
@@ -115,11 +117,18 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.Task
 func AdminListTaskListTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
 	tlName := getRequiredOption(c, FlagTaskList)
-	tlTypeFlag := strings.Title(c.String(FlagTaskListType))
-	tlTypeInt := enumspb.TaskListType_value[tlTypeFlag]
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	if err != nil {
+		ErrorAndExit("Failed to parse TaskList Type", err)
+	}
 	tlType := enumspb.TaskListType(tlTypeInt)
+	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	}
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
+	workflowID := c.String(FlagWorkflowID)
+	runID := c.String(FlagRunID)
 
 	pFactory := CreatePersistenceFactory(c)
 	taskManager, err := pFactory.NewTaskManager()
@@ -128,9 +137,35 @@ func AdminListTaskListTasks(c *cli.Context) {
 	}
 
 	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskList: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
-	tasks, err := taskManager.GetTasks(req)
-	if err != nil {
-		ErrorAndExit("Failed to get Tasks", err)
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		response, err := taskManager.GetTasks(req)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		tasks := response.Tasks
+		if workflowID != "" {
+			filteredTasks := tasks[:0]
+
+			for _, task := range tasks {
+				if task.Data.WorkflowId != workflowID {
+					continue
+				}
+				if runID != "" && task.Data.RunId != runID {
+					continue
+				}
+				filteredTasks = append(filteredTasks, task)
+			}
+			
+			tasks = filteredTasks
+		}
+
+		var items []interface{}
+		for _, task := range tasks {
+			items = append(items, task)
+		}
+		return items, nil, nil
 	}
-	prettyPrintJSONObject(tasks)
+
+	paginate(c, paginationFunc)
 }

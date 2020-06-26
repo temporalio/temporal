@@ -381,7 +381,7 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
 	req := &workflowservice.QueryWorkflowRequest{
-		Namespace:             s.namespace,
+		Namespace: s.namespace,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)

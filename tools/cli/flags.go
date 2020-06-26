@@ -53,6 +53,7 @@ const (
 	FlagTargetCluster                     = "target_cluster"
 	FlagMinEventID                        = "min_event_id"
 	FlagMaxEventID                        = "max_event_id"
+	FlagStartEventVersion                 = "start_event_version"
 	FlagTaskList                          = "tasklist"
 	FlagTaskListWithAlias                 = FlagTaskList + ", tl"
 	FlagTaskListType                      = "tasklisttype"
@@ -241,6 +242,18 @@ var flagsForExecution = []cli.Flag{
 	},
 }
 
+var flagsForPagination = []cli.Flag{
+	cli.BoolFlag{
+		Name:  FlagMoreWithAlias,
+		Usage: "List more pages, default is to list one page of default page size 10",
+	},
+	cli.IntFlag{
+		Name:  FlagPageSizeWithAlias,
+		Value: 10,
+		Usage: "Result page size",
+	},
+}
+
 func getFlagsForShow() []cli.Flag {
 	return append(flagsForExecution, getFlagsForShowID()...)
 }
@@ -317,10 +330,10 @@ func getFlagsForStart() []cli.Flag {
 				"\t│ │ │ │ │ \n" +
 				"\t* * * * *",
 		},
-		cli.IntFlag{
+		cli.StringFlag{
 			Name: FlagWorkflowIDReusePolicyAlias,
-			Usage: "Optional input to configure if the same workflow Id is allow to use for new workflow execution. " +
-				"Available options: 0: AllowDuplicate, 1: AllowDuplicateFailedOnly, 2: RejectDuplicate",
+			Usage: "Configure if the same workflow Id is allowed for use in new workflow execution. " +
+				"Options: AllowDuplicate, AllowDuplicateFailedOnly, RejectDuplicate",
 		},
 		cli.StringFlag{
 			Name:  FlagInputWithAlias,
@@ -404,18 +417,7 @@ func getCommonFlagsForVisibility() []cli.Flag {
 }
 
 func getFlagsForList() []cli.Flag {
-	flagsForList := []cli.Flag{
-		cli.BoolFlag{
-			Name:  FlagMoreWithAlias,
-			Usage: "List more pages, default is to list one page of default page size 10",
-		},
-		cli.IntFlag{
-			Name:  FlagPageSizeWithAlias,
-			Value: 10,
-			Usage: "Result page size",
-		},
-	}
-	flagsForList = append(getFlagsForListAll(), flagsForList...)
+	flagsForList := append(getFlagsForListAll(), flagsForPagination...)
 	return flagsForList
 }
 

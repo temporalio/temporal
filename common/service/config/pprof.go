@@ -27,6 +27,7 @@ package config
 import (
 	"fmt"
 	"net/http"
+
 	// DO NOT REMOVE THE LINE BELOW
 	_ "net/http/pprof"
 	"sync/atomic"

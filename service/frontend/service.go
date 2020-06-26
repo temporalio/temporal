@@ -102,6 +102,9 @@ type Config struct {
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableRPCReplication         dynamicconfig.BoolPropertyFn
+	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -141,6 +144,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		VisibilityArchivalQueryMaxPageSize:     dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
+		EnableRPCReplication:                   dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
+		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
 	}
 }
 
@@ -231,7 +236,9 @@ func (s *Service) Start() {
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalNamespaceEnabled() {
 		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
-		if consumerConfig != nil && consumerConfig.Type == config.ReplicationConsumerTypeRPC {
+		if consumerConfig != nil &&
+			consumerConfig.Type == config.ReplicationConsumerTypeRPC &&
+			s.config.EnableRPCReplication() {
 			replicationMessageSink = s.GetNamespaceReplicationQueue()
 		} else {
 			var err error

@@ -164,13 +164,13 @@ var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse
 		Description: "a test namespace",
 		OwnerEmail:  "test@uber.com",
 	},
-	Configuration: &namespacepb.NamespaceConfiguration{
+	Config: &namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: 3,
 		EmitMetric:                             &types.BoolValue{Value: true},
 	},
-	ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
+	ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: "active",
-		Clusters: []*replicationpb.ClusterReplicationConfiguration{
+		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: "active",
 			},
@@ -288,10 +288,10 @@ func (s *cliAppSuite) TestStartWorkflow() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
 	// start with wid
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "-wrp", "AllowDuplicateFailedOnly"})
 	s.Nil(err)
 	// start without wid
-	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
+	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-wrp", "AllowDuplicateFailedOnly"})
 	s.Nil(err)
 }
 
@@ -740,37 +740,6 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 func (s *cliAppSuite) TestIsAttributeName() {
 	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
 	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
-}
-
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
-	res := getWorkflowIDReusePolicy(1)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
-	res = getWorkflowIDReusePolicy(2)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
-	res = getWorkflowIDReusePolicy(3)
-	s.Equal(res, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
-}
-
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
-	oldOsExit := osExit
-	defer func() { osExit = oldOsExit }()
-	var errorCode int
-	osExit = func(code int) {
-		errorCode = code
-	}
-	getWorkflowIDReusePolicy(2147483647)
-	s.Equal(1, errorCode)
-}
-
-func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
-	oldOsExit := osExit
-	defer func() { osExit = oldOsExit }()
-	var errorCode int
-	osExit = func(code int) {
-		errorCode = code
-	}
-	getWorkflowIDReusePolicy(-1)
-	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestGetSearchAttributes() {

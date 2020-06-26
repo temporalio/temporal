@@ -119,7 +119,7 @@ type (
 		// Internode controls backend service communication TLS settings.
 		Internode GroupTLS `yaml:"internode"`
 		// Frontend controls SDK Client to Frontend communication TLS settings.
-		Frontend  GroupTLS `yaml:"frontend"`
+		Frontend GroupTLS `yaml:"frontend"`
 	}
 
 	// GroupTLS contains an instance client and server TLS settings
@@ -133,14 +133,14 @@ type (
 	// ServerTLS contains items to load server TLS configuration
 	ServerTLS struct {
 		// The path to the file containing the PEM-encoded public key of the certificate to use.
-		CertFile          string    `yaml:"certFile"`
+		CertFile string `yaml:"certFile"`
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
-		KeyFile           string    `yaml:"keyFile"`
-  		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+		KeyFile string `yaml:"keyFile"`
+		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
 		// This value is ignored if `requireClientAuth` is not enabled.
-		ClientCAFiles     []string  `yaml:"clientCaFiles"`
+		ClientCAFiles []string `yaml:"clientCaFiles"`
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
-		RequireClientAuth bool      `yaml:"requireClientAuth"`
+		RequireClientAuth bool `yaml:"requireClientAuth"`
 	}
 
 	// ClientTLS contains TLS configuration for clients.

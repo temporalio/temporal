@@ -175,7 +175,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			Usage: "List tasks for given shard Id and task type",
 			Flags: append(append(
 				getDBFlags(),
-				getFlagsForList()...),
+				flagsForPagination...),
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Value: "active",
@@ -345,6 +345,14 @@ func newAdminHistoryHostCommands() []cli.Command {
 
 func newAdminNamespaceCommands() []cli.Command {
 	return []cli.Command{
+		{
+			Name:  "list",
+			Usage: "List namespaces",
+			Flags: append(getDBFlags(), getFlagsForList()...),
+			Action: func(c *cli.Context) {
+				AdminListNamespaces(c)
+			},
+		},
 		{
 			Name:    "register",
 			Aliases: []string{"re"},
@@ -519,6 +527,29 @@ clusters:
 			},
 			Action: func(c *cli.Context) {
 				AdminMergeDLQ(c)
+			},
+		},
+		{
+			Name:  "list_dlq",
+			Usage: "List replication tasks from dlq",
+			Flags: append(append(
+				getDBFlags(),
+				getFlagsForList()...),
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardId",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster for reading DLQ topic for ReplicationTask",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminListDLQ(c)
 			},
 		},
 		{
@@ -725,7 +756,8 @@ func newAdminTaskListCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a tasklist",
-			Flags: append(getDBFlags(),
+			Flags: append(append(append(getDBFlags(), flagsForExecution...),
+				flagsForPagination...),
 				cli.StringFlag{
 					Name:  FlagNamespaceID,
 					Usage: "Namespace Id",

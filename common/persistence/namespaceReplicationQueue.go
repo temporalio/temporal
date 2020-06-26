@@ -102,7 +102,7 @@ func (q *namespaceReplicationQueueImpl) Start() {
 }
 
 func (q *namespaceReplicationQueueImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	close(q.done)

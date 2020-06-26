@@ -195,7 +195,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 	reusePolicy := defaultWorkflowIDReusePolicy
 	if c.IsSet(FlagWorkflowIDReusePolicy) {
-		reusePolicy = getWorkflowIDReusePolicy(c.Int(FlagWorkflowIDReusePolicy))
+		reusePolicyInt, err := stringToEnum(c.String(FlagWorkflowIDReusePolicy), enumspb.WorkflowIdReusePolicy_value)
+		if err != nil {
+			ErrorAndExit("Failed to parse Reuse Policy", err)
+		}
+		reusePolicy = enumspb.WorkflowIdReusePolicy(reusePolicyInt)
 	}
 
 	input := processJSONInput(c)
@@ -872,7 +876,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
 			var row []string
 			row = append(row, pt.GetBinaryChecksum())
-			row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
+			row = append(row, time.Unix(0, pt.GetCreateTimeNano()).String())
 			row = append(row, pt.GetRunId())
 			row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
 			table.Append(row)
@@ -925,10 +929,10 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	}
 
 	return &cligenpb.DescribeWorkflowExecutionResponse{
-		ExecutionConfiguration: resp.ExecutionConfiguration,
-		WorkflowExecutionInfo:  executionInfo,
-		PendingActivities:      pendingActs,
-		PendingChildren:        resp.PendingChildren,
+		ExecutionConfig:       resp.ExecutionConfig,
+		WorkflowExecutionInfo: executionInfo,
+		PendingActivities:     pendingActs,
+		PendingChildren:       resp.PendingChildren,
 	}
 }
 
@@ -1318,15 +1322,6 @@ func getWorkflowStatus(statusStr string) enumspb.WorkflowExecutionStatus {
 	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
 		"[running, completed, failed, canceled, terminated, continueasnew, timedout]"))
 	return 0
-}
-
-func getWorkflowIDReusePolicy(value int) enumspb.WorkflowIdReusePolicy {
-	if value > 0 && value < len(enumspb.WorkflowIdReusePolicy_value) {
-		return enumspb.WorkflowIdReusePolicy(value)
-	}
-	// At this point, the policy should return if the value is valid
-	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
-	return enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY //doesn't really matter
 }
 
 // default will print decoded raw

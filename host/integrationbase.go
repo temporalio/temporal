@@ -169,9 +169,9 @@ func (s *IntegrationBase) registerNamespace(
 		Description:                            namespace,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		HistoryArchivalStatus:                  historyArchivalStatus,
-		HistoryArchivalURI:                     historyArchivalURI,
+		HistoryArchivalUri:                     historyArchivalURI,
 		VisibilityArchivalStatus:               visibilityArchivalStatus,
-		VisibilityArchivalURI:                  visibilityArchivalURI,
+		VisibilityArchivalUri:                  visibilityArchivalURI,
 	})
 
 	return err
@@ -227,9 +227,9 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:            0,
 				HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
+				HistoryArchivalUri:       s.testCluster.archiverBase.historyURI,
 				VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-				VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
+				VisibilityArchivalUri:    s.testCluster.archiverBase.visibilityURI,
 				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{

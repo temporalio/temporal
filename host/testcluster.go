@@ -92,7 +92,7 @@ type (
 		KafkaConfig *messaging.KafkaConfig
 	}
 
-	// WorkerConfig is the config for enabling/disabling cadence worker
+	// WorkerConfig is the config for enabling/disabling Temporal worker
 	WorkerConfig struct {
 		EnableArchiver   bool
 		EnableIndexer    bool

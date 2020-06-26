@@ -83,16 +83,16 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 				OwnerEmail:  info.Owner,
 				Data:        info.Data,
 			},
-			Config: &namespacepb.NamespaceConfiguration{
+			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-				HistoryArchivalURI:                     config.HistoryArchivalURI,
+				HistoryArchivalUri:                     config.HistoryArchivalUri,
 				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-				VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+				VisibilityArchivalUri:                  config.VisibilityArchivalUri,
 				BadBinaries:                            config.BadBinaries,
 			},
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
 				Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
@@ -110,10 +110,10 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []string,
-) []*replicationpb.ClusterReplicationConfiguration {
-	output := []*replicationpb.ClusterReplicationConfiguration{}
+) []*replicationpb.ClusterReplicationConfig {
+	output := []*replicationpb.ClusterReplicationConfig{}
 	for _, clusterName := range input {
-		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
+		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
 	}
 	return output
 }

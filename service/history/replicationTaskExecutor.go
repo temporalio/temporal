@@ -223,7 +223,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		NewRunHistory:     attr.NewRunHistory,
 		ForceBufferEvents: false,
 		ResetWorkflow:     attr.ResetWorkflow,
-		NewRunNDC:         attr.NewRunNDC,
+		NewRunNdc:         attr.NewRunNdc,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
