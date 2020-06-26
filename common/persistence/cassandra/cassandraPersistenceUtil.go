@@ -889,7 +889,8 @@ func createTimerTasks(
 		var eventID int64
 		var attempt int64
 
-		timeoutType := 0
+		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
+		workflowBackoffType := enumsgenpb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
 
 		switch t := task.(type) {
 		case *p.DecisionTimeoutTask:
@@ -911,7 +912,7 @@ func createTimerTasks(
 
 		case *p.WorkflowBackoffTimerTask:
 			eventID = t.EventID
-			timeoutType = t.TimeoutType
+			workflowBackoffType = t.WorkflowBackoffType
 
 		case *p.WorkflowTimeoutTask:
 			// noop
@@ -937,7 +938,8 @@ func createTimerTasks(
 			WorkflowId:          workflowID,
 			RunId:               runID,
 			TaskType:            task.GetType(),
-			TimeoutType:         int32(timeoutType),
+			TimeoutType:         timeoutType,
+			WorkflowBackoffType: workflowBackoffType,
 			Version:             task.GetVersion(),
 			ScheduleAttempt:     attempt,
 			EventId:             eventID,

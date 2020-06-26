@@ -32,6 +32,12 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common/v1"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
+	historypb "go.temporal.io/temporal-proto/history/v1"
+	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
@@ -39,11 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 )
 
 const (
@@ -111,12 +112,6 @@ const (
 
 // UnknownNumRowsAffected is returned when the number of rows that an API affected cannot be determined
 const UnknownNumRowsAffected = -1
-
-// Types of workflow backoff timeout
-const (
-	WorkflowBackoffTimeoutTypeRetry = iota
-	WorkflowBackoffTimeoutTypeCron
-)
 
 const (
 	// InitialFailoverNotificationVersion is the initial failover version for a namespace
@@ -356,7 +351,7 @@ type (
 		TaskID              int64
 		EventID             int64
 		ScheduleAttempt     int64
-		TimeoutType         int
+		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
 
@@ -414,7 +409,7 @@ type (
 	ActivityTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TimeoutType         int
+		TimeoutType         enumspb.TimeoutType
 		EventID             int64
 		Attempt             int64
 		Version             int64
@@ -443,7 +438,7 @@ type (
 		TaskID              int64
 		EventID             int64 // TODO this attribute is not used?
 		Version             int64
-		TimeoutType         int // 0 for retry, 1 for cron.
+		WorkflowBackoffType enumsgenpb.WorkflowBackoffType
 	}
 
 	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
@@ -871,7 +866,7 @@ type (
 		TaskID            int64
 	}
 
-	//RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
+	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
 		SourceClusterName    string
 		ExclusiveBeginTaskID int64

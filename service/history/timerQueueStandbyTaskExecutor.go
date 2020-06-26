@@ -217,7 +217,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
-		isHeartBeatTask := timerTask.TimeoutType == int32(enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
 		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
 		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
@@ -272,7 +272,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if timerTask.TimeoutType == int32(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START) {
+	if timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		return nil
 	}
 

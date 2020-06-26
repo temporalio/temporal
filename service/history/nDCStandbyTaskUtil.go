@@ -98,7 +98,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 		tag.TaskID(timerTask.GetTaskId()),
 		tag.TaskType(timerTask.TaskType),
-		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
+		tag.WorkflowTimeoutType(timerTask.TimeoutType),
 		tag.FailoverVersion(timerTask.GetVersion()),
 		tag.TimestampProto(timerTask.VisibilityTimestamp),
 		tag.WorkflowEventID(timerTask.GetEventId()))
