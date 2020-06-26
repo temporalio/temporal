@@ -108,14 +108,14 @@ CREATE TABLE events (
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
   namespace_id        uuid,
-  task_list_name   text,
-  task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
-  type             int, -- enum rowType {Task, TaskList}
+  task_queue_name   text,
+  task_queue_type   int, -- enum TaskQueueType {ActivityTask, DecisionTask}
+  type             int, -- enum rowType {Task, TaskQueue}
   task_id          bigint,  -- unique identifier for tasks, monotonically increasing
   range_id         bigint static, -- Used to ensure that only one process can write to the table
   task             text,
-  task_list        text,
-  PRIMARY KEY ((namespace_id, task_list_name, task_list_type), type, task_id)
+  task_queue        text,
+  PRIMARY KEY ((namespace_id, task_queue_name, task_queue_type), type, task_id)
 );
 
 `

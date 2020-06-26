@@ -32,12 +32,12 @@ import "server/matchingservice/v1/request_response.proto";
 // with completion or failure.
 service MatchingService {
 
-    // PollForDecisionTask is called by frontend to process DecisionTask from a specific task list.  A
+    // PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
     // DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
     rpc PollForDecisionTask (PollForDecisionTaskRequest) returns (PollForDecisionTaskResponse) {
     }
 
-    // PollForActivityTask is called by frontend to process ActivityTask from a specific task list.  ActivityTask
+    // PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
     // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
     rpc PollForActivityTask (PollForActivityTaskRequest) returns (PollForActivityTaskResponse) {
     }
@@ -70,12 +70,12 @@ service MatchingService {
     rpc CancelOutstandingPoll (CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
     }
 
-    // DescribeTaskList returns information about the target task list, right now this API returns the
-    // pollers which polled this task list in last few minutes.
-    rpc DescribeTaskList (DescribeTaskListRequest) returns (DescribeTaskListResponse) {
+    // DescribeTaskQueue returns information about the target task queue, right now this API returns the
+    // pollers which polled this task queue in last few minutes.
+    rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
     }
 
-    // ListTaskListPartitions returns a map of partitionKey and hostAddress for a task list.
-    rpc  ListTaskListPartitions(ListTaskListPartitionsRequest) returns (ListTaskListPartitionsResponse){
+    // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
+    rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }
 }

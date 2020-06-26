@@ -33,7 +33,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
@@ -435,8 +435,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId()}
-	taskList := &tasklistpb.TaskList{
-		Name: activityInfo.TaskList,
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: activityInfo.TaskQueue,
 	}
 	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
 
@@ -446,7 +446,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		NamespaceId:                   targetNamespaceID,
 		SourceNamespaceId:             namespaceID,
 		Execution:                     execution,
-		TaskList:                      taskList,
+		TaskQueue:                     taskQueue,
 		ScheduleId:                    scheduledID,
 		ScheduleToStartTimeoutSeconds: scheduleToStartTimeout,
 	})
@@ -515,7 +515,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                  startAttributes.WorkflowType,
-		TaskList:                      startAttributes.TaskList,
+		TaskQueue:                     startAttributes.TaskQueue,
 		Input:                         startAttributes.Input,
 		WorkflowRunTimeoutSeconds:     startAttributes.WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeoutSeconds:    startAttributes.WorkflowTaskTimeoutSeconds,

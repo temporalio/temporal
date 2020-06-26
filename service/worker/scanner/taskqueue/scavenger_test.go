@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasklist
+package taskqueue
 
 import (
 	"errors"
@@ -44,10 +44,10 @@ import (
 type (
 	ScavengerTestSuite struct {
 		suite.Suite
-		taskListTable *mockTaskListTable
-		taskTables    map[string]*mockTaskTable
-		taskMgr       *mocks.TaskManager
-		scvgr         *Scavenger
+		taskQueueTable *mockTaskQueueTable
+		taskTables     map[string]*mockTaskTable
+		taskMgr        *mocks.TaskManager
+		scvgr          *Scavenger
 	}
 )
 
@@ -59,7 +59,7 @@ func TestScavengerTestSuite(t *testing.T) {
 
 func (s *ScavengerTestSuite) SetupTest() {
 	s.taskMgr = &mocks.TaskManager{}
-	s.taskListTable = &mockTaskListTable{}
+	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
@@ -73,10 +73,10 @@ func (s *ScavengerTestSuite) SetupTest() {
 
 func (s *ScavengerTestSuite) TestAllExpiredTasks() {
 	nTasks := 32
-	nTaskLists := 3
-	for i := 0; i < nTaskLists; i++ {
+	nTaskQueues := 3
+	for i := 0; i < nTaskQueues; i++ {
 		name := fmt.Sprintf("test-expired-tl-%v", i)
-		s.taskListTable.generate(name, true)
+		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks, true)
 		s.taskTables[name] = tt
@@ -86,16 +86,16 @@ func (s *ScavengerTestSuite) TestAllExpiredTasks() {
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
 		s.Equal(0, len(tasks), "failed to delete all expired tasks")
-		s.Nil(s.taskListTable.get(tl), "failed to delete expired executorTask list")
+		s.Nil(s.taskQueueTable.get(tl), "failed to delete expired executorTask queue")
 	}
 }
 
 func (s *ScavengerTestSuite) TestAllAliveTasks() {
 	nTasks := 32
-	nTaskLists := 3
-	for i := 0; i < nTaskLists; i++ {
+	nTaskQueues := 3
+	for i := 0; i < nTaskQueues; i++ {
 		name := fmt.Sprintf("test-Alive-tl-%v", i)
-		s.taskListTable.generate(name, true)
+		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks, false)
 		s.taskTables[name] = tt
@@ -105,16 +105,16 @@ func (s *ScavengerTestSuite) TestAllAliveTasks() {
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
 		s.Equal(nTasks, len(tasks), "scavenger deleted a non-expired executorTask")
-		s.NotNil(s.taskListTable.get(tl), "scavenger deleted a non-expired executorTask list")
+		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
 }
 
 func (s *ScavengerTestSuite) TestExpiredTasksFollowedByAlive() {
 	nTasks := 32
-	nTaskLists := 3
-	for i := 0; i < nTaskLists; i++ {
+	nTaskQueues := 3
+	for i := 0; i < nTaskQueues; i++ {
 		name := fmt.Sprintf("test-Alive-tl-%v", i)
-		s.taskListTable.generate(name, true)
+		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks/2, true)
 		tt.generate(nTasks/2, false)
@@ -126,16 +126,16 @@ func (s *ScavengerTestSuite) TestExpiredTasksFollowedByAlive() {
 		tasks := tbl.get(100)
 		s.Equal(nTasks/2, len(tasks), "scavenger deleted non-expired tasks")
 		s.Equal(int64(nTasks/2), tasks[0].GetTaskId(), "scavenger deleted wrong set of tasks")
-		s.NotNil(s.taskListTable.get(tl), "scavenger deleted a non-expired executorTask list")
+		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
 }
 
 func (s *ScavengerTestSuite) TestAliveTasksFollowedByExpired() {
 	nTasks := 32
-	nTaskLists := 3
-	for i := 0; i < nTaskLists; i++ {
+	nTaskQueues := 3
+	for i := 0; i < nTaskQueues; i++ {
 		name := fmt.Sprintf("test-Alive-tl-%v", i)
-		s.taskListTable.generate(name, true)
+		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks/2, false)
 		tt.generate(nTasks/2, true)
@@ -146,16 +146,16 @@ func (s *ScavengerTestSuite) TestAliveTasksFollowedByExpired() {
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
 		s.Equal(nTasks, len(tasks), "scavenger deleted non-expired tasks")
-		s.NotNil(s.taskListTable.get(tl), "scavenger deleted a non-expired executorTask list")
+		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
 }
 
 func (s *ScavengerTestSuite) TestAllExpiredTasksWithErrors() {
 	nTasks := 32
-	nTaskLists := 3
-	for i := 0; i < nTaskLists; i++ {
+	nTaskQueues := 3
+	for i := 0; i < nTaskQueues; i++ {
 		name := fmt.Sprintf("test-expired-tl-%v", i)
-		s.taskListTable.generate(name, true)
+		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks, true)
 		s.taskTables[name] = tt
@@ -166,7 +166,7 @@ func (s *ScavengerTestSuite) TestAllExpiredTasksWithErrors() {
 		tasks := tbl.get(100)
 		s.Equal(0, len(tasks), "failed to delete all expired tasks")
 	}
-	result, _ := s.taskListTable.list(nil, 10)
+	result, _ := s.taskQueueTable.list(nil, 10)
 	s.Equal(1, len(result), "expected partial deletion due to transient errors")
 }
 
@@ -183,31 +183,31 @@ func (s *ScavengerTestSuite) runScavenger() {
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocks() {
-	s.taskMgr.On("ListTaskList", mock.Anything).Return(
-		func(req *p.ListTaskListRequest) *p.ListTaskListResponse {
-			items, next := s.taskListTable.list(req.PageToken, req.PageSize)
-			return &p.ListTaskListResponse{Items: items, NextPageToken: next}
+	s.taskMgr.On("ListTaskQueue", mock.Anything).Return(
+		func(req *p.ListTaskQueueRequest) *p.ListTaskQueueResponse {
+			items, next := s.taskQueueTable.list(req.PageToken, req.PageSize)
+			return &p.ListTaskQueueResponse{Items: items, NextPageToken: next}
 		}, nil)
-	s.taskMgr.On("DeleteTaskList", mock.Anything).Return(
-		func(req *p.DeleteTaskListRequest) error {
-			s.taskListTable.delete(req.TaskList.Name)
+	s.taskMgr.On("DeleteTaskQueue", mock.Anything).Return(
+		func(req *p.DeleteTaskQueueRequest) error {
+			s.taskQueueTable.delete(req.TaskQueue.Name)
 			return nil
 		})
 	s.taskMgr.On("GetTasks", mock.Anything).Return(
 		func(req *p.GetTasksRequest) *p.GetTasksResponse {
-			result := s.taskTables[req.TaskList].get(req.BatchSize)
+			result := s.taskTables[req.TaskQueue].get(req.BatchSize)
 			return &p.GetTasksResponse{Tasks: result}
 		}, nil)
 	s.taskMgr.On("CompleteTasksLessThan", mock.Anything).Return(
 		func(req *p.CompleteTasksLessThanRequest) int {
-			return s.taskTables[req.TaskListName].deleteLessThan(req.TaskID, req.Limit)
+			return s.taskTables[req.TaskQueueName].deleteLessThan(req.TaskID, req.Limit)
 		}, nil)
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocksWithErrors() {
-	s.taskMgr.On("ListTaskList", mock.Anything).Return(nil, errTest).Once()
+	s.taskMgr.On("ListTaskQueue", mock.Anything).Return(nil, errTest).Once()
 	s.taskMgr.On("GetTasks", mock.Anything).Return(nil, errTest).Once()
 	s.taskMgr.On("CompleteTasksLessThan", mock.Anything).Return(0, errTest).Once()
-	s.taskMgr.On("DeleteTaskList", mock.Anything).Return(errTest).Once()
+	s.taskMgr.On("DeleteTaskQueue", mock.Anything).Return(errTest).Once()
 	s.setupTaskMgrMocks()
 }

@@ -287,7 +287,7 @@ func (s *TestBase) UpdateShard(updatedInfo *persistenceblobs.ShardInfo, previous
 }
 
 // CreateWorkflowExecutionWithBranchToken test util function
-func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskList,
+func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue,
 	wType string, wTimeout int32, decisionTimeout int32, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, branchToken []byte, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
@@ -297,7 +297,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				NamespaceID:         namespaceID,
 				WorkflowID:          workflowExecution.GetWorkflowId(),
 				RunID:               workflowExecution.GetRunId(),
-				TaskList:            taskList,
+				TaskQueue:           taskQueue,
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
@@ -316,7 +316,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				&p.DecisionTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
-					TaskList:            taskList,
+					TaskQueue:           taskQueue,
 					ScheduleID:          decisionScheduleID,
 					VisibilityTimestamp: time.Now(),
 				},
@@ -331,14 +331,14 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 }
 
 // CreateWorkflowExecution is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskList, wType string, wTimeout, decisionTimeout int32, nextEventID, lastProcessedEventID, decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
-	return s.CreateWorkflowExecutionWithBranchToken(namespaceID, workflowExecution, taskList, wType, wTimeout, decisionTimeout,
+func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue, wType string, wTimeout, decisionTimeout int32, nextEventID, lastProcessedEventID, decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
+	return s.CreateWorkflowExecutionWithBranchToken(namespaceID, workflowExecution, taskQueue, wType, wTimeout, decisionTimeout,
 		nextEventID, lastProcessedEventID, decisionScheduleID, nil, timerTasks)
 }
 
 // CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
+	taskQueue, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
@@ -356,7 +356,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 	transferTasks = append(transferTasks, &p.DecisionTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: namespaceID,
-		TaskList:    taskList,
+		TaskQueue:   taskQueue,
 		ScheduleID:  decisionScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
@@ -366,7 +366,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				NamespaceID:         namespaceID,
 				WorkflowID:          workflowExecution.GetWorkflowId(),
 				RunID:               workflowExecution.GetRunId(),
-				TaskList:            taskList,
+				TaskQueue:           taskQueue,
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
@@ -393,7 +393,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskList string, nextEventID int64, lastProcessedEventID int64,
+	taskQueue string, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64) (*p.CreateWorkflowExecutionResponse, error) {
 
 	transferTasks := []p.Task{}
@@ -402,7 +402,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 			&p.DecisionTask{
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
-				TaskList:    taskList,
+				TaskQueue:   taskQueue,
 				ScheduleID:  int64(decisionScheduleID),
 			})
 	}
@@ -412,7 +412,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 			&p.ActivityTask{
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
-				TaskList:    taskList,
+				TaskQueue:   taskQueue,
 				ScheduleID:  int64(activityScheduleID),
 			})
 	}
@@ -424,7 +424,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				NamespaceID:        namespaceID,
 				WorkflowID:         workflowExecution.GetWorkflowId(),
 				RunID:              workflowExecution.GetRunId(),
-				TaskList:           taskList,
+				TaskQueue:          taskQueue,
 				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:   common.FirstEventID,
@@ -446,7 +446,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 
 // CreateChildWorkflowExecution is a utility method to create child workflow executions
 func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	parentNamespaceID string, parentExecution commonpb.WorkflowExecution, initiatedID int64, taskList, wType string,
+	parentNamespaceID string, parentExecution commonpb.WorkflowExecution, initiatedID int64, taskQueue, wType string,
 	wTimeout int32, decisionTimeout int32, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
@@ -460,7 +460,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				ParentWorkflowID:    parentExecution.GetWorkflowId(),
 				ParentRunID:         parentExecution.GetRunId(),
 				InitiatedID:         initiatedID,
-				TaskList:            taskList,
+				TaskQueue:           taskQueue,
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
@@ -479,7 +479,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				&p.DecisionTask{
 					TaskID:      s.GetNextSequenceNumber(),
 					NamespaceID: namespaceID,
-					TaskList:    taskList,
+					TaskQueue:   taskQueue,
 					ScheduleID:  decisionScheduleID,
 				},
 			},
@@ -548,7 +548,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 	newdecisionTask := &p.DecisionTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceID,
-		TaskList:    updatedInfo.TaskList,
+		TaskQueue:   updatedInfo.TaskQueue,
 		ScheduleID:  int64(decisionScheduleID),
 	}
 
@@ -571,7 +571,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 				NamespaceID:         updatedInfo.NamespaceID,
 				WorkflowID:          newExecution.GetWorkflowId(),
 				RunID:               newExecution.GetRunId(),
-				TaskList:            updatedInfo.TaskList,
+				TaskQueue:           updatedInfo.TaskQueue,
 				WorkflowTypeName:    updatedInfo.WorkflowTypeName,
 				WorkflowRunTimeout:  updatedInfo.WorkflowRunTimeout,
 				WorkflowTaskTimeout: updatedInfo.WorkflowTaskTimeout,
@@ -752,7 +752,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 		transferTasks = append(transferTasks, &p.DecisionTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceID,
-			TaskList:    updatedInfo.TaskList,
+			TaskQueue:   updatedInfo.TaskQueue,
 			ScheduleID:  int64(decisionScheduleID)})
 	}
 
@@ -760,7 +760,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 		transferTasks = append(transferTasks, &p.ActivityTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceID,
-			TaskList:    updatedInfo.TaskList,
+			TaskQueue:   updatedInfo.TaskQueue,
 			ScheduleID:  int64(activityScheduleID)})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
@@ -1239,12 +1239,12 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 }
 
 // CreateDecisionTask is a utility method to create a task
-func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskList string,
+func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue string,
 	decisionScheduleID int64) (int64, error) {
-	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
+	leaseResponse, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
-		TaskList:    taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_DECISION,
+		TaskQueue:   taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_DECISION,
 	})
 	if err != nil {
 		return 0, err
@@ -1265,8 +1265,8 @@ func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution comm
 	}
 
 	_, err = s.TaskMgr.CreateTasks(&p.CreateTasksRequest{
-		TaskListInfo: leaseResponse.TaskListInfo,
-		Tasks:        tasks,
+		TaskQueueInfo: leaseResponse.TaskQueueInfo,
+		Tasks:         tasks,
 	})
 
 	if err != nil {
@@ -1280,21 +1280,21 @@ func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution comm
 func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution commonpb.WorkflowExecution,
 	activities map[int64]string) ([]int64, error) {
 
-	taskLists := make(map[string]*p.PersistedTaskListInfo)
+	taskQueues := make(map[string]*p.PersistedTaskQueueInfo)
 	for _, tl := range activities {
-		_, ok := taskLists[tl]
+		_, ok := taskQueues[tl]
 		if !ok {
-			resp, err := s.TaskMgr.LeaseTaskList(
-				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: enumspb.TASK_LIST_TYPE_ACTIVITY})
+			resp, err := s.TaskMgr.LeaseTaskQueue(
+				&p.LeaseTaskQueueRequest{NamespaceID: namespaceID, TaskQueue: tl, TaskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY})
 			if err != nil {
 				return []int64{}, err
 			}
-			taskLists[tl] = resp.TaskListInfo
+			taskQueues[tl] = resp.TaskQueueInfo
 		}
 	}
 
 	var taskIDs []int64
-	for activityScheduleID, taskList := range activities {
+	for activityScheduleID, taskQueue := range activities {
 		taskID := s.GetNextSequenceNumber()
 		tasks := []*persistenceblobs.AllocatedTaskInfo{
 			{
@@ -1310,8 +1310,8 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 			},
 		}
 		_, err := s.TaskMgr.CreateTasks(&p.CreateTasksRequest{
-			TaskListInfo: taskLists[taskList],
-			Tasks:        tasks,
+			TaskQueueInfo: taskQueues[taskQueue],
+			Tasks:         tasks,
 		})
 		if err != nil {
 			return nil, err
@@ -1323,10 +1323,10 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(namespaceID string, taskList string, taskType enumspb.TaskListType, batchSize int) (*p.GetTasksResponse, error) {
+func (s *TestBase) GetTasks(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, batchSize int) (*p.GetTasksResponse, error) {
 	response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 		NamespaceID:  namespaceID,
-		TaskList:     taskList,
+		TaskQueue:    taskQueue,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
 		MaxReadLevel: convert.Int64Ptr(math.MaxInt64),
@@ -1340,12 +1340,12 @@ func (s *TestBase) GetTasks(namespaceID string, taskList string, taskType enumsp
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(namespaceID string, taskList string, taskType enumspb.TaskListType, taskID int64) error {
+func (s *TestBase) CompleteTask(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, taskID int64) error {
 	return s.TaskMgr.CompleteTask(&p.CompleteTaskRequest{
-		TaskList: &p.TaskListKey{
+		TaskQueue: &p.TaskQueueKey{
 			NamespaceID: namespaceID,
 			TaskType:    taskType,
-			Name:        taskList,
+			Name:        taskQueue,
 		},
 		TaskID: taskID,
 	})

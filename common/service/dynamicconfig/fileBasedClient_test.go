@@ -93,8 +93,8 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 	s.Equal(false, v)
 
 	filters = map[Filter]interface{}{
-		Namespace:    "samples-namespace",
-		TaskListName: "non-exist-tasklist",
+		Namespace:     "samples-namespace",
+		TaskQueueName: "non-exist-taskqueue",
 	}
 	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
@@ -160,7 +160,7 @@ func (s *fileBasedClientSuite) TestGetBoolValue() {
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
 	filters := map[Filter]interface{}{
-		TaskListName: "random tasklist",
+		TaskQueueName: "random taskqueue",
 	}
 	v, err := s.client.GetStringValue(testGetStringPropertyKey, filters, "defaultString")
 	s.NoError(err)
@@ -188,7 +188,7 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
 	filters := map[Filter]interface{}{
-		TaskListName: "random tasklist",
+		TaskQueueName: "random taskqueue",
 	}
 	v, err := s.client.GetMapValue(testGetMapPropertyKey, filters, defaultVal)
 	s.Error(err)
@@ -212,8 +212,8 @@ func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 	filters := map[Filter]interface{}{
-		Namespace:    "samples-namespace",
-		TaskListName: "longIdleTimeTasklist",
+		Namespace:     "samples-namespace",
+		TaskQueueName: "longIdleTimeTaskqueue",
 	}
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
 	s.Error(err)
@@ -275,13 +275,13 @@ func (s *fileBasedClientSuite) TestMatch() {
 		{
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
-					"namespace":    "samples-namespace",
-					"taskListName": "sample-task-list",
+					"namespace":     "samples-namespace",
+					"taskQueueName": "sample-task-list",
 				},
 			},
 			filters: map[Filter]interface{}{
-				Namespace:    "samples-namespace",
-				TaskListName: "sample-task-list",
+				Namespace:     "samples-namespace",
+				TaskQueueName: "sample-task-list",
 			},
 			matched: true,
 		},
@@ -293,8 +293,8 @@ func (s *fileBasedClientSuite) TestMatch() {
 				},
 			},
 			filters: map[Filter]interface{}{
-				Namespace:    "samples-namespace",
-				TaskListName: "sample-task-list",
+				Namespace:     "samples-namespace",
+				TaskQueueName: "sample-task-list",
 			},
 			matched: false,
 		},
@@ -305,7 +305,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 				},
 			},
 			filters: map[Filter]interface{}{
-				TaskListName: "sample-task-list",
+				TaskQueueName: "sample-task-list",
 			},
 			matched: false,
 		},

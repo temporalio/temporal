@@ -101,7 +101,7 @@ var (
 
 // Pre-defined values for TagSysComponent
 var (
-	ComponentTaskList                 = component("tasklist")
+	ComponentTaskQueue                = component("taskqueue")
 	ComponentHistoryEngine            = component("history-engine")
 	ComponentHistoryCache             = component("history-cache")
 	ComponentEventsCache              = component("events-cache")
@@ -182,6 +182,6 @@ var (
 	StoreOperationDeleteWorkflowExecution = storeOperation("delete-wf-execution")
 	StoreOperationUpdateShard             = storeOperation("update-shard")
 	StoreOperationCreateTask              = storeOperation("create-task")
-	StoreOperationUpdateTaskList          = storeOperation("update-task-list")
-	StoreOperationStopTaskList            = storeOperation("stop-task-list")
+	StoreOperationUpdateTaskQueue         = storeOperation("update-task-list")
+	StoreOperationStopTaskQueue           = storeOperation("stop-task-list")
 )

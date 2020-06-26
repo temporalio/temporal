@@ -84,7 +84,7 @@ const (
 	rowTypeShardTaskID     = int64(-11)
 	emptyInitiatedID       = int64(-7)
 
-	stickyTaskListTTL = int32(24 * time.Hour / time.Second) // if sticky task_list stopped being updated, remove it in one day
+	stickyTaskQueueTTL = int32(24 * time.Hour / time.Second) // if sticky task_queue stopped being updated, remove it in one day
 )
 
 const (
@@ -100,12 +100,12 @@ const (
 const (
 	// Row types for table tasks
 	rowTypeTask = iota
-	rowTypeTaskList
+	rowTypeTaskQueue
 )
 
 const (
-	taskListTaskID = -12345
-	initialRangeID = 1 // Id of the first range of a new task list
+	taskQueueTaskID = -12345
+	initialRangeID  = 1 // Id of the first range of a new task queue
 )
 
 const (
@@ -618,84 +618,84 @@ workflow_state = ? ` +
 		`and visibility_ts < ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`namespace_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
-		`namespace_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
 	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
 		`FROM tasks ` +
 		`WHERE namespace_id = ? ` +
-		`and task_list_name = ? ` +
-		`and task_list_type = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
 		`and type = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
 	templateCompleteTaskQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
-		`and task_list_name = ? ` +
-		`and task_list_type = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
 
 	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
-		`AND task_list_name = ? ` +
-		`AND task_list_type = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
 		`AND task_id <= ? `
 
-	templateGetTaskList = `SELECT ` +
+	templateGetTaskQueue = `SELECT ` +
 		`range_id, ` +
-		`task_list, ` +
-		`task_list_encoding ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
 		`FROM tasks ` +
 		`WHERE namespace_id = ? ` +
-		`and task_list_name = ? ` +
-		`and task_list_type = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
 
-	templateInsertTaskListQuery = `INSERT INTO tasks (` +
+	templateInsertTaskQueueQuery = `INSERT INTO tasks (` +
 		`namespace_id, ` +
-		`task_list_name, ` +
-		`task_list_type, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
 		`type, ` +
 		`task_id, ` +
 		`range_id, ` +
-		`task_list, ` +
-		`task_list_encoding ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
 		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
-	templateUpdateTaskListQuery = `UPDATE tasks SET ` +
+	templateUpdateTaskQueueQuery = `UPDATE tasks SET ` +
 		`range_id = ?, ` +
-		`task_list = ?, ` +
-		`task_list_encoding = ? ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
 		`WHERE namespace_id = ? ` +
-		`and task_list_name = ? ` +
-		`and task_list_type = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateUpdateTaskListQueryWithTTL = `INSERT INTO tasks (` +
+	templateUpdateTaskQueueQueryWithTTL = `INSERT INTO tasks (` +
 		`namespace_id, ` +
-		`task_list_name, ` +
-		`task_list_type, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
 		`type, ` +
 		`task_id, ` +
 		`range_id, ` +
-		`task_list, ` +
-		`task_list_encoding ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
 		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
-	templateDeleteTaskListQuery = `DELETE FROM tasks ` +
+	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
-		`AND task_list_name = ? ` +
-		`AND task_list_type = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
 		`AND task_id = ? ` +
 		`IF range_id = ?`
@@ -2225,94 +2225,94 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*p.LeaseTaskListResponse, error) {
-	if len(request.TaskList) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList requires non empty task list"))
+func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) (*p.LeaseTaskQueueResponse, error) {
+	if len(request.TaskQueue) == 0 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
 	}
 	now := types.TimestampNow()
-	query := d.session.Query(templateGetTaskList,
+	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
-		request.TaskList,
+		request.TaskQueue,
 		request.TaskType,
-		rowTypeTaskList,
-		taskListTaskID,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
 	)
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
 	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
-	var tl *p.PersistedTaskListInfo
+	var tl *p.PersistedTaskQueueInfo
 	if err != nil {
-		if err == gocql.ErrNotFound { // First time task list is used
-			tl = &p.PersistedTaskListInfo{
-				Data: &persistenceblobs.TaskListInfo{
+		if err == gocql.ErrNotFound { // First time task queue is used
+			tl = &p.PersistedTaskQueueInfo{
+				Data: &persistenceblobs.TaskQueueInfo{
 					NamespaceId: request.NamespaceID,
-					Name:        request.TaskList,
+					Name:        request.TaskQueue,
 					TaskType:    request.TaskType,
-					Kind:        request.TaskListKind,
+					Kind:        request.TaskQueueKind,
 					AckLevel:    0,
 					Expiry:      nil,
 					LastUpdated: now,
 				},
 				RangeID: initialRangeID,
 			}
-			datablob, err := serialization.TaskListInfoToBlob(tl.Data)
+			datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
 
 			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 			}
 
-			query = d.session.Query(templateInsertTaskListQuery,
+			query = d.session.Query(templateInsertTaskQueueQuery,
 				request.NamespaceID,
-				request.TaskList,
+				request.TaskQueue,
 				request.TaskType,
-				rowTypeTaskList,
-				taskListTaskID,
+				rowTypeTaskQueue,
+				taskQueueTaskID,
 				initialRangeID,
 				datablob.Data,
 				datablob.Encoding,
 			)
 		} else if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 	} else {
 		// if request.RangeID is > 0, we are trying to renew an already existing
-		// lease on the task list. If request.RangeID=0, we are trying to steal
-		// the tasklist from its current owner
+		// lease on the task queue. If request.RangeID=0, we are trying to steal
+		// the taskqueue from its current owner
 		if request.RangeID > 0 && request.RangeID != rangeID {
 			return nil, &p.ConditionFailedError{
-				Msg: fmt.Sprintf("leaseTaskList:renew failed: taskList:%v, taskListType:%v, haveRangeID:%v, gotRangeID:%v",
-					request.TaskList, request.TaskType, request.RangeID, rangeID),
+				Msg: fmt.Sprintf("leaseTaskQueue:renew failed: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+					request.TaskQueue, request.TaskType, request.RangeID, rangeID),
 			}
 		}
 
-		tli, err := serialization.TaskListInfoFromBlob(tlBytes, tlEncoding)
+		tli, err := serialization.TaskQueueInfoFromBlob(tlBytes, tlEncoding)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 
 		tli.LastUpdated = now
-		tl = &p.PersistedTaskListInfo{
+		tl = &p.PersistedTaskQueueInfo{
 			Data:    tli,
 			RangeID: rangeID + 1,
 		}
 
-		datablob, err := serialization.TaskListInfoToBlob(tl.Data)
+		datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 
-		query = d.session.Query(templateUpdateTaskListQuery,
+		query = d.session.Query(templateUpdateTaskQueueQuery,
 			rangeID+1,
 			datablob.Data,
 			datablob.Encoding,
 			request.NamespaceID,
-			&request.TaskList,
+			&request.TaskQueue,
 			request.TaskType,
-			rowTypeTaskList,
-			taskListTaskID,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
 			rangeID,
 		)
 	}
@@ -2320,68 +2320,68 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskList operation failed. Error: %v", err))
+			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. Error: %v", err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed. Error : %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Error : %v", err))
 	}
 	if !applied {
 		previousRangeID := previous["range_id"]
 		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("leaseTaskList: taskList:%v, taskListType:%v, haveRangeID:%v, gotRangeID:%v",
-				request.TaskList, request.TaskType, rangeID, previousRangeID),
+			Msg: fmt.Sprintf("leaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+				request.TaskQueue, request.TaskType, rangeID, previousRangeID),
 		}
 	}
 
-	return &p.LeaseTaskListResponse{TaskListInfo: tl}, nil
+	return &p.LeaseTaskQueueResponse{TaskQueueInfo: tl}, nil
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) (*p.UpdateTaskListResponse, error) {
-	tli := *request.TaskListInfo
+func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
+	tli := *request.TaskQueueInfo
 	tli.LastUpdated = types.TimestampNow()
-	if tli.Kind == enumspb.TASK_LIST_KIND_STICKY { // if task_list is sticky, then update with TTL
+	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		expiry := types.TimestampNow()
-		expiry.Seconds += int64(stickyTaskListTTL)
+		expiry.Seconds += int64(stickyTaskQueueTTL)
 
-		datablob, err := serialization.TaskListInfoToBlob(&tli)
+		datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 		if err != nil {
-			return nil, convertCommonErrors("UpdateTaskList", err)
+			return nil, convertCommonErrors("UpdateTaskQueue", err)
 		}
 
-		query := d.session.Query(templateUpdateTaskListQueryWithTTL,
+		query := d.session.Query(templateUpdateTaskQueueQueryWithTTL,
 			tli.GetNamespaceId(),
 			&tli.Name,
 			tli.TaskType,
-			rowTypeTaskList,
-			taskListTaskID,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
 			request.RangeID,
 			datablob.Data,
 			datablob.Encoding,
-			stickyTaskListTTL,
+			stickyTaskQueueTTL,
 		)
 		err = query.Exec()
 		if err != nil {
-			return nil, convertCommonErrors("UpdateTaskList", err)
+			return nil, convertCommonErrors("UpdateTaskQueue", err)
 		}
 
-		return &p.UpdateTaskListResponse{}, nil
+		return &p.UpdateTaskQueueResponse{}, nil
 	}
 
 	tli.LastUpdated = types.TimestampNow()
-	datablob, err := serialization.TaskListInfoToBlob(&tli)
+	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
-		return nil, convertCommonErrors("UpdateTaskList", err)
+		return nil, convertCommonErrors("UpdateTaskQueue", err)
 	}
 
-	query := d.session.Query(templateUpdateTaskListQuery,
+	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID,
 		datablob.Data,
 		datablob.Encoding,
 		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
-		rowTypeTaskList,
-		taskListTaskID,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
 		request.RangeID,
 	)
 
@@ -2389,9 +2389,9 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err))
+			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateTaskQueue operation failed. Error: %v", err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Error: %v", err))
 	}
 
 	if !applied {
@@ -2401,32 +2401,32 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 		}
 
 		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update task list. name: %v, type: %v, rangeID: %v, columns: (%v)",
+			Msg: fmt.Sprintf("Failed to update task queue. name: %v, type: %v, rangeID: %v, columns: (%v)",
 				tli.Name, tli.TaskType, request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
-	return &p.UpdateTaskListResponse{}, nil
+	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func (d *cassandraPersistence) ListTaskList(request *p.ListTaskListRequest) (*p.ListTaskListResponse, error) {
+func (d *cassandraPersistence) ListTaskQueue(request *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
 	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))
 }
 
-func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) error {
-	query := d.session.Query(templateDeleteTaskListQuery,
-		request.TaskList.NamespaceID, request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
+func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest) error {
+	query := d.session.Query(templateDeleteTaskQueueQuery,
+		request.TaskQueue.NamespaceID, request.TaskQueue.Name, request.TaskQueue.TaskType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteTaskList operation failed. Error: %v", err))
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteTaskQueue operation failed. Error: %v", err))
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteTaskList operation failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteTaskQueue operation failed. Error: %v", err))
 	}
 	if !applied {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("DeleteTaskList operation failed: expected_range_id=%v but found %+v", request.RangeID, previous),
+			Msg: fmt.Sprintf("DeleteTaskQueue operation failed: expected_range_id=%v but found %+v", request.RangeID, previous),
 		}
 	}
 	return nil
@@ -2442,9 +2442,9 @@ func MintAllocatedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *pers
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	namespaceID := request.TaskListInfo.Data.GetNamespaceId()
-	taskList := request.TaskListInfo.Data.Name
-	taskListType := request.TaskListInfo.Data.TaskType
+	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
+	taskQueue := request.TaskQueueInfo.Data.Name
+	taskQueueType := request.TaskQueueInfo.Data.TaskType
 
 	for _, task := range request.Tasks {
 		ttl := GetTaskTTL(task.Data)
@@ -2456,8 +2456,8 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 		if ttl <= 0 {
 			batch.Query(templateCreateTaskQuery,
 				namespaceID,
-				taskList,
-				taskListType,
+				taskQueue,
+				taskQueueType,
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
@@ -2469,8 +2469,8 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 
 			batch.Query(templateCreateTaskWithTTLQuery,
 				namespaceID,
-				taskList,
-				taskListType,
+				taskQueue,
+				taskQueueType,
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
@@ -2479,25 +2479,25 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 		}
 	}
 
-	tl := *request.TaskListInfo.Data
+	tl := *request.TaskQueueInfo.Data
 	tl.LastUpdated = types.TimestampNow()
-	datablob, err := serialization.TaskListInfoToBlob(&tl)
+	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
 
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	batch.Query(templateUpdateTaskListQuery,
-		request.TaskListInfo.RangeID,
+	batch.Query(templateUpdateTaskQueueQuery,
+		request.TaskQueueInfo.RangeID,
 		datablob.Data,
 		datablob.Encoding,
 		namespaceID,
-		taskList,
-		taskListType,
-		rowTypeTaskList,
-		taskListTaskID,
-		request.TaskListInfo.RangeID,
+		taskQueue,
+		taskQueueType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.TaskQueueInfo.RangeID,
 	)
 
 	previous := make(map[string]interface{})
@@ -2511,8 +2511,8 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	if !applied {
 		rangeID := previous["range_id"]
 		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskListType: %v, rangeID: %v, db rangeID: %v",
-				taskList, taskListType, request.TaskListInfo.RangeID, rangeID),
+			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
+				taskQueue, taskQueueType, request.TaskQueueInfo.RangeID, rangeID),
 		}
 	}
 
@@ -2540,10 +2540,10 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 		return &p.GetTasksResponse{}, nil
 	}
 
-	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
 		request.NamespaceID,
-		request.TaskList,
+		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
 		request.ReadLevel,
@@ -2606,7 +2606,7 @@ PopulateTasks:
 
 // From TaskManager interface
 func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
-	tli := request.TaskList
+	tli := request.TaskQueue
 	query := d.session.Query(templateCompleteTaskQuery,
 		tli.NamespaceID,
 		tli.Name,
@@ -2630,7 +2630,7 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 // be returned to the caller
 func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLessThanRequest) (int, error) {
 	query := d.session.Query(templateCompleteTasksLessThanQuery,
-		request.NamespaceID, request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
+		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
 	if err != nil {
 		if isThrottlingError(err) {

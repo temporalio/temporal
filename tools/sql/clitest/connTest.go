@@ -144,13 +144,13 @@ CREATE TABLE task_maps (
 
 CREATE TABLE tasks (
   namespace_id BINARY(16) NOT NULL,
-  task_list_name VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
   task_type TINYINT NOT NULL, -- {Activity, Decision}
   task_id BIGINT NOT NULL,
   --
   data BLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_list_name, task_type, task_id)
+  PRIMARY KEY (namespace_id, task_queue_name, task_type, task_id)
 );
 `
 }

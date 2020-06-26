@@ -90,10 +90,10 @@ func NewCliApp() *cli.App {
 			Subcommands: newActivityCommands(),
 		},
 		{
-			Name:        "tasklist",
+			Name:        "taskqueue",
 			Aliases:     []string{"tl"},
-			Usage:       "Operate Temporal task list",
-			Subcommands: newTaskListCommands(),
+			Usage:       "Operate Temporal task queue",
+			Subcommands: newTaskQueueCommands(),
 		},
 		{
 			Name:        "batch",
@@ -142,10 +142,10 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminElasticSearchCommands(),
 				},
 				{
-					Name:        "tasklist",
+					Name:        "taskqueue",
 					Aliases:     []string{"tl"},
-					Usage:       "Run admin operation on taskList",
-					Subcommands: newAdminTaskListCommands(),
+					Usage:       "Run admin operation on taskQueue",
+					Subcommands: newAdminTaskQueueCommands(),
 				},
 				{
 					Name:        "membership",

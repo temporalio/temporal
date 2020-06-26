@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasklist
+package taskqueue
 
 import (
 	"time"
@@ -35,29 +35,29 @@ import (
 
 var retryForeverPolicy = newRetryForeverPolicy()
 
-func (s *Scavenger) completeTasks(key *p.TaskListKey, taskID int64, limit int) (int, error) {
+func (s *Scavenger) completeTasks(key *p.TaskQueueKey, taskID int64, limit int) (int, error) {
 	var n int
 	var err error
 	err = s.retryForever(func() error {
 		n, err = s.db.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
-			NamespaceID:  key.NamespaceID,
-			TaskListName: key.Name,
-			TaskType:     key.TaskType,
-			TaskID:       taskID,
-			Limit:        limit,
+			NamespaceID:   key.NamespaceID,
+			TaskQueueName: key.Name,
+			TaskType:      key.TaskType,
+			TaskID:        taskID,
+			Limit:         limit,
 		})
 		return err
 	})
 	return n, err
 }
 
-func (s *Scavenger) getTasks(key *p.TaskListKey, batchSize int) (*p.GetTasksResponse, error) {
+func (s *Scavenger) getTasks(key *p.TaskQueueKey, batchSize int) (*p.GetTasksResponse, error) {
 	var err error
 	var resp *p.GetTasksResponse
 	err = s.retryForever(func() error {
 		resp, err = s.db.GetTasks(&p.GetTasksRequest{
 			NamespaceID: key.NamespaceID,
-			TaskList:    key.Name,
+			TaskQueue:   key.Name,
 			TaskType:    key.TaskType,
 			ReadLevel:   -1, // get the first N tasks sorted by taskID
 			BatchSize:   batchSize,
@@ -67,11 +67,11 @@ func (s *Scavenger) getTasks(key *p.TaskListKey, batchSize int) (*p.GetTasksResp
 	return resp, err
 }
 
-func (s *Scavenger) listTaskList(pageSize int, pageToken []byte) (*p.ListTaskListResponse, error) {
+func (s *Scavenger) listTaskQueue(pageSize int, pageToken []byte) (*p.ListTaskQueueResponse, error) {
 	var err error
-	var resp *p.ListTaskListResponse
+	var resp *p.ListTaskQueueResponse
 	err = s.retryForever(func() error {
-		resp, err = s.db.ListTaskList(&p.ListTaskListRequest{
+		resp, err = s.db.ListTaskQueue(&p.ListTaskQueueRequest{
 			PageSize:  pageSize,
 			PageToken: pageToken,
 		})
@@ -80,11 +80,11 @@ func (s *Scavenger) listTaskList(pageSize int, pageToken []byte) (*p.ListTaskLis
 	return resp, err
 }
 
-func (s *Scavenger) deleteTaskList(key *p.TaskListKey, rangeID int64) error {
+func (s *Scavenger) deleteTaskQueue(key *p.TaskQueueKey, rangeID int64) error {
 	// retry only on service busy errors
 	return backoff.Retry(func() error {
-		return s.db.DeleteTaskList(&p.DeleteTaskListRequest{
-			TaskList: &p.TaskListKey{
+		return s.db.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
+			TaskQueue: &p.TaskQueueKey{
 				NamespaceID: key.NamespaceID,
 				Name:        key.Name,
 				TaskType:    key.TaskType,

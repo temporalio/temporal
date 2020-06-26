@@ -54,10 +54,10 @@ const (
 	FlagMinEventID                        = "min_event_id"
 	FlagMaxEventID                        = "max_event_id"
 	FlagStartEventVersion                 = "start_event_version"
-	FlagTaskList                          = "tasklist"
-	FlagTaskListWithAlias                 = FlagTaskList + ", tl"
-	FlagTaskListType                      = "tasklisttype"
-	FlagTaskListTypeWithAlias             = FlagTaskListType + ", tlt"
+	FlagTaskQueue                         = "taskqueue"
+	FlagTaskQueueWithAlias                = FlagTaskQueue + ", tl"
+	FlagTaskQueueType                     = "taskqueuetype"
+	FlagTaskQueueTypeWithAlias            = FlagTaskQueueType + ", tlt"
 	FlagWorkflowIDReusePolicy             = "workflowidreusepolicy"
 	FlagWorkflowIDReusePolicyAlias        = FlagWorkflowIDReusePolicy + ", wrp"
 	FlagCronSchedule                      = "cron"
@@ -299,8 +299,8 @@ func getFlagsForShowID() []cli.Flag {
 func getFlagsForStart() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagTaskListWithAlias,
-			Usage: "TaskList",
+			Name:  FlagTaskQueueWithAlias,
+			Usage: "TaskQueue",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,

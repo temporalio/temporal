@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidTaskListNames(t *testing.T) {
+func TestValidTaskQueueNames(t *testing.T) {
 	testCases := []struct {
 		input     string
 		baseName  string
@@ -51,7 +51,7 @@ func TestValidTaskListNames(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			tn, err := newTaskListName(tc.input)
+			tn, err := newTaskQueueName(tc.input)
 			require.NoError(t, err)
 			require.Equal(t, tc.partition, tn.partition)
 			require.Equal(t, tc.partition == 0, tn.IsRoot())
@@ -62,7 +62,7 @@ func TestValidTaskListNames(t *testing.T) {
 	}
 }
 
-func TestTaskListParentName(t *testing.T) {
+func TestTaskQueueParentName(t *testing.T) {
 	testCases := []struct {
 		name   string
 		degree int
@@ -95,14 +95,14 @@ func TestTaskListParentName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name+"#"+strconv.Itoa(tc.degree), func(t *testing.T) {
-			tn, err := newTaskListName(tc.name)
+			tn, err := newTaskQueueName(tc.name)
 			require.NoError(t, err)
 			require.Equal(t, tc.output, tn.Parent(tc.degree))
 		})
 	}
 }
 
-func TestInvalidTasklistNames(t *testing.T) {
+func TestInvalidTaskqueueNames(t *testing.T) {
 	inputs := []string{
 		"/__temporal_sys/",
 		"/__temporal_sys/0",
@@ -114,7 +114,7 @@ func TestInvalidTasklistNames(t *testing.T) {
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {
-			_, err := newTaskListName(name)
+			_, err := newTaskQueueName(name)
 			require.Error(t, err)
 		})
 	}

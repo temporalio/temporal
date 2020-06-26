@@ -124,7 +124,7 @@ func (c *canaryImpl) startWorker() error {
 		MaxConcurrentActivityExecutionSize: activityWorkerMaxExecutors,
 	}
 
-	archivalWorker := worker.New(c.archivalClient.Client, archivalTaskListName, options)
+	archivalWorker := worker.New(c.archivalClient.Client, archivalTaskQueueName, options)
 	registerHistoryArchival(archivalWorker)
 
 	defer archivalWorker.Stop()
@@ -132,7 +132,7 @@ func (c *canaryImpl) startWorker() error {
 		return err
 	}
 
-	canaryWorker := worker.New(c.canaryClient.Client, taskListName, options)
+	canaryWorker := worker.New(c.canaryClient.Client, taskQueueName, options)
 	registerBatch(canaryWorker)
 	registerCancellation(canaryWorker)
 	registerConcurrentExec(canaryWorker)

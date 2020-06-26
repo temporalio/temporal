@@ -264,14 +264,14 @@ func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 	return newInt64("wf-decision-fail-cause", decisionFailCause)
 }
 
-// WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType enumspb.TaskListType) Tag {
-	return newInt32("wf-task-list-type", int32(taskListType))
+// WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
+func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) Tag {
+	return newInt32("wf-task-list-type", int32(taskQueueType))
 }
 
-// WorkflowTaskListName returns tag for WorkflowTaskListName
-func WorkflowTaskListName(taskListName string) Tag {
-	return newStringTag("wf-task-list-name", taskListName)
+// WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
+func WorkflowTaskQueueName(taskQueueName string) Tag {
+	return newStringTag("wf-task-list-name", taskQueueName)
 }
 
 // size limit
@@ -848,7 +848,7 @@ func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
 }
 
-// TaskListInfo returns tag for task list info
-func TaskListInfo(s interface{}) Tag {
+// TaskQueueInfo returns tag for task queue info
+func TaskQueueInfo(s interface{}) Tag {
 	return newObjectTag("task-list-info", s)
 }

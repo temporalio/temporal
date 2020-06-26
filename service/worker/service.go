@@ -134,7 +134,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:              &params.PersistenceConfig,
 			ClusterMetadata:          params.ClusterMetadata,
-			TaskListScannerEnabled:   dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
+			TaskQueueScannerEnabled:  dc.GetBoolProperty(dynamicconfig.TaskQueueScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},

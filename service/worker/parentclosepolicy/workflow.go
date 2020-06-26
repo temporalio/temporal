@@ -44,8 +44,8 @@ import (
 
 const (
 	processorContextKey = "processorContext"
-	// processorTaskListName is the tasklist name
-	processorTaskListName = "temporal-sys-processor-parent-close-policy"
+	// processorTaskQueueName is the taskqueue name
+	processorTaskQueueName = "temporal-sys-processor-parent-close-policy"
 	// processorWFTypeName is the workflow type
 	processorWFTypeName   = "temporal-sys-parent-close-policy-workflow"
 	processorActivityName = "temporal-sys-parent-close-policy-activity"

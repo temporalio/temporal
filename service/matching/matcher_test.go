@@ -53,8 +53,8 @@ type MatcherTestSuite struct {
 	controller  *gomock.Controller
 	client      *matchingservicemock.MockMatchingServiceClient
 	fwdr        *Forwarder
-	cfg         *taskListConfig
-	taskList    *taskListID
+	cfg         *taskQueueConfig
+	taskQueue   *taskQueueID
 	matcher     *TaskMatcher // matcher for child partition
 	rootMatcher *TaskMatcher // matcher for parent partition
 }
@@ -67,8 +67,8 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNopCollection())
-	t.taskList = newTestTaskListID(uuid.New(), taskListPartitionPrefix+"tl0/1", enumspb.TASK_LIST_TYPE_DECISION)
-	tlCfg, err := newTaskListConfig(t.taskList, cfg, t.newNamespaceCache())
+	t.taskQueue = newTestTaskQueueID(uuid.New(), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_DECISION)
+	tlCfg, err := newTaskQueueConfig(t.taskQueue, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
@@ -77,13 +77,13 @@ func (t *MatcherTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.cfg = tlCfg
-	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, enumspb.TASK_LIST_KIND_NORMAL, t.client)
+	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 
-	rootTaskList := newTestTaskListID(t.taskList.namespaceID, t.taskList.Parent(20), enumspb.TASK_LIST_TYPE_DECISION)
-	rootTasklistCfg, err := newTaskListConfig(rootTaskList, cfg, t.newNamespaceCache())
+	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20), enumspb.TASK_QUEUE_TYPE_DECISION)
+	rootTaskqueueCfg, err := newTaskQueueConfig(rootTaskQueue, cfg, t.newNamespaceCache())
 	t.NoError(err)
-	t.rootMatcher = newTaskMatcher(rootTasklistCfg, nil, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
+	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
@@ -186,8 +186,8 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsgenpb.TaskSource)
 	t.NotNil(req)
 	t.NoError(err)
 	t.True(remoteSyncMatch)
-	t.Equal(t.taskList.name, req.GetForwardedFrom())
-	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
+	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
@@ -291,8 +291,8 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	err = payloads.Decode(result.GetQueryResult(), &answer)
 	t.NoError(err)
 	t.Equal("answer", answer)
-	t.Equal(t.taskList.name, req.GetForwardedFrom())
-	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
+	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
@@ -413,8 +413,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.NoError(err)
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
-	t.Equal(t.taskList.name, req.GetForwardedFrom())
-	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
+	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestRemotePoll() {

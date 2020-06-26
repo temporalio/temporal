@@ -253,12 +253,12 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		NamespaceID:         executionInfo.NamespaceID,
-		TaskList:            decision.TaskList,
+		TaskQueue:           decision.TaskQueue,
 		ScheduleID:          decision.ScheduleID,
 		Version:             decision.Version,
 	})
 
-	if r.mutableState.IsStickyTaskListEnabled() {
+	if r.mutableState.IsStickyTaskQueueEnabled() {
 		scheduledTime := time.Unix(0, decision.ScheduledTimestamp)
 		scheduleToStartTimeout := time.Duration(
 			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
@@ -338,7 +338,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		NamespaceID:         targetNamespaceID,
-		TaskList:            activityInfo.TaskList,
+		TaskQueue:           activityInfo.TaskQueue,
 		ScheduleID:          activityInfo.ScheduleID,
 		Version:             activityInfo.Version,
 	})

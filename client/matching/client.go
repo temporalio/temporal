@@ -72,12 +72,12 @@ func (c *clientImpl) AddActivityTask(
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetNamespaceId(),
-		*request.GetTaskList(),
-		enumspb.TASK_LIST_TYPE_ACTIVITY,
+		*request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = partition
-	client, err := c.getClientForTasklist(partition)
+	request.TaskQueue.Name = partition
+	client, err := c.getClientForTaskqueue(partition)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +92,12 @@ func (c *clientImpl) AddDecisionTask(
 	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetNamespaceId(),
-		*request.GetTaskList(),
-		enumspb.TASK_LIST_TYPE_DECISION,
+		*request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = partition
-	client, err := c.getClientForTasklist(request.TaskList.GetName())
+	request.TaskQueue.Name = partition
+	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +112,12 @@ func (c *clientImpl) PollForActivityTask(
 	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
-		*request.PollRequest.GetTaskList(),
-		enumspb.TASK_LIST_TYPE_ACTIVITY,
+		*request.PollRequest.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedFrom(),
 	)
-	request.PollRequest.TaskList.Name = partition
-	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
+	request.PollRequest.TaskQueue.Name = partition
+	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -132,12 +132,12 @@ func (c *clientImpl) PollForDecisionTask(
 	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
-		*request.PollRequest.GetTaskList(),
-		enumspb.TASK_LIST_TYPE_DECISION,
+		*request.PollRequest.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
-	request.PollRequest.TaskList.Name = partition
-	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
+	request.PollRequest.TaskQueue.Name = partition
+	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -149,12 +149,12 @@ func (c *clientImpl) PollForDecisionTask(
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
-		*request.GetTaskList(),
-		enumspb.TASK_LIST_TYPE_DECISION,
+		*request.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_DECISION,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = partition
-	client, err := c.getClientForTasklist(request.TaskList.GetName())
+	request.TaskQueue.Name = partition
+	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
-	client, err := c.getClientForTasklist(request.TaskList.GetName())
+	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *mat
 }
 
 func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
-	client, err := c.getClientForTasklist(request.TaskList.GetName())
+	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -183,24 +183,24 @@ func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *matchin
 	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
-	client, err := c.getClientForTasklist(request.DescRequest.TaskList.GetName())
+func (c *clientImpl) DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
+	client, err := c.getClientForTaskqueue(request.DescRequest.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeTaskList(ctx, request, opts...)
+	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	client, err := c.getClientForTasklist(request.TaskList.GetName())
+func (c *clientImpl) ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ListTaskListPartitions(ctx, request, opts...)
+	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -211,7 +211,7 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getClientForTasklist(key string) (matchingservice.MatchingServiceClient, error) {
+func (c *clientImpl) getClientForTaskqueue(key string) (matchingservice.MatchingServiceClient, error) {
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err

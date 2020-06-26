@@ -36,7 +36,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
@@ -413,7 +413,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	parentInitiatedEventID := int64(144)
 
 	now := time.Now()
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeoutSecond := int32(110)
 	taskTimeoutSeconds := int32(11)
@@ -443,7 +443,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			ParentInitiatedEventId:          parentInitiatedEventID,
 			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
 			WorkflowTaskTimeoutSeconds:      taskTimeoutSeconds,
-			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 		}},
 	}
@@ -467,7 +467,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Timestamp: now.UnixNano(),
 		EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: taskTimeoutSeconds,
 			Attempt:                    newRunDecisionAttempt,
 		}},
@@ -684,7 +684,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	}
 
 	now := time.Now()
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	timeoutSecond := int32(11)
 	evenType := enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED
 	decisionAttempt := int64(111)
@@ -694,7 +694,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: timeoutSecond,
 			Attempt:                    decisionAttempt,
 		}},
@@ -705,15 +705,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		StartedID:       common.EmptyEventID,
 		RequestID:       emptyUUID,
 		DecisionTimeout: timeoutSecond,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 		Attempt:         decisionAttempt,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		TaskList: tasklist,
+		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateDecisionTaskScheduledEvent(
-		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(), event.GetTimestamp(),
+		event.GetVersion(), event.GetEventId(), taskqueue, timeoutSecond, decisionAttempt, event.GetTimestamp(), event.GetTimestamp(),
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
@@ -735,7 +735,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 	}
 
 	now := time.Now()
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	timeoutSecond := int32(11)
 	scheduleID := int64(111)
 	decisionRequestID := uuid.New()
@@ -756,7 +756,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 		StartedID:       event.GetEventId(),
 		RequestID:       decisionRequestID,
 		DecisionTimeout: timeoutSecond,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 		Attempt:         0,
 	}
 	s.mockMutableState.EXPECT().ReplicateDecisionTaskStartedEvent(
@@ -799,16 +799,16 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 		}},
 	}
 	s.mockMutableState.EXPECT().ReplicateDecisionTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE).Return(nil).Times(1)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	newScheduleID := int64(233)
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		TaskList: tasklist,
+		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateTransientDecisionTaskScheduled().Return(&decisionInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
-		TaskList:   tasklist,
+		TaskQueue:  taskqueue,
 	}, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
@@ -845,16 +845,16 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 		}},
 	}
 	s.mockMutableState.EXPECT().ReplicateDecisionTaskFailedEvent().Return(nil).Times(1)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	newScheduleID := int64(233)
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		TaskList: tasklist,
+		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateTransientDecisionTaskScheduled().Return(&decisionInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
-		TaskList:   tasklist,
+		TaskQueue:  taskqueue,
 	}, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
@@ -1043,7 +1043,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 
 	now := time.Now()
 	activityID := "activity ID"
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	timeoutSecond := int32(10)
 	evenType := enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED
 	event := &historypb.HistoryEvent{
@@ -1071,10 +1071,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
 		TimerTaskStatus:          timerTaskStatusNone,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		TaskList: tasklist,
+		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateActivityTaskScheduledEvent(event.GetEventId(), event).Return(ai, nil).Times(1)
@@ -1101,7 +1101,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 	}
 
 	now := time.Now()
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	evenType := enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED
 	scheduledEvent := &historypb.HistoryEvent{
 		Version:    version,
@@ -1121,7 +1121,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		TaskList: tasklist,
+		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateActivityTaskStartedEvent(startedEvent).Return(nil).Times(1)

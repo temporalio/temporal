@@ -72,11 +72,9 @@ require (
 	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	golang.org/x/tools v0.0.0-20200609164405-eb789aa7ce50 // indirect
 	google.golang.org/api v0.26.0
-	google.golang.org/genproto v0.0.0-20200624020401-64a14ca9d1ad // indirect
 	google.golang.org/grpc v1.30.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	google.golang.org/protobuf v1.25.0 // indirect
@@ -88,3 +86,7 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
+
+replace go.temporal.io/temporal-proto v0.25.0 => ../temporal-proto-go
+
+replace go.temporal.io/temporal v0.25.0 => ../temporal-go-sdk

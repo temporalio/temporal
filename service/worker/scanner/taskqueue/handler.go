@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasklist
+package taskqueue
 
 import (
 	"strings"
@@ -36,7 +36,7 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/service/worker/scanner/executor"
-	// tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	// taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 )
 
 type handlerStatus = executor.TaskStatus
@@ -47,9 +47,9 @@ const (
 	handlerStatusDefer = executor.TaskStatusDefer
 )
 
-const scannerTaskListPrefix = "temporal-sys-tl-scanner"
+const scannerTaskQueuePrefix = "temporal-sys-tl-scanner"
 
-// deleteHandler handles deletions for a given task list
+// deleteHandler handles deletions for a given task queue
 // this handler limits the amount of tasks deleted to maxTasksPerJob
 // for fairness among all the task-list in the system - when there
 // is more work to do subsequently, this handler will return StatusDefer
@@ -64,7 +64,7 @@ const scannerTaskListPrefix = "temporal-sys-tl-scanner"
 //    - Delete the entire batch of tasks
 //    - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task-list
 //      Try deleting the task-list if its idle
-func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) handlerStatus {
+func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) handlerStatus {
 	var err error
 	var nProcessed, nDeleted int
 
@@ -79,7 +79,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) hand
 
 		nTasks := len(resp.Tasks)
 		if nTasks == 0 {
-			s.tryDeleteTaskList(key, state)
+			s.tryDeleteTaskQueue(key, state)
 			return handlerStatusDone
 		}
 
@@ -97,7 +97,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) hand
 
 		nDeleted += nTasks
 		if nTasks < taskBatchSize {
-			s.tryDeleteTaskList(key, state)
+			s.tryDeleteTaskQueue(key, state)
 			return handlerStatusDone
 		}
 	}
@@ -105,43 +105,43 @@ func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) hand
 	return handlerStatusDefer
 }
 
-func (s *Scavenger) tryDeleteTaskList(key *p.TaskListKey, state *taskListState) {
-	if strings.HasPrefix(key.Name, scannerTaskListPrefix) {
-		return // avoid deleting our own task list
+func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueState) {
+	if strings.HasPrefix(key.Name, scannerTaskQueuePrefix) {
+		return // avoid deleting our own task queue
 	}
 
 	lastUpdated, _ := types.TimestampFromProto(&state.lastUpdated)
 	delta := time.Now().Sub(lastUpdated)
-	if delta < taskListGracePeriod {
+	if delta < taskQueueGracePeriod {
 		return
 	}
-	// usually, matching engine is the authoritative owner of a tasklist
-	// and its incorrect for any other entity to mutate executorTask lists (including deleting it)
+	// usually, matching engine is the authoritative owner of a taskqueue
+	// and its incorrect for any other entity to mutate executorTask queues (including deleting it)
 	// the delete here is safe because of two reasons:
-	//   - we delete the executorTask list only if the lastUpdated is > 48H. If a executorTask list is idle for
+	//   - we delete the executorTask queue only if the lastUpdated is > 48H. If a executorTask queue is idle for
 	//     this amount of time, it will no longer be owned by any host in matching engine (because
 	//     of idle timeout). If any new host has to take ownership of this at this time, it can only
 	//     do so by updating the rangeID
-	//   - deleteTaskList is a conditional delete where condition is the rangeID
-	if err := s.deleteTaskList(key, state.rangeID); err != nil {
-		s.logger.Error("deleteTaskList error", tag.Error(err))
+	//   - deleteTaskQueue is a conditional delete where condition is the rangeID
+	if err := s.deleteTaskQueue(key, state.rangeID); err != nil {
+		s.logger.Error("deleteTaskQueue error", tag.Error(err))
 		return
 	}
-	atomic.AddInt64(&s.stats.tasklist.nDeleted, 1)
-	s.logger.Info("tasklist deleted", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType))
+	atomic.AddInt64(&s.stats.taskqueue.nDeleted, 1)
+	s.logger.Info("taskqueue deleted", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.Name), tag.WorkflowTaskQueueType(key.TaskType))
 }
 
-func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
+func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState, nProcessed int, nDeleted int, err error) {
 	atomic.AddInt64(&s.stats.task.nDeleted, int64(nDeleted))
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
 		s.logger.Error("scavenger.deleteHandler processed.",
-			tag.Error(err), tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.Error(err), tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.Name), tag.WorkflowTaskQueueType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
 		s.logger.Info("scavenger.deleteHandler processed.",
-			tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.Name), tag.WorkflowTaskQueueType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
 

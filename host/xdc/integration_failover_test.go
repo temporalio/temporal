@@ -48,7 +48,7 @@ import (
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -194,16 +194,16 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	// start workflow in new cluster
 	id := "integration-namespace-failover-test"
 	wt := "integration-namespace-failover-test-type"
-	tl := "integration-namespace-failover-test-tasklist"
+	tl := "integration-namespace-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -252,16 +252,16 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// start a workflow
 	id := "integration-simple-workflow-failover-test"
 	wt := "integration-simple-workflow-failover-test-type"
-	tl := "integration-simple-workflow-failover-test-tasklist"
+	tl := "integration-simple-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -290,7 +290,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 30,
@@ -329,7 +329,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	poller := host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -341,7 +341,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	poller2 := host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -552,23 +552,23 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Start a workflow
 	id := "integration-sticky-decision-workflow-failover-test"
 	wt := "integration-sticky-decision-workflow-failover-test-type"
-	tl := "integration-sticky-decision-workflow-failover-test-tasklist"
-	stl1 := "integration-sticky-decision-workflow-failover-test-tasklist-sticky1"
-	stl2 := "integration-sticky-decision-workflow-failover-test-tasklist-sticky2"
+	tl := "integration-sticky-decision-workflow-failover-test-taskqueue"
+	stl1 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky1"
+	stl2 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
-	stickyTaskList1 := &tasklistpb.TaskList{Name: stl1}
-	stickyTaskList2 := &tasklistpb.TaskList{Name: stl2}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	stickyTaskQueue1 := &taskqueuepb.TaskQueue{Name: stl1}
+	stickyTaskQueue2 := &taskqueuepb.TaskQueue{Name: stl2}
 	stickyTaskTimeout := 100
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  2592000,
 		WorkflowTaskTimeoutSeconds: 60,
@@ -607,8 +607,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	poller1 := &host.TaskPoller{
 		Engine:                              client1,
 		Namespace:                           namespace,
-		TaskList:                            taskList,
-		StickyTaskList:                      stickyTaskList1,
+		TaskQueue:                           taskQueue,
+		StickyTaskQueue:                     stickyTaskQueue1,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity1,
 		DecisionHandler:                     dtHandler,
@@ -619,8 +619,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	poller2 := &host.TaskPoller{
 		Engine:                              client2,
 		Namespace:                           namespace,
-		TaskList:                            taskList,
-		StickyTaskList:                      stickyTaskList2,
+		TaskQueue:                           taskQueue,
+		StickyTaskQueue:                     stickyTaskQueue2,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity2,
 		DecisionHandler:                     dtHandler,
@@ -731,16 +731,16 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// start a workflow
 	id := "integration-start-workflow-failover-ID-reuse-policy-test"
 	wt := "integration-start-workflow-failover-ID-reuse-policy-test-type"
-	tl := "integration-start-workflow-failover-ID-reuse-policy-test-tasklist"
+	tl := "integration-start-workflow-failover-ID-reuse-policy-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -768,7 +768,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	poller := host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -779,7 +779,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	poller2 := host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -864,16 +864,16 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// start a workflow
 	id := "integration-terminate-workflow-failover-test"
 	wt := "integration-terminate-workflow-failover-test-type"
-	tl := "integration-terminate-workflow-failover-test-tasklist"
+	tl := "integration-terminate-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -898,7 +898,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
@@ -925,7 +925,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	poller := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -1049,16 +1049,16 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// start a workflow
 	id := "integration-continueAsNew-workflow-failover-test"
 	wt := "integration-continueAsNew-workflow-failover-test-type"
-	tl := "integration-continueAsNew-workflow-failover-test-tasklist"
+	tl := "integration-continueAsNew-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1085,7 +1085,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
-					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeoutSeconds:  100,
 					WorkflowTaskTimeoutSeconds: 10,
@@ -1106,7 +1106,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	poller := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1116,7 +1116,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	poller2 := host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1187,16 +1187,16 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Start a workflow
 	id := "integration-signal-workflow-failover-test"
 	wt := "integration-signal-workflow-failover-test-type"
-	tl := "integration-signal-workflow-failover-test-tasklist"
+	tl := "integration-signal-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  300,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1231,7 +1231,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	poller := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1241,7 +1241,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1368,16 +1368,16 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	// Start a workflow
 	id := "integration-user-timer-workflow-failover-test"
 	wt := "integration-user-timer-workflow-failover-test-type"
-	tl := "integration-user-timer-workflow-failover-test-tasklist"
+	tl := "integration-user-timer-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  300,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -1459,7 +1459,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1469,7 +1469,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1540,17 +1540,17 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Start a workflow
 	id := "integration-activity-heartbeat-workflow-failover-test"
 	wt := "integration-activity-heartbeat-workflow-failover-test-type"
-	tl := "integration-activity-heartbeat-workflow-failover-test-tasklist"
+	tl := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
 	identity1 := "worker1"
 	identity2 := "worker2"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  300,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -1579,7 +1579,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: "some random activity type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeString("some random input"),
 					ScheduleToCloseTimeoutSeconds: 1000,
 					ScheduleToStartTimeoutSeconds: 1000,
@@ -1628,7 +1628,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity1,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler1,
@@ -1639,7 +1639,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity2,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler2,
@@ -1749,16 +1749,16 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Start a workflow
 	id := "integration-transient-decision-workflow-failover-test"
 	wt := "integration-transient-decision-workflow-failover-test-type"
-	tl := "integration-transient-decision-workflow-failover-test-tasklist"
+	tl := "integration-transient-decision-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  300,
 		WorkflowTaskTimeoutSeconds: 8,
@@ -1798,7 +1798,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1808,7 +1808,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1870,16 +1870,16 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// start a workflow
 	id := "integration-cron-workflow-failover-test"
 	wt := "integration-cron-workflow-failover-test-type"
-	tl := "integration-cron-workflow-failover-test-tasklist"
+	tl := "integration-cron-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1904,7 +1904,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	poller2 := host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,
@@ -1970,16 +1970,16 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	// start a workflow
 	id := "integration-workflow-retry-failover-test"
 	wt := "integration-workflow-retry-failover-test-type"
-	tl := "integration-workflow-retry-failover-test-tasklist"
+	tl := "integration-workflow-retry-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -2012,7 +2012,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	poller2 := host.TaskPoller{
 		Engine:          client2,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,

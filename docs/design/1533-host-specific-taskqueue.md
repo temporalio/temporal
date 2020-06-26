@@ -1,4 +1,4 @@
-# Proposal: Resource-Specific Tasklist
+# Proposal: Resource-Specific TaskQueue
 
 Author: Yichao Yang (@yycptt)
 
@@ -8,7 +8,7 @@ Discussion at <https://github.com/uber-go/cadence-client/issues/697>
 
 ## Abstract
 
-Currently, there’s no straightforward way for a Cadence user to run multiple activities (a session) on a single activity worker. Although there is the option to explicitly specify a host-specific tasklist name or manually execute special activities to get information about the activity worker, these approaches have limitations and are error prone. Besides running multiple activities on a single worker, a user may also want to limit the total number of sessions running concurrently on a single worker if those sessions consume worker resources. This document proposes several new APIs and their implementations so that a user can create sessions, execute activities, and limit the number of concurrent sessions through a simple API call.
+Currently, there’s no straightforward way for a Cadence user to run multiple activities (a session) on a single activity worker. Although there is the option to explicitly specify a host-specific taskqueue name or manually execute special activities to get information about the activity worker, these approaches have limitations and are error prone. Besides running multiple activities on a single worker, a user may also want to limit the total number of sessions running concurrently on a single worker if those sessions consume worker resources. This document proposes several new APIs and their implementations so that a user can create sessions, execute activities, and limit the number of concurrent sessions through a simple API call.
 
 ## Use Cases
 
@@ -44,7 +44,7 @@ There will be four new APIs available when writing a workflow:
 sessionCtx, err := workflow.**CreateSession**(ctx Context, so *SessionOptions)
 ```
 
-A user calls this API to create a session on the worker that polls the task list specified in the ActivityOptions (or in the StartWorkflowOptions if the task list name is not specified in the ActivityOptions). All activities executed within the returned sessionCtx (a new context which contains metadata information of the created session) are considered to be part of the session and will be executed on the same worker. The sessionCtx will be cancelled if the worker executing this session dies or CompleteSession() is called.
+A user calls this API to create a session on the worker that polls the task queue specified in the ActivityOptions (or in the StartWorkflowOptions if the task queue name is not specified in the ActivityOptions). All activities executed within the returned sessionCtx (a new context which contains metadata information of the created session) are considered to be part of the session and will be executed on the same worker. The sessionCtx will be cancelled if the worker executing this session dies or CompleteSession() is called.
 
 The SessionOptions struct contains two fields: `ExecutionTimeout`, which specifies the maximum amount of time the session can run and `CreationTimeout`, which specifies how long session creation can take before returning an error.
 
@@ -73,7 +73,7 @@ sessionCtx, err := workflow.**RecreateSession**(ctx Context, recreateToken []byt
 
 For long running sessions, user might want to split it into multiple runs while still wanting all the activities executed by the same worker. This API is designed for such a use case.
 
-Its usage is the same as CreateSession() except that it also takes in a recreateToken. The token encodes the resource specific tasklist name on which the new session should be created. A user can get the token by calling the GetRecreateToken() method of the SessionInfo object.
+Its usage is the same as CreateSession() except that it also takes in a recreateToken. The token encodes the resource specific taskqueue name on which the new session should be created. A user can get the token by calling the GetRecreateToken() method of the SessionInfo object.
 
 
 #### Example
@@ -144,7 +144,7 @@ There will be three new options available when creating a worker:
 
 All sessions are **resource specific**. This means that a session is always tied to some kind of resource (not the worker). The resource can be CPU, GPU, memory, file descriptors, etc., and we want all the activities within a session to be executed by the same worker that owns the resource. If a worker dies and restarts, as long as it owns the same resource, we can try to reestablish the session (this is future work). Also, the user needs to ensure that the resource is owned by only one worker on a single host.
 
-Note that when creating a session, a user doesn’t need to specify the resource that is consumed by the session. This is because right now one worker owns only one resource, so there’s only one resource type on the worker. As a result, as long as the user specifies the correct tasklist in the context passed into the createSession API, the correct type of resource will be consumed (since there’s only one). Later, when a worker can support multiple types of resources, users will need to specify the resource type when creating a session.
+Note that when creating a session, a user doesn’t need to specify the resource that is consumed by the session. This is because right now one worker owns only one resource, so there’s only one resource type on the worker. As a result, as long as the user specifies the correct taskqueue in the context passed into the createSession API, the correct type of resource will be consumed (since there’s only one). Later, when a worker can support multiple types of resources, users will need to specify the resource type when creating a session.
 
 ### Workflow Context
 
@@ -156,7 +156,7 @@ When a user calls the CreateSession() or RecreateSession() API, a structure that
 
 3. **ResourceID**: the resource consumed by the session. (Will Be Exported)
  
-4. **tasklist**: the resource specific tasklist used by this session. (Not Exported)
+4. **taskqueue**: the resource specific taskqueue used by this session. (Not Exported)
 
 5. **sessionState**: the state of the session (Not Exported).  It can take one of the three values below:
 
@@ -170,27 +170,27 @@ When a user calls the CreateSession() or RecreateSession() API, a structure that
 
 When a user calls the CompleteSession() API, the state of the session will be changed to "Closed" in place, which is why this API doesn’t return a new context variable.
 
-There is no way to set the state of a session to “Failed”. The state of a session is “Failed” only when the worker executing the session is down and the change from “Open” to “Failed” is done in the background. Also notice that it’s possible that the worker is down, but the session state is still “Open” (since it takes some time to detect the worker failure). In this case, when a user executes an activity, the activity will still be scheduled on the resource specific tasklist. However, it will be cancelled after worker failure is detected and the user will get a cancelled error.
+There is no way to set the state of a session to “Failed”. The state of a session is “Failed” only when the worker executing the session is down and the change from “Open” to “Failed” is done in the background. Also notice that it’s possible that the worker is down, but the session state is still “Open” (since it takes some time to detect the worker failure). In this case, when a user executes an activity, the activity will still be scheduled on the resource specific taskqueue. However, it will be cancelled after worker failure is detected and the user will get a cancelled error.
 
 ### Workflow Worker
 
-When scheduling an activity, the workflow worker needs to check the context to see if this activity belongs to a session. If so and the state of that session is "Open", get the resource specific tasklist from the context and use it to override the tasklist value specified in the activity option. If on the other hand, the state is "Failed", the ExecuteActivity call will immediately fail without scheduling the activity and return an ErrSessionFailed error through Future.Get().
+When scheduling an activity, the workflow worker needs to check the context to see if this activity belongs to a session. If so and the state of that session is "Open", get the resource specific taskqueue from the context and use it to override the taskqueue value specified in the activity option. If on the other hand, the state is "Failed", the ExecuteActivity call will immediately fail without scheduling the activity and return an ErrSessionFailed error through Future.Get().
 
 CreateSession() and CompleteSession() really do are **schedule special activities** and get some information from the worker which executes these activities.
 
-* For CreateSession(), a special **session creation activity** will be scheduled on a global tasklist which is only used for this type of activity. During the execution of that activity, a signal containing the resource specific tasklist name will be sent back to the workflow (with other information like hostname). Once the signal is received by the worker, the creation is considered successful and the tasklist name will be stored in the session context. The creation activity also performs periodic heartbeat throughout the whole lifetime of the session. As a result, if the activity worker is down, the workflow can be notified and set the session state to “Failed”. 
+* For CreateSession(), a special **session creation activity** will be scheduled on a global taskqueue which is only used for this type of activity. During the execution of that activity, a signal containing the resource specific taskqueue name will be sent back to the workflow (with other information like hostname). Once the signal is received by the worker, the creation is considered successful and the taskqueue name will be stored in the session context. The creation activity also performs periodic heartbeat throughout the whole lifetime of the session. As a result, if the activity worker is down, the workflow can be notified and set the session state to “Failed”. 
 
-* For RecreateSession(), the same thing happens. The only difference is that the session creation activity will be **scheduled on the resource specific task list instead of a global one**.
+* For RecreateSession(), the same thing happens. The only difference is that the session creation activity will be **scheduled on the resource specific task queue instead of a global one**.
 
-* For CompleteSession(), a special **completion activity** will be scheduled on the resource specific tasklist. The purpose of this activity is to stop the corresponding creation activity created by the CreateSession()/CreateSessionWithHostID() API call, so that the resource used by the session can be released. Note that, **the completion activity must be scheduled on the resource specific tasklist (not a global one)** since we need to make sure the completion activity and the creation activity it needs to stop are running by the same worker.
+* For CompleteSession(), a special **completion activity** will be scheduled on the resource specific taskqueue. The purpose of this activity is to stop the corresponding creation activity created by the CreateSession()/CreateSessionWithHostID() API call, so that the resource used by the session can be released. Note that, **the completion activity must be scheduled on the resource specific taskqueue (not a global one)** since we need to make sure the completion activity and the creation activity it needs to stop are running by the same worker.
 
 ### Activity Worker
 
 When `EnableSessionWorker` is set to true, two more activity workers will be started.
 
-* This worker polls from a global tasklist whose name is derived from the tasklist name specified in the workerOption and executes only the special session creation activity. This special activity serves several purposes:
+* This worker polls from a global taskqueue whose name is derived from the taskqueue name specified in the workerOption and executes only the special session creation activity. This special activity serves several purposes:
 
-   1. **Send the resource specific tasklist name** back to the workflow through signal.
+   1. **Send the resource specific taskqueue name** back to the workflow through signal.
 
    2. Keep **heart beating** to Cadence server until the end of the session.
 
@@ -200,9 +200,9 @@ When `EnableSessionWorker` is set to true, two more activity workers will be sta
 
    3. Check the number of currently running sessions on the worker. If the maximum number of concurrent sessions has been reached, return an error to fail the creation.
 
-   One detail we need to ensure is that when the maximum number of concurrent sessions has been reached, this worker should stop polling from the global task list.
+   One detail we need to ensure is that when the maximum number of concurrent sessions has been reached, this worker should stop polling from the global task queue.
 
-* Session Activity Worker: this worker only polls from the resource specific tasklist. There are three kinds of activities that can be run by this worker:
+* Session Activity Worker: this worker only polls from the resource specific taskqueue. There are three kinds of activities that can be run by this worker:
 
    1. User activities in a session that belongs to this host.
 
@@ -220,23 +220,23 @@ This section illustrates the sequence diagrams for situations that may occur dur
 
 * Here is the sequence diagram for a normal session execution.
 
-![image alt text](1533-host-specific-tasklist-image_0.png)
+![image alt text](1533-host-specific-taskqueue-image_0.png)
 
 * When activity worker fails during the execution.
 
-![image alt text](1533-host-specific-tasklist-image_1.png)
+![image alt text](1533-host-specific-taskqueue-image_1.png)
 
 * When the workflow failed or terminated during the execution.
 
-![image alt text](1533-host-specific-tasklist-image_2.png)
+![image alt text](1533-host-specific-taskqueue-image_2.png)
 
-* When there are too many outstanding sessions and the user is trying to create a new one. The assumption here is that each activity worker is configured to have **MaxCurrentSessionExecutionSize = 1**. Resource specific tasklist and session activity worker are omitted in the diagram.
+* When there are too many outstanding sessions and the user is trying to create a new one. The assumption here is that each activity worker is configured to have **MaxCurrentSessionExecutionSize = 1**. Resource specific taskqueue and session activity worker are omitted in the diagram.
 
-![image alt text](1533-host-specific-tasklist-image_3.png)
+![image alt text](1533-host-specific-taskqueue-image_3.png)
 
 * An example of RecreateSession().
 
-![image alt text](1533-host-specific-tasklist-image_4.png)
+![image alt text](1533-host-specific-taskqueue-image_4.png)
 
 ## Open Issues
 

@@ -135,18 +135,18 @@ func (c *metricClient) PollMutableState(
 	return resp, err
 }
 
-func (c *metricClient) ResetStickyTaskList(
+func (c *metricClient) ResetStickyTaskQueue(
 	context context.Context,
-	request *historyservice.ResetStickyTaskListRequest,
-	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientRequests)
+	request *historyservice.ResetStickyTaskQueueRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.ResetStickyTaskList(context, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.ResetStickyTaskQueue(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientResetStickyTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err

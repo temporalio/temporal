@@ -40,8 +40,8 @@ func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType) {
 	}
 }
 
-func SetDefaultTaskListKind(f *enumspb.TaskListKind) {
-	if *f == enumspb.TASK_LIST_KIND_UNSPECIFIED {
-		*f = enumspb.TASK_LIST_KIND_NORMAL
+func SetDefaultTaskQueueKind(f *enumspb.TaskQueueKind) {
+	if *f == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		*f = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
 }

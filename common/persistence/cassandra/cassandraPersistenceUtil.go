@@ -703,7 +703,7 @@ func createTransferTasks(
 
 	targetNamespaceID := namespaceID
 	for _, task := range transferTasks {
-		var taskList string
+		var taskQueue string
 		var scheduleID int64
 		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
 		targetRunID := ""
@@ -713,12 +713,12 @@ func createTransferTasks(
 		switch task.GetType() {
 		case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
-			taskList = task.(*p.ActivityTask).TaskList
+			taskQueue = task.(*p.ActivityTask).TaskQueue
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
 		case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
-			taskList = task.(*p.DecisionTask).TaskList
+			taskQueue = task.(*p.DecisionTask).TaskQueue
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
@@ -768,7 +768,7 @@ func createTransferTasks(
 			TargetNamespaceId:       targetNamespaceID,
 			TargetWorkflowId:        targetWorkflowID,
 			TargetRunId:             targetRunID,
-			TaskList:                taskList,
+			TaskQueue:               taskQueue,
 			TargetChildWorkflowOnly: targetChildWorkflowOnly,
 			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),

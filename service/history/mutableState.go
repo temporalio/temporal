@@ -52,7 +52,7 @@ type (
 		StartedID       int64
 		RequestID       string
 		DecisionTimeout int32
-		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
+		TaskQueue       string // This is only needed to communicate taskqueue used after AddDecisionTaskScheduledEvent
 		Attempt         int64
 		// Scheduled and Started timestamps are useful for transient decision: when transient decision finally completes,
 		// use these timestamp to create scheduled/started events.
@@ -167,7 +167,7 @@ type (
 		IsCancelRequested() (bool, string)
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
-		IsStickyTaskListEnabled() bool
+		IsStickyTaskQueueEnabled() bool
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)

@@ -216,7 +216,7 @@ type (
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
 		CompletionEvent                    *serialization.DataBlob
-		TaskList                           string
+		TaskQueue                          string
 		WorkflowTypeName                   string
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
@@ -242,7 +242,7 @@ type (
 		DecisionOriginalScheduledTimestamp int64
 		CancelRequested                    bool
 		CancelRequestID                    string
-		StickyTaskList                     string
+		StickyTaskQueue                    string
 		StickyScheduleToStartTimeout       int32
 		ClientLibraryVersion               string
 		ClientFeatureVersion               string
@@ -308,7 +308,7 @@ type (
 		Attempt                int32
 		NamespaceID            string
 		StartedIdentity        string
-		TaskList               string
+		TaskQueue              string
 		HasRetryPolicy         bool
 		InitialInterval        int32
 		BackoffCoefficient     float64
@@ -568,7 +568,7 @@ type (
 		Status           *enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
-		TaskList         string
+		TaskQueue        string
 		SearchAttributes map[string]interface{}
 	}
 
@@ -596,7 +596,7 @@ type (
 		RunTimeout         int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -610,7 +610,7 @@ type (
 		ExecutionTimestamp int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 		CloseTimestamp     int64
 		Status             enumspb.WorkflowExecutionStatus
@@ -629,7 +629,7 @@ type (
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -741,7 +741,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	info := &persistenceblobs.WorkflowExecutionInfo{
 		NamespaceId:                             executionInfo.NamespaceID,
 		WorkflowId:                              executionInfo.WorkflowID,
-		TaskList:                                executionInfo.TaskList,
+		TaskQueue:                               executionInfo.TaskQueue,
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
 		WorkflowRunTimeoutSeconds:               executionInfo.WorkflowRunTimeout,
 		WorkflowExecutionTimeoutSeconds:         executionInfo.WorkflowExecutionTimeout,
@@ -760,7 +760,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		DecisionStartedTimestampNanos:           executionInfo.DecisionStartedTimestamp,
 		DecisionScheduledTimestampNanos:         executionInfo.DecisionScheduledTimestamp,
 		DecisionOriginalScheduledTimestampNanos: executionInfo.DecisionOriginalScheduledTimestamp,
-		StickyTaskList:                          executionInfo.StickyTaskList,
+		StickyTaskQueue:                         executionInfo.StickyTaskQueue,
 		StickyScheduleToStartTimeout:            int64(executionInfo.StickyScheduleToStartTimeout),
 		ClientLibraryVersion:                    executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                    executionInfo.ClientFeatureVersion,
@@ -829,7 +829,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowID:                         info.WorkflowId,
 		RunID:                              state.RunId,
 		NextEventID:                        nextEventID,
-		TaskList:                           info.GetTaskList(),
+		TaskQueue:                          info.GetTaskQueue(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
 		WorkflowExecutionTimeout:           info.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
@@ -850,7 +850,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		DecisionStartedTimestamp:           info.GetDecisionStartedTimestampNanos(),
 		DecisionScheduledTimestamp:         info.GetDecisionScheduledTimestampNanos(),
 		DecisionOriginalScheduledTimestamp: info.GetDecisionOriginalScheduledTimestampNanos(),
-		StickyTaskList:                     info.GetStickyTaskList(),
+		StickyTaskQueue:                    info.GetStickyTaskQueue(),
 		StickyScheduleToStartTimeout:       int32(info.GetStickyScheduleToStartTimeout()),
 		ClientLibraryVersion:               info.GetClientLibraryVersion(),
 		ClientFeatureVersion:               info.GetClientFeatureVersion(),
@@ -927,7 +927,7 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		TimerTaskStatus:          decoded.GetTimerTaskStatus(),
 		Attempt:                  decoded.GetAttempt(),
 		StartedIdentity:          decoded.GetStartedIdentity(),
-		TaskList:                 decoded.GetTaskList(),
+		TaskQueue:                decoded.GetTaskQueue(),
 		HasRetryPolicy:           decoded.GetHasRetryPolicy(),
 		InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
 		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
@@ -974,7 +974,7 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		CancelRequestId:               v.CancelRequestID,
 		TimerTaskStatus:               v.TimerTaskStatus,
 		Attempt:                       v.Attempt,
-		TaskList:                      v.TaskList,
+		TaskQueue:                     v.TaskQueue,
 		StartedIdentity:               v.StartedIdentity,
 		HasRetryPolicy:                v.HasRetryPolicy,
 		RetryInitialIntervalSeconds:   v.InitialInterval,

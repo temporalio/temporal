@@ -34,7 +34,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/cache"
@@ -507,28 +507,28 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
-	taskList := func(name string) *tasklistpb.TaskList {
-		return &tasklistpb.TaskList{Name: name, Kind: enumspb.TASK_LIST_KIND_NORMAL}
+func (s *decisionAttrValidatorSuite) TestValidateTaskQueueName() {
+	taskQueue := func(name string) *taskqueuepb.TaskQueue {
+		return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	}
 
 	testCases := []struct {
 		defaultVal  string
-		input       *tasklistpb.TaskList
-		output      *tasklistpb.TaskList
+		input       *taskqueuepb.TaskQueue
+		output      *taskqueuepb.TaskQueue
 		isOutputErr bool
 	}{
-		{"tl-1", nil, &tasklistpb.TaskList{Name: "tl-1"}, false},
-		{"", taskList("tl-1"), taskList("tl-1"), false},
-		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
-		{"", taskList("/tl-1"), taskList("/tl-1"), false},
-		{"", taskList("/__temporal_sys"), taskList("/__temporal_sys"), false},
-		{"", nil, &tasklistpb.TaskList{}, true},
-		{"", taskList(""), taskList(""), true},
-		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
-		{"tl-1", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
-		{"", taskList(reservedTaskListPrefix + "tl-1"), taskList(reservedTaskListPrefix + "tl-1"), true},
-		{"tl-1", taskList(reservedTaskListPrefix + "tl-1"), taskList(reservedTaskListPrefix + "tl-1"), true},
+		{"tl-1", nil, &taskqueuepb.TaskQueue{Name: "tl-1"}, false},
+		{"", taskQueue("tl-1"), taskQueue("tl-1"), false},
+		{"tl-1", taskQueue("tl-1"), taskQueue("tl-1"), false},
+		{"", taskQueue("/tl-1"), taskQueue("/tl-1"), false},
+		{"", taskQueue("/__temporal_sys"), taskQueue("/__temporal_sys"), false},
+		{"", nil, &taskqueuepb.TaskQueue{}, true},
+		{"", taskQueue(""), taskQueue(""), true},
+		{"", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
+		{"tl-1", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
+		{"", taskQueue(reservedTaskQueuePrefix + "tl-1"), taskQueue(reservedTaskQueuePrefix + "tl-1"), true},
+		{"tl-1", taskQueue(reservedTaskQueuePrefix + "tl-1"), taskQueue(reservedTaskQueuePrefix + "tl-1"), true},
 	}
 
 	for _, tc := range testCases {
@@ -539,7 +539,7 @@ func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
 			key += "nil"
 		}
 		s.Run(key, func() {
-			output, err := s.validator.validatedTaskList(tc.input, tc.defaultVal)
+			output, err := s.validator.validatedTaskQueue(tc.input, tc.defaultVal)
 			if tc.isOutputErr {
 				s.Error(err)
 			} else {

@@ -78,7 +78,7 @@ type (
 
 const (
 	workflowIDPrefix       = "temporal-archival"
-	decisionTaskList       = "temporal-archival-tl"
+	decisionTaskQueue      = "temporal-archival-tl"
 	signalName             = "temporal-archival-signal"
 	archivalWorkflowFnName = "archivalWorkflow"
 	workflowRunTimeout     = time.Hour * 24 * 30
@@ -104,7 +104,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:         worker.New(container.PublicClient, decisionTaskList, wo),
+		worker:         worker.New(container.PublicClient, decisionTaskQueue, wo),
 		namespaceCache: container.NamespaceCache,
 	}
 

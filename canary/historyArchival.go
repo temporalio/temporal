@@ -136,7 +136,7 @@ func executeArchivalExeternalWorkflow(
 ) (*commonpb.WorkflowExecution, error) {
 	workflowID := fmt.Sprintf("%v.%v", wfTypeArchivalExternal, uuid.New())
 	ops := newWorkflowOptions(workflowID, childWorkflowTimeout)
-	ops.TaskList = archivalTaskListName
+	ops.TaskQueue = archivalTaskQueueName
 	workflowRun, err := client.ExecuteWorkflow(ctx, ops, wfTypeArchivalExternal, scheduledTimeNanos)
 	if err != nil {
 		return nil, err

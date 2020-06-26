@@ -195,17 +195,17 @@ func (handler *DCRedirectionHandlerImpl) UpdateNamespace(
 
 // Other APIs
 
-// DescribeTaskList API call
-func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
+// DescribeTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
-) (resp *workflowservice.DescribeTaskListResponse, retError error) {
+	request *workflowservice.DescribeTaskQueueRequest,
+) (resp *workflowservice.DescribeTaskQueueResponse, retError error) {
 
-	var apiName = "DescribeTaskList"
+	var apiName = "DescribeTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskListScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -214,10 +214,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.DescribeTaskList(ctx, request)
+			resp, err = handler.frontendHandler.DescribeTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.DescribeTaskList(ctx, request)
+			resp, err = remoteClient.DescribeTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -665,17 +665,17 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	return resp, err
 }
 
-// ResetStickyTaskList API call
-func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
+// ResetStickyTaskQueue API call
+func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
-) (resp *workflowservice.ResetStickyTaskListResponse, retError error) {
+	request *workflowservice.ResetStickyTaskQueueRequest,
+) (resp *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 
-	var apiName = "ResetStickyTaskList"
+	var apiName = "ResetStickyTaskQueue"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskListScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskQueueScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -684,10 +684,10 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.ResetStickyTaskList(ctx, request)
+			resp, err = handler.frontendHandler.ResetStickyTaskQueue(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.ResetStickyTaskList(ctx, request)
+			resp, err = remoteClient.ResetStickyTaskQueue(ctx, request)
 		}
 		return err
 	})
@@ -1144,17 +1144,17 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	return resp, err
 }
 
-// ListTaskListPartitions API call
-func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
+// ListTaskQueuePartitions API call
+func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
-) (resp *workflowservice.ListTaskListPartitionsResponse, retError error) {
+	request *workflowservice.ListTaskQueuePartitionsRequest,
+) (resp *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	var apiName = "ListTaskListPartitions"
+	var apiName = "ListTaskQueuePartitions"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskListPartitionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskQueuePartitionsScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1163,10 +1163,10 @@ func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.ListTaskListPartitions(ctx, request)
+			resp, err = handler.frontendHandler.ListTaskQueuePartitions(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.ListTaskListPartitions(ctx, request)
+			resp, err = remoteClient.ListTaskQueuePartitions(ctx, request)
 		}
 		return err
 	})

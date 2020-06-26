@@ -77,10 +77,10 @@ func (h *NilCheckHandler) PollMutableState(ctx context.Context, request *history
 	return resp, err
 }
 
-func (h *NilCheckHandler) ResetStickyTaskList(ctx context.Context, request *historyservice.ResetStickyTaskListRequest) (_ *historyservice.ResetStickyTaskListResponse, retError error) {
-	resp, err := h.parentHandler.ResetStickyTaskList(ctx, request)
+func (h *NilCheckHandler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
+	resp, err := h.parentHandler.ResetStickyTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.ResetStickyTaskListResponse{}
+		resp = &historyservice.ResetStickyTaskQueueResponse{}
 	}
 	return resp, err
 }

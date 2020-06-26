@@ -42,7 +42,7 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal-proto/workflowservicemock/v1"
@@ -85,7 +85,7 @@ func (m *clientFactoryMock) SDKClient(c *cli.Context, namespace string) sdkclien
 var commands = []string{
 	"namespace", "n",
 	"workflow", "wf",
-	"tasklist", "tl",
+	"taskqueue", "tl",
 }
 
 var cliTestNamespace = "cli-test-namespace"
@@ -244,7 +244,7 @@ var (
 					EventType: eventType,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+						TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
 						WorkflowRunTimeoutSeconds:  60,
 						WorkflowTaskTimeoutSeconds: 10,
 						Identity:                   "tester",
@@ -288,10 +288,10 @@ func (s *cliAppSuite) TestStartWorkflow() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
 	// start with wid
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "-wrp", "AllowDuplicateFailedOnly"})
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "-wrp", "AllowDuplicateFailedOnly"})
 	s.Nil(err)
 	// start without wid
-	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-wrp", "AllowDuplicateFailedOnly"})
+	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-wrp", "AllowDuplicateFailedOnly"})
 	s.Nil(err)
 }
 
@@ -299,7 +299,7 @@ func (s *cliAppSuite) TestStartWorkflow_Failed() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	// start with wid
-	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
 }
 
@@ -309,13 +309,13 @@ func (s *cliAppSuite) TestRunWorkflow() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 
 	// start with wid
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start without wid
-	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
+	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -325,7 +325,7 @@ func (s *cliAppSuite) TestRunWorkflow_Failed() {
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start with wid
-	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tl", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -513,8 +513,8 @@ func (s *cliAppSuite) TestCountWorkflow() {
 	s.sdkClient.AssertExpectations(s.T())
 }
 
-var describeTaskListResponse = &workflowservice.DescribeTaskListResponse{
-	Pollers: []*tasklistpb.PollerInfo{
+var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
+	Pollers: []*taskqueuepb.PollerInfo{
 		{
 			LastAccessTime: time.Now().UnixNano(),
 			Identity:       "tester",
@@ -552,16 +552,16 @@ func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	s.Nil(err)
 }
 
-func (s *cliAppSuite) TestDescribeTaskList() {
-	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "tasklist", "describe", "-tl", "test-taskList"})
+func (s *cliAppSuite) TestDescribeTaskQueue() {
+	s.sdkClient.On("DescribeTaskQueue", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskQueueResponse, nil).Once()
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "taskqueue", "describe", "-tl", "test-taskQueue"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
-func (s *cliAppSuite) TestDescribeTaskList_Activity() {
-	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "tasklist", "describe", "-tl", "test-taskList", "-tlt", "activity"})
+func (s *cliAppSuite) TestDescribeTaskQueue_Activity() {
+	s.sdkClient.On("DescribeTaskQueue", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskQueueResponse, nil).Once()
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "taskqueue", "describe", "-tl", "test-taskQueue", "-tlt", "activity"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -706,7 +706,7 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:               &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
 			WorkflowRunTimeoutSeconds:  60,
 			WorkflowTaskTimeoutSeconds: 10,
 			Identity:                   "tester",
@@ -883,7 +883,7 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 				EventType: eventType,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
-					TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: "taskQueue"},
 					WorkflowRunTimeoutSeconds:  60,
 					WorkflowTaskTimeoutSeconds: 10,
 					Identity:                   "tester",
