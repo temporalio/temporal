@@ -768,6 +768,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		attr.ParentClosePolicy = enumspb.PARENT_CLOSE_POLICY_ABANDON
 	}
 
+	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
+
 	requestID := uuid.New()
 	_, _, err = handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		handler.decisionTaskCompletedID, requestID, attr,

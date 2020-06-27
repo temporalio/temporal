@@ -48,6 +48,6 @@ func SetDefaultTaskQueueKind(f *enumspb.TaskQueueKind) {
 
 func SetDefaultParentClosePolicy(f *enumspb.ParentClosePolicy) {
 	if *f == enumspb.PARENT_CLOSE_POLICY_UNSPECIFIED {
-		*f = enumspb.PARENT_CLOSE_POLICY_ABANDON
+		*f = enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	}
 }

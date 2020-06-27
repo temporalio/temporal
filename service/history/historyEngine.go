@@ -2852,7 +2852,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 	default:
-		return serviceerror.NewInternal("Failed to process start workflow reuse policy.")
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
 	}
 
 	return nil
