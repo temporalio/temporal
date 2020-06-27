@@ -162,7 +162,7 @@ func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Co
 	me := newMatchingEngine(
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
-	tl := "tl"
+	tl := "tq"
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
 	tlID := newTestTaskQueueID(dID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL

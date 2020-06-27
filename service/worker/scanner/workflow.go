@@ -50,10 +50,10 @@ const (
 	maxConcurrentDecisionTaskExecutionSize = 10
 	infiniteDuration                       = 20 * 365 * 24 * time.Hour
 
-	tlScannerWFID                  = "temporal-sys-tl-scanner"
-	tlScannerWFTypeName            = "temporal-sys-tl-scanner-workflow"
-	tlScannerTaskQueueName         = "temporal-sys-tl-scanner-taskqueue-0"
-	taskQueueScavengerActivityName = "temporal-sys-tl-scanner-scvg-activity"
+	tqScannerWFID                  = "temporal-sys-tq-scanner"
+	tqScannerWFTypeName            = "temporal-sys-tq-scanner-workflow"
+	tqScannerTaskQueueName         = "temporal-sys-tq-scanner-taskqueue-0"
+	taskQueueScavengerActivityName = "temporal-sys-tq-scanner-scvg-activity"
 
 	historyScannerWFID           = "temporal-sys-history-scanner"
 	historyScannerWFTypeName     = "temporal-sys-history-scanner-workflow"
@@ -82,8 +82,8 @@ var (
 		RetryPolicy:            &activityRetryPolicy,
 	}
 	tlScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                    tlScannerWFID,
-		TaskQueue:             tlScannerTaskQueueName,
+		ID:                    tqScannerWFID,
+		TaskQueue:             tqScannerTaskQueueName,
 		WorkflowRunTimeout:    5 * 24 * time.Hour,
 		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
 		CronSchedule:          "0 */12 * * *",
@@ -102,7 +102,7 @@ var (
 	}
 )
 
-// TaskQueueScannerWorkflow is the workflow that runs the task-list scanner background daemon
+// TaskQueueScannerWorkflow is the workflow that runs the task queue scanner background daemon
 func TaskQueueScannerWorkflow(
 	ctx workflow.Context,
 ) error {

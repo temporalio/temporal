@@ -85,7 +85,7 @@ func (m *clientFactoryMock) SDKClient(c *cli.Context, namespace string) sdkclien
 var commands = []string{
 	"namespace", "n",
 	"workflow", "wf",
-	"taskqueue", "tl",
+	"taskqueue", "tq",
 }
 
 var cliTestNamespace = "cli-test-namespace"

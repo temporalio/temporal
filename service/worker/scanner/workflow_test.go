@@ -53,7 +53,7 @@ func TestScannerWorkflowTestSuite(t *testing.T) {
 }
 
 func (s *scannerWorkflowTestSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
-	env.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+	env.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 	env.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
 	env.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
 	env.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
@@ -68,7 +68,7 @@ func (s *scannerWorkflowTestSuite) TestWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
 	env.OnActivity(taskQueueScavengerActivityName, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(tlScannerWFTypeName)
+	env.ExecuteWorkflow(tqScannerWFTypeName)
 	s.True(env.IsWorkflowCompleted())
 }
 

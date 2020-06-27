@@ -182,6 +182,6 @@ var (
 	StoreOperationDeleteWorkflowExecution = storeOperation("delete-wf-execution")
 	StoreOperationUpdateShard             = storeOperation("update-shard")
 	StoreOperationCreateTask              = storeOperation("create-task")
-	StoreOperationUpdateTaskQueue         = storeOperation("update-task-list")
-	StoreOperationStopTaskQueue           = storeOperation("stop-task-list")
+	StoreOperationUpdateTaskQueue         = storeOperation("update-task-queue")
+	StoreOperationStopTaskQueue           = storeOperation("stop-task-queue")
 )

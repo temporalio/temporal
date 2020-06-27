@@ -77,13 +77,13 @@ func TestSizeLimitIntegrationSuite(t *testing.T) {
 func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	id := "integration-terminate-workflow-by-size-limit-test"
 	wt := "integration-terminate-workflow-by-size-limit-test-type"
-	tl := "integration-terminate-workflow-by-size-limit-test-taskqueue"
+	tq := "integration-terminate-workflow-by-size-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
@@ -116,7 +116,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,

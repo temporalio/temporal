@@ -251,7 +251,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowTaskTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
@@ -287,7 +287,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -316,7 +316,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -346,7 +346,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 			Name: "",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -403,7 +403,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: -1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -432,7 +432,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       -1,
@@ -461,7 +461,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 			Name: "workflow-type",
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-list",
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,

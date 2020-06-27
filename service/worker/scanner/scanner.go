@@ -129,8 +129,8 @@ func (s *Scanner) Start() error {
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
-		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
-		workerTaskQueueNames = append(workerTaskQueueNames, tlScannerTaskQueueName)
+		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
+		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
 	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra && s.context.cfg.HistoryScannerEnabled() {
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
@@ -139,7 +139,7 @@ func (s *Scanner) Start() error {
 	for _, tl := range workerTaskQueueNames {
 		work := worker.New(s.context.GetSDKClient(), tl, workerOpts)
 
-		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(ExecutionsScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
 		work.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})

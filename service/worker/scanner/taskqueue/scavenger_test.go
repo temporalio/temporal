@@ -75,7 +75,7 @@ func (s *ScavengerTestSuite) TestAllExpiredTasks() {
 	nTasks := 32
 	nTaskQueues := 3
 	for i := 0; i < nTaskQueues; i++ {
-		name := fmt.Sprintf("test-expired-tl-%v", i)
+		name := fmt.Sprintf("test-expired-tq-%v", i)
 		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks, true)
@@ -94,7 +94,7 @@ func (s *ScavengerTestSuite) TestAllAliveTasks() {
 	nTasks := 32
 	nTaskQueues := 3
 	for i := 0; i < nTaskQueues; i++ {
-		name := fmt.Sprintf("test-Alive-tl-%v", i)
+		name := fmt.Sprintf("test-Alive-tq-%v", i)
 		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks, false)
@@ -113,7 +113,7 @@ func (s *ScavengerTestSuite) TestExpiredTasksFollowedByAlive() {
 	nTasks := 32
 	nTaskQueues := 3
 	for i := 0; i < nTaskQueues; i++ {
-		name := fmt.Sprintf("test-Alive-tl-%v", i)
+		name := fmt.Sprintf("test-Alive-tq-%v", i)
 		s.taskQueueTable.generate(name, true)
 		tt := newMockTaskTable()
 		tt.generate(nTasks/2, true)

@@ -276,12 +276,12 @@ func (s *fileBasedClientSuite) TestMatch() {
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":     "samples-namespace",
-					"taskQueueName": "sample-task-list",
+					"taskQueueName": "sample-task-queue",
 				},
 			},
 			filters: map[Filter]interface{}{
 				Namespace:     "samples-namespace",
-				TaskQueueName: "sample-task-list",
+				TaskQueueName: "sample-task-queue",
 			},
 			matched: true,
 		},
@@ -289,12 +289,12 @@ func (s *fileBasedClientSuite) TestMatch() {
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":         "samples-namespace",
-					"some-other-filter": "sample-task-list",
+					"some-other-filter": "sample-task-queue",
 				},
 			},
 			filters: map[Filter]interface{}{
 				Namespace:     "samples-namespace",
-				TaskQueueName: "sample-task-list",
+				TaskQueueName: "sample-task-queue",
 			},
 			matched: false,
 		},
@@ -305,7 +305,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 				},
 			},
 			filters: map[Filter]interface{}{
-				TaskQueueName: "sample-task-list",
+				TaskQueueName: "sample-task-queue",
 			},
 			matched: false,
 		},

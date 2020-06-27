@@ -931,7 +931,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskQueue"
+	tq := "testTaskQueue"
 
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
@@ -943,9 +943,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tq, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tq, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -972,7 +972,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskQueue"
+	tq := "testTaskQueue"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
@@ -983,9 +983,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tq, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tq, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
@@ -1010,7 +1010,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskQueue"
+	tq := "testTaskQueue"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
@@ -1021,7 +1021,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tq, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -1045,7 +1045,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskQueue"
+	tq := "testTaskQueue"
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
@@ -1061,20 +1061,20 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tq, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
-	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
+	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tq, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
 	activity1ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent1.EventId,
-		activity1ID, activity1Type, tl, activity1Input, 100, 10, 1, 5)
+		activity1ID, activity1Type, tq, activity1Input, 100, 10, 1, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent1.EventId,
-		activity2ID, activity2Type, tl, activity2Input, 100, 10, 1, 5)
+		activity2ID, activity2Type, tq, activity2Input, 100, 10, 1, 5)
 	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.EventId, identity)
 	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, activity1ScheduledEvent.EventId,
 		activity1StartedEvent.EventId, activity1Result, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
-	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
+	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tq, identity)
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
@@ -1088,7 +1088,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    activity3ID,
 			ActivityType:                  &commonpb.ActivityType{Name: activity3Type},
-			TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
+			TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
 			Input:                         activity3Input,
 			ScheduleToCloseTimeoutSeconds: 100,
 			ScheduleToStartTimeoutSeconds: 10,
@@ -1132,7 +1132,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	s.Equal(activity3ID, activity3Attributes.ActivityId)
 	s.Equal(activity3Type, activity3Attributes.ActivityType.Name)
 	s.Equal(int64(12), activity3Attributes.DecisionTaskCompletedEventId)
-	s.Equal(tl, activity3Attributes.TaskQueue.Name)
+	s.Equal(tq, activity3Attributes.TaskQueue.Name)
 	s.Equal(activity3Input, activity3Attributes.Input)
 	s.Equal(int32(100), activity3Attributes.ScheduleToCloseTimeoutSeconds)
 	s.Equal(int32(10), activity3Attributes.ScheduleToStartTimeoutSeconds)

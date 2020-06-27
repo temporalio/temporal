@@ -518,17 +518,17 @@ func (s *decisionAttrValidatorSuite) TestValidateTaskQueueName() {
 		output      *taskqueuepb.TaskQueue
 		isOutputErr bool
 	}{
-		{"tl-1", nil, &taskqueuepb.TaskQueue{Name: "tl-1"}, false},
-		{"", taskQueue("tl-1"), taskQueue("tl-1"), false},
-		{"tl-1", taskQueue("tl-1"), taskQueue("tl-1"), false},
+		{"tq-1", nil, &taskqueuepb.TaskQueue{Name: "tq-1"}, false},
+		{"", taskQueue("tq-1"), taskQueue("tq-1"), false},
+		{"tq-1", taskQueue("tq-1"), taskQueue("tq-1"), false},
 		{"", taskQueue("/tl-1"), taskQueue("/tl-1"), false},
 		{"", taskQueue("/__temporal_sys"), taskQueue("/__temporal_sys"), false},
 		{"", nil, &taskqueuepb.TaskQueue{}, true},
 		{"", taskQueue(""), taskQueue(""), true},
 		{"", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
-		{"tl-1", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
-		{"", taskQueue(reservedTaskQueuePrefix + "tl-1"), taskQueue(reservedTaskQueuePrefix + "tl-1"), true},
-		{"tl-1", taskQueue(reservedTaskQueuePrefix + "tl-1"), taskQueue(reservedTaskQueuePrefix + "tl-1"), true},
+		{"tq-1", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
+		{"", taskQueue(reservedTaskQueuePrefix + "tq-1"), taskQueue(reservedTaskQueuePrefix + "tq-1"), true},
+		{"tq-1", taskQueue(reservedTaskQueuePrefix + "tq-1"), taskQueue(reservedTaskQueuePrefix + "tq-1"), true},
 	}
 
 	for _, tc := range testCases {

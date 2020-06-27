@@ -59,7 +59,7 @@ func newMockTaskTable() *mockTaskTable {
 }
 
 func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
-	tl := p.PersistedTaskQueueInfo{
+	tq := p.PersistedTaskQueueInfo{
 		Data: &persistenceblobs.TaskQueueInfo{
 			NamespaceId: uuid.New(),
 			Name:        name,
@@ -68,9 +68,9 @@ func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 		RangeID: 22,
 	}
 	if idle {
-		tl.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
+		tq.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
 	}
-	tbl.info = append(tbl.info, &tl)
+	tbl.info = append(tbl.info, &tq)
 }
 
 func (tbl *mockTaskQueueTable) list(token []byte, count int) ([]*p.PersistedTaskQueueInfo, []byte) {

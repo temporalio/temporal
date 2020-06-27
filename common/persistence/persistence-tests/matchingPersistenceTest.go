@@ -436,7 +436,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		updatedTime := time.Now().UTC()
 		_, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 			NamespaceID:   namespaceID,
-			TaskQueue:     "list-task-list-test-tl0",
+			TaskQueue:     "list-task-queue-test-tl0",
 			TaskType:      enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			TaskQueueKind: enumspb.TASK_QUEUE_KIND_STICKY,
 		})
@@ -447,7 +447,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 
 		s.Equal(1, len(resp.Items))
 		s.EqualValues(namespaceID, resp.Items[0].Data.GetNamespaceId())
-		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
+		s.Equal("list-task-queue-test-tl0", resp.Items[0].Data.Name)
 		s.Equal(enumspb.TASK_QUEUE_TYPE_ACTIVITY, resp.Items[0].Data.TaskType)
 		s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)

@@ -80,7 +80,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		TaskType:    convert.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			tlInfo := &persistenceblobs.TaskQueueInfo{
+			tqInfo := &persistenceblobs.TaskQueueInfo{
 				NamespaceId: namespaceID,
 				Name:        request.TaskQueue,
 				TaskType:    request.TaskType,
@@ -89,7 +89,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 				Expiry:      nil,
 				LastUpdated: types.TimestampNow(),
 			}
-			blob, err := serialization.TaskQueueInfoToBlob(tlInfo)
+			blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +118,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		}
 	}
 
-	tlInfo, err := serialization.TaskQueueInfoFromBlob(row.Data, row.DataEncoding)
+	tqInfo, err := serialization.TaskQueueInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +135,9 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		}
 
 		// todo: we shoudnt edit protobufs
-		tlInfo.LastUpdated = types.TimestampNow()
+		tqInfo.LastUpdated = types.TimestampNow()
 
-		blob, err1 := serialization.TaskQueueInfoToBlob(tlInfo)
+		blob, err1 := serialization.TaskQueueInfoToBlob(tqInfo)
 		if err1 != nil {
 			return err1
 		}
@@ -161,7 +161,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
 		}
 		resp = &persistence.LeaseTaskQueueResponse{TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-			Data:    tlInfo,
+			Data:    tqInfo,
 			RangeID: row.RangeID + 1,
 		}}
 		return nil
@@ -177,16 +177,16 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 
 	shardID := m.shardID(nidBytes, request.TaskQueueInfo.Name)
 
-	tl := request.TaskQueueInfo
-	tl.LastUpdated = types.TimestampNow()
+	tq := request.TaskQueueInfo
+	tq.LastUpdated = types.TimestampNow()
 
 	var blob serialization.DataBlob
 	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		tl.Expiry, err = types.TimestampProto(stickyTaskQueueTTL())
+		tq.Expiry, err = types.TimestampProto(stickyTaskQueueTTL())
 		if err != nil {
 			return nil, err
 		}
-		blob, err = serialization.TaskQueueInfoToBlob(tl)
+		blob, err = serialization.TaskQueueInfoToBlob(tq)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +203,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 		}
 	}
 	var resp *persistence.UpdateTaskQueueResponse
-	blob, err = serialization.TaskQueueInfoToBlob(tl)
+	blob, err = serialization.TaskQueueInfoToBlob(tq)
 	if err != nil {
 		return nil, err
 	}

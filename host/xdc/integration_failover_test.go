@@ -194,10 +194,10 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	// start workflow in new cluster
 	id := "integration-namespace-failover-test"
 	wt := "integration-namespace-failover-test-type"
-	tl := "integration-namespace-failover-test-taskqueue"
+	tq := "integration-namespace-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
@@ -252,10 +252,10 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// start a workflow
 	id := "integration-simple-workflow-failover-test"
 	wt := "integration-simple-workflow-failover-test-type"
-	tl := "integration-simple-workflow-failover-test-taskqueue"
+	tq := "integration-simple-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  namespace,
@@ -290,7 +290,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 30,
@@ -552,16 +552,16 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Start a workflow
 	id := "integration-sticky-decision-workflow-failover-test"
 	wt := "integration-sticky-decision-workflow-failover-test-type"
-	tl := "integration-sticky-decision-workflow-failover-test-taskqueue"
-	stl1 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky1"
-	stl2 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky2"
+	tq := "integration-sticky-decision-workflow-failover-test-taskqueue"
+	stq1 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky1"
+	stq2 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
-	stickyTaskQueue1 := &taskqueuepb.TaskQueue{Name: stl1}
-	stickyTaskQueue2 := &taskqueuepb.TaskQueue{Name: stl2}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	stickyTaskQueue1 := &taskqueuepb.TaskQueue{Name: stq1}
+	stickyTaskQueue2 := &taskqueuepb.TaskQueue{Name: stq2}
 	stickyTaskTimeout := 100
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),

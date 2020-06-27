@@ -91,7 +91,7 @@ func NewCliApp() *cli.App {
 		},
 		{
 			Name:        "taskqueue",
-			Aliases:     []string{"tl"},
+			Aliases:     []string{"tq"},
 			Usage:       "Operate Temporal task queue",
 			Subcommands: newTaskQueueCommands(),
 		},
@@ -143,7 +143,7 @@ func NewCliApp() *cli.App {
 				},
 				{
 					Name:        "taskqueue",
-					Aliases:     []string{"tl"},
+					Aliases:     []string{"tq"},
 					Usage:       "Run admin operation on taskQueue",
 					Subcommands: newAdminTaskQueueCommands(),
 				},

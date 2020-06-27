@@ -78,7 +78,7 @@ type (
 
 const (
 	workflowIDPrefix       = "temporal-archival"
-	decisionTaskQueue      = "temporal-archival-tl"
+	decisionTaskQueue      = "temporal-archival-tq"
 	signalName             = "temporal-archival-signal"
 	archivalWorkflowFnName = "archivalWorkflow"
 	workflowRunTimeout     = time.Hour * 24 * 30

@@ -51,19 +51,19 @@ const scannerTaskQueuePrefix = "temporal-sys-tl-scanner"
 
 // deleteHandler handles deletions for a given task queue
 // this handler limits the amount of tasks deleted to maxTasksPerJob
-// for fairness among all the task-list in the system - when there
+// for fairness among all the task queue in the system - when there
 // is more work to do subsequently, this handler will return StatusDefer
 // with the assumption that the executor will schedule this task later
 //
 // Each loop of the handler proceeds as follows
-//    - Retrieve the next batch of tasks sorted by task_id for this task-list from persistence
-//    - If there are 0 tasks for this task-list, try deleting the task-list if its idle
+//    - Retrieve the next batch of tasks sorted by task_id for this task queue from persistence
+//    - If there are 0 tasks for this task queue, try deleting the task queue if its idle
 //    - If any of the tasks in the batch isn't expired, we are done. Since tasks are retrieved
 //      in sorted order, if one of the tasks isn't expired, chances are, none of the tasks above
 //      it are expired as well - so, we give up and wait for the next run
 //    - Delete the entire batch of tasks
-//    - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task-list
-//      Try deleting the task-list if its idle
+//    - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task queue
+//      Try deleting the task queue if its idle
 func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) handlerStatus {
 	var err error
 	var nProcessed, nDeleted int
