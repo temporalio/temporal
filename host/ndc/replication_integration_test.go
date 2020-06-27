@@ -41,7 +41,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowID := "replication-message-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
 	var historyBatch []*historypb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
@@ -61,7 +61,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 	)
@@ -84,7 +84,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowID := "replication-message-dlq-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
 	var historyBatch []*historypb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
@@ -105,7 +105,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 	)

@@ -732,30 +732,30 @@ func newAdminElasticSearchCommands() []cli.Command {
 	}
 }
 
-func newAdminTaskListCommands() []cli.Command {
+func newAdminTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe pollers and status information of tasklist",
+			Usage:   "Describe pollers and status information of taskqueue",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTaskListWithAlias,
-					Usage: "TaskList description",
+					Name:  FlagTaskQueueWithAlias,
+					Usage: "TaskQueue description",
 				},
 				cli.StringFlag{
-					Name:  FlagTaskListTypeWithAlias,
+					Name:  FlagTaskQueueTypeWithAlias,
 					Value: "decision",
-					Usage: "Optional TaskList type [decision|activity]",
+					Usage: "Optional TaskQueue type [decision|activity]",
 				},
 			},
 			Action: func(c *cli.Context) {
-				AdminDescribeTaskList(c)
+				AdminDescribeTaskQueue(c)
 			},
 		},
 		{
 			Name:  "list_tasks",
-			Usage: "List tasks of a tasklist",
+			Usage: "List tasks of a taskqueue",
 			Flags: append(append(append(getDBFlags(), flagsForExecution...),
 				flagsForPagination...),
 				cli.StringFlag{
@@ -763,13 +763,13 @@ func newAdminTaskListCommands() []cli.Command {
 					Usage: "Namespace Id",
 				},
 				cli.StringFlag{
-					Name:  FlagTaskListType,
+					Name:  FlagTaskQueueType,
 					Value: "activity",
-					Usage: "Tasklist type: activity, decision",
+					Usage: "Taskqueue type: activity, decision",
 				},
 				cli.StringFlag{
-					Name:  FlagTaskList,
-					Usage: "Tasklist name",
+					Name:  FlagTaskQueue,
+					Usage: "Taskqueue name",
 				},
 				cli.Int64Flag{
 					Name:  FlagMinReadLevel,
@@ -781,7 +781,7 @@ func newAdminTaskListCommands() []cli.Command {
 				},
 			),
 			Action: func(c *cli.Context) {
-				AdminListTaskListTasks(c)
+				AdminListTaskQueueTasks(c)
 			},
 		},
 	}

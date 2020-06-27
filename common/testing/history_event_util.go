@@ -32,7 +32,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/common/failure"
 )
@@ -44,7 +44,7 @@ const (
 	childWorkflowPrefix  = "child-"
 	reason               = "NDC reason"
 	workflowType         = "test-workflow-type"
-	taskList             = "taskList"
+	taskQueue            = "taskQueue"
 	identity             = "identity"
 	decisionTaskAttempts = 0
 	childWorkflowID      = "child-workflowID"
@@ -142,9 +142,9 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED
 		historyEvent.Attributes = &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			StartToCloseTimeoutSeconds: timeout,
 			Attempt:                    decisionTaskAttempts,
@@ -239,9 +239,9 @@ func InitializeHistoryEventGenerator(
 			WorkflowType: &commonpb.WorkflowType{
 				Name: workflowType,
 			},
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			WorkflowExecutionTimeoutSeconds: timeout,
 			WorkflowRunTimeoutSeconds:       timeout,
@@ -288,9 +288,9 @@ func InitializeHistoryEventGenerator(
 			WorkflowType: &commonpb.WorkflowType{
 				Name: workflowType,
 			},
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			WorkflowRunTimeoutSeconds:    timeout,
 			WorkflowTaskTimeoutSeconds:   timeout,
@@ -396,9 +396,9 @@ func InitializeHistoryEventGenerator(
 			ActivityId:   uuid.New(),
 			ActivityType: &commonpb.ActivityType{Name: "activity"},
 			Namespace:    namespace,
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			ScheduleToCloseTimeoutSeconds: timeout,
 			ScheduleToStartTimeoutSeconds: timeout,
@@ -608,9 +608,9 @@ func InitializeHistoryEventGenerator(
 			Namespace:    namespace,
 			WorkflowId:   childWorkflowID,
 			WorkflowType: &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			WorkflowExecutionTimeoutSeconds: timeout,
 			WorkflowRunTimeoutSeconds:       timeout,

@@ -78,7 +78,7 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, randomID)
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                    workflowID,
-		TaskList:              processorTaskListName,
+		TaskQueue:             processorTaskQueueName,
 		WorkflowTaskTimeout:   time.Minute,
 		WorkflowIDReusePolicy: sdkclient.WorkflowIDReusePolicyAllowDuplicate,
 	}

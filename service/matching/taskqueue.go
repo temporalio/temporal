@@ -34,68 +34,68 @@ import (
 )
 
 type (
-	// taskListID is the key that uniquely identifies a task list
-	taskListID struct {
-		qualifiedTaskListName
+	// taskQueueID is the key that uniquely identifies a task queue
+	taskQueueID struct {
+		qualifiedTaskQueueName
 		namespaceID string
-		taskType    enumspb.TaskListType
+		taskType    enumspb.TaskQueueType
 	}
-	// qualifiedTaskListName refers to the fully qualified task list name
-	qualifiedTaskListName struct {
+	// qualifiedTaskQueueName refers to the fully qualified task queue name
+	qualifiedTaskQueueName struct {
 		name      string // internal name of the tasks list
-		baseName  string // original name of the task list as specified by user
-		partition int    // partitionID of task list
+		baseName  string // original name of the task queue as specified by user
+		partition int    // partitionID of task queue
 	}
 )
 
 const (
-	// taskListPartitionPrefix is the required naming prefix for any task list partition other than partition 0
-	taskListPartitionPrefix = "/__temporal_sys/"
+	// taskQueuePartitionPrefix is the required naming prefix for any task queue partition other than partition 0
+	taskQueuePartitionPrefix = "/__temporal_sys/"
 )
 
-// newTaskListName returns a fully qualified task list name.
-// Fully qualified names contain additional metadata about task list
+// newTaskQueueName returns a fully qualified task queue name.
+// Fully qualified names contain additional metadata about task queue
 // derived from their given name. The additional metadata only makes sense
-// when a task list has more than one partition. When there is more than
-// one partition for a user specified task list, each of the
+// when a task queue has more than one partition. When there is more than
+// one partition for a user specified task queue, each of the
 // individual partitions have an internal name of the form
 //
 //     /__temporal_sys/[original-name]/[partitionID]
 //
 // The name of the root partition is always the same as the user specified name. Rest of
-// the partitions follow the naming convention above. In addition, the task lists partitions
+// the partitions follow the naming convention above. In addition, the task queues partitions
 // logically form a N-ary tree where N is configurable dynamically. The tree formation is an
-// optimization to allow for partitioned task lists to dispatch tasks with low latency when
+// optimization to allow for partitioned task queues to dispatch tasks with low latency when
 // throughput is low - See https://github.com/temporalio/temporal/issues/2098
 //
 // Returns error if the given name is non-compliant with the required format
-// for task list names
-func newTaskListName(name string) (qualifiedTaskListName, error) {
-	tn := qualifiedTaskListName{
+// for task queue names
+func newTaskQueueName(name string) (qualifiedTaskQueueName, error) {
+	tn := qualifiedTaskQueueName{
 		name:     name,
 		baseName: name,
 	}
 	if err := tn.init(); err != nil {
-		return qualifiedTaskListName{}, err
+		return qualifiedTaskQueueName{}, err
 	}
 	return tn, nil
 }
 
-// IsRoot returns true if this task list is a root partition
-func (tn *qualifiedTaskListName) IsRoot() bool {
+// IsRoot returns true if this task queue is a root partition
+func (tn *qualifiedTaskQueueName) IsRoot() bool {
 	return tn.partition == 0
 }
 
-// GetRoot returns the root name for a task list
-func (tn *qualifiedTaskListName) GetRoot() string {
+// GetRoot returns the root name for a task queue
+func (tn *qualifiedTaskQueueName) GetRoot() string {
 	return tn.baseName
 }
 
-// Parent returns the name of the parent task list
+// Parent returns the name of the parent task queue
 // input:
 //   degree: Number of children at each level of the tree
-// Returns empty string if this task list is the root
-func (tn *qualifiedTaskListName) Parent(degree int) string {
+// Returns empty string if this task queue is the root
+func (tn *qualifiedTaskQueueName) Parent(degree int) string {
 	if tn.IsRoot() || degree == 0 {
 		return ""
 	}
@@ -103,53 +103,53 @@ func (tn *qualifiedTaskListName) Parent(degree int) string {
 	return tn.mkName(pid)
 }
 
-func (tn *qualifiedTaskListName) mkName(partition int) string {
+func (tn *qualifiedTaskQueueName) mkName(partition int) string {
 	if partition == 0 {
 		return tn.baseName
 	}
-	return fmt.Sprintf("%v%v/%v", taskListPartitionPrefix, tn.baseName, partition)
+	return fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, tn.baseName, partition)
 }
 
-func (tn *qualifiedTaskListName) init() error {
-	if !strings.HasPrefix(tn.name, taskListPartitionPrefix) {
+func (tn *qualifiedTaskQueueName) init() error {
+	if !strings.HasPrefix(tn.name, taskQueuePartitionPrefix) {
 		return nil
 	}
 
 	suffixOff := strings.LastIndex(tn.name, "/")
-	if suffixOff <= len(taskListPartitionPrefix) {
-		return fmt.Errorf("invalid partitioned task list name %v", tn.name)
+	if suffixOff <= len(taskQueuePartitionPrefix) {
+		return fmt.Errorf("invalid partitioned task queue name %v", tn.name)
 	}
 
 	p, err := strconv.Atoi(tn.name[suffixOff+1:])
 	if err != nil || p <= 0 {
-		return fmt.Errorf("invalid partitioned task list name %v", tn.name)
+		return fmt.Errorf("invalid partitioned task queue name %v", tn.name)
 	}
 
 	tn.partition = p
-	tn.baseName = tn.name[len(taskListPartitionPrefix):suffixOff]
+	tn.baseName = tn.name[len(taskQueuePartitionPrefix):suffixOff]
 	return nil
 }
 
-// newTaskListID returns taskListID which uniquely identfies as task list
-func newTaskListID(namespaceID string, taskListName string, taskType enumspb.TaskListType) (*taskListID, error) {
-	name, err := newTaskListName(taskListName)
+// newTaskQueueID returns taskQueueID which uniquely identfies as task queue
+func newTaskQueueID(namespaceID string, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
+	name, err := newTaskQueueName(taskQueueName)
 	if err != nil {
 		return nil, err
 	}
-	return &taskListID{
-		qualifiedTaskListName: name,
-		namespaceID:           namespaceID,
-		taskType:              taskType,
+	return &taskQueueID{
+		qualifiedTaskQueueName: name,
+		namespaceID:            namespaceID,
+		taskType:               taskType,
 	}, nil
 }
 
-func (tid *taskListID) String() string {
+func (tid *taskQueueID) String() string {
 	var b bytes.Buffer
 	b.WriteString("[")
 	b.WriteString("name=")
 	b.WriteString(tid.name)
 	b.WriteString("type=")
-	if tid.taskType == enumspb.TASK_LIST_TYPE_ACTIVITY {
+	if tid.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		b.WriteString("activity")
 	} else {
 		b.WriteString("decision")

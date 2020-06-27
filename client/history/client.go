@@ -261,21 +261,21 @@ func (c *clientImpl) DescribeMutableState(
 	return response, nil
 }
 
-func (c *clientImpl) ResetStickyTaskList(
+func (c *clientImpl) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *historyservice.ResetStickyTaskListRequest,
-	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
+	request *historyservice.ResetStickyTaskQueueRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	client, err := c.getClientForWorkflowID(request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 
-	var response *historyservice.ResetStickyTaskListResponse
+	var response *historyservice.ResetStickyTaskQueueResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.ResetStickyTaskList(ctx, request, opts...)
+		response, err = client.ResetStickyTaskQueue(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)

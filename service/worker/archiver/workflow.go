@@ -61,7 +61,7 @@ func archivalWorkflowHelper(
 	logger = logger.WithTags(
 		tag.WorkflowID(workflowInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
-		tag.WorkflowTaskListName(workflowInfo.TaskListName),
+		tag.WorkflowTaskQueueName(workflowInfo.TaskQueueName),
 		tag.WorkflowType(workflowInfo.WorkflowType.Name))
 	logger = loggerimpl.NewReplayLogger(logger, ctx, false)
 

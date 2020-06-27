@@ -78,7 +78,7 @@ func (s *Processor) Start() error {
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
 	}
-	processorWorker := worker.New(s.svcClient, processorTaskListName, workerOpts)
+	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
 
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})

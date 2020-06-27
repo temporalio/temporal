@@ -44,19 +44,19 @@ var keys = map[Key]string{
 	unknownKey: "unknownKey",
 
 	// tests keys
-	testGetPropertyKey:                               "testGetPropertyKey",
-	testGetIntPropertyKey:                            "testGetIntPropertyKey",
-	testGetFloat64PropertyKey:                        "testGetFloat64PropertyKey",
-	testGetDurationPropertyKey:                       "testGetDurationPropertyKey",
-	testGetBoolPropertyKey:                           "testGetBoolPropertyKey",
-	testGetStringPropertyKey:                         "testGetStringPropertyKey",
-	testGetMapPropertyKey:                            "testGetMapPropertyKey",
-	testGetIntPropertyFilteredByNamespaceKey:         "testGetIntPropertyFilteredByNamespaceKey",
-	testGetDurationPropertyFilteredByNamespaceKey:    "testGetDurationPropertyFilteredByNamespaceKey",
-	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
-	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
-	testGetBoolPropertyFilteredByNamespaceIDKey:      "testGetBoolPropertyFilteredByNamespaceIDKey",
-	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
+	testGetPropertyKey:                                "testGetPropertyKey",
+	testGetIntPropertyKey:                             "testGetIntPropertyKey",
+	testGetFloat64PropertyKey:                         "testGetFloat64PropertyKey",
+	testGetDurationPropertyKey:                        "testGetDurationPropertyKey",
+	testGetBoolPropertyKey:                            "testGetBoolPropertyKey",
+	testGetStringPropertyKey:                          "testGetStringPropertyKey",
+	testGetMapPropertyKey:                             "testGetMapPropertyKey",
+	testGetIntPropertyFilteredByNamespaceKey:          "testGetIntPropertyFilteredByNamespaceKey",
+	testGetDurationPropertyFilteredByNamespaceKey:     "testGetDurationPropertyFilteredByNamespaceKey",
+	testGetIntPropertyFilteredByTaskQueueInfoKey:      "testGetIntPropertyFilteredByTaskQueueInfoKey",
+	testGetDurationPropertyFilteredByTaskQueueInfoKey: "testGetDurationPropertyFilteredByTaskQueueInfoKey",
+	testGetBoolPropertyFilteredByNamespaceIDKey:       "testGetBoolPropertyFilteredByNamespaceIDKey",
+	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
 	// system settings
 	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
@@ -127,14 +127,14 @@ var keys = map[Key]string{
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
 	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
-	MatchingIdleTasklistCheckInterval:       "matching.idleTasklistCheckInterval",
-	MaxTasklistIdleTime:                     "matching.maxTasklistIdleTime",
+	MatchingIdleTaskqueueCheckInterval:      "matching.idleTaskqueueCheckInterval",
+	MaxTaskqueueIdleTime:                    "matching.maxTaskqueueIdleTime",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 	MatchingMaxTaskDeleteBatchSize:          "matching.maxTaskDeleteBatchSize",
 	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
-	MatchingNumTasklistWritePartitions:      "matching.numTasklistWritePartitions",
-	MatchingNumTasklistReadPartitions:       "matching.numTasklistReadPartitions",
+	MatchingNumTaskqueueWritePartitions:     "matching.numTaskqueueWritePartitions",
+	MatchingNumTaskqueueReadPartitions:      "matching.numTaskqueueReadPartitions",
 	MatchingForwarderMaxOutstandingPolls:    "matching.forwarderMaxOutstandingPolls",
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
@@ -287,7 +287,7 @@ var keys = map[Key]string{
 	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
 	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
 	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
-	TaskListScannerEnabled:                          "worker.taskListScannerEnabled",
+	TaskQueueScannerEnabled:                         "worker.taskQueueScannerEnabled",
 	HistoryScannerEnabled:                           "worker.historyScannerEnabled",
 	ExecutionsScannerEnabled:                        "worker.executionsScannerEnabled",
 }
@@ -305,10 +305,10 @@ const (
 	testGetMapPropertyKey
 	testGetIntPropertyFilteredByNamespaceKey
 	testGetDurationPropertyFilteredByNamespaceKey
-	testGetIntPropertyFilteredByTaskListInfoKey
-	testGetDurationPropertyFilteredByTaskListInfoKey
+	testGetIntPropertyFilteredByTaskQueueInfoKey
+	testGetDurationPropertyFilteredByTaskQueueInfoKey
 	testGetBoolPropertyFilteredByNamespaceIDKey
-	testGetBoolPropertyFilteredByTaskListInfoKey
+	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
 	// EnableGlobalNamespace is key for enable global namespace
 	EnableGlobalNamespace
@@ -364,7 +364,7 @@ const (
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn
 
-	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskList, WorkflowID, ActivityID, TimerID,
+	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit
 
@@ -430,7 +430,7 @@ const (
 	MatchingPersistenceMaxQPS
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS
-	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
+	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
 	MatchingGetTasksBatchSize
@@ -440,10 +440,10 @@ const (
 	MatchingEnableSyncMatch
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval
-	// MatchingIdleTasklistCheckInterval is the IdleTasklistCheckInterval
-	MatchingIdleTasklistCheckInterval
-	// MaxTasklistIdleTime is the max time tasklist being idle
-	MaxTasklistIdleTime
+	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
+	MatchingIdleTaskqueueCheckInterval
+	// MaxTaskqueueIdleTime is the max time taskqueue being idle
+	MaxTaskqueueIdleTime
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer
@@ -452,17 +452,17 @@ const (
 	MatchingMaxTaskDeleteBatchSize
 	// MatchingThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	MatchingThrottledLogRPS
-	// MatchingNumTasklistWritePartitions is the number of write partitions for a task list
-	MatchingNumTasklistWritePartitions
-	// MatchingNumTasklistReadPartitions is the number of read partitions for a task list
-	MatchingNumTasklistReadPartitions
+	// MatchingNumTaskqueueWritePartitions is the number of write partitions for a task queue
+	MatchingNumTaskqueueWritePartitions
+	// MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue
+	MatchingNumTaskqueueReadPartitions
 	// MatchingForwarderMaxOutstandingPolls is the max number of inflight polls from the forwarder
 	MatchingForwarderMaxOutstandingPolls
 	// MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder
 	MatchingForwarderMaxOutstandingTasks
 	// MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded
 	MatchingForwarderMaxRatePerSecond
-	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task list partition tree
+	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration
@@ -655,7 +655,7 @@ const (
 
 	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	HistoryThrottledLogRPS
-	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
@@ -731,8 +731,8 @@ const (
 	WorkerThrottledLogRPS
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
 	ScannerPersistenceMaxQPS
-	// TaskListScannerEnabled indicates if task list scanner should be started as part of worker.Scanner
-	TaskListScannerEnabled
+	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
+	TaskQueueScannerEnabled
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
 	HistoryScannerEnabled
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
@@ -798,7 +798,7 @@ var filters = []string{
 	"unknownFilter",
 	"namespace",
 	"namespaceID",
-	"taskListName",
+	"taskQueueName",
 	"taskType",
 	"shardID",
 }
@@ -809,8 +809,8 @@ const (
 	Namespace
 	// NamespaceID is the namespace Id
 	NamespaceID
-	// TaskListName is the tasklist name
-	TaskListName
+	// TaskQueueName is the taskqueue name
+	TaskQueueName
 	// TaskType is the task type (0:Decision, 1:Activity)
 	TaskType
 	// ShardID is the shard id
@@ -823,10 +823,10 @@ const (
 // FilterOption is used to provide filters for dynamic config keys
 type FilterOption func(filterMap map[Filter]interface{})
 
-// TaskListFilter filters by task list name
-func TaskListFilter(name string) FilterOption {
+// TaskQueueFilter filters by task queue name
+func TaskQueueFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskListName] = name
+		filterMap[TaskQueueName] = name
 	}
 }
 
@@ -845,7 +845,7 @@ func NamespaceIDFilter(namespaceID string) FilterOption {
 }
 
 // TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType enumspb.TaskListType) FilterOption {
+func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
 	}

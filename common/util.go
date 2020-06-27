@@ -282,21 +282,21 @@ func GenerateRandomString(n int) string {
 // CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
 func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
 	matchingResp := &matchingservice.PollForDecisionTaskResponse{
-		TaskToken:                 token,
-		WorkflowExecution:         workflowExecution,
-		WorkflowType:              historyResponse.WorkflowType,
-		PreviousStartedEventId:    historyResponse.PreviousStartedEventId,
-		StartedEventId:            historyResponse.StartedEventId,
-		Attempt:                   historyResponse.GetAttempt(),
-		NextEventId:               historyResponse.NextEventId,
-		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
-		DecisionInfo:              historyResponse.DecisionInfo,
-		WorkflowExecutionTaskList: historyResponse.WorkflowExecutionTaskList,
-		EventStoreVersion:         historyResponse.EventStoreVersion,
-		BranchToken:               historyResponse.BranchToken,
-		ScheduledTimestamp:        historyResponse.ScheduledTimestamp,
-		StartedTimestamp:          historyResponse.StartedTimestamp,
-		Queries:                   historyResponse.Queries,
+		TaskToken:                  token,
+		WorkflowExecution:          workflowExecution,
+		WorkflowType:               historyResponse.WorkflowType,
+		PreviousStartedEventId:     historyResponse.PreviousStartedEventId,
+		StartedEventId:             historyResponse.StartedEventId,
+		Attempt:                    historyResponse.GetAttempt(),
+		NextEventId:                historyResponse.NextEventId,
+		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
+		DecisionInfo:               historyResponse.DecisionInfo,
+		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
+		EventStoreVersion:          historyResponse.EventStoreVersion,
+		BranchToken:                historyResponse.BranchToken,
+		ScheduledTimestamp:         historyResponse.ScheduledTimestamp,
+		StartedTimestamp:           historyResponse.StartedTimestamp,
+		Queries:                    historyResponse.Queries,
 	}
 
 	return matchingResp

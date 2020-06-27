@@ -161,16 +161,16 @@ func (a *AccessControlledWorkflowHandler) DescribeNamespace(
 	return a.frontendHandler.DescribeNamespace(ctx, request)
 }
 
-// DescribeTaskList API call
-func (a *AccessControlledWorkflowHandler) DescribeTaskList(
+// DescribeTaskQueue API call
+func (a *AccessControlledWorkflowHandler) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
-) (*workflowservice.DescribeTaskListResponse, error) {
+	request *workflowservice.DescribeTaskQueueRequest,
+) (*workflowservice.DescribeTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeTaskListScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "DescribeTaskList",
+		APIName:   "DescribeTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -181,7 +181,7 @@ func (a *AccessControlledWorkflowHandler) DescribeTaskList(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.DescribeTaskList(ctx, request)
+	return a.frontendHandler.DescribeTaskQueue(ctx, request)
 }
 
 // DescribeWorkflowExecution API call
@@ -492,16 +492,16 @@ func (a *AccessControlledWorkflowHandler) RequestCancelWorkflowExecution(
 	return a.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
 }
 
-// ResetStickyTaskList API call
-func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
+// ResetStickyTaskQueue API call
+func (a *AccessControlledWorkflowHandler) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
-) (*workflowservice.ResetStickyTaskListResponse, error) {
+	request *workflowservice.ResetStickyTaskQueueRequest,
+) (*workflowservice.ResetStickyTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetStickyTaskListScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetStickyTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "ResetStickyTaskList",
+		APIName:   "ResetStickyTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -512,7 +512,7 @@ func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.ResetStickyTaskList(ctx, request)
+	return a.frontendHandler.ResetStickyTaskQueue(ctx, request)
 }
 
 // ResetWorkflowExecution API call
@@ -725,16 +725,16 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 	return a.frontendHandler.TerminateWorkflowExecution(ctx, request)
 }
 
-// ListTaskListPartitions API call
-func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
+// ListTaskQueuePartitions API call
+func (a *AccessControlledWorkflowHandler) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
-) (*workflowservice.ListTaskListPartitionsResponse, error) {
+	request *workflowservice.ListTaskQueuePartitionsRequest,
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListTaskListPartitionsScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListTaskQueuePartitionsScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "ListTaskListPartitions",
+		APIName:   "ListTaskQueuePartitions",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -745,7 +745,7 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.ListTaskListPartitions(ctx, request)
+	return a.frontendHandler.ListTaskQueuePartitions(ctx, request)
 }
 
 // UpdateNamespace API call

@@ -683,51 +683,51 @@ func (p *taskPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLess
 	return result, err
 }
 
-func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceRequests)
+func (p *taskPersistenceClient) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceLeaseTaskQueueScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceLatency)
-	response, err := p.persistence.LeaseTaskList(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceLeaseTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.LeaseTaskQueue(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceLeaseTaskListScope, err)
+		p.updateErrorMetric(metrics.PersistenceLeaseTaskQueueScope, err)
 	}
 
 	return response, err
 }
 
-func (p *taskPersistenceClient) ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceListTaskListScope, metrics.PersistenceRequests)
-	sw := p.metricClient.StartTimer(metrics.PersistenceListTaskListScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListTaskList(request)
+func (p *taskPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceListTaskQueueScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceListTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ListTaskQueue(request)
 	sw.Stop()
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceListTaskListScope, err)
+		p.updateErrorMetric(metrics.PersistenceListTaskQueueScope, err)
 	}
 	return response, err
 }
 
-func (p *taskPersistenceClient) DeleteTaskList(request *DeleteTaskListRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceDeleteTaskListScope, metrics.PersistenceRequests)
-	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteTaskListScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteTaskList(request)
+func (p *taskPersistenceClient) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteTaskQueueScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteTaskQueueScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteTaskQueue(request)
 	sw.Stop()
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceDeleteTaskListScope, err)
+		p.updateErrorMetric(metrics.PersistenceDeleteTaskQueueScope, err)
 	}
 	return err
 }
 
-func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceRequests)
+func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceLatency)
-	response, err := p.persistence.UpdateTaskList(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.UpdateTaskQueue(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceUpdateTaskListScope, err)
+		p.updateErrorMetric(metrics.PersistenceUpdateTaskQueueScope, err)
 	}
 
 	return response, err

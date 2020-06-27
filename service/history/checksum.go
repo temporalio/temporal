@@ -70,7 +70,7 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 		DecisionScheduledId:  executionInfo.DecisionScheduleID,
 		DecisionStartedId:    executionInfo.DecisionStartedID,
 		DecisionVersion:      executionInfo.DecisionVersion,
-		StickyTaskListName:   executionInfo.StickyTaskList,
+		StickyTaskQueueName:  executionInfo.StickyTaskQueue,
 	}
 
 	if replicationState != nil {

@@ -80,15 +80,15 @@ func (c *retryableClient) DescribeNamespace(
 	return resp, err
 }
 
-func (c *retryableClient) DescribeTaskList(
+func (c *retryableClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
+	request *workflowservice.DescribeTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeTaskListResponse, error) {
-	var resp *workflowservice.DescribeTaskListResponse
+) (*workflowservice.DescribeTaskQueueResponse, error) {
+	var resp *workflowservice.DescribeTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DescribeTaskList(ctx, request, opts...)
+		resp, err = c.client.DescribeTaskQueue(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -350,15 +350,15 @@ func (c *retryableClient) RequestCancelWorkflowExecution(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) ResetStickyTaskList(
+func (c *retryableClient) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
+	request *workflowservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetStickyTaskListResponse, error) {
-	var resp *workflowservice.ResetStickyTaskListResponse
+) (*workflowservice.ResetStickyTaskQueueResponse, error) {
+	var resp *workflowservice.ResetStickyTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
+		resp, err = c.client.ResetStickyTaskQueue(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -605,15 +605,15 @@ func (c *retryableClient) GetClusterInfo(
 	return resp, err
 }
 
-func (c *retryableClient) ListTaskListPartitions(
+func (c *retryableClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
+	request *workflowservice.ListTaskQueuePartitionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListTaskListPartitionsResponse, error) {
-	var resp *workflowservice.ListTaskListPartitionsResponse
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
+	var resp *workflowservice.ListTaskQueuePartitionsResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)
+		resp, err = c.client.ListTaskQueuePartitions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

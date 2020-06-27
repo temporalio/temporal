@@ -47,7 +47,7 @@ type (
 		ReplicateDecisionTaskScheduledEvent(
 			version int64,
 			scheduleID int64,
-			taskList string,
+			taskQueue string,
 			startToCloseTimeoutSeconds int32,
 			attempt int64,
 			scheduleTimestamp int64,
@@ -125,7 +125,7 @@ func newMutableStateDecisionTaskManager(msb *mutableStateBuilder) mutableStateDe
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEvent(
 	version int64,
 	scheduleID int64,
-	taskList string,
+	taskQueue string,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
 	scheduleTimestamp int64,
@@ -150,7 +150,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
 		DecisionTimeout:            startToCloseTimeoutSeconds,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Attempt:                    attempt,
 		ScheduledTimestamp:         scheduleTimestamp,
 		StartedTimestamp:           0,
@@ -182,7 +182,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 		StartedID:          common.EmptyEventID,
 		RequestID:          emptyUUID,
 		DecisionTimeout:    m.msb.GetExecutionInfo().WorkflowTaskTimeout,
-		TaskList:           m.msb.GetExecutionInfo().TaskList,
+		TaskQueue:          m.msb.GetExecutionInfo().TaskQueue,
 		Attempt:            m.msb.GetExecutionInfo().DecisionAttempt,
 		ScheduledTimestamp: m.msb.timeSource.Now().UnixNano(),
 		StartedTimestamp:   0,
@@ -229,7 +229,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 		Attempt:                    decision.Attempt,
 		StartedTimestamp:           timestamp,
 		ScheduledTimestamp:         decision.ScheduledTimestamp,
-		TaskList:                   decision.TaskList,
+		TaskQueue:                  decision.TaskQueue,
 		OriginalScheduledTimestamp: decision.OriginalScheduledTimestamp,
 	}
 
@@ -299,10 +299,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		return nil, m.msb.createInternalServerError(opTag)
 	}
 
-	// Tasklist and decision timeout should already be set from workflow execution started event
-	taskList := m.msb.executionInfo.TaskList
-	if m.msb.IsStickyTaskListEnabled() {
-		taskList = m.msb.executionInfo.StickyTaskList
+	// Taskqueue and decision timeout should already be set from workflow execution started event
+	taskQueue := m.msb.executionInfo.TaskQueue
+	if m.msb.IsStickyTaskQueueEnabled() {
+		taskQueue = m.msb.executionInfo.StickyTaskQueue
 	} else {
 		// It can be because stickyness has expired due to StickyTTL config
 		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
@@ -329,7 +329,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 	// Avoid creating new history events when decisions are continuously failing
 	scheduleTime := m.msb.timeSource.Now().UnixNano()
 	if m.msb.executionInfo.DecisionAttempt == 0 {
-		newDecisionEvent = m.msb.hBuilder.AddDecisionTaskScheduledEvent(taskList, taskTimeout,
+		newDecisionEvent = m.msb.hBuilder.AddDecisionTaskScheduledEvent(taskQueue, taskTimeout,
 			m.msb.executionInfo.DecisionAttempt)
 		scheduleID = newDecisionEvent.GetEventId()
 		scheduleTime = newDecisionEvent.GetTimestamp()
@@ -338,7 +338,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 	decision, err := m.ReplicateDecisionTaskScheduledEvent(
 		m.msb.GetCurrentVersion(),
 		scheduleID,
-		taskList,
+		taskQueue,
 		taskTimeout,
 		m.msb.executionInfo.DecisionAttempt,
 		scheduleTime,
@@ -423,12 +423,12 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 	var event *historypb.HistoryEvent
 	scheduleID := decision.ScheduleID
 	startedID := scheduleID + 1
-	tasklist := request.TaskList.GetName()
+	taskqueue := request.TaskQueue.GetName()
 	startTime := m.msb.timeSource.Now().UnixNano()
 	// First check to see if new events came since transient decision was scheduled
 	if decision.Attempt > 0 && decision.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new DecisionTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddDecisionTaskScheduledEvent(tasklist, decision.DecisionTimeout, 0)
+		scheduleEvent := m.msb.hBuilder.AddDecisionTaskScheduledEvent(taskqueue, decision.DecisionTimeout, 0)
 		scheduleID = scheduleEvent.GetEventId()
 		decision.Attempt = 0
 	}
@@ -473,7 +473,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 	m.beforeAddDecisionTaskCompletedEvent()
 	if decision.Attempt > 0 {
 		// Create corresponding DecisionTaskSchedule and DecisionTaskStarted events for decisions we have been retrying
-		scheduledEvent := m.msb.hBuilder.AddTransientDecisionTaskScheduledEvent(m.msb.executionInfo.TaskList, decision.DecisionTimeout,
+		scheduledEvent := m.msb.hBuilder.AddTransientDecisionTaskScheduledEvent(m.msb.executionInfo.TaskQueue, decision.DecisionTimeout,
 			decision.Attempt, decision.ScheduledTimestamp)
 		startedEvent := m.msb.hBuilder.AddTransientDecisionTaskStartedEvent(scheduledEvent.GetEventId(), decision.RequestID,
 			request.GetIdentity(), decision.StartedTimestamp)
@@ -581,7 +581,7 @@ func (m *mutableStateDecisionTaskManagerImpl) FailDecision(
 		RequestID:                  emptyUUID,
 		DecisionTimeout:            0,
 		StartedTimestamp:           0,
-		TaskList:                   "",
+		TaskQueue:                  "",
 		OriginalScheduledTimestamp: 0,
 	}
 	if incrementAttempt {
@@ -602,7 +602,7 @@ func (m *mutableStateDecisionTaskManagerImpl) DeleteDecision() {
 		Attempt:            0,
 		StartedTimestamp:   0,
 		ScheduledTimestamp: 0,
-		TaskList:           "",
+		TaskQueue:          "",
 		// Keep the last original scheduled timestamp, so that AddDecisionAsHeartbeat can continue with it.
 		OriginalScheduledTimestamp: m.getDecisionInfo().OriginalScheduledTimestamp,
 	}
@@ -623,7 +623,7 @@ func (m *mutableStateDecisionTaskManagerImpl) UpdateDecision(
 	m.msb.executionInfo.DecisionScheduledTimestamp = decision.ScheduledTimestamp
 	m.msb.executionInfo.DecisionOriginalScheduledTimestamp = decision.OriginalScheduledTimestamp
 
-	// NOTE: do not update tasklist in execution info
+	// NOTE: do not update taskqueue in execution info
 
 	m.msb.logger.Debug("Decision Updated",
 		tag.WorkflowScheduleID(decision.ScheduleID),
@@ -680,11 +680,11 @@ func (m *mutableStateDecisionTaskManagerImpl) CreateTransientDecisionEvents(
 	decision *decisionInfo,
 	identity string,
 ) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
-	tasklist := m.msb.executionInfo.TaskList
+	taskqueue := m.msb.executionInfo.TaskQueue
 	scheduledEvent := newDecisionTaskScheduledEventWithInfo(
 		decision.ScheduleID,
 		decision.ScheduledTimestamp,
-		tasklist,
+		taskqueue,
 		decision.DecisionTimeout,
 		decision.Attempt,
 	)
@@ -701,9 +701,9 @@ func (m *mutableStateDecisionTaskManagerImpl) CreateTransientDecisionEvents(
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) getDecisionInfo() *decisionInfo {
-	taskList := m.msb.executionInfo.TaskList
-	if m.msb.IsStickyTaskListEnabled() {
-		taskList = m.msb.executionInfo.StickyTaskList
+	taskQueue := m.msb.executionInfo.TaskQueue
+	if m.msb.IsStickyTaskQueueEnabled() {
+		taskQueue = m.msb.executionInfo.StickyTaskQueue
 	}
 	return &decisionInfo{
 		Version:                    m.msb.executionInfo.DecisionVersion,
@@ -714,7 +714,7 @@ func (m *mutableStateDecisionTaskManagerImpl) getDecisionInfo() *decisionInfo {
 		Attempt:                    m.msb.executionInfo.DecisionAttempt,
 		StartedTimestamp:           m.msb.executionInfo.DecisionStartedTimestamp,
 		ScheduledTimestamp:         m.msb.executionInfo.DecisionScheduledTimestamp,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		OriginalScheduledTimestamp: m.msb.executionInfo.DecisionOriginalScheduledTimestamp,
 	}
 }

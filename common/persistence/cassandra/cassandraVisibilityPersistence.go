@@ -50,11 +50,11 @@ const (
 
 const (
 	templateCreateWorkflowExecutionStartedWithTTL = `INSERT INTO open_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateDeleteWorkflowExecutionStarted = `DELETE FROM open_executions ` +
@@ -64,36 +64,36 @@ const (
 		`AND run_id = ?`
 
 	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosedWithTTLV2 = `INSERT INTO closed_executions_v2 (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosedV2 = `INSERT INTO closed_executions_v2 (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -101,7 +101,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -109,7 +109,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_list ` +
+	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -117,7 +117,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -125,7 +125,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -133,7 +133,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND status = ? `
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -190,7 +190,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			request.WorkflowTypeName,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 		)
 	} else {
 		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
@@ -203,7 +203,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			request.WorkflowTypeName,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 			ttl,
 		)
 	}
@@ -253,7 +253,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.HistoryLength,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedV2,
@@ -269,7 +269,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.HistoryLength,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
@@ -285,7 +285,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.HistoryLength,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 			retention,
 		)
 		// duplicate write to v2 to order by close time
@@ -302,7 +302,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.HistoryLength,
 			request.Memo.Data,
 			string(request.Memo.GetEncoding()),
-			request.TaskList,
+			request.TaskQueue,
 			retention,
 		)
 	}
@@ -636,8 +636,8 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 	var executionTime time.Time
 	var memo []byte
 	var encoding string
-	var taskList string
-	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskList) {
+	var taskQueue string
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID.String(),
@@ -645,7 +645,7 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
 			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
-			TaskList:      taskList,
+			TaskQueue:     taskQueue,
 		}
 		return record, true
 	}
@@ -663,8 +663,8 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	var historyLength int64
 	var memo []byte
 	var encoding string
-	var taskList string
-	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskList) {
+	var taskQueue string
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID.String(),
@@ -675,7 +675,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 			Status:        &status,
 			HistoryLength: historyLength,
 			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
-			TaskList:      taskList,
+			TaskQueue:     taskQueue,
 		}
 		return record, true
 	}

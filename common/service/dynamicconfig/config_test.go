@@ -175,14 +175,14 @@ func (s *configSuite) TestGetStringPropertyFnWithNamespaceFilter() {
 	s.Equal("efg", value(namespace))
 }
 
-func (s *configSuite) TestGetIntPropertyFilteredByTaskListInfo() {
-	key := testGetIntPropertyFilteredByTaskListInfoKey
+func (s *configSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
+	key := testGetIntPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
-	taskList := "testTaskList"
-	value := s.cln.GetIntPropertyFilteredByTaskListInfo(key, 10)
-	s.Equal(10, value(namespace, taskList, 0))
+	taskQueue := "testTaskQueue"
+	value := s.cln.GetIntPropertyFilteredByTaskQueueInfo(key, 10)
+	s.Equal(10, value(namespace, taskQueue, 0))
 	s.client.SetValue(key, 50)
-	s.Equal(50, value(namespace, taskList, 0))
+	s.Equal(50, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetFloat64Property() {
@@ -210,14 +210,14 @@ func (s *configSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 	s.Equal(false, value(namespaceID))
 }
 
-func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
-	key := testGetBoolPropertyFilteredByTaskListInfoKey
+func (s *configSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
+	key := testGetBoolPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
-	taskList := "testTaskList"
-	value := s.cln.GetBoolPropertyFilteredByTaskListInfo(key, false)
-	s.Equal(false, value(namespace, taskList, 0))
+	taskQueue := "testTaskQueue"
+	value := s.cln.GetBoolPropertyFilteredByTaskQueueInfo(key, false)
+	s.Equal(false, value(namespace, taskQueue, 0))
 	s.client.SetValue(key, true)
-	s.Equal(true, value(namespace, taskList, 0))
+	s.Equal(true, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetDurationProperty() {
@@ -237,14 +237,14 @@ func (s *configSuite) TestGetDurationPropertyFilteredByNamespace() {
 	s.Equal(time.Minute, value(namespace))
 }
 
-func (s *configSuite) TestGetDurationPropertyFilteredByTaskListInfo() {
-	key := testGetDurationPropertyFilteredByTaskListInfoKey
+func (s *configSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
+	key := testGetDurationPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
-	taskList := "testTaskList"
-	value := s.cln.GetDurationPropertyFilteredByTaskListInfo(key, time.Second)
-	s.Equal(time.Second, value(namespace, taskList, 0))
+	taskQueue := "testTaskQueue"
+	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(key, time.Second)
+	s.Equal(time.Second, value(namespace, taskQueue, 0))
 	s.client.SetValue(key, time.Minute)
-	s.Equal(time.Minute, value(namespace, taskList, 0))
+	s.Equal(time.Minute, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetMapProperty() {
@@ -290,7 +290,7 @@ func BenchmarkLogValue(b *testing.B) {
 	keys := []Key{
 		HistorySizeLimitError,
 		MatchingThrottledLogRPS,
-		MatchingIdleTasklistCheckInterval,
+		MatchingIdleTaskqueueCheckInterval,
 	}
 	values := []interface{}{
 		1024 * 1024,

@@ -64,7 +64,7 @@ func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		ScheduleToCloseTimeout: expiration,
 		HeartbeatTimeout:       5 * time.Second,
 		RetryPolicy:            retryPolicy,
