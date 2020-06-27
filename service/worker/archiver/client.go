@@ -70,7 +70,7 @@ type (
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
-		URI                  string // should be historyURI, but keep the existing name for backward compatibility
+		HistoryURI           string
 
 		// visibility archival
 		WorkflowTypeName   string
@@ -202,7 +202,7 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 		errCh <- err
 	}()
 	c.metricsScope.IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
-	URI, err := carchiver.NewURI(request.ArchiveRequest.URI)
+	URI, err := carchiver.NewURI(request.ArchiveRequest.HistoryURI)
 	if err != nil {
 		return
 	}
@@ -259,7 +259,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),
-		HistoryArchivalUri: request.ArchiveRequest.URI,
+		HistoryArchivalUri: request.ArchiveRequest.HistoryURI,
 	})
 }
 

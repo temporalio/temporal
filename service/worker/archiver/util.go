@@ -79,7 +79,7 @@ func tagLoggerWithHistoryRequest(logger log.Logger, request *ArchiveRequest) log
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
-		tag.ArchivalURI(request.URI),
+		tag.ArchivalURI(request.HistoryURI),
 	)
 }
 
@@ -89,7 +89,7 @@ func tagLoggerWithVisibilityRequest(logger log.Logger, request *ArchiveRequest) 
 		tag.ArchivalRequestNamespace(request.Namespace),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
-		tag.ArchivalURI(request.URI),
+		tag.ArchivalURI(request.HistoryURI),
 	)
 }
 

@@ -159,8 +159,8 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:     "test:///history/archival",
-			Targets: []ArchivalTarget{ArchiveTargetHistory},
+			HistoryURI: "test:///history/archival",
+			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -182,8 +182,8 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:     "test:///history/archival",
-			Targets: []ArchivalTarget{ArchiveTargetHistory},
+			HistoryURI: "test:///history/archival",
+			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -206,8 +206,8 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:     "test:///history/archival",
-			Targets: []ArchivalTarget{ArchiveTargetHistory},
+			HistoryURI: "test:///history/archival",
+			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -232,7 +232,7 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:           "test:///history/archival",
+			HistoryURI:    "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
@@ -260,7 +260,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:           "test:///history/archival",
+			HistoryURI:    "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
@@ -289,7 +289,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:           "test:///history/archival",
+			HistoryURI:    "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
@@ -312,7 +312,7 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:           "test:///history/archival",
+			HistoryURI:    "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
@@ -333,7 +333,7 @@ func (s *clientSuite) TestArchiveSendSignal_Success() {
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			URI:           "test:///history/archival",
+			HistoryURI:    "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
