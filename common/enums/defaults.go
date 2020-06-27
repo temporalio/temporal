@@ -45,3 +45,9 @@ func SetDefaultTaskListKind(f *enumspb.TaskListKind) {
 		*f = enumspb.TASK_LIST_KIND_NORMAL
 	}
 }
+
+func SetDefaultParentClosePolicy(f *enumspb.ParentClosePolicy) {
+	if *f == enumspb.PARENT_CLOSE_POLICY_UNSPECIFIED {
+		*f = enumspb.PARENT_CLOSE_POLICY_ABANDON
+	}
+}
