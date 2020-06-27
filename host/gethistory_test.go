@@ -35,7 +35,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
@@ -49,13 +49,13 @@ import (
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "integration-get-workflow-history-events-long-poll-test-all"
 	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-all-type"
-	tasklistName := "integration-get-workflow-history-events-long-poll-test-all-tasklist"
+	taskqueueName := "integration-get-workflow-history-events-long-poll-test-all-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskList := &tasklistpb.TaskList{Name: tasklistName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -63,7 +63,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 workflowID,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -92,7 +92,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      taskList,
+					TaskQueue:                     taskQueue,
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
@@ -120,7 +120,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -215,13 +215,13 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	workflowID := "integration-get-workflow-history-events-long-poll-test-close"
 	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-close-type"
-	tasklistName := "integration-get-workflow-history-events-long-poll-test-close-tasklist"
+	taskqueueName := "integration-get-workflow-history-events-long-poll-test-close-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskList := &tasklistpb.TaskList{Name: tasklistName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -229,7 +229,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 workflowID,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -258,7 +258,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      taskList,
+					TaskQueue:                     taskQueue,
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
@@ -286,7 +286,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -374,13 +374,13 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	workflowID := "integration-poll-for-workflow-raw-history-events-long-poll-test-all"
 	workflowTypeName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-type"
-	tasklistName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-tasklist"
+	taskqueueName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskList := &tasklistpb.TaskList{Name: tasklistName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -388,7 +388,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		Namespace:                  s.testRawHistoryNamespaceName,
 		WorkflowId:                 workflowID,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -418,7 +418,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 					ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "1",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
-						TaskList:                      taskList,
+						TaskQueue:                     taskQueue,
 						Input:                         payloads.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeoutSeconds: 100,
 						ScheduleToStartTimeoutSeconds: 25,
@@ -448,7 +448,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.testRawHistoryNamespaceName,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -576,13 +576,13 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	workflowID := "integration-admin-get-workflow-history-raw-events-all"
 	workflowTypeName := "integration-admin-get-workflow-history-raw-events-all-type"
-	tasklistName := "integration-admin-get-workflow-history-raw-events-all-tasklist"
+	taskqueueName := "integration-admin-get-workflow-history-raw-events-all-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskList := &tasklistpb.TaskList{Name: tasklistName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -590,7 +590,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 workflowID,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -623,7 +623,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      taskList,
+					TaskQueue:                     taskQueue,
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
@@ -651,7 +651,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -793,13 +793,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle() {
 	workflowID := "integration-admin-get-workflow-history-raw-events-in-the-middle"
 	workflowTypeName := "integration-admin-get-workflow-history-raw-events-in-the-middle-type"
-	tasklistName := "integration-admin-get-workflow-history-raw-events-in-the-middle-tasklist"
+	taskqueueName := "integration-admin-get-workflow-history-raw-events-in-the-middle-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskList := &tasklistpb.TaskList{Name: tasklistName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -807,7 +807,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		Namespace:                  s.namespace,
 		WorkflowId:                 workflowID,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -840,7 +840,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      taskList,
+					TaskQueue:                     taskQueue,
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
@@ -868,7 +868,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,

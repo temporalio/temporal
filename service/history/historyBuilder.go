@@ -30,7 +30,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
@@ -87,16 +87,16 @@ func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *historyservic
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddDecisionTaskScheduledEvent(taskList string,
+func (b *historyBuilder) AddDecisionTaskScheduledEvent(taskQueue string,
 	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
-	event := b.newDecisionTaskScheduledEvent(taskList, startToCloseTimeoutSeconds, attempt)
+	event := b.newDecisionTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddTransientDecisionTaskScheduledEvent(taskList string,
+func (b *historyBuilder) AddTransientDecisionTaskScheduledEvent(taskQueue string,
 	startToCloseTimeoutSeconds int32, attempt int64, timestamp int64) *historypb.HistoryEvent {
-	event := b.newTransientDecisionTaskScheduledEvent(taskList, startToCloseTimeoutSeconds, attempt, timestamp)
+	event := b.newTransientDecisionTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt, timestamp)
 
 	return b.addTransientEvent(event)
 }
@@ -478,7 +478,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attributes := &historypb.WorkflowExecutionStartedEventAttributes{}
 	attributes.WorkflowType = request.WorkflowType
-	attributes.TaskList = request.TaskList
+	attributes.TaskQueue = request.TaskQueue
 	attributes.Header = request.Header
 	attributes.Input = request.Input
 	attributes.WorkflowRunTimeoutSeconds = request.WorkflowRunTimeoutSeconds
@@ -511,18 +511,18 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	return historyEvent
 }
 
-func (b *historyBuilder) newDecisionTaskScheduledEvent(taskList string, startToCloseTimeoutSeconds int32,
+func (b *historyBuilder) newDecisionTaskScheduledEvent(taskQueue string, startToCloseTimeoutSeconds int32,
 	attempt int64) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED)
 
-	return setDecisionTaskScheduledEventInfo(historyEvent, taskList, startToCloseTimeoutSeconds, attempt)
+	return setDecisionTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
-func (b *historyBuilder) newTransientDecisionTaskScheduledEvent(taskList string, startToCloseTimeoutSeconds int32,
+func (b *historyBuilder) newTransientDecisionTaskScheduledEvent(taskQueue string, startToCloseTimeoutSeconds int32,
 	attempt int64, timestamp int64) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEventWithTimestamp(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, timestamp)
 
-	return setDecisionTaskScheduledEventInfo(historyEvent, taskList, startToCloseTimeoutSeconds, attempt)
+	return setDecisionTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
 func (b *historyBuilder) newDecisionTaskStartedEvent(scheduledEventID int64, requestID string,
@@ -575,7 +575,7 @@ func (b *historyBuilder) newActivityTaskScheduledEvent(decisionTaskCompletedEven
 	attributes := &historypb.ActivityTaskScheduledEventAttributes{}
 	attributes.ActivityId = scheduleAttributes.ActivityId
 	attributes.ActivityType = scheduleAttributes.ActivityType
-	attributes.TaskList = scheduleAttributes.TaskList
+	attributes.TaskQueue = scheduleAttributes.TaskQueue
 	attributes.Header = scheduleAttributes.Header
 	attributes.Input = scheduleAttributes.Input
 	attributes.ScheduleToCloseTimeoutSeconds = scheduleAttributes.ScheduleToCloseTimeoutSeconds
@@ -864,7 +864,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
 	attributes.NewExecutionRunId = newRunID
 	attributes.WorkflowType = request.WorkflowType
-	attributes.TaskList = request.TaskList
+	attributes.TaskQueue = request.TaskQueue
 	attributes.Header = request.Header
 	attributes.Input = request.Input
 	attributes.WorkflowRunTimeoutSeconds = request.WorkflowRunTimeoutSeconds
@@ -888,7 +888,7 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 	attributes.Namespace = startAttributes.Namespace
 	attributes.WorkflowId = startAttributes.WorkflowId
 	attributes.WorkflowType = startAttributes.WorkflowType
-	attributes.TaskList = startAttributes.TaskList
+	attributes.TaskQueue = startAttributes.TaskQueue
 	attributes.Header = startAttributes.Header
 	attributes.Input = startAttributes.Input
 	attributes.WorkflowExecutionTimeoutSeconds = startAttributes.WorkflowExecutionTimeoutSeconds
@@ -1023,11 +1023,11 @@ func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string
 	return historyEvent
 }
 
-func newDecisionTaskScheduledEventWithInfo(eventID, timestamp int64, taskList string, startToCloseTimeoutSeconds int32,
+func newDecisionTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue string, startToCloseTimeoutSeconds int32,
 	attempt int64) *historypb.HistoryEvent {
 	historyEvent := createNewHistoryEvent(eventID, enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, timestamp)
 
-	return setDecisionTaskScheduledEventInfo(historyEvent, taskList, startToCloseTimeoutSeconds, attempt)
+	return setDecisionTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
 func newDecisionTaskStartedEventWithInfo(eventID, timestamp int64, scheduledEventID int64, requestID string,
@@ -1046,11 +1046,11 @@ func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, timestamp
 	return historyEvent
 }
 
-func setDecisionTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskList string,
+func setDecisionTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskQueue string,
 	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
 	attributes := &historypb.DecisionTaskScheduledEventAttributes{}
-	attributes.TaskList = &tasklistpb.TaskList{}
-	attributes.TaskList.Name = taskList
+	attributes.TaskQueue = &taskqueuepb.TaskQueue{}
+	attributes.TaskQueue.Name = taskQueue
 	attributes.StartToCloseTimeoutSeconds = startToCloseTimeoutSeconds
 	attributes.Attempt = attempt
 	historyEvent.Attributes = &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: attributes}

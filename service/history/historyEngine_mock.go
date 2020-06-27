@@ -30,13 +30,14 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice/v1"
 	repication "github.com/temporalio/temporal/.gen/proto/replication/v1"
 	persistence "github.com/temporalio/temporal/common/persistence"
 	common "go.temporal.io/temporal-proto/common/v1"
 	history "go.temporal.io/temporal-proto/history/v1"
-	reflect "reflect"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -146,19 +147,19 @@ func (mr *MockEngineMockRecorder) DescribeMutableState(ctx, request interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockEngine)(nil).DescribeMutableState), ctx, request)
 }
 
-// ResetStickyTaskList mocks base method.
-func (m *MockEngine) ResetStickyTaskList(ctx context.Context, resetRequest *historyservice.ResetStickyTaskListRequest) (*historyservice.ResetStickyTaskListResponse, error) {
+// ResetStickyTaskQueue mocks base method.
+func (m *MockEngine) ResetStickyTaskQueue(ctx context.Context, resetRequest *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetStickyTaskList", ctx, resetRequest)
-	ret0, _ := ret[0].(*historyservice.ResetStickyTaskListResponse)
+	ret := m.ctrl.Call(m, "ResetStickyTaskQueue", ctx, resetRequest)
+	ret0, _ := ret[0].(*historyservice.ResetStickyTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ResetStickyTaskList indicates an expected call of ResetStickyTaskList.
-func (mr *MockEngineMockRecorder) ResetStickyTaskList(ctx, resetRequest interface{}) *gomock.Call {
+// ResetStickyTaskQueue indicates an expected call of ResetStickyTaskQueue.
+func (mr *MockEngineMockRecorder) ResetStickyTaskQueue(ctx, resetRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStickyTaskList", reflect.TypeOf((*MockEngine)(nil).ResetStickyTaskList), ctx, resetRequest)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStickyTaskQueue", reflect.TypeOf((*MockEngine)(nil).ResetStickyTaskQueue), ctx, resetRequest)
 }
 
 // DescribeWorkflowExecution mocks base method.

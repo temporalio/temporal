@@ -22,6 +22,6 @@ history.historyMgrNumConns:
 system.advancedVisibilityWritingMode:
 - value: "off"
   constraints: {}
-matching.numTasklistReadPartitions:
+matching.numTaskqueueReadPartitions:
 - value: 1
   constraints: {}

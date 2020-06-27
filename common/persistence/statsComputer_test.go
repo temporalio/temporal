@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 )
 
 type (
@@ -73,17 +73,17 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	workflowType := &commonpb.WorkflowType{
 		Name: "test-workflow-type-name",
 	}
-	taskList := &tasklistpb.TaskList{
-		Name: "test-tasklist",
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: "test-taskqueue",
 	}
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceID = namespaceID
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = execution.GetWorkflowId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
-	ms.UpdateWorkflowMutation.ExecutionInfo.TaskList = taskList.GetName()
+	ms.UpdateWorkflowMutation.ExecutionInfo.TaskQueue = taskQueue.GetName()
 
-	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(taskList.GetName())
+	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(taskQueue.GetName())
 
 	stats := s.sc.computeMutableStateUpdateStats(ms)
 	s.Equal(stats.ExecutionInfoSize, expectedSize)

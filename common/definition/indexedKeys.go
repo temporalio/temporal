@@ -42,7 +42,7 @@ const (
 	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
 	BinaryChecksums = "BinaryChecksums"
-	TaskList        = "TaskList"
+	TaskQueue       = "TaskQueue"
 
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
@@ -97,7 +97,7 @@ var systemIndexedKeys = map[string]interface{}{
 	CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
 	ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
 	HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
-	TaskList:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 }
 
 // IsSystemIndexedKey return true is key is system added

@@ -890,7 +890,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                  attr.WorkflowType,
-		TaskList:                      attr.TaskList,
+		TaskQueue:                     attr.TaskQueue,
 		RetryPolicy:                   attr.RetryPolicy,
 		Input:                         attr.Input,
 		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,

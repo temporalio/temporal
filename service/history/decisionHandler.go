@@ -34,7 +34,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
@@ -380,13 +380,13 @@ Update_History_Loop:
 		)
 		hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
-		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskList == nil {
+		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyDisabledCounter)
-			executionInfo.StickyTaskList = ""
+			executionInfo.StickyTaskQueue = ""
 			executionInfo.StickyScheduleToStartTimeout = 0
 		} else {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyEnabledCounter)
-			executionInfo.StickyTaskList = request.StickyAttributes.WorkerTaskList.GetName()
+			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
 			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeoutSeconds()
 		}
 		executionInfo.ClientLibraryVersion = clientLibVersion
@@ -487,8 +487,8 @@ Update_History_Loop:
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflowservice.PollForDecisionTaskRequest{
-					TaskList: &tasklistpb.TaskList{Name: newDecision.TaskList},
-					Identity: request.Identity,
+					TaskQueue: &taskqueuepb.TaskQueue{Name: newDecision.TaskQueue},
+					Identity:  request.Identity,
 				})
 				if err != nil {
 					return nil, err
@@ -597,12 +597,12 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	// before it was started.
 	response.ScheduledEventId = decision.ScheduleID
 	response.StartedEventId = decision.StartedID
-	response.StickyExecutionEnabled = msBuilder.IsStickyTaskListEnabled()
+	response.StickyExecutionEnabled = msBuilder.IsStickyTaskQueueEnabled()
 	response.NextEventId = msBuilder.GetNextEventID()
 	response.Attempt = decision.Attempt
-	response.WorkflowExecutionTaskList = &tasklistpb.TaskList{
-		Name: executionInfo.TaskList,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	response.ScheduledTimestamp = decision.ScheduledTimestamp
 	response.StartedTimestamp = decision.StartedTimestamp

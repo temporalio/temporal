@@ -36,7 +36,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
@@ -114,7 +114,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	id := "dynamic-historybuilder-success-test-workflow-id"
 	rid := "dynamic-historybuilder-success-test-run-id"
 	wt := "dynamic-historybuilder-success-type"
-	tl := "dynamic-historybuilder-success-tasklist"
+	tl := "dynamic-historybuilder-success-taskqueue"
 	identity := "dynamic-historybuilder-success-worker"
 	input := payloads.EncodeString("dynamic-historybuilder-success-input")
 	execTimeout := int32(70)
@@ -154,7 +154,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.False(decisionRunning2)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activityTaskList := "dynamic-historybuilder-success-activity-tasklist"
+	activityTaskQueue := "dynamic-historybuilder-success-activity-taskqueue"
 	activityTimeout := int32(60)
 	queueTimeout := int32(20)
 	hearbeatTimeout := int32(10)
@@ -164,9 +164,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	activity1Input := payloads.EncodeString("dynamic-historybuilder-success-activity1-input")
 	activity1Result := payloads.EncodeString("dynamic-historybuilder-success-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
+		activityTaskQueue, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskQueue, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(6), s.getNextEventID())
 	ai0, activity1Running0 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running0)
@@ -178,9 +178,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	activity2Input := payloads.EncodeString("dynamic-historybuilder-success-activity2-input")
 	activity2Failure := failure.NewServerFailure("dynamic-historybuilder-success-activity2-failed", false)
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
+		activityTaskQueue, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskQueue, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(7), s.getNextEventID())
 	ai2, activity2Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running0)
@@ -198,16 +198,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 		BackoffCoefficient:       1,
 	}
 	activity3ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity3ID, activity3Type,
-		activityTaskList, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout, activity3RetryPolicy)
+		activityTaskQueue, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout, activity3RetryPolicy)
 	s.validateActivityTaskScheduledEvent(activity3ScheduledEvent, 7, 4, activity3ID, activity3Type,
-		activityTaskList, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskQueue, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(8), s.getNextEventID())
 	ai2, activity3Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity3Running0)
 	s.Equal(common.EmptyEventID, ai2.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
+	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskQueue, identity)
 	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity,
 		0, nil)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
@@ -238,7 +238,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(common.EmptyEventID, di3.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
+	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskQueue, identity)
 	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity,
 		0, nil)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
@@ -259,7 +259,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.False(activity2Running3)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activity3StartedEvent := s.addActivityTaskStartedEvent(7, activityTaskList, identity)
+	activity3StartedEvent := s.addActivityTaskStartedEvent(7, activityTaskQueue, identity)
 	s.validateTransientActivityTaskStartedEvent(activity3StartedEvent, common.TransientEventID, 7, identity)
 	s.Equal(int64(13), s.getNextEventID())
 	ai5, activity3Running1 := s.msBuilder.GetActivityInfo(7)
@@ -273,7 +273,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(activity3Failure, ai6.LastFailure)
 	s.True(activity3Running2)
 
-	activity3StartedEvent2 := s.addActivityTaskStartedEvent(7, activityTaskList, identity)
+	activity3StartedEvent2 := s.addActivityTaskStartedEvent(7, activityTaskQueue, identity)
 	s.validateTransientActivityTaskStartedEvent(activity3StartedEvent2, common.TransientEventID, 7, identity)
 	s.Equal(int64(13), s.getNextEventID())
 	ai7, activity3Running3 := s.msBuilder.GetActivityInfo(7)
@@ -318,7 +318,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	id := "historybuilder-workflowstart-failures-test-workflow-id"
 	rid := "historybuilder-workflowstart-failures-test-run-id"
 	wt := "historybuilder-workflowstart-failures-type"
-	tl := "historybuilder-workflowstart-failures-tasklist"
+	tl := "historybuilder-workflowstart-failures-taskqueue"
 	identity := "historybuilder-workflowstart-failures-worker"
 	input := payloads.EncodeString("historybuilder-workflowstart-failures-input")
 	execTimeout := int32(70)
@@ -348,7 +348,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowId:                      we.WorkflowId,
 				WorkflowType:                    &commonpb.WorkflowType{Name: wt},
-				TaskList:                        &tasklistpb.TaskList{Name: tl},
+				TaskQueue:                       &taskqueuepb.TaskQueue{Name: tl},
 				Input:                           input,
 				WorkflowExecutionTimeoutSeconds: execTimeout,
 				WorkflowRunTimeoutSeconds:       runTimeout,
@@ -369,7 +369,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	id := "historybuilder-decisionscheduled-failures-test-workflow-id"
 	rid := "historybuilder-decisionscheduled-failures-test-run-id"
 	wt := "historybuilder-decisionscheduled-failures-type"
-	tl := "historybuilder-decisionscheduled-failures-tasklist"
+	tl := "historybuilder-decisionscheduled-failures-taskqueue"
 	identity := "historybuilder-decisionscheduled-failures-worker"
 	input := payloads.EncodeString("historybuilder-decisionscheduled-failures-input")
 	execTimeout := int32(70)
@@ -405,7 +405,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	id := "historybuilder-decisionstarted-failures-test-workflow-id"
 	rid := "historybuilder-decisionstarted-failures-test-run-id"
 	wt := "historybuilder-decisionstarted-failures-type"
-	tl := "historybuilder-decisionstarted-failures-tasklist"
+	tl := "historybuilder-decisionstarted-failures-taskqueue"
 	identity := "historybuilder-decisionstarted-failures-worker"
 	input := payloads.EncodeString("historybuilder-decisionstarted-failures-input")
 	execTimeout := int32(70)
@@ -421,8 +421,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	s.Equal(int64(2), s.getNextEventID())
 
 	_, _, err := s.msBuilder.AddDecisionTaskStartedEvent(2, uuid.New(), &workflowservice.PollForDecisionTaskRequest{
-		TaskList: &tasklistpb.TaskList{Name: tl},
-		Identity: identity,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tl},
+		Identity:  identity,
 	})
 	s.NotNil(err)
 	s.Equal(int64(2), s.getNextEventID())
@@ -439,8 +439,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
 	_, _, err = s.msBuilder.AddDecisionTaskStartedEvent(100, uuid.New(), &workflowservice.PollForDecisionTaskRequest{
-		TaskList: &tasklistpb.TaskList{Name: tl},
-		Identity: identity,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tl},
+		Identity:  identity,
 	})
 	s.NotNil(err)
 	s.Equal(int64(3), s.getNextEventID())
@@ -462,7 +462,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	id := "flush-buffered-events-test-workflow-id"
 	rid := "flush-buffered-events-test-run-id"
 	wt := "flush-buffered-events-type"
-	tl := "flush-buffered-events-tasklist"
+	tl := "flush-buffered-events-taskqueue"
 	identity := "flush-buffered-events-worker"
 	input := payloads.EncodeString("flush-buffered-events-input")
 	execTimeout := int32(70)
@@ -506,7 +506,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.False(decisionRunning2)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activityTaskList := "flush-buffered-events-activity-tasklist"
+	activityTaskQueue := "flush-buffered-events-activity-taskqueue"
 	activityTimeout := int32(60)
 	queueTimeout := int32(20)
 	hearbeatTimeout := int32(10)
@@ -517,9 +517,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	activity1Input := payloads.EncodeString("flush-buffered-events-activity1-input")
 	activity1Result := payloads.EncodeString("flush-buffered-events-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
+		activityTaskQueue, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskQueue, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(6), s.getNextEventID())
 	ai0, activity1Running0 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running0)
@@ -531,9 +531,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	activity2Type := "flush-buffered-events-activity2-type"
 	activity2Input := payloads.EncodeString("flush-buffered-events-activity2-input")
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
+		activityTaskQueue, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskQueue, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(7), s.getNextEventID())
 	ai2, activity2Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running0)
@@ -541,7 +541,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	// 7 activity1 started
-	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
+	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskQueue, identity)
 	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity,
 		0, nil)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
@@ -584,7 +584,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	// 11 (buffered) activity2 started
-	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
+	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskQueue, identity)
 	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity,
 		0, nil)
 	s.Equal(int64(11), s.getNextEventID())
@@ -626,7 +626,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() {
 	workflowType := "some random workflow type"
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	identity := "some random identity"
 	input := payloads.EncodeString("some random workflow input")
 	execTimeout := int32(70)
@@ -638,15 +638,15 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
-		workflowExecution, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
+		workflowExecution, workflowType, taskqueue, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.validateWorkflowExecutionStartedEvent(
-		workflowStartedEvent, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
+		workflowStartedEvent, workflowType, taskqueue, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.Equal(int64(2), s.getNextEventID())
 
 	decisionInfo := s.addDecisionTaskScheduledEvent()
-	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, tasklist, taskTimeout)
+	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, taskqueue, taskTimeout)
 	s.Equal(int64(3), s.getNextEventID())
 	decisionInfo, decisionRunning := s.msBuilder.GetDecisionInfo(2)
 	s.True(decisionRunning)
@@ -655,7 +655,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	s.Equal(common.EmptyEventID, decisionInfo.StartedID)
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
-	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, tasklist, identity)
+	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, taskqueue, identity)
 	s.validateDecisionTaskStartedEvent(decisionStartedEvent, 3, 2, identity)
 	s.Equal(int64(4), s.getNextEventID())
 	decisionInfo, decisionRunning = s.msBuilder.GetDecisionInfo(2)
@@ -698,7 +698,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 
 func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	workflowType := "some random workflow type"
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	identity := "some random identity"
 	input := payloads.EncodeString("some random workflow input")
 	execTimeout := int32(70)
@@ -710,15 +710,15 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
-		workflowExecution, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
+		workflowExecution, workflowType, taskqueue, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.validateWorkflowExecutionStartedEvent(
-		workflowStartedEvent, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
+		workflowStartedEvent, workflowType, taskqueue, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.Equal(int64(2), s.getNextEventID())
 
 	decisionInfo := s.addDecisionTaskScheduledEvent()
-	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, tasklist, taskTimeout)
+	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, taskqueue, taskTimeout)
 	s.Equal(int64(3), s.getNextEventID())
 	decisionInfo, decisionRunning := s.msBuilder.GetDecisionInfo(2)
 	s.True(decisionRunning)
@@ -727,7 +727,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	s.Equal(common.EmptyEventID, decisionInfo.StartedID)
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
-	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, tasklist, identity)
+	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, taskqueue, identity)
 	s.validateDecisionTaskStartedEvent(decisionStartedEvent, 3, 2, identity)
 	s.Equal(int64(4), s.getNextEventID())
 	decisionInfo, decisionRunning = s.msBuilder.GetDecisionInfo(2)
@@ -782,12 +782,12 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 }
 
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we commonpb.WorkflowExecution, workflowType,
-	taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) *historypb.HistoryEvent {
+	taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) *historypb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:                      we.WorkflowId,
 		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                        &tasklistpb.TaskList{Name: taskList},
+		TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: executionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
@@ -814,10 +814,10 @@ func (s *historyBuilderSuite) addDecisionTaskScheduledEvent() *decisionInfo {
 }
 
 func (s *historyBuilderSuite) addDecisionTaskStartedEvent(scheduleID int64,
-	taskList, identity string) *historypb.HistoryEvent {
+	taskQueue, identity string) *historypb.HistoryEvent {
 	event, _, err := s.msBuilder.AddDecisionTaskStartedEvent(scheduleID, uuid.New(), &workflowservice.PollForDecisionTaskRequest{
-		TaskList: &tasklistpb.TaskList{Name: taskList},
-		Identity: identity,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+		Identity:  identity,
 	})
 	s.Nil(err)
 
@@ -834,13 +834,13 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID int64, activityID, activityType,
-	taskList string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
+	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
 	*persistence.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
 		&decisionpb.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    activityID,
 			ActivityType:                  &commonpb.ActivityType{Name: activityType},
-			TaskList:                      &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                         input,
 			ScheduleToCloseTimeoutSeconds: timeout,
 			ScheduleToStartTimeoutSeconds: queueTimeout,
@@ -852,7 +852,7 @@ func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID 
 	return event, ai
 }
 
-func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64, taskList,
+func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64, taskQueue,
 	identity string) *historypb.HistoryEvent {
 	ai, _ := s.msBuilder.GetActivityInfo(scheduleID)
 	event, err := s.msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, uuid.New(), identity)
@@ -933,14 +933,14 @@ func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEve
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *historypb.HistoryEvent, workflowType,
-	taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) {
+	taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) {
 	s.NotNil(event)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, event.EventType)
 	s.Equal(common.FirstEventID, event.EventId)
 	attributes := event.GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(attributes)
 	s.Equal(workflowType, attributes.WorkflowType.Name)
-	s.Equal(taskList, attributes.TaskList.Name)
+	s.Equal(taskQueue, attributes.TaskQueue.Name)
 	s.Equal(input, attributes.Input)
 	s.Equal(executionTimeout, attributes.WorkflowExecutionTimeoutSeconds)
 	s.Equal(runTimeout, attributes.WorkflowRunTimeoutSeconds)
@@ -949,10 +949,10 @@ func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *histo
 }
 
 func (s *historyBuilderSuite) validateDecisionTaskScheduledEvent(di *decisionInfo, eventID int64,
-	taskList string, timeout int32) {
+	taskQueue string, timeout int32) {
 	s.NotNil(di)
 	s.Equal(eventID, di.ScheduleID)
-	s.Equal(taskList, di.TaskList)
+	s.Equal(taskQueue, di.TaskQueue)
 }
 
 func (s *historyBuilderSuite) validateDecisionTaskStartedEvent(event *historypb.HistoryEvent, eventID, scheduleID int64,
@@ -979,7 +979,7 @@ func (s *historyBuilderSuite) validateDecisionTaskCompletedEvent(event *historyp
 }
 
 func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *historypb.HistoryEvent, eventID, decisionID int64,
-	activityID, activityType, taskList string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32) {
+	activityID, activityType, taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32) {
 	s.NotNil(event)
 	s.Equal(enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -988,7 +988,7 @@ func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *historyp
 	s.Equal(decisionID, attributes.DecisionTaskCompletedEventId)
 	s.Equal(activityID, attributes.ActivityId)
 	s.Equal(activityType, attributes.ActivityType.Name)
-	s.Equal(taskList, attributes.TaskList.Name)
+	s.Equal(taskQueue, attributes.TaskQueue.Name)
 	s.Equal(input, attributes.Input)
 	s.Equal(timeout, attributes.ScheduleToCloseTimeoutSeconds)
 	s.Equal(queueTimeout, attributes.ScheduleToStartTimeoutSeconds)

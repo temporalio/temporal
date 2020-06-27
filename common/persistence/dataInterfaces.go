@@ -210,7 +210,7 @@ type (
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
 		CompletionEvent                    *historypb.HistoryEvent
-		TaskList                           string
+		TaskQueue                          string
 		WorkflowTypeName                   string
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
@@ -236,7 +236,7 @@ type (
 		DecisionOriginalScheduledTimestamp int64
 		CancelRequested                    bool
 		CancelRequestID                    string
-		StickyTaskList                     string
+		StickyTaskQueue                    string
 		StickyScheduleToStartTimeout       int32
 		ClientLibraryVersion               string
 		ClientFeatureVersion               string
@@ -289,11 +289,11 @@ type (
 		SetVisibilityTimestamp(timestamp time.Time)
 	}
 
-	// TaskListKey is the struct used to identity TaskLists
-	TaskListKey struct {
+	// TaskQueueKey is the struct used to identity TaskQueues
+	TaskQueueKey struct {
 		NamespaceID string
 		Name        string
-		TaskType    enumspb.TaskListType
+		TaskType    enumspb.TaskQueueType
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -301,7 +301,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string
-		TaskList            string
+		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
 	}
@@ -311,7 +311,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string
-		TaskList            string
+		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
 		RecordVisibility    bool
@@ -523,7 +523,7 @@ type (
 		// For retry
 		Attempt                int32
 		StartedIdentity        string
-		TaskList               string
+		TaskQueue              string
 		HasRetryPolicy         bool
 		InitialInterval        int32
 		BackoffCoefficient     float64
@@ -888,68 +888,68 @@ type (
 		TaskID              int64
 	}
 
-	// LeaseTaskListRequest is used to request lease of a task list
-	LeaseTaskListRequest struct {
-		NamespaceID  string
-		TaskList     string
-		TaskType     enumspb.TaskListType
-		TaskListKind enumspb.TaskListKind
-		RangeID      int64
+	// LeaseTaskQueueRequest is used to request lease of a task queue
+	LeaseTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
+		RangeID       int64
 	}
 
-	// LeaseTaskListResponse is response to LeaseTaskListRequest
-	LeaseTaskListResponse struct {
-		TaskListInfo *PersistedTaskListInfo
+	// LeaseTaskQueueResponse is response to LeaseTaskQueueRequest
+	LeaseTaskQueueResponse struct {
+		TaskQueueInfo *PersistedTaskQueueInfo
 	}
 
-	// UpdateTaskListRequest is used to update task list implementation information
-	UpdateTaskListRequest struct {
-		RangeID      int64
-		TaskListInfo *persistenceblobs.TaskListInfo
+	// UpdateTaskQueueRequest is used to update task queue implementation information
+	UpdateTaskQueueRequest struct {
+		RangeID       int64
+		TaskQueueInfo *persistenceblobs.TaskQueueInfo
 	}
 
-	// UpdateTaskListResponse is the response to UpdateTaskList
-	UpdateTaskListResponse struct {
+	// UpdateTaskQueueResponse is the response to UpdateTaskQueue
+	UpdateTaskQueueResponse struct {
 	}
 
-	// ListTaskListRequest contains the request params needed to invoke ListTaskList API
-	ListTaskListRequest struct {
+	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
+	ListTaskQueueRequest struct {
 		PageSize  int
 		PageToken []byte
 	}
 
-	// ListTaskListResponse is the response from ListTaskList API
-	ListTaskListResponse struct {
-		Items         []*PersistedTaskListInfo
+	// ListTaskQueueResponse is the response from ListTaskQueue API
+	ListTaskQueueResponse struct {
+		Items         []*PersistedTaskQueueInfo
 		NextPageToken []byte
 	}
 
-	// DeleteTaskListRequest contains the request params needed to invoke DeleteTaskList API
-	DeleteTaskListRequest struct {
-		TaskList *TaskListKey
-		RangeID  int64
+	// DeleteTaskQueueRequest contains the request params needed to invoke DeleteTaskQueue API
+	DeleteTaskQueueRequest struct {
+		TaskQueue *TaskQueueKey
+		RangeID   int64
 	}
 
 	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
-		TaskListInfo *PersistedTaskListInfo
-		Tasks        []*persistenceblobs.AllocatedTaskInfo
+		TaskQueueInfo *PersistedTaskQueueInfo
+		Tasks         []*persistenceblobs.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
 	}
 
-	PersistedTaskListInfo struct {
-		Data    *persistenceblobs.TaskListInfo
+	PersistedTaskQueueInfo struct {
+		Data    *persistenceblobs.TaskQueueInfo
 		RangeID int64
 	}
 
-	// GetTasksRequest is used to retrieve tasks of a task list
+	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
 		NamespaceID  string
-		TaskList     string
-		TaskType     enumspb.TaskListType
+		TaskQueue    string
+		TaskType     enumspb.TaskQueueType
 		ReadLevel    int64  // range exclusive
 		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
@@ -962,17 +962,17 @@ type (
 
 	// CompleteTaskRequest is used to complete a task
 	CompleteTaskRequest struct {
-		TaskList *TaskListKey
-		TaskID   int64
+		TaskQueue *TaskQueueKey
+		TaskID    int64
 	}
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		NamespaceID  string
-		TaskListName string
-		TaskType     enumspb.TaskListType
-		TaskID       int64 // Tasks less than or equal to this ID will be completed
-		Limit        int   // Limit on the max number of tasks that can be completed. Required param
+		NamespaceID   string
+		TaskQueueName string
+		TaskType      enumspb.TaskQueueType
+		TaskID        int64 // Tasks less than or equal to this ID will be completed
+		Limit         int   // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// GetTimerTaskRequest is the request for GetTimerTask
@@ -1398,10 +1398,10 @@ type (
 	TaskManager interface {
 		Closeable
 		GetName() string
-		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
-		UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error)
-		ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error)
-		DeleteTaskList(request *DeleteTaskListRequest) error
+		LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error)
+		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error

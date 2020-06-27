@@ -17,7 +17,7 @@ testGetDurationPropertyKey:
 - value: wrong duration string
   constraints:
     namespace: samples-namespace
-    taskListName: longIdleTimeTasklist
+    taskQueueName: longIdleTimeTaskqueue
 - value: 2
   constraints:
     namespace: samples-namespace
@@ -44,10 +44,10 @@ testGetMapPropertyKey:
   constraints: {}
 - value: "1"
   constraints:
-    taskListName: random tasklist
+    taskQueueName: random taskqueue
 testGetStringPropertyKey:
 - value: some random string
   constraints: {}
 - value: constrained-string
   constraints:
-    taskListName: random tasklist
+    taskQueueName: random taskqueue

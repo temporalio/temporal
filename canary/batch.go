@@ -47,8 +47,8 @@ func registerBatch(r registrar) {
 const (
 	// TODO: to get rid of them:
 	//  after batch job has an API, we should use the API: https://github.com/uber/cadence/issues/2225
-	sysBatchWFTypeName        = "temporal-sys-batch-workflow"
-	systemBatcherTaskListName = "temporal-sys-batcher-tasklist"
+	sysBatchWFTypeName         = "temporal-sys-batch-workflow"
+	systemBatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 
 	// there are two level, so totally 5*5 + 5 == 30 descendants
 	// default batch RPS is 50, so it will takes ~1 seconds to terminate all
@@ -104,7 +104,7 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 		MaximumAttempts:    4,
 	}
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		ScheduleToStartTimeout: scheduleToStartTimeout,
 		StartToCloseTimeout:    activityTaskTimeout,
 		RetryPolicy:            retryPolicy,
@@ -179,7 +179,7 @@ func startBatchWorkflow(ctx context.Context, namespace, startTime string) error 
 	options := client.StartWorkflowOptions{
 		WorkflowExecutionTimeout: childWorkflowTimeout,
 		WorkflowTaskTimeout:      decisionTaskTimeout,
-		TaskList:                 systemBatcherTaskListName,
+		TaskQueue:                systemBatcherTaskQueueName,
 		SearchAttributes: map[string]interface{}{
 			"CustomNamespace": namespace,
 			"Operator":        "admin",

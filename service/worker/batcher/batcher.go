@@ -92,7 +92,7 @@ func (s *Batcher) Start() error {
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
 	}
-	batchWorker := worker.New(s.svcClient, BatcherTaskListName, workerOpts)
+	batchWorker := worker.New(s.svcClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

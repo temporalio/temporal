@@ -50,7 +50,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	filterpb "go.temporal.io/temporal-proto/filter/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
@@ -183,10 +183,10 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// start a workflow
 	id := "xdc-search-attr-test-" + uuid.New()
 	wt := "xdc-search-attr-test-type"
-	tl := "xdc-search-attr-test-tasklist"
+	tl := "xdc-search-attr-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -198,7 +198,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Namespace:                  namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -266,7 +266,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	poller := host.TaskPoller{
 		Engine:          client1,
 		Namespace:       namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.logger,

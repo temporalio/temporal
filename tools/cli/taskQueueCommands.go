@@ -28,35 +28,35 @@ import (
 	"os"
 
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 )
 
-// DescribeTaskList show pollers info of a given tasklist
-func DescribeTaskList(c *cli.Context) {
+// DescribeTaskQueue show pollers info of a given taskqueue
+func DescribeTaskQueue(c *cli.Context) {
 	wfClient := getWorkflowClient(c)
-	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := strToTaskListType(c.String(FlagTaskListType)) // default type is decision
+	taskQueue := getRequiredOption(c, FlagTaskQueue)
+	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is decision
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := wfClient.DescribeTaskList(ctx, taskList, taskListType)
+	response, err := wfClient.DescribeTaskQueue(ctx, taskQueue, taskQueueType)
 	if err != nil {
-		ErrorAndExit("Operation DescribeTaskList failed.", err)
+		ErrorAndExit("Operation DescribeTaskQueue failed.", err)
 	}
 
 	pollers := response.Pollers
 	if len(pollers) == 0 {
-		ErrorAndExit(colorMagenta("No poller for tasklist: "+taskList), nil)
+		ErrorAndExit(colorMagenta("No poller for taskqueue: "+taskQueue), nil)
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == enumspb.TASK_LIST_TYPE_ACTIVITY {
+	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
@@ -69,36 +69,36 @@ func DescribeTaskList(c *cli.Context) {
 	table.Render()
 }
 
-// ListTaskListPartitions gets all the tasklist partition and host information.
-func ListTaskListPartitions(c *cli.Context) {
+// ListTaskQueuePartitions gets all the taskqueue partition and host information.
+func ListTaskQueuePartitions(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
-	taskList := getRequiredOption(c, FlagTaskList)
+	taskQueue := getRequiredOption(c, FlagTaskQueue)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	request := &workflowservice.ListTaskListPartitionsRequest{
+	request := &workflowservice.ListTaskQueuePartitionsRequest{
 		Namespace: namespace,
-		TaskList:  &tasklistpb.TaskList{Name: taskList},
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 	}
 
-	response, err := frontendClient.ListTaskListPartitions(ctx, request)
+	response, err := frontendClient.ListTaskQueuePartitions(ctx, request)
 	if err != nil {
-		ErrorAndExit("Operation ListTaskListPartitions failed.", err)
+		ErrorAndExit("Operation ListTaskQueuePartitions failed.", err)
 	}
-	if len(response.DecisionTaskListPartitions) > 0 {
-		printTaskListPartitions("Decision", response.DecisionTaskListPartitions)
+	if len(response.DecisionTaskQueuePartitions) > 0 {
+		printTaskQueuePartitions("Decision", response.DecisionTaskQueuePartitions)
 	}
-	if len(response.ActivityTaskListPartitions) > 0 {
-		printTaskListPartitions("Activity", response.ActivityTaskListPartitions)
+	if len(response.ActivityTaskQueuePartitions) > 0 {
+		printTaskQueuePartitions("Activity", response.ActivityTaskQueuePartitions)
 	}
 }
 
-func printTaskListPartitions(taskListType string, partitions []*tasklistpb.TaskListPartitionMetadata) {
+func printTaskQueuePartitions(taskQueueType string, partitions []*taskqueuepb.TaskQueuePartitionMetadata) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.SetHeader([]string{taskListType + "TaskListPartition", "Host"})
+	table.SetHeader([]string{taskQueueType + "TaskQueuePartition", "Host"})
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, partition := range partitions {

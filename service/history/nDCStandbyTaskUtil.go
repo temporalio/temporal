@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
@@ -122,7 +122,7 @@ type (
 
 	pushDecisionToMatchingInfo struct {
 		decisionScheduleToStartTimeout int32
-		tasklist                       tasklistpb.TaskList
+		taskqueue                      taskqueuepb.TaskQueue
 	}
 )
 
@@ -158,12 +158,12 @@ func newPushActivityToMatchingInfo(
 
 func newPushDecisionToMatchingInfo(
 	decisionScheduleToStartTimeout int32,
-	tasklist tasklistpb.TaskList,
+	taskqueue taskqueuepb.TaskQueue,
 ) *pushDecisionToMatchingInfo {
 
 	return &pushDecisionToMatchingInfo{
 		decisionScheduleToStartTimeout: decisionScheduleToStartTimeout,
-		tasklist:                       tasklist,
+		taskqueue:                      taskqueue,
 	}
 }
 

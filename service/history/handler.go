@@ -81,7 +81,7 @@ var (
 	errNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errContinueAsNewInitiatorNotSet = serviceerror.NewInvalidArgument("ContinueAsNewInitiator not set on request.")
 	errWorkflowExecutionNotSet      = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
-	errTaskListNotSet               = serviceerror.NewInvalidArgument("Task list not set.")
+	errTaskQueueNotSet              = serviceerror.NewInvalidArgument("Task queue not set.")
 	errWorkflowIDNotSet             = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errRunIDNotValid                = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	errSourceClusterNotSet          = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
@@ -350,8 +350,8 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
-	if request.PollRequest == nil || request.PollRequest.TaskList.GetName() == "" {
-		return nil, h.error(errTaskListNotSet, scope, namespaceID, workflowID)
+	if request.PollRequest == nil || request.PollRequest.TaskQueue.GetName() == "" {
+		return nil, h.error(errTaskQueueNotSet, scope, namespaceID, workflowID)
 	}
 
 	engine, err1 := h.controller.GetEngine(workflowID)
@@ -1220,19 +1220,19 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 }
 
-// ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
+// ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
 // Volatile information are the information related to client, such as:
-// 1. StickyTaskList
+// 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservice.ResetStickyTaskListRequest) (_ *historyservice.ResetStickyTaskListResponse, retError error) {
+func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryResetStickyTaskListScope
+	scope := metrics.HistoryResetStickyTaskQueueScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -1256,7 +1256,7 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservi
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
-	resp, err := engine.ResetStickyTaskList(ctx, request)
+	resp, err := engine.ResetStickyTaskQueue(ctx, request)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}

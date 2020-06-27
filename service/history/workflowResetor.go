@@ -191,7 +191,7 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 	if newMutableState.HasBufferedEvents() {
 		return serviceerror.NewInternal(fmt.Sprintf("replay history shouldn't see any bufferred events"))
 	}
-	if newMutableState.IsStickyTaskListEnabled() {
+	if newMutableState.IsStickyTaskQueueEnabled() {
 		return serviceerror.NewInternal(fmt.Sprintf("replay history shouldn't have stikyness"))
 	}
 	return nil
@@ -230,7 +230,7 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 		}
 		t := &persistence.ActivityTask{
 			NamespaceID: exeInfo.NamespaceID,
-			TaskList:    exeInfo.TaskList,
+			TaskQueue:   exeInfo.TaskQueue,
 			ScheduleID:  ai.ScheduleID,
 		}
 		tasks = append(tasks, t)
@@ -335,7 +335,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	newTransferTasks = append(newTransferTasks,
 		&persistence.DecisionTask{
 			NamespaceID: namespaceID,
-			TaskList:    decision.TaskList,
+			TaskQueue:   decision.TaskQueue,
 			ScheduleID:  decision.ScheduleID,
 		},
 		&persistence.RecordWorkflowStartedTask{},
@@ -1020,7 +1020,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	decision, _ = newMsBuilder.GetDecisionInfo(decisionScheduledID)
 	transferTasks = append(transferTasks, &persistence.DecisionTask{
 		NamespaceID:      namespaceID,
-		TaskList:         decision.TaskList,
+		TaskQueue:        decision.TaskQueue,
 		ScheduleID:       decision.ScheduleID,
 		RecordVisibility: true,
 	})

@@ -63,6 +63,6 @@ message Task {
 
 message QueryTask {
     string namespace_id = 1;
-    string task_list = 2;
+    string task_queue = 2;
     string task_id = 3;
 }

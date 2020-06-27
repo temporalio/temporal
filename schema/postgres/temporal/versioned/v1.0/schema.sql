@@ -79,16 +79,16 @@ CREATE INDEX buffered_events_by_events_ids ON buffered_events(shard_id, namespac
 
 CREATE TABLE tasks (
   namespace_id BYTEA NOT NULL,
-  task_list_name VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
   task_type SMALLINT NOT NULL, -- {Activity, Decision}
   task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_list_name, task_type, task_id)
+  PRIMARY KEY (namespace_id, task_queue_name, task_type, task_id)
 );
 
-CREATE TABLE task_lists (
+CREATE TABLE task_queues (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
   name VARCHAR(255) NOT NULL,

@@ -37,7 +37,7 @@ import (
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common"
@@ -60,8 +60,8 @@ type (
 	TaskPoller struct {
 		Engine                              FrontendClient
 		Namespace                           string
-		TaskList                            *tasklistpb.TaskList
-		StickyTaskList                      *tasklistpb.TaskList
+		TaskQueue                           *taskqueuepb.TaskQueue
+		StickyTaskQueue                     *taskqueuepb.TaskQueue
 		StickyScheduleToStartTimeoutSeconds int32
 		Identity                            string
 		DecisionHandler                     decisionTaskHandler
@@ -91,16 +91,16 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithoutRetry(dumpHistory bool, dr
 func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
 	dumpHistory bool,
 	dropTask bool,
-	pollStickyTaskList bool,
-	respondStickyTaskList bool,
+	pollStickyTaskQueue bool,
+	respondStickyTaskQueue bool,
 	decisionAttempt int64,
 ) (isQueryTask bool, err error) {
 
 	return p.PollAndProcessDecisionTaskWithAttemptAndRetry(
 		dumpHistory,
 		dropTask,
-		pollStickyTaskList,
-		respondStickyTaskList,
+		pollStickyTaskQueue,
+		respondStickyTaskQueue,
 		decisionAttempt,
 		5)
 }
@@ -109,8 +109,8 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
 func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
 	dumpHistory bool,
 	dropTask bool,
-	pollStickyTaskList bool,
-	respondStickyTaskList bool,
+	pollStickyTaskQueue bool,
+	respondStickyTaskQueue bool,
 	decisionAttempt int64,
 	retryCount int,
 ) (isQueryTask bool, err error) {
@@ -118,8 +118,8 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
 	isQueryTask, _, err = p.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
 		dumpHistory,
 		dropTask,
-		pollStickyTaskList,
-		respondStickyTaskList,
+		pollStickyTaskQueue,
+		respondStickyTaskQueue,
 		decisionAttempt,
 		retryCount,
 		false,
@@ -131,8 +131,8 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
 func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
 	dumpHistory bool,
 	dropTask bool,
-	pollStickyTaskList bool,
-	respondStickyTaskList bool,
+	pollStickyTaskQueue bool,
+	respondStickyTaskQueue bool,
 	decisionAttempt int64,
 	retryCount int,
 	forceCreateNewDecision bool,
@@ -141,13 +141,13 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDec
 Loop:
 	for attempt := 0; attempt < retryCount; attempt++ {
 
-		taskList := p.TaskList
-		if pollStickyTaskList {
-			taskList = p.StickyTaskList
+		taskQueue := p.TaskQueue
+		if pollStickyTaskQueue {
+			taskQueue = p.StickyTaskQueue
 		}
 		response, err1 := p.Engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: p.Namespace,
-			TaskList:  taskList,
+			TaskQueue: taskQueue,
 			Identity:  p.Identity,
 		})
 
@@ -166,7 +166,7 @@ Loop:
 		}
 
 		var events []*historypb.HistoryEvent
-		if response.Query == nil || !pollStickyTaskList {
+		if response.Query == nil || !pollStickyTaskQueue {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
 			history := response.History
@@ -257,8 +257,8 @@ Loop:
 		}
 
 		p.Logger.Info("Completing Decision.  Decisions", tag.Value(decisions))
-		if !respondStickyTaskList {
-			// non sticky tasklist
+		if !respondStickyTaskQueue {
+			// non sticky taskqueue
 			newTask, err := p.Engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
@@ -269,15 +269,15 @@ Loop:
 			})
 			return false, newTask, err
 		}
-		// sticky tasklist
+		// sticky taskqueue
 		newTask, err := p.Engine.RespondDecisionTaskCompleted(
 			NewContext(),
 			&workflowservice.RespondDecisionTaskCompletedRequest{
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
 				Decisions: decisions,
-				StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-					WorkerTaskList:                p.StickyTaskList,
+				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+					WorkerTaskQueue:               p.StickyTaskQueue,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 				},
 				ReturnNewDecisionTask:      forceCreateNewDecision,
@@ -326,15 +326,15 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 
 	p.Logger.Info("Completing Decision", tag.Value(decisions))
 
-	// sticky tasklist
+	// sticky taskqueue
 	newTask, err := p.Engine.RespondDecisionTaskCompleted(
 		NewContext(),
 		&workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Decisions: decisions,
-			StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-				WorkerTaskList:                p.StickyTaskList,
+			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				WorkerTaskQueue:               p.StickyTaskQueue,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 			},
 			ReturnNewDecisionTask:      true,
@@ -351,7 +351,7 @@ retry:
 	for attempt := 0; attempt < 5; attempt++ {
 		response, err := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
 			Namespace: p.Namespace,
-			TaskList:  p.TaskList,
+			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
 		})
 
@@ -413,7 +413,7 @@ retry:
 	for attempt := 0; attempt < 5; attempt++ {
 		response, err1 := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
 			Namespace: p.Namespace,
-			TaskList:  p.TaskList,
+			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
 		})
 

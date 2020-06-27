@@ -42,7 +42,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	sdkclient "go.temporal.io/temporal/client"
@@ -89,7 +89,7 @@ type (
 		GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (*historyservice.GetMutableStateResponse, error)
 		PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error)
 		DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (*historyservice.DescribeMutableStateResponse, error)
-		ResetStickyTaskList(ctx context.Context, resetRequest *historyservice.ResetStickyTaskListRequest) (*historyservice.ResetStickyTaskListResponse, error)
+		ResetStickyTaskQueue(ctx context.Context, resetRequest *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error)
 		DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (*historyservice.DescribeWorkflowExecutionResponse, error)
 		RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error)
 		RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error)
@@ -697,22 +697,22 @@ func (e *historyEngineImpl) PollMutableState(
 		return nil, e.updateEntityNotExistsErrorOnPassiveCluster(err, request.GetNamespaceId())
 	}
 	return &historyservice.PollMutableStateResponse{
-		Execution:                            response.Execution,
-		WorkflowType:                         response.WorkflowType,
-		NextEventId:                          response.NextEventId,
-		PreviousStartedEventId:               response.PreviousStartedEventId,
-		LastFirstEventId:                     response.LastFirstEventId,
-		TaskList:                             response.TaskList,
-		StickyTaskList:                       response.StickyTaskList,
-		ClientLibraryVersion:                 response.ClientLibraryVersion,
-		ClientFeatureVersion:                 response.ClientFeatureVersion,
-		ClientImpl:                           response.ClientImpl,
-		StickyTaskListScheduleToStartTimeout: response.StickyTaskListScheduleToStartTimeout,
-		CurrentBranchToken:                   response.CurrentBranchToken,
-		ReplicationInfo:                      response.ReplicationInfo,
-		VersionHistories:                     response.VersionHistories,
-		WorkflowState:                        response.WorkflowState,
-		WorkflowStatus:                       response.WorkflowStatus,
+		Execution:                             response.Execution,
+		WorkflowType:                          response.WorkflowType,
+		NextEventId:                           response.NextEventId,
+		PreviousStartedEventId:                response.PreviousStartedEventId,
+		LastFirstEventId:                      response.LastFirstEventId,
+		TaskQueue:                             response.TaskQueue,
+		StickyTaskQueue:                       response.StickyTaskQueue,
+		ClientLibraryVersion:                  response.ClientLibraryVersion,
+		ClientFeatureVersion:                  response.ClientFeatureVersion,
+		ClientImpl:                            response.ClientImpl,
+		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
+		CurrentBranchToken:                    response.CurrentBranchToken,
+		ReplicationInfo:                       response.ReplicationInfo,
+		VersionHistories:                      response.VersionHistories,
+		WorkflowState:                         response.WorkflowState,
+		WorkflowStatus:                        response.WorkflowStatus,
 	}, nil
 }
 
@@ -950,19 +950,19 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
 	defer sw.Stop()
 
-	if msResp.GetIsStickyTaskListEnabled() &&
-		len(msResp.GetStickyTaskList().GetName()) != 0 &&
+	if msResp.GetIsStickyTaskQueueEnabled() &&
+		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		e.config.EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
 			NamespaceId:  namespaceID,
 			QueryRequest: queryRequest,
-			TaskList:     msResp.GetStickyTaskList(),
+			TaskQueue:    msResp.GetStickyTaskQueue(),
 		}
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
-		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskListScheduleToStartTimeout())*time.Second)
+		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskQueueScheduleToStartTimeout())*time.Second)
 		stickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchStickyLatency)
 		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
 		stickyStopWatch.Stop()
@@ -992,7 +992,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
 			resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			clearStickinessStopWatch := scope.StartTimer(metrics.DirectQueryDispatchClearStickinessLatency)
-			_, err := e.ResetStickyTaskList(resetContext, &historyservice.ResetStickyTaskListRequest{
+			_, err := e.ResetStickyTaskQueue(resetContext, &historyservice.ResetStickyTaskQueueRequest{
 				NamespaceId: namespaceID,
 				Execution:   queryRequest.GetExecution(),
 			})
@@ -1006,7 +1006,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	}
 
 	if err := common.IsValidContext(ctx); err != nil {
-		e.logger.Info("query context timed out before query on non-sticky task list could be attempted",
+		e.logger.Info("query context timed out before query on non-sticky task queue could be attempted",
 			tag.WorkflowNamespace(queryRequest.GetNamespace()),
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
@@ -1020,13 +1020,13 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 		tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-		tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
+		tag.WorkflowTaskQueueName(msResp.GetStickyTaskQueue().GetName()),
 		tag.WorkflowNextEventID(msResp.GetNextEventId()))
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
 		NamespaceId:  namespaceID,
 		QueryRequest: queryRequest,
-		TaskList:     msResp.TaskList,
+		TaskQueue:    msResp.TaskQueue,
 	}
 
 	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
@@ -1075,22 +1075,22 @@ func (e *historyEngineImpl) getMutableState(
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	retResp = &historyservice.GetMutableStateResponse{
-		Execution:                            &execution,
-		WorkflowType:                         &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:                     mutableState.GetLastFirstEventID(),
-		NextEventId:                          mutableState.GetNextEventID(),
-		PreviousStartedEventId:               mutableState.GetPreviousStartedEventID(),
-		TaskList:                             &tasklistpb.TaskList{Name: executionInfo.TaskList},
-		StickyTaskList:                       &tasklistpb.TaskList{Name: executionInfo.StickyTaskList},
-		ClientLibraryVersion:                 executionInfo.ClientLibraryVersion,
-		ClientFeatureVersion:                 executionInfo.ClientFeatureVersion,
-		ClientImpl:                           executionInfo.ClientImpl,
-		IsWorkflowRunning:                    mutableState.IsWorkflowExecutionRunning(),
-		StickyTaskListScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
-		CurrentBranchToken:                   currentBranchToken,
-		WorkflowState:                        workflowState,
-		WorkflowStatus:                       workflowStatus,
-		IsStickyTaskListEnabled:              mutableState.IsStickyTaskListEnabled(),
+		Execution:                             &execution,
+		WorkflowType:                          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+		LastFirstEventId:                      mutableState.GetLastFirstEventID(),
+		NextEventId:                           mutableState.GetNextEventID(),
+		PreviousStartedEventId:                mutableState.GetPreviousStartedEventID(),
+		TaskQueue:                             &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
+		StickyTaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.StickyTaskQueue},
+		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
+		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
+		ClientImpl:                            executionInfo.ClientImpl,
+		IsWorkflowRunning:                     mutableState.IsWorkflowExecutionRunning(),
+		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
+		CurrentBranchToken:                    currentBranchToken,
+		WorkflowState:                         workflowState,
+		WorkflowStatus:                        workflowStatus,
+		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
 	}
 	replicationState := mutableState.GetReplicationState()
 	if replicationState != nil {
@@ -1164,17 +1164,17 @@ func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (string, error)
 	return string(jsonBytes), nil
 }
 
-// ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
+// ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
 // Volatile information are the information related to client, such as:
-// 1. StickyTaskList
+// 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (e *historyEngineImpl) ResetStickyTaskList(
+func (e *historyEngineImpl) ResetStickyTaskQueue(
 	ctx context.Context,
-	resetRequest *historyservice.ResetStickyTaskListRequest,
-) (*historyservice.ResetStickyTaskListResponse, error) {
+	resetRequest *historyservice.ResetStickyTaskQueueRequest,
+) (*historyservice.ResetStickyTaskQueueResponse, error) {
 
 	namespaceID, err := validateNamespaceUUID(resetRequest.GetNamespaceId())
 	if err != nil {
@@ -1194,7 +1194,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.ResetStickyTaskListResponse{}, nil
+	return &historyservice.ResetStickyTaskQueueResponse{}, nil
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -1223,7 +1223,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
-			TaskList:                        &tasklistpb.TaskList{Name: executionInfo.TaskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
 			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
@@ -1479,7 +1479,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	}
 
 	var activityStartedTime time.Time
-	var taskList string
+	var taskQueue string
 	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1512,7 +1512,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				return serviceerror.NewInternal("Unable to add ActivityTaskCompleted event to history.")
 			}
 			activityStartedTime = ai.StartedTime
-			taskList = ai.TaskList
+			taskQueue = ai.TaskQueue
 			return nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
@@ -1521,7 +1521,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskListTag(taskList),
+				metrics.TaskQueueTag(taskQueue),
 			)
 		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
 	}
@@ -1553,7 +1553,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	}
 
 	var activityStartedTime time.Time
-	var taskList string
+	var taskQueue string
 	err = e.updateWorkflowExecutionWithAction(ctx, namespaceID, workflowExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1597,7 +1597,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			activityStartedTime = ai.StartedTime
-			taskList = ai.TaskList
+			taskQueue = ai.TaskQueue
 			return postActions, nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
@@ -1606,7 +1606,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskListTag(taskList),
+				metrics.TaskQueueTag(taskQueue),
 			)
 		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
 	}
@@ -1638,7 +1638,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	}
 
 	var activityStartedTime time.Time
-	var taskList string
+	var taskQueue string
 	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1677,7 +1677,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			}
 
 			activityStartedTime = ai.StartedTime
-			taskList = ai.TaskList
+			taskQueue = ai.TaskQueue
 			return nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
@@ -1686,7 +1686,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskListTag(taskList),
+				metrics.TaskQueueTag(taskQueue),
 			)
 		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
 	}
@@ -2619,8 +2619,8 @@ func validateStartWorkflowExecutionRequest(
 	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
 	}
-	if request.TaskList == nil || request.TaskList.GetName() == "" {
-		return serviceerror.NewInvalidArgument("Missing Tasklist.")
+	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
+		return serviceerror.NewInvalidArgument("Missing Taskqueue.")
 	}
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
@@ -2631,8 +2631,8 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetWorkflowId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
 	}
-	if len(request.TaskList.GetName()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("TaskList exceeds length limit.")
+	if len(request.TaskQueue.GetName()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("TaskQueue exceeds length limit.")
 	}
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
@@ -2757,7 +2757,7 @@ func getStartRequest(
 		Namespace:                       request.GetNamespace(),
 		WorkflowId:                      request.GetWorkflowId(),
 		WorkflowType:                    request.GetWorkflowType(),
-		TaskList:                        request.GetTaskList(),
+		TaskQueue:                       request.GetTaskQueue(),
 		Input:                           request.GetInput(),
 		WorkflowExecutionTimeoutSeconds: request.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeoutSeconds:       request.GetWorkflowRunTimeoutSeconds(),

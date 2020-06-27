@@ -56,9 +56,9 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		tlMgr        *taskListManagerImpl
-		config       *taskListConfig
-		taskListID   *taskListID
+		tlMgr        *taskQueueManagerImpl
+		config       *taskQueueConfig
+		taskQueueID  *taskQueueID
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
@@ -68,17 +68,17 @@ type (
 	}
 )
 
-// errShutdown indicates that the task list is shutting down
-var errShutdown = errors.New("task list shutting down")
+// errShutdown indicates that the task queue is shutting down
+var errShutdown = errors.New("task queue shutting down")
 
-func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
+func newTaskWriter(tlMgr *taskQueueManagerImpl) *taskWriter {
 	return &taskWriter{
-		tlMgr:      tlMgr,
-		config:     tlMgr.config,
-		taskListID: tlMgr.taskListID,
-		stopCh:     make(chan struct{}),
-		appendCh:   make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
-		logger:     tlMgr.logger,
+		tlMgr:       tlMgr,
+		config:      tlMgr.config,
+		taskQueueID: tlMgr.taskQueueID,
+		stopCh:      make(chan struct{}),
+		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
+		logger:      tlMgr.logger,
 	}
 }
 
@@ -124,7 +124,7 @@ func (w *taskWriter) appendTask(execution *commonpb.WorkflowExecution,
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskList")
+		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskQueue")
 	}
 }
 
@@ -182,8 +182,8 @@ writerLoop:
 					w.logger.Error("Persistent store operation failure",
 						tag.StoreOperationCreateTask,
 						tag.Error(err),
-						tag.WorkflowTaskListName(w.taskListID.name),
-						tag.WorkflowTaskListType(w.taskListID.taskType),
+						tag.WorkflowTaskQueueName(w.taskQueueID.name),
+						tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
 						tag.Number(taskIDs[0]),
 						tag.NextNumber(taskIDs[batchSize-1]),
 					)
