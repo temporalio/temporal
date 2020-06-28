@@ -30,6 +30,7 @@ import (
 	"math/rand"
 	"time"
 
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/log"
@@ -80,7 +81,7 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 		ID:                    workflowID,
 		TaskQueue:             processorTaskQueueName,
 		WorkflowTaskTimeout:   time.Minute,
-		WorkflowIDReusePolicy: sdkclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
