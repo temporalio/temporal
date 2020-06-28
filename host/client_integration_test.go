@@ -59,7 +59,7 @@ type (
 		hostPort  string
 		sdkClient sdkclient.Client
 		worker    worker.Worker
-		taskList  string
+		taskQueue string
 	}
 )
 
@@ -90,8 +90,8 @@ func (s *clientIntegrationSuite) SetupSuite() {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
 
-	s.taskList = "client-integration-test-tasklist"
-	s.worker = worker.New(s.sdkClient, s.taskList, worker.Options{})
+	s.taskQueue = "client-integration-test-taskqueue"
+	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
 	s.worker.RegisterWorkflow(testParentWorkflow)
@@ -199,10 +199,10 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	}
 
 	// use another converter to run activity,
-	// with new taskList so that worker with same data converter can properly process tasks.
+	// with new taskQueue so that worker with same data converter can properly process tasks.
 	var result1 string
 	ctx1 := workflow.WithDataConverter(ctx, newTestDataConverter())
-	ctx1 = workflow.WithTaskList(ctx1, tl)
+	ctx1 = workflow.WithTaskQueue(ctx1, tl)
 	err1 := workflow.ExecuteActivity(ctx1, testActivity, "world1").Get(ctx1, &result1)
 	if err1 != nil {
 		return "", err1
@@ -231,7 +231,7 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter() {
-	tl := "client-integration-data-converter-activity-tasklist"
+	tl := "client-integration-data-converter-activity-taskqueue"
 	dc := newTestDataConverter()
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, dc)
 	defer func() {
@@ -242,7 +242,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 	id := "client-integration-data-converter-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
@@ -266,7 +266,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
-	tl := "client-integration-data-converter-activity-failed-tasklist"
+	tl := "client-integration-data-converter-activity-failed-taskqueue"
 	sdkClient, worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
 	defer func() {
 		worker.Stop()
@@ -276,7 +276,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	id := "client-integration-data-converter-failed-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
@@ -312,7 +312,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	s.Equal(1, failedAct)
 }
 
-var childTaskList = "client-integration-data-converter-child-tasklist"
+var childTaskQueue = "client-integration-data-converter-child-taskqueue"
 
 func testParentWorkflow(ctx workflow.Context) (string, error) {
 	logger := workflow.GetLogger(ctx)
@@ -334,7 +334,7 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	cwo1 := workflow.ChildWorkflowOptions{
 		WorkflowID:         childID1,
 		WorkflowRunTimeout: time.Minute,
-		TaskList:           childTaskList,
+		TaskQueue:          childTaskQueue,
 	}
 	ctx1 := workflow.WithChildOptions(ctx, cwo1)
 	ctx1 = workflow.WithDataConverter(ctx1, newTestDataConverter())
@@ -373,7 +373,7 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 
 func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	dc := newTestDataConverter()
-	sdkClient, worker := s.startWorkerWithDataConverter(childTaskList, dc)
+	sdkClient, worker := s.startWorkerWithDataConverter(childTaskQueue, dc)
 	defer func() {
 		worker.Stop()
 		sdkClient.Close()
@@ -382,7 +382,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	id := "client-integration-data-converter-with-child-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskList:           s.taskList,
+		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)

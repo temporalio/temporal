@@ -348,8 +348,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentNextEventID := int64(2333)
 	currentDecisionTimeout := int32(100)
 	currentDecisionStickyTimeout := int32(10)
-	currentDecisionTasklist := "some random decision tasklist"
-	currentDecisionStickyTasklist := "some random decision sticky tasklist"
+	currentDecisionTaskqueue := "some random decision taskqueue"
+	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	req := &historyservice.ReplicateEventsRequest{
 		History: &historypb.History{
@@ -394,8 +394,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		NamespaceID:                  namespaceID,
 		RunID:                        currentRunID,
 		NextEventID:                  currentNextEventID,
-		TaskList:                     currentDecisionTasklist,
-		StickyTaskList:               currentDecisionStickyTasklist,
+		TaskQueue:                    currentDecisionTaskqueue,
+		StickyTaskQueue:              currentDecisionStickyTaskqueue,
 		DecisionTimeout:              currentDecisionTimeout,
 		StickyScheduleToStartTimeout: currentDecisionStickyTimeout,
 		DecisionVersion:              common.EmptyVersion,
@@ -420,7 +420,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskList:   currentDecisionStickyTasklist,
+		TaskQueue:  currentDecisionStickyTaskqueue,
 		Attempt:    0,
 	}
 	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
@@ -1061,7 +1061,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	decisionStickyTasklist := "some random decision sticky tasklist"
+	decisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
@@ -1127,7 +1127,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskList:   decisionStickyTasklist,
+		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
 	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
@@ -1227,7 +1227,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	decisionStickyTasklist := "some random decision sticky tasklist"
+	decisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
@@ -1264,7 +1264,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskList:   decisionStickyTasklist,
+		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
 	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
@@ -1672,8 +1672,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	incomingReplicationInfoLastEventID := currentLastEventID
 	decisionTimeout := int32(100)
 	decisionStickyTimeout := int32(10)
-	decisionTasklist := "some random decision tasklist"
-	decisionStickyTasklist := "some random decision sticky tasklist"
+	decisionTaskqueue := "some random decision taskqueue"
+	decisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	updateCondition := int64(1394)
 
@@ -1716,8 +1716,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		StartTimestamp:               startTimeStamp,
 		NamespaceID:                  namespaceID,
 		RunID:                        runID,
-		TaskList:                     decisionTasklist,
-		StickyTaskList:               decisionStickyTasklist,
+		TaskQueue:                    decisionTaskqueue,
+		StickyTaskQueue:              decisionStickyTaskqueue,
 		DecisionTimeout:              decisionTimeout,
 		StickyScheduleToStartTimeout: decisionStickyTimeout,
 		State:                        currentState,
@@ -1731,7 +1731,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		Version:    currentLastWriteVersion,
 		ScheduleID: currentLastEventID + 2,
 		StartedID:  common.EmptyEventID,
-		TaskList:   decisionStickyTasklist,
+		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
 	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
@@ -1856,7 +1856,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -1878,7 +1878,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -1910,7 +1910,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       runTimeout,
@@ -1976,7 +1976,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -1998,7 +1998,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2030,7 +2030,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       runTimeout,
@@ -2092,7 +2092,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -2114,7 +2114,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2146,7 +2146,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       runTimeout,
@@ -2214,7 +2214,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2243,7 +2243,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2275,7 +2275,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -2366,7 +2366,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2387,7 +2387,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2419,7 +2419,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -2503,7 +2503,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2524,7 +2524,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2556,7 +2556,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -2640,7 +2640,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2661,7 +2661,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2693,7 +2693,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -2790,7 +2790,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2815,7 +2815,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2857,7 +2857,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -2967,7 +2967,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -2992,7 +2992,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3034,7 +3034,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -3071,7 +3071,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version + 1
 	currentRunID := uuid.New()
 	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
-	currentDecisionStickyTasklist := "some random decision sticky tasklist"
+	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
@@ -3137,7 +3137,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskList:   currentDecisionStickyTasklist,
+		TaskQueue:  currentDecisionStickyTaskqueue,
 		Attempt:    0,
 	}
 	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
@@ -3156,7 +3156,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -3177,7 +3177,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3209,7 +3209,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -3311,7 +3311,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -3333,7 +3333,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3365,7 +3365,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,
@@ -3468,7 +3468,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
@@ -3497,7 +3497,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID:      common.FirstEventID + 1,
 		StartedID:       common.EmptyEventID,
 		DecisionTimeout: decisionTimeout,
-		TaskList:        tasklist,
+		TaskQueue:       taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3529,7 +3529,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:         parentWorkflowID,
 		ParentRunID:              parentRunID,
 		InitiatedID:              initiatedID,
-		TaskList:                 tasklist,
+		TaskQueue:                taskqueue,
 		WorkflowTypeName:         workflowType,
 		WorkflowExecutionTimeout: workflowTimeout,
 		WorkflowRunTimeout:       workflowTimeout,

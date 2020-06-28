@@ -55,7 +55,7 @@ func NewWorkflowNilCheckHandler(
 }
 
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
-// entity within Temporal, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
+// entity within Temporal, used as a container for all resources like workflow executions, taskqueues, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
 // namespace.
 func (wh *WorkflowNilCheckHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
@@ -126,7 +126,7 @@ func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionHistory(ctx context.Conte
 	return resp, err
 }
 
-// PollForDecisionTask is called by application worker to process DecisionTask from a specific taskList.  A
+// PollForDecisionTask is called by application worker to process DecisionTask from a specific taskQueue.  A
 // DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
 // Application is then expected to call 'RespondDecisionTaskCompleted' API when it is done processing the DecisionTask.
 // It will also create a 'DecisionTaskStarted' event in the history for that session before handing off DecisionTask to
@@ -155,7 +155,7 @@ func (wh *WorkflowNilCheckHandler) RespondDecisionTaskCompleted(ctx context.Cont
 
 // RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
 // DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-// either clear sticky tasklist or report any panics during DecisionTask processing.  Temporal will only append first
+// either clear sticky taskqueue or report any panics during DecisionTask processing.  Temporal will only append first
 // DecisionTaskFailed event to the history of workflow execution for consecutive failures.
 func (wh *WorkflowNilCheckHandler) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondDecisionTaskFailed(ctx, request)
@@ -165,7 +165,7 @@ func (wh *WorkflowNilCheckHandler) RespondDecisionTaskFailed(ctx context.Context
 	return resp, err
 }
 
-// PollForActivityTask is called by application worker to process ActivityTask from a specific taskList.  ActivityTask
+// PollForActivityTask is called by application worker to process ActivityTask from a specific taskQueue.  ActivityTask
 // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
 // Application is expected to call 'RespondActivityTaskCompleted' or 'RespondActivityTaskFailed' once it is done
 // processing the task.
@@ -413,17 +413,17 @@ func (wh *WorkflowNilCheckHandler) RespondQueryTaskCompleted(ctx context.Context
 	return resp, err
 }
 
-// ResetStickyTaskList resets the sticky tasklist related information in mutable state of a given workflow.
+// ResetStickyTaskQueue resets the sticky taskqueue related information in mutable state of a given workflow.
 // Things cleared are:
-// 1. StickyTaskList
+// 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (wh *WorkflowNilCheckHandler) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
-	resp, err := wh.parentHandler.ResetStickyTaskList(ctx, request)
+func (wh *WorkflowNilCheckHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
+	resp, err := wh.parentHandler.ResetStickyTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.ResetStickyTaskListResponse{}
+		resp = &workflowservice.ResetStickyTaskQueueResponse{}
 	}
 	return resp, err
 }
@@ -446,12 +446,12 @@ func (wh *WorkflowNilCheckHandler) DescribeWorkflowExecution(ctx context.Context
 	return resp, err
 }
 
-// DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes.
-func (wh *WorkflowNilCheckHandler) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
-	resp, err := wh.parentHandler.DescribeTaskList(ctx, request)
+// DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
+// pollers which polled this taskqueue in last few minutes.
+func (wh *WorkflowNilCheckHandler) DescribeTaskQueue(ctx context.Context, request *workflowservice.DescribeTaskQueueRequest) (_ *workflowservice.DescribeTaskQueueResponse, retError error) {
+	resp, err := wh.parentHandler.DescribeTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.DescribeTaskListResponse{}
+		resp = &workflowservice.DescribeTaskQueueResponse{}
 	}
 	return resp, err
 }
@@ -465,11 +465,11 @@ func (wh *WorkflowNilCheckHandler) GetClusterInfo(ctx context.Context, request *
 	return resp, err
 }
 
-// ListTaskListPartitions ...
-func (wh *WorkflowNilCheckHandler) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
-	resp, err := wh.parentHandler.ListTaskListPartitions(ctx, request)
+// ListTaskQueuePartitions ...
+func (wh *WorkflowNilCheckHandler) ListTaskQueuePartitions(ctx context.Context, request *workflowservice.ListTaskQueuePartitionsRequest) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
+	resp, err := wh.parentHandler.ListTaskQueuePartitions(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.ListTaskListPartitionsResponse{}
+		resp = &workflowservice.ListTaskQueuePartitionsResponse{}
 	}
 	return resp, err
 }

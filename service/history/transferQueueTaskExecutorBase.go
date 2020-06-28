@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	m "github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
@@ -113,7 +113,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
+		TaskQueue:                     &taskqueuepb.TaskQueue{Name: task.TaskQueue},
 		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})
@@ -123,7 +123,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 
 func (t *transferQueueTaskExecutorBase) pushDecision(
 	task *persistenceblobs.TransferTaskInfo,
-	tasklist *tasklistpb.TaskList,
+	taskqueue *taskqueuepb.TaskQueue,
 	decisionScheduleToStartTimeout int32,
 ) error {
 
@@ -140,7 +140,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		TaskList:                      tasklist,
+		TaskQueue:                     taskqueue,
 		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
 	})
@@ -156,7 +156,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	executionTimeUnixNano int64,
 	runTimeout int32,
 	taskID int64,
-	taskList string,
+	taskQueue string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
@@ -189,7 +189,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 		RunTimeout:         int64(runTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
-		TaskList:           taskList,
+		TaskQueue:          taskQueue,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -205,7 +205,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	taskList string,
+	taskQueue string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
@@ -233,7 +233,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
-		TaskList:           taskList,
+		TaskQueue:          taskQueue,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -252,7 +252,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	historyLength int64,
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
-	taskList string,
+	taskQueue string,
 	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
@@ -299,7 +299,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,
 			Memo:               visibilityMemo,
-			TaskList:           taskList,
+			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		}); err != nil {
 			return err

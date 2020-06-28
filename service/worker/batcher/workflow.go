@@ -47,8 +47,8 @@ import (
 
 const (
 	batcherContextKey = "batcherContext"
-	// BatcherTaskListName is the tasklist name
-	BatcherTaskListName = "temporal-sys-batcher-tasklist"
+	// BatcherTaskQueueName is the taskqueue name
+	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 	// BatchWFTypeName is the workflow type
 	BatchWFTypeName   = "temporal-sys-batch-workflow"
 	batchActivityName = "temporal-sys-batch-activity"

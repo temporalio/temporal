@@ -194,14 +194,14 @@ const (
 	PersistenceCompleteTaskScope
 	// PersistenceCompleteTasksLessThanScope is the metric scope for persistence.TaskManager.PersistenceCompleteTasksLessThan API
 	PersistenceCompleteTasksLessThanScope
-	// PersistenceLeaseTaskListScope tracks LeaseTaskList calls made by service to persistence layer
-	PersistenceLeaseTaskListScope
-	// PersistenceUpdateTaskListScope tracks PersistenceUpdateTaskListScope calls made by service to persistence layer
-	PersistenceUpdateTaskListScope
-	// PersistenceListTaskListScope is the metric scope for persistence.TaskManager.ListTaskList API
-	PersistenceListTaskListScope
-	// PersistenceDeleteTaskListScope is the metric scope for persistence.TaskManager.DeleteTaskList API
-	PersistenceDeleteTaskListScope
+	// PersistenceLeaseTaskQueueScope tracks LeaseTaskQueue calls made by service to persistence layer
+	PersistenceLeaseTaskQueueScope
+	// PersistenceUpdateTaskQueueScope tracks PersistenceUpdateTaskQueueScope calls made by service to persistence layer
+	PersistenceUpdateTaskQueueScope
+	// PersistenceListTaskQueueScope is the metric scope for persistence.TaskManager.ListTaskQueue API
+	PersistenceListTaskQueueScope
+	// PersistenceDeleteTaskQueueScope is the metric scope for persistence.TaskManager.DeleteTaskQueue API
+	PersistenceDeleteTaskQueueScope
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
@@ -304,8 +304,8 @@ const (
 	HistoryClientGetMutableStateScope
 	// HistoryClientPollMutableStateScope tracks RPC calls to history service
 	HistoryClientPollMutableStateScope
-	// HistoryClientResetStickyTaskListScope tracks RPC calls to history service
-	HistoryClientResetStickyTaskListScope
+	// HistoryClientResetStickyTaskQueueScope tracks RPC calls to history service
+	HistoryClientResetStickyTaskQueueScope
 	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDescribeWorkflowExecutionScope
 	// HistoryClientRecordDecisionTaskStartedScope tracks RPC calls to history service
@@ -368,16 +368,16 @@ const (
 	MatchingClientRespondQueryTaskCompletedScope
 	// MatchingClientCancelOutstandingPollScope tracks RPC calls to matching service
 	MatchingClientCancelOutstandingPollScope
-	// MatchingClientDescribeTaskListScope tracks RPC calls to matching service
-	MatchingClientDescribeTaskListScope
-	// MatchingClientListTaskListPartitionsScope tracks RPC calls to matching service
-	MatchingClientListTaskListPartitionsScope
+	// MatchingClientDescribeTaskQueueScope tracks RPC calls to matching service
+	MatchingClientDescribeTaskQueueScope
+	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
+	MatchingClientListTaskQueuePartitionsScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDescribeNamespaceScope
-	// FrontendClientDescribeTaskListScope tracks RPC calls to frontend service
-	FrontendClientDescribeTaskListScope
+	// FrontendClientDescribeTaskQueueScope tracks RPC calls to frontend service
+	FrontendClientDescribeTaskQueueScope
 	// FrontendClientDescribeWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientDescribeWorkflowExecutionScope
 	// FrontendClientGetWorkflowExecutionHistoryScope tracks RPC calls to frontend service
@@ -408,8 +408,8 @@ const (
 	FrontendClientRegisterNamespaceScope
 	// FrontendClientRequestCancelWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientRequestCancelWorkflowExecutionScope
-	// FrontendClientResetStickyTaskListScope tracks RPC calls to frontend service
-	FrontendClientResetStickyTaskListScope
+	// FrontendClientResetStickyTaskQueueScope tracks RPC calls to frontend service
+	FrontendClientResetStickyTaskQueueScope
 	// FrontendClientResetWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientResetWorkflowExecutionScope
 	// FrontendClientRespondActivityTaskCanceledScope tracks RPC calls to frontend service
@@ -458,8 +458,8 @@ const (
 	FrontendClientReapplyEventsScope
 	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
 	FrontendClientGetClusterInfoScope
-	// FrontendClientListTaskListPartitionsScope tracks RPC calls to frontend service
-	FrontendClientListTaskListPartitionsScope
+	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
+	FrontendClientListTaskQueuePartitionsScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -488,8 +488,8 @@ const (
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeNamespaceScope
-	// DCRedirectionDescribeTaskListScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeTaskListScope
+	// DCRedirectionDescribeTaskQueueScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeTaskQueueScope
 	// DCRedirectionDescribeWorkflowExecutionScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeWorkflowExecutionScope
 	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
@@ -528,8 +528,8 @@ const (
 	DCRedirectionRegisterNamespaceScope
 	// DCRedirectionRequestCancelWorkflowExecutionScope tracks RPC calls for dc redirection
 	DCRedirectionRequestCancelWorkflowExecutionScope
-	// DCRedirectionResetStickyTaskListScope tracks RPC calls for dc redirection
-	DCRedirectionResetStickyTaskListScope
+	// DCRedirectionResetStickyTaskQueueScope tracks RPC calls for dc redirection
+	DCRedirectionResetStickyTaskQueueScope
 	// DCRedirectionResetWorkflowExecutionScope tracks RPC calls for dc redirection
 	DCRedirectionResetWorkflowExecutionScope
 	// DCRedirectionRespondActivityTaskCanceledScope tracks RPC calls for dc redirection
@@ -560,8 +560,8 @@ const (
 	DCRedirectionTerminateWorkflowExecutionScope
 	// DCRedirectionUpdateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionUpdateNamespaceScope
-	// DCRedirectionListTaskListPartitionsScope tracks RPC calls for dc redirection
-	DCRedirectionListTaskListPartitionsScope
+	// DCRedirectionListTaskQueuePartitionsScope tracks RPC calls for dc redirection
+	DCRedirectionListTaskQueuePartitionsScope
 
 	// MessagingPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -769,12 +769,12 @@ const (
 	FrontendQueryWorkflowScope
 	// FrontendDescribeWorkflowExecutionScope is the metric scope for frontend.DescribeWorkflowExecution
 	FrontendDescribeWorkflowExecutionScope
-	// FrontendDescribeTaskListScope is the metric scope for frontend.DescribeTaskList
-	FrontendDescribeTaskListScope
-	// FrontendResetStickyTaskListScope is the metric scope for frontend.ResetStickyTaskList
-	FrontendListTaskListPartitionsScope
-	// FrontendResetStickyTaskListScope is the metric scope for frontend.ResetStickyTaskList
-	FrontendResetStickyTaskListScope
+	// FrontendDescribeTaskQueueScope is the metric scope for frontend.DescribeTaskQueue
+	FrontendDescribeTaskQueueScope
+	// FrontendResetStickyTaskQueueScope is the metric scope for frontend.ResetStickyTaskQueue
+	FrontendListTaskQueuePartitionsScope
+	// FrontendResetStickyTaskQueueScope is the metric scope for frontend.ResetStickyTaskQueue
+	FrontendResetStickyTaskQueueScope
 	// FrontendListNamespacesScope is the metric scope for frontend.ListNamespace
 	FrontendListNamespacesScope
 	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
@@ -805,8 +805,8 @@ const (
 	HistoryGetMutableStateScope
 	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
 	HistoryPollMutableStateScope
-	// HistoryResetStickyTaskListScope tracks ResetStickyTaskListScope API calls received by service
-	HistoryResetStickyTaskListScope
+	// HistoryResetStickyTaskQueueScope tracks ResetStickyTaskQueueScope API calls received by service
+	HistoryResetStickyTaskQueueScope
 	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
 	HistoryDescribeWorkflowExecutionScope
 	// HistoryRecordDecisionTaskStartedScope tracks RecordDecisionTaskStarted API calls received by service
@@ -1001,18 +1001,18 @@ const (
 	MatchingAddActivityTaskScope
 	// MatchingAddDecisionTaskScope tracks AddDecisionTask API calls received by service
 	MatchingAddDecisionTaskScope
-	// MatchingTaskListMgrScope is the metrics scope for matching.TaskListManager component
-	MatchingTaskListMgrScope
+	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
+	MatchingTaskQueueMgrScope
 	// MatchingQueryWorkflowScope tracks AddDecisionTask API calls received by service
 	MatchingQueryWorkflowScope
 	// MatchingRespondQueryTaskCompletedScope tracks AddDecisionTask API calls received by service
 	MatchingRespondQueryTaskCompletedScope
 	// MatchingCancelOutstandingPollScope tracks CancelOutstandingPoll API calls received by service
 	MatchingCancelOutstandingPollScope
-	// MatchingDescribeTaskListScope tracks DescribeTaskList API calls received by service
-	MatchingDescribeTaskListScope
-	// MatchingListTaskListPartitionsScope tracks ListTaskListPartitions API calls received by service
-	MatchingListTaskListPartitionsScope
+	// MatchingDescribeTaskQueueScope tracks DescribeTaskQueue API calls received by service
+	MatchingDescribeTaskQueueScope
+	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
+	MatchingListTaskQueuePartitionsScope
 
 	NumMatchingScopes
 )
@@ -1049,8 +1049,8 @@ const (
 	ArchiverPumpScope
 	// ArchiverArchivalWorkflowScope is scope used by all metrics emitted by archiver.ArchivalWorkflow
 	ArchiverArchivalWorkflowScope
-	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
-	TaskListScavengerScope
+	// TaskQueueScavengerScope is scope used by all metrics emitted by worker.taskqueue.Scavenger module
+	TaskQueueScavengerScope
 	// ExecutionsScavengerScope is scope used by all metrics emitted by worker.executions.Scavenger module
 	ExecutionsScavengerScope
 	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
@@ -1099,10 +1099,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTasksScope:                                 {operation: "GetTasks"},
 		PersistenceCompleteTaskScope:                             {operation: "CompleteTask"},
 		PersistenceCompleteTasksLessThanScope:                    {operation: "CompleteTasksLessThan"},
-		PersistenceLeaseTaskListScope:                            {operation: "LeaseTaskList"},
-		PersistenceUpdateTaskListScope:                           {operation: "UpdateTaskList"},
-		PersistenceListTaskListScope:                             {operation: "ListTaskList"},
-		PersistenceDeleteTaskListScope:                           {operation: "DeleteTaskList"},
+		PersistenceLeaseTaskQueueScope:                           {operation: "LeaseTaskQueue"},
+		PersistenceUpdateTaskQueueScope:                          {operation: "UpdateTaskQueue"},
+		PersistenceListTaskQueueScope:                            {operation: "ListTaskQueue"},
+		PersistenceDeleteTaskQueueScope:                          {operation: "DeleteTaskQueue"},
 		PersistenceAppendHistoryEventsScope:                      {operation: "AppendHistoryEvents"},
 		PersistenceGetWorkflowExecutionHistoryScope:              {operation: "GetWorkflowExecutionHistory"},
 		PersistenceDeleteWorkflowExecutionHistoryScope:           {operation: "DeleteWorkflowExecutionHistory"},
@@ -1165,7 +1165,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRespondActivityTaskCanceledScope:         {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetMutableStateScope:                     {operation: "HistoryClientGetMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientPollMutableStateScope:                    {operation: "HistoryClientPollMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientResetStickyTaskListScope:                 {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientResetStickyTaskQueueScope:                {operation: "HistoryClientResetStickyTaskQueueScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDescribeWorkflowExecutionScope:           {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordDecisionTaskStartedScope:           {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordActivityTaskStartedScope:           {operation: "HistoryClientRecordActivityTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1197,11 +1197,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientQueryWorkflowScope:                      {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientRespondQueryTaskCompletedScope:          {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientCancelOutstandingPollScope:              {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientDescribeTaskListScope:                   {operation: "MatchingClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientListTaskListPartitionsScope:             {operation: "MatchingClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientDescribeTaskQueueScope:                  {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientListTaskQueuePartitionsScope:            {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientDescribeTaskListScope:                   {operation: "FrontendClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionHistoryScope:        {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1217,7 +1217,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRecordActivityTaskHeartbeatByIdScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRegisterNamespaceScope:                  {operation: "FrontendClientRegisterNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRequestCancelWorkflowExecutionScope:     {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientResetStickyTaskListScope:                {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientResetStickyTaskQueueScope:               {operation: "FrontendClientResetStickyTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetWorkflowExecutionScope:             {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledScope:        {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledByIdScope:    {operation: "FrontendClientRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1242,7 +1242,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetDLQReplicationTasksScope:             {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListTaskListPartitionsScope:             {operation: "FrontendClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributeScope:                    {operation: "AdminClientAddSearchAttribute", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:             {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1257,7 +1257,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateNamespaceScope:                  {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                   {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionDescribeTaskListScope:                    {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeTaskQueueScope:                   {operation: "DCRedirectionDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:           {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionHistoryScope:         {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionRawHistoryScope:      {operation: "DCRedirectionGetWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1277,7 +1277,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionRecordActivityTaskHeartbeatByIdScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRegisterNamespaceScope:                   {operation: "DCRedirectionRegisterNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRequestCancelWorkflowExecutionScope:      {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionResetStickyTaskListScope:                 {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionResetStickyTaskQueueScope:                {operation: "DCRedirectionResetStickyTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionResetWorkflowExecutionScope:              {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCanceledScope:         {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCanceledByIdScope:     {operation: "DCRedirectionRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1293,7 +1293,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionStartWorkflowExecutionScope:              {operation: "DCRedirectionStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionTerminateWorkflowExecutionScope:          {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateNamespaceScope:                     {operation: "DCRedirectionUpdateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListTaskListPartitionsScope:              {operation: "DCRedirectionListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListTaskQueuePartitionsScope:             {operation: "DCRedirectionListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1389,9 +1389,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDeprecateNamespaceScope:                 {operation: "DeprecateNamespace"},
 		FrontendQueryWorkflowScope:                      {operation: "QueryWorkflow"},
 		FrontendDescribeWorkflowExecutionScope:          {operation: "DescribeWorkflowExecution"},
-		FrontendListTaskListPartitionsScope:             {operation: "FrontendListTaskListPartitions"},
-		FrontendDescribeTaskListScope:                   {operation: "DescribeTaskList"},
-		FrontendResetStickyTaskListScope:                {operation: "ResetStickyTaskList"},
+		FrontendListTaskQueuePartitionsScope:            {operation: "FrontendListTaskQueuePartitions"},
+		FrontendDescribeTaskQueueScope:                  {operation: "DescribeTaskQueue"},
+		FrontendResetStickyTaskQueueScope:               {operation: "ResetStickyTaskQueue"},
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 	},
 	// History Scope Names
@@ -1405,7 +1405,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRespondActivityTaskCanceledScope:                {operation: "RespondActivityTaskCanceled"},
 		HistoryGetMutableStateScope:                            {operation: "GetMutableState"},
 		HistoryPollMutableStateScope:                           {operation: "PollMutableState"},
-		HistoryResetStickyTaskListScope:                        {operation: "ResetStickyTaskListScope"},
+		HistoryResetStickyTaskQueueScope:                       {operation: "ResetStickyTaskQueueScope"},
 		HistoryDescribeWorkflowExecutionScope:                  {operation: "DescribeWorkflowExecution"},
 		HistoryRecordDecisionTaskStartedScope:                  {operation: "RecordDecisionTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:                  {operation: "RecordActivityTaskStarted"},
@@ -1503,12 +1503,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingPollForActivityTaskScope:       {operation: "PollForActivityTask"},
 		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
 		MatchingAddDecisionTaskScope:           {operation: "AddDecisionTask"},
-		MatchingTaskListMgrScope:               {operation: "TaskListMgr"},
+		MatchingTaskQueueMgrScope:              {operation: "TaskQueueMgr"},
 		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
 		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
 		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
-		MatchingDescribeTaskListScope:          {operation: "DescribeTaskList"},
-		MatchingListTaskListPartitionsScope:    {operation: "ListTaskListPartitions"},
+		MatchingDescribeTaskQueueScope:         {operation: "DescribeTaskQueue"},
+		MatchingListTaskQueuePartitionsScope:   {operation: "ListTaskQueuePartitions"},
 	},
 	// Worker Scope Names
 	Worker: {
@@ -1527,7 +1527,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverScope:                          {operation: "Archiver"},
 		ArchiverPumpScope:                      {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:          {operation: "ArchiverArchivalWorkflow"},
-		TaskListScavengerScope:                 {operation: "tasklistscavenger"},
+		TaskQueueScavengerScope:                {operation: "taskqueuescavenger"},
 		ExecutionsScavengerScope:               {operation: "executionsscavenger"},
 		HistoryScavengerScope:                  {operation: "historyscavenger"},
 		BatcherScope:                           {operation: "batcher"},
@@ -1634,32 +1634,32 @@ const (
 	VisibilityArchiveSuccessCount
 
 	MatchingClientForwardedCounter
-	MatchingClientInvalidTaskListName
+	MatchingClientInvalidTaskQueueName
 
 	NamespaceReplicationTaskAckLevelGauge
 	NamespaceReplicationDLQAckLevelGauge
 	NamespaceReplicationDLQMaxLevelGauge
 
-	// common metrics that are emitted per task list
-	ServiceRequestsPerTaskList
-	ServiceFailuresPerTaskList
-	ServiceLatencyPerTaskList
-	ServiceErrInvalidArgumentPerTaskListCounter
-	ServiceErrNamespaceNotActivePerTaskListCounter
-	ServiceErrResourceExhaustedPerTaskListCounter
-	ServiceErrNotFoundPerTaskListCounter
-	ServiceErrExecutionAlreadyStartedPerTaskListCounter
-	ServiceErrNamespaceAlreadyExistsPerTaskListCounter
-	ServiceErrCancellationAlreadyRequestedPerTaskListCounter
-	ServiceErrQueryFailedPerTaskListCounter
-	ServiceErrContextTimeoutPerTaskListCounter
-	ServiceErrRetryTaskPerTaskListCounter
-	ServiceErrBadBinaryPerTaskListCounter
-	ServiceErrClientVersionNotSupportedPerTaskListCounter
-	ServiceErrIncompleteHistoryPerTaskListCounter
-	ServiceErrNonDeterministicPerTaskListCounter
-	ServiceErrUnauthorizedPerTaskListCounter
-	ServiceErrAuthorizeFailedPerTaskListCounter
+	// common metrics that are emitted per task queue
+	ServiceRequestsPerTaskQueue
+	ServiceFailuresPerTaskQueue
+	ServiceLatencyPerTaskQueue
+	ServiceErrInvalidArgumentPerTaskQueueCounter
+	ServiceErrNamespaceNotActivePerTaskQueueCounter
+	ServiceErrResourceExhaustedPerTaskQueueCounter
+	ServiceErrNotFoundPerTaskQueueCounter
+	ServiceErrExecutionAlreadyStartedPerTaskQueueCounter
+	ServiceErrNamespaceAlreadyExistsPerTaskQueueCounter
+	ServiceErrCancellationAlreadyRequestedPerTaskQueueCounter
+	ServiceErrQueryFailedPerTaskQueueCounter
+	ServiceErrContextTimeoutPerTaskQueueCounter
+	ServiceErrRetryTaskPerTaskQueueCounter
+	ServiceErrBadBinaryPerTaskQueueCounter
+	ServiceErrClientVersionNotSupportedPerTaskQueueCounter
+	ServiceErrIncompleteHistoryPerTaskQueueCounter
+	ServiceErrNonDeterministicPerTaskQueueCounter
+	ServiceErrUnauthorizedPerTaskQueueCounter
+	ServiceErrAuthorizeFailedPerTaskQueueCounter
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1840,32 +1840,32 @@ const (
 
 // Matching metrics enum
 const (
-	PollSuccessPerTaskListCounter = iota + NumCommonMetrics
-	PollTimeoutPerTaskListCounter
-	PollSuccessWithSyncPerTaskListCounter
-	LeaseRequestPerTaskListCounter
-	LeaseFailurePerTaskListCounter
-	ConditionFailedErrorPerTaskListCounter
-	RespondQueryTaskFailedPerTaskListCounter
-	SyncThrottlePerTaskListCounter
-	BufferThrottlePerTaskListCounter
-	SyncMatchLatencyPerTaskList
-	AsyncMatchLatencyPerTaskList
-	ExpiredTasksPerTaskListCounter
-	ForwardedPerTaskListCounter
-	ForwardTaskCallsPerTaskList
-	ForwardTaskErrorsPerTaskList
-	ForwardTaskLatencyPerTaskList
-	ForwardQueryCallsPerTaskList
-	ForwardQueryErrorsPerTaskList
-	ForwardQueryLatencyPerTaskList
-	ForwardPollCallsPerTaskList
-	ForwardPollErrorsPerTaskList
-	ForwardPollLatencyPerTaskList
-	LocalToLocalMatchPerTaskListCounter
-	LocalToRemoteMatchPerTaskListCounter
-	RemoteToLocalMatchPerTaskListCounter
-	RemoteToRemoteMatchPerTaskListCounter
+	PollSuccessPerTaskQueueCounter = iota + NumCommonMetrics
+	PollTimeoutPerTaskQueueCounter
+	PollSuccessWithSyncPerTaskQueueCounter
+	LeaseRequestPerTaskQueueCounter
+	LeaseFailurePerTaskQueueCounter
+	ConditionFailedErrorPerTaskQueueCounter
+	RespondQueryTaskFailedPerTaskQueueCounter
+	SyncThrottlePerTaskQueueCounter
+	BufferThrottlePerTaskQueueCounter
+	SyncMatchLatencyPerTaskQueue
+	AsyncMatchLatencyPerTaskQueue
+	ExpiredTasksPerTaskQueueCounter
+	ForwardedPerTaskQueueCounter
+	ForwardTaskCallsPerTaskQueue
+	ForwardTaskErrorsPerTaskQueue
+	ForwardTaskLatencyPerTaskQueue
+	ForwardQueryCallsPerTaskQueue
+	ForwardQueryErrorsPerTaskQueue
+	ForwardQueryLatencyPerTaskQueue
+	ForwardPollCallsPerTaskQueue
+	ForwardPollErrorsPerTaskQueue
+	ForwardPollLatencyPerTaskQueue
+	LocalToLocalMatchPerTaskQueueCounter
+	LocalToRemoteMatchPerTaskQueueCounter
+	RemoteToLocalMatchPerTaskQueueCounter
+	RemoteToRemoteMatchPerTaskQueueCounter
 
 	NumMatchingMetrics
 )
@@ -1912,9 +1912,9 @@ const (
 	ArchiverWorkflowStoppingCount
 	TaskProcessedCount
 	TaskDeletedCount
-	TaskListProcessedCount
-	TaskListDeletedCount
-	TaskListOutstandingCount
+	TaskQueueProcessedCount
+	TaskQueueDeletedCount
+	TaskQueueOutstandingCount
 	ExecutionsOutstandingCount
 	StartedCount
 	StoppedCount
@@ -2017,69 +2017,69 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VisibilityArchiverArchiveTransientErrorCount:              {metricName: "visibility_archiver_archive_transient_error", metricType: Counter},
 		VisibilityArchiveSuccessCount:                             {metricName: "visibility_archiver_archive_success", metricType: Counter},
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
-		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
+		MatchingClientInvalidTaskQueueName:                        {metricName: "invalid_task_queue_name", metricType: Counter},
 
 		NamespaceReplicationTaskAckLevelGauge: {metricName: "namespace_replication_task_ack_level", metricType: Gauge},
 		NamespaceReplicationDLQAckLevelGauge:  {metricName: "namespace_dlq_ack_level", metricType: Gauge},
 		NamespaceReplicationDLQMaxLevelGauge:  {metricName: "namespace_dlq_max_level", metricType: Gauge},
 
-		// per task list common metrics
+		// per task queue common metrics
 
-		ServiceRequestsPerTaskList: {
+		ServiceRequestsPerTaskQueue: {
 			metricName: "service_requests_per_tl", metricRollupName: "service_requests", metricType: Counter,
 		},
-		ServiceFailuresPerTaskList: {
+		ServiceFailuresPerTaskQueue: {
 			metricName: "service_errors_per_tl", metricRollupName: "service_errors", metricType: Counter,
 		},
-		ServiceLatencyPerTaskList: {
+		ServiceLatencyPerTaskQueue: {
 			metricName: "service_latency_per_tl", metricRollupName: "service_latency", metricType: Timer,
 		},
-		ServiceErrInvalidArgumentPerTaskListCounter: {
+		ServiceErrInvalidArgumentPerTaskQueueCounter: {
 			metricName: "service_errors_invalid_argument_per_tl", metricRollupName: "service_errors_invalid_argument", metricType: Counter,
 		},
-		ServiceErrNamespaceNotActivePerTaskListCounter: {
+		ServiceErrNamespaceNotActivePerTaskQueueCounter: {
 			metricName: "service_errors_namespace_not_active_per_tl", metricRollupName: "service_errors_namespace_not_active", metricType: Counter,
 		},
-		ServiceErrResourceExhaustedPerTaskListCounter: {
+		ServiceErrResourceExhaustedPerTaskQueueCounter: {
 			metricName: "service_errors_resource_exhausted_per_tl", metricRollupName: "service_errors_resource_exhausted", metricType: Counter,
 		},
-		ServiceErrNotFoundPerTaskListCounter: {
+		ServiceErrNotFoundPerTaskQueueCounter: {
 			metricName: "service_errors_entity_not_found_per_tl", metricRollupName: "service_errors_entity_not_found", metricType: Counter,
 		},
-		ServiceErrExecutionAlreadyStartedPerTaskListCounter: {
+		ServiceErrExecutionAlreadyStartedPerTaskQueueCounter: {
 			metricName: "service_errors_execution_already_started_per_tl", metricRollupName: "service_errors_execution_already_started", metricType: Counter,
 		},
-		ServiceErrNamespaceAlreadyExistsPerTaskListCounter: {
+		ServiceErrNamespaceAlreadyExistsPerTaskQueueCounter: {
 			metricName: "service_errors_namespace_already_exists_per_tl", metricRollupName: "service_errors_namespace_already_exists", metricType: Counter,
 		},
-		ServiceErrCancellationAlreadyRequestedPerTaskListCounter: {
+		ServiceErrCancellationAlreadyRequestedPerTaskQueueCounter: {
 			metricName: "service_errors_cancellation_already_requested_per_tl", metricRollupName: "service_errors_cancellation_already_requested", metricType: Counter,
 		},
-		ServiceErrQueryFailedPerTaskListCounter: {
+		ServiceErrQueryFailedPerTaskQueueCounter: {
 			metricName: "service_errors_query_failed_per_tl", metricRollupName: "service_errors_query_failed", metricType: Counter,
 		},
-		ServiceErrContextTimeoutPerTaskListCounter: {
+		ServiceErrContextTimeoutPerTaskQueueCounter: {
 			metricName: "service_errors_context_timeout_per_tl", metricRollupName: "service_errors_context_timeout", metricType: Counter,
 		},
-		ServiceErrRetryTaskPerTaskListCounter: {
+		ServiceErrRetryTaskPerTaskQueueCounter: {
 			metricName: "service_errors_retry_task_per_tl", metricRollupName: "service_errors_retry_task", metricType: Counter,
 		},
-		ServiceErrBadBinaryPerTaskListCounter: {
+		ServiceErrBadBinaryPerTaskQueueCounter: {
 			metricName: "service_errors_bad_binary_per_tl", metricRollupName: "service_errors_bad_binary", metricType: Counter,
 		},
-		ServiceErrClientVersionNotSupportedPerTaskListCounter: {
+		ServiceErrClientVersionNotSupportedPerTaskQueueCounter: {
 			metricName: "service_errors_client_version_not_supported_per_tl", metricRollupName: "service_errors_client_version_not_supported", metricType: Counter,
 		},
-		ServiceErrIncompleteHistoryPerTaskListCounter: {
+		ServiceErrIncompleteHistoryPerTaskQueueCounter: {
 			metricName: "service_errors_incomplete_history_per_tl", metricRollupName: "service_errors_incomplete_history", metricType: Counter,
 		},
-		ServiceErrNonDeterministicPerTaskListCounter: {
+		ServiceErrNonDeterministicPerTaskQueueCounter: {
 			metricName: "service_errors_nondeterministic_per_tl", metricRollupName: "service_errors_nondeterministic", metricType: Counter,
 		},
-		ServiceErrUnauthorizedPerTaskListCounter: {
+		ServiceErrUnauthorizedPerTaskQueueCounter: {
 			metricName: "service_errors_unauthorized_per_tl", metricRollupName: "service_errors_unauthorized", metricType: Counter,
 		},
-		ServiceErrAuthorizeFailedPerTaskListCounter: {
+		ServiceErrAuthorizeFailedPerTaskQueueCounter: {
 			metricName: "service_errors_authorize_failed_per_tl", metricRollupName: "service_errors_authorize_failed", metricType: Counter,
 		},
 	},
@@ -2251,32 +2251,32 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 	},
 	Matching: {
-		PollSuccessPerTaskListCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
-		PollTimeoutPerTaskListCounter:            {metricName: "poll_timeouts_per_tl", metricRollupName: "poll_timeouts"},
-		PollSuccessWithSyncPerTaskListCounter:    {metricName: "poll_success_sync_per_tl", metricRollupName: "poll_success_sync"},
-		LeaseRequestPerTaskListCounter:           {metricName: "lease_requests_per_tl", metricRollupName: "lease_requests"},
-		LeaseFailurePerTaskListCounter:           {metricName: "lease_failures_per_tl", metricRollupName: "lease_failures"},
-		ConditionFailedErrorPerTaskListCounter:   {metricName: "condition_failed_errors_per_tl", metricRollupName: "condition_failed_errors"},
-		RespondQueryTaskFailedPerTaskListCounter: {metricName: "respond_query_failed_per_tl", metricRollupName: "respond_query_failed"},
-		SyncThrottlePerTaskListCounter:           {metricName: "sync_throttle_count_per_tl", metricRollupName: "sync_throttle_count"},
-		BufferThrottlePerTaskListCounter:         {metricName: "buffer_throttle_count_per_tl", metricRollupName: "buffer_throttle_count"},
-		ExpiredTasksPerTaskListCounter:           {metricName: "tasks_expired_per_tl", metricRollupName: "tasks_expired"},
-		ForwardedPerTaskListCounter:              {metricName: "forwarded_per_tl", metricRollupName: "forwarded"},
-		ForwardTaskCallsPerTaskList:              {metricName: "forward_task_calls_per_tl", metricRollupName: "forward_task_calls"},
-		ForwardTaskErrorsPerTaskList:             {metricName: "forward_task_errors_per_tl", metricRollupName: "forward_task_errors"},
-		ForwardQueryCallsPerTaskList:             {metricName: "forward_query_calls_per_tl", metricRollupName: "forward_query_calls"},
-		ForwardQueryErrorsPerTaskList:            {metricName: "forward_query_errors_per_tl", metricRollupName: "forward_query_errors"},
-		ForwardPollCallsPerTaskList:              {metricName: "forward_poll_calls_per_tl", metricRollupName: "forward_poll_calls"},
-		ForwardPollErrorsPerTaskList:             {metricName: "forward_poll_errors_per_tl", metricRollupName: "forward_poll_errors"},
-		SyncMatchLatencyPerTaskList:              {metricName: "syncmatch_latency_per_tl", metricRollupName: "syncmatch_latency", metricType: Timer},
-		AsyncMatchLatencyPerTaskList:             {metricName: "asyncmatch_latency_per_tl", metricRollupName: "asyncmatch_latency", metricType: Timer},
-		ForwardTaskLatencyPerTaskList:            {metricName: "forward_task_latency_per_tl", metricRollupName: "forward_task_latency"},
-		ForwardQueryLatencyPerTaskList:           {metricName: "forward_query_latency_per_tl", metricRollupName: "forward_query_latency"},
-		ForwardPollLatencyPerTaskList:            {metricName: "forward_poll_latency_per_tl", metricRollupName: "forward_poll_latency"},
-		LocalToLocalMatchPerTaskListCounter:      {metricName: "local_to_local_matches_per_tl", metricRollupName: "local_to_local_matches"},
-		LocalToRemoteMatchPerTaskListCounter:     {metricName: "local_to_remote_matches_per_tl", metricRollupName: "local_to_remote_matches"},
-		RemoteToLocalMatchPerTaskListCounter:     {metricName: "remote_to_local_matches_per_tl", metricRollupName: "remote_to_local_matches"},
-		RemoteToRemoteMatchPerTaskListCounter:    {metricName: "remote_to_remote_matches_per_tl", metricRollupName: "remote_to_remote_matches"},
+		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
+		PollTimeoutPerTaskQueueCounter:            {metricName: "poll_timeouts_per_tl", metricRollupName: "poll_timeouts"},
+		PollSuccessWithSyncPerTaskQueueCounter:    {metricName: "poll_success_sync_per_tl", metricRollupName: "poll_success_sync"},
+		LeaseRequestPerTaskQueueCounter:           {metricName: "lease_requests_per_tl", metricRollupName: "lease_requests"},
+		LeaseFailurePerTaskQueueCounter:           {metricName: "lease_failures_per_tl", metricRollupName: "lease_failures"},
+		ConditionFailedErrorPerTaskQueueCounter:   {metricName: "condition_failed_errors_per_tl", metricRollupName: "condition_failed_errors"},
+		RespondQueryTaskFailedPerTaskQueueCounter: {metricName: "respond_query_failed_per_tl", metricRollupName: "respond_query_failed"},
+		SyncThrottlePerTaskQueueCounter:           {metricName: "sync_throttle_count_per_tl", metricRollupName: "sync_throttle_count"},
+		BufferThrottlePerTaskQueueCounter:         {metricName: "buffer_throttle_count_per_tl", metricRollupName: "buffer_throttle_count"},
+		ExpiredTasksPerTaskQueueCounter:           {metricName: "tasks_expired_per_tl", metricRollupName: "tasks_expired"},
+		ForwardedPerTaskQueueCounter:              {metricName: "forwarded_per_tl", metricRollupName: "forwarded"},
+		ForwardTaskCallsPerTaskQueue:              {metricName: "forward_task_calls_per_tl", metricRollupName: "forward_task_calls"},
+		ForwardTaskErrorsPerTaskQueue:             {metricName: "forward_task_errors_per_tl", metricRollupName: "forward_task_errors"},
+		ForwardQueryCallsPerTaskQueue:             {metricName: "forward_query_calls_per_tl", metricRollupName: "forward_query_calls"},
+		ForwardQueryErrorsPerTaskQueue:            {metricName: "forward_query_errors_per_tl", metricRollupName: "forward_query_errors"},
+		ForwardPollCallsPerTaskQueue:              {metricName: "forward_poll_calls_per_tl", metricRollupName: "forward_poll_calls"},
+		ForwardPollErrorsPerTaskQueue:             {metricName: "forward_poll_errors_per_tl", metricRollupName: "forward_poll_errors"},
+		SyncMatchLatencyPerTaskQueue:              {metricName: "syncmatch_latency_per_tl", metricRollupName: "syncmatch_latency", metricType: Timer},
+		AsyncMatchLatencyPerTaskQueue:             {metricName: "asyncmatch_latency_per_tl", metricRollupName: "asyncmatch_latency", metricType: Timer},
+		ForwardTaskLatencyPerTaskQueue:            {metricName: "forward_task_latency_per_tl", metricRollupName: "forward_task_latency"},
+		ForwardQueryLatencyPerTaskQueue:           {metricName: "forward_query_latency_per_tl", metricRollupName: "forward_query_latency"},
+		ForwardPollLatencyPerTaskQueue:            {metricName: "forward_poll_latency_per_tl", metricRollupName: "forward_poll_latency"},
+		LocalToLocalMatchPerTaskQueueCounter:      {metricName: "local_to_local_matches_per_tl", metricRollupName: "local_to_local_matches"},
+		LocalToRemoteMatchPerTaskQueueCounter:     {metricName: "local_to_remote_matches_per_tl", metricRollupName: "local_to_remote_matches"},
+		RemoteToLocalMatchPerTaskQueueCounter:     {metricName: "remote_to_local_matches_per_tl", metricRollupName: "remote_to_local_matches"},
+		RemoteToRemoteMatchPerTaskQueueCounter:    {metricName: "remote_to_remote_matches_per_tl", metricRollupName: "remote_to_remote_matches"},
 	},
 	Worker: {
 		ReplicatorMessages:                            {metricName: "replicator_messages"},
@@ -2319,9 +2319,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchiverWorkflowStoppingCount:                 {metricName: "archiver_workflow_stopping"},
 		TaskProcessedCount:                            {metricName: "task_processed", metricType: Gauge},
 		TaskDeletedCount:                              {metricName: "task_deleted", metricType: Gauge},
-		TaskListProcessedCount:                        {metricName: "tasklist_processed", metricType: Gauge},
-		TaskListDeletedCount:                          {metricName: "tasklist_deleted", metricType: Gauge},
-		TaskListOutstandingCount:                      {metricName: "tasklist_outstanding", metricType: Gauge},
+		TaskQueueProcessedCount:                       {metricName: "taskqueue_processed", metricType: Gauge},
+		TaskQueueDeletedCount:                         {metricName: "taskqueue_deleted", metricType: Gauge},
+		TaskQueueOutstandingCount:                     {metricName: "taskqueue_outstanding", metricType: Gauge},
 		ExecutionsOutstandingCount:                    {metricName: "executions_outstanding", metricType: Gauge},
 		StartedCount:                                  {metricName: "started", metricType: Counter},
 		StoppedCount:                                  {metricName: "stopped", metricType: Counter},

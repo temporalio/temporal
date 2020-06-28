@@ -117,7 +117,7 @@ func newCadenceClient(namespace string, runtime *RuntimeContext) (cadenceClient,
 func newWorkflowOptions(id string, executionTimeout time.Duration) client.StartWorkflowOptions {
 	return client.StartWorkflowOptions{
 		ID:                    id,
-		TaskList:              taskListName,
+		TaskQueue:             taskQueueName,
 		WorkflowRunTimeout:    executionTimeout,
 		WorkflowTaskTimeout:   decisionTaskTimeout,
 		WorkflowIDReusePolicy: client.WorkflowIDReusePolicyAllowDuplicate,
@@ -127,7 +127,7 @@ func newWorkflowOptions(id string, executionTimeout time.Duration) client.StartW
 // newActivityOptions builds and returns activityOptions with reasonable defaults
 func newActivityOptions() workflow.ActivityOptions {
 	return workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		StartToCloseTimeout:    activityTaskTimeout,
 		ScheduleToStartTimeout: scheduleToStartTimeout,
 		ScheduleToCloseTimeout: scheduleToStartTimeout + activityTaskTimeout,
@@ -139,7 +139,7 @@ func newChildWorkflowOptions(namespace string, wfID string) workflow.ChildWorkfl
 	return workflow.ChildWorkflowOptions{
 		Namespace:             namespace,
 		WorkflowID:            wfID,
-		TaskList:              taskListName,
+		TaskQueue:             taskQueueName,
 		WorkflowRunTimeout:    childWorkflowTimeout,
 		WorkflowTaskTimeout:   decisionTaskTimeout,
 		WorkflowIDReusePolicy: client.WorkflowIDReusePolicyAllowDuplicate,

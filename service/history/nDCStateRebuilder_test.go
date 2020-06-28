@@ -36,7 +36,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
@@ -255,7 +255,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random workflow type"},
 			Input:                           payloads.EncodeString("some random input"),
 			WorkflowExecutionTimeoutSeconds: 123,
 			WorkflowRunTimeoutSeconds:       233,

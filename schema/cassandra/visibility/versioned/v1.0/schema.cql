@@ -8,7 +8,7 @@ CREATE TABLE open_executions (
   workflow_type_name   text,
   memo                 blob,
   encoding             text,
-  task_list            text,
+  task_queue            text,
   PRIMARY KEY  ((namespace_id, namespace_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
@@ -34,7 +34,7 @@ CREATE TABLE closed_executions (
   history_length       bigint,
   memo                 blob,
   encoding             text,
-  task_list            text,
+  task_queue            text,
   PRIMARY KEY  ((namespace_id, namespace_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
@@ -61,7 +61,7 @@ CREATE TABLE closed_executions_v2 (
   history_length       bigint,
   memo                 blob,
   encoding             text,
-  task_list            text,
+  task_queue            text,
   PRIMARY KEY  ((namespace_id, namespace_partition), close_time, run_id)
 ) WITH CLUSTERING ORDER BY (close_time DESC)
   AND COMPACTION = {

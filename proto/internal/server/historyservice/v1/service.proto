@@ -48,14 +48,14 @@ service HistoryService {
     rpc PollMutableState (PollMutableStateRequest) returns (PollMutableStateResponse) {
     }
 
-    // Reset the sticky task list related information in mutable state of a given workflow.
+    // Reset the sticky task queue related information in mutable state of a given workflow.
     // Things cleared are:
-    // 1. StickyTaskList
+    // 1. StickyTaskQueue
     // 2. StickyScheduleToStartTimeout
     // 3. ClientLibraryVersion
     // 4. ClientFeatureVersion
     // 5. ClientImpl
-    rpc ResetStickyTaskList (ResetStickyTaskListRequest) returns (ResetStickyTaskListResponse) {
+    rpc ResetStickyTaskQueue (ResetStickyTaskQueueRequest) returns (ResetStickyTaskQueueResponse) {
     }
 
     // RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
@@ -80,7 +80,7 @@ service HistoryService {
 
     // RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
     // DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-    // either clear sticky task list or report ny panics during DecisionTask processing.
+    // either clear sticky task queue or report ny panics during DecisionTask processing.
     rpc RespondDecisionTaskFailed (RespondDecisionTaskFailedRequest) returns (RespondDecisionTaskFailedResponse) {
     }
 

@@ -24,8 +24,8 @@ package server.matchingservice.v1;
 option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice/v1;matchingservice";
 
 import "temporal/common/v1/message.proto";
-import "temporal/enums/v1/task_list.proto";
-import "temporal/tasklist/v1/message.proto";
+import "temporal/enums/v1/task_queue.proto";
+import "temporal/taskqueue/v1/message.proto";
 import "temporal/query/v1/message.proto";
 
 import "server/enums/v1/task.proto";
@@ -53,7 +53,7 @@ message PollForDecisionTaskResponse {
     bool sticky_execution_enabled = 9;
     temporal.query.v1.WorkflowQuery query = 10;
     server.history.v1.TransientDecisionInfo decision_info = 11;
-    temporal.tasklist.v1.TaskList workflow_execution_task_list = 12;
+    temporal.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     int32 event_store_version = 13;
     bytes branch_token = 14;
     int64 scheduled_timestamp = 15;
@@ -90,7 +90,7 @@ message PollForActivityTaskResponse {
 message AddDecisionTaskRequest {
     string namespace_id = 1;
     temporal.common.v1.WorkflowExecution execution = 2;
-    temporal.tasklist.v1.TaskList task_list = 3;
+    temporal.taskqueue.v1.TaskQueue task_queue = 3;
     int64 schedule_id = 4;
     int32 schedule_to_start_timeout_seconds = 5;
     string forwarded_from = 6;
@@ -104,7 +104,7 @@ message AddActivityTaskRequest {
     string namespace_id = 1;
     temporal.common.v1.WorkflowExecution execution = 2;
     string source_namespace_id = 3;
-    temporal.tasklist.v1.TaskList task_list = 4;
+    temporal.taskqueue.v1.TaskQueue task_queue = 4;
     int64 schedule_id = 5;
     int32 schedule_to_start_timeout_seconds = 6;
     string forwarded_from = 7;
@@ -116,7 +116,7 @@ message AddActivityTaskResponse {
 
 message QueryWorkflowRequest {
     string namespace_id = 1;
-    temporal.tasklist.v1.TaskList task_list = 2;
+    temporal.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.workflowservice.v1.QueryWorkflowRequest query_request = 3;
     string forwarded_from = 4;
 }
@@ -128,7 +128,7 @@ message QueryWorkflowResponse {
 
 message RespondQueryTaskCompletedRequest {
     string namespace_id = 1;
-    temporal.tasklist.v1.TaskList task_list = 2;
+    temporal.taskqueue.v1.TaskQueue task_queue = 2;
     string task_id = 3;
     temporal.workflowservice.v1.RespondQueryTaskCompletedRequest completed_request = 4;
 }
@@ -138,30 +138,30 @@ message RespondQueryTaskCompletedResponse {
 
 message CancelOutstandingPollRequest {
     string namespace_id = 1;
-    temporal.enums.v1.TaskListType task_list_type = 2;
-    temporal.tasklist.v1.TaskList task_list = 3;
+    temporal.enums.v1.TaskQueueType task_queue_type = 2;
+    temporal.taskqueue.v1.TaskQueue task_queue = 3;
     string poller_id = 4;
 }
 
 message CancelOutstandingPollResponse {
 }
 
-message DescribeTaskListRequest {
+message DescribeTaskQueueRequest {
     string namespace_id = 1;
-    temporal.workflowservice.v1.DescribeTaskListRequest desc_request = 2;
+    temporal.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;
 }
 
-message DescribeTaskListResponse {
-    repeated temporal.tasklist.v1.PollerInfo pollers = 1;
-    temporal.tasklist.v1.TaskListStatus task_list_status = 2;
+message DescribeTaskQueueResponse {
+    repeated temporal.taskqueue.v1.PollerInfo pollers = 1;
+    temporal.taskqueue.v1.TaskQueueStatus task_queue_status = 2;
 }
 
-message ListTaskListPartitionsRequest {
+message ListTaskQueuePartitionsRequest {
     string namespace = 1;
-    temporal.tasklist.v1.TaskList task_list = 2;
+    temporal.taskqueue.v1.TaskQueue task_queue = 2;
 }
 
-message ListTaskListPartitionsResponse {
-    repeated temporal.tasklist.v1.TaskListPartitionMetadata activity_task_list_partitions = 1;
-    repeated temporal.tasklist.v1.TaskListPartitionMetadata decision_task_list_partitions = 2;
+message ListTaskQueuePartitionsResponse {
+    repeated temporal.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
+    repeated temporal.taskqueue.v1.TaskQueuePartitionMetadata decision_task_queue_partitions = 2;
 }

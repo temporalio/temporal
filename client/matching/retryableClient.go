@@ -162,15 +162,15 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
-func (c *retryableClient) DescribeTaskList(
+func (c *retryableClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *matchingservice.DescribeTaskListRequest,
-	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	var resp *matchingservice.DescribeTaskListResponse
+	var resp *matchingservice.DescribeTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DescribeTaskList(ctx, request, opts...)
+		resp, err = c.client.DescribeTaskQueue(ctx, request, opts...)
 		return err
 	}
 
@@ -178,15 +178,15 @@ func (c *retryableClient) DescribeTaskList(
 	return resp, err
 }
 
-func (c *retryableClient) ListTaskListPartitions(
+func (c *retryableClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *matchingservice.ListTaskListPartitionsRequest,
-	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	var resp *matchingservice.ListTaskListPartitionsResponse
+	var resp *matchingservice.ListTaskQueuePartitionsResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)
+		resp, err = c.client.ListTaskQueuePartitions(ctx, request, opts...)
 		return err
 	}
 

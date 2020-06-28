@@ -789,8 +789,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	// emit workflow completion stats if any
 	if currentWorkflow.ExecutionInfo.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
-			taskList := currentWorkflow.ExecutionInfo.TaskList
-			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)
+			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
+			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
 		}
 	}
 

@@ -49,10 +49,10 @@ func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tests := []func(tlm *taskListManagerImpl){
-		func(tlm *taskListManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskListManagerImpl) { close(tlm.taskReader.dispatcherShutdownC) },
-		func(tlm *taskListManagerImpl) {
+	tests := []func(tlm *taskQueueManagerImpl){
+		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
+		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.dispatcherShutdownC) },
+		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
@@ -62,7 +62,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		tlm := createTestTaskListManager(controller)
+		tlm := createTestTaskQueueManager(controller)
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
@@ -79,7 +79,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskListManager(controller)
+	tlm := createTestTaskQueueManager(controller)
 	tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -96,7 +96,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskListManager(controller)
+	tlm := createTestTaskQueueManager(controller)
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -147,11 +147,11 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
 }
 
-func createTestTaskListManager(controller *gomock.Controller) *taskListManagerImpl {
-	return createTestTaskListManagerWithConfig(controller, defaultTestConfig())
+func createTestTaskQueueManager(controller *gomock.Controller) *taskQueueManagerImpl {
+	return createTestTaskQueueManagerWithConfig(controller, defaultTestConfig())
 }
 
-func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Config) *taskListManagerImpl {
+func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Config) *taskQueueManagerImpl {
 	logger, err := loggerimpl.NewDevelopment()
 	if err != nil {
 		panic(err)
@@ -162,29 +162,29 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 	me := newMatchingEngine(
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
-	tl := "tl"
+	tl := "tq"
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
-	tlID := newTestTaskListID(dID, tl, enumspb.TASK_LIST_TYPE_ACTIVITY)
-	tlKind := enumspb.TASK_LIST_KIND_NORMAL
-	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
+	tlID := newTestTaskQueueID(dID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
+	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg)
 	if err != nil {
-		logger.Fatal("error when createTestTaskListManager", tag.Error(err))
+		logger.Fatal("error when createTestTaskQueueManager", tag.Error(err))
 	}
-	return tlMgr.(*taskListManagerImpl)
+	return tlMgr.(*taskQueueManagerImpl)
 }
 
 func TestIsTaskAddedRecently(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskListManager(controller)
+	tlm := createTestTaskQueueManager(controller)
 	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now()))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTasklistIdleTime())))
+	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTaskqueueIdleTime())))
 	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(1*time.Second)))
 	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Time{}))
 }
 
-func TestDescribeTaskList(t *testing.T) {
+func TestDescribeTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
@@ -192,8 +192,8 @@ func TestDescribeTaskList(t *testing.T) {
 	taskCount := int64(3)
 	PollerIdentity := "test-poll"
 
-	// Create taskList Manager and set taskList state
-	tlm := createTestTaskListManager(controller)
+	// Create taskQueue Manager and set taskQueue state
+	tlm := createTestTaskQueueManager(controller)
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -203,19 +203,19 @@ func TestDescribeTaskList(t *testing.T) {
 	}
 
 	includeTaskStatus := false
-	descResp := tlm.DescribeTaskList(includeTaskStatus)
+	descResp := tlm.DescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 0, len(descResp.GetPollers()))
-	require.Nil(t, descResp.GetTaskListStatus())
+	require.Nil(t, descResp.GetTaskQueueStatus())
 
 	includeTaskStatus = true
-	taskListStatus := tlm.DescribeTaskList(includeTaskStatus).GetTaskListStatus()
-	require.NotNil(t, taskListStatus)
-	require.Zero(t, taskListStatus.GetAckLevel())
-	require.Equal(t, taskCount, taskListStatus.GetReadLevel())
-	require.Equal(t, taskCount, taskListStatus.GetBacklogCountHint())
-	require.True(t, taskListStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
-	require.True(t, taskListStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
-	taskIDBlock := taskListStatus.GetTaskIdBlock()
+	taskQueueStatus := tlm.DescribeTaskQueue(includeTaskStatus).GetTaskQueueStatus()
+	require.NotNil(t, taskQueueStatus)
+	require.Zero(t, taskQueueStatus.GetAckLevel())
+	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
+	require.Equal(t, taskCount, taskQueueStatus.GetBacklogCountHint())
+	require.True(t, taskQueueStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
+	require.True(t, taskQueueStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
+	taskIDBlock := taskQueueStatus.GetTaskIdBlock()
 	require.Equal(t, int64(1), taskIDBlock.GetStartId())
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
 
@@ -225,7 +225,7 @@ func TestDescribeTaskList(t *testing.T) {
 		tlm.taskAckManager.completeTask(startTaskID + i)
 	}
 
-	descResp = tlm.DescribeTaskList(includeTaskStatus)
+	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
 	require.NotEmpty(t, descResp.Pollers[0].GetLastAccessTime())
@@ -233,39 +233,39 @@ func TestDescribeTaskList(t *testing.T) {
 
 	rps := 5.0
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &rps)
-	descResp = tlm.DescribeTaskList(includeTaskStatus)
+	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
 	require.True(t, descResp.Pollers[0].GetRatePerSecond() > 4.0 && descResp.Pollers[0].GetRatePerSecond() < 6.0)
 
-	taskListStatus = descResp.GetTaskListStatus()
-	require.NotNil(t, taskListStatus)
-	require.Equal(t, taskCount, taskListStatus.GetAckLevel())
-	require.Zero(t, taskListStatus.GetBacklogCountHint())
+	taskQueueStatus = descResp.GetTaskQueueStatus()
+	require.NotNil(t, taskQueueStatus)
+	require.Equal(t, taskCount, taskQueueStatus.GetAckLevel())
+	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
 }
 
-func tlMgrStartWithoutNotifyEvent(tlm *taskListManagerImpl) {
+func tlMgrStartWithoutNotifyEvent(tlm *taskQueueManagerImpl) {
 	// mimic tlm.Start() but avoid calling notifyEvent
 	tlm.startWG.Done()
 	go tlm.taskReader.dispatchBufferedTasks()
 	go tlm.taskReader.getTasksPump()
 }
 
-func TestCheckIdleTaskList(t *testing.T) {
+func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNopCollection())
-	cfg.IdleTasklistCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
+	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
 
 	// Idle
-	tlm := createTestTaskListManagerWithConfig(controller, cfg)
+	tlm := createTestTaskQueueManagerWithConfig(controller, cfg)
 	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(20 * time.Millisecond)
 	require.False(t, atomic.CompareAndSwapInt32(&tlm.stopped, 0, 1))
 
 	// Active poll-er
-	tlm = createTestTaskListManagerWithConfig(controller, cfg)
+	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
@@ -275,7 +275,7 @@ func TestCheckIdleTaskList(t *testing.T) {
 	require.Equal(t, int32(1), tlm.stopped)
 
 	// Active adding task
-	tlm = createTestTaskListManagerWithConfig(controller, cfg)
+	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
 	tlm.taskReader.Signal()

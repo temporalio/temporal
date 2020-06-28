@@ -37,7 +37,7 @@ import (
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
@@ -888,8 +888,8 @@ func (e *mutableStateBuilder) GetNamespaceEntry() *cache.NamespaceCacheEntry {
 	return e.namespaceEntry
 }
 
-func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
-	if e.executionInfo.StickyTaskList == "" {
+func (e *mutableStateBuilder) IsStickyTaskQueueEnabled() bool {
+	if e.executionInfo.StickyTaskQueue == "" {
 		return false
 	}
 	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
@@ -1462,9 +1462,9 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 // nolint:unused
 func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 
-	taskList := e.executionInfo.TaskList
-	if e.IsStickyTaskListEnabled() {
-		taskList = e.executionInfo.StickyTaskList
+	taskQueue := e.executionInfo.TaskQueue
+	if e.IsStickyTaskQueueEnabled() {
+		taskQueue = e.executionInfo.StickyTaskQueue
 	}
 	return &decisionInfo{
 		Version:                    e.executionInfo.DecisionVersion,
@@ -1475,7 +1475,7 @@ func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 		Attempt:                    e.executionInfo.DecisionAttempt,
 		StartedTimestamp:           e.executionInfo.DecisionStartedTimestamp,
 		ScheduledTimestamp:         e.executionInfo.DecisionScheduledTimestamp,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		OriginalScheduledTimestamp: e.executionInfo.DecisionOriginalScheduledTimestamp,
 	}
 }
@@ -1560,7 +1560,7 @@ func (e *mutableStateBuilder) FailDecision(
 }
 
 func (e *mutableStateBuilder) ClearStickyness() {
-	e.executionInfo.StickyTaskList = ""
+	e.executionInfo.StickyTaskQueue = ""
 	e.executionInfo.StickyScheduleToStartTimeout = 0
 	e.executionInfo.ClientLibraryVersion = ""
 	e.executionInfo.ClientFeatureVersion = ""
@@ -1649,12 +1649,12 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 ) (*historypb.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
-	taskList := previousExecutionInfo.TaskList
-	if attributes.TaskList != nil {
-		taskList = attributes.TaskList.GetName()
+	taskQueue := previousExecutionInfo.TaskQueue
+	if attributes.TaskQueue != nil {
+		taskQueue = attributes.TaskQueue.GetName()
 	}
-	tl := &tasklistpb.TaskList{}
-	tl.Name = taskList
+	tl := &taskqueuepb.TaskQueue{}
+	tl.Name = taskQueue
 
 	workflowType := previousExecutionInfo.WorkflowTypeName
 	if attributes.WorkflowType != nil {
@@ -1678,7 +1678,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		RequestId:                       uuid.New(),
 		Namespace:                       e.namespaceEntry.GetInfo().Name,
 		WorkflowId:                      execution.WorkflowId,
-		TaskList:                        tl,
+		TaskQueue:                       tl,
 		WorkflowType:                    wType,
 		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
@@ -1811,7 +1811,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.NamespaceID = e.namespaceEntry.GetInfo().Id
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
 	e.executionInfo.RunID = execution.GetRunId()
-	e.executionInfo.TaskList = event.TaskList.GetName()
+	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeoutSeconds()
 	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeoutSeconds()
@@ -1916,13 +1916,13 @@ func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() (*decisi
 func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(
 	version int64,
 	scheduleID int64,
-	taskList string,
+	taskQueue string,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
 ) (*decisionInfo, error) {
-	return e.decisionTaskManager.ReplicateDecisionTaskScheduledEvent(version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
+	return e.decisionTaskManager.ReplicateDecisionTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(
@@ -2189,7 +2189,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
 		TimerTaskStatus:          timerTaskStatusNone,
-		TaskList:                 attributes.TaskList.GetName(),
+		TaskQueue:                attributes.TaskQueue.GetName(),
 		HasRetryPolicy:           attributes.RetryPolicy != nil,
 	}
 	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)

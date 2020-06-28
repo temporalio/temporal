@@ -31,10 +31,10 @@ import (
 
 type taskGC struct {
 	lock           int64
-	db             *taskListDB
+	db             *taskQueueDB
 	ackLevel       int64
 	lastDeleteTime time.Time
-	config         *taskListConfig
+	config         *taskQueueConfig
 }
 
 var maxTimeBetweenTaskDeletes = time.Second
@@ -50,7 +50,7 @@ var maxTimeBetweenTaskDeletes = time.Second
 //
 // Finally, the Run() method is safe to be called from multiple threads. The underlying
 // implementation will make sure only one caller executes Run() and others simply bail out
-func newTaskGC(db *taskListDB, config *taskListConfig) *taskGC {
+func newTaskGC(db *taskQueueDB, config *taskQueueConfig) *taskGC {
 	return &taskGC{db: db, config: config}
 }
 
