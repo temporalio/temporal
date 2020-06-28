@@ -29,8 +29,9 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
+	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal/activity"
-	cclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 
 	"github.com/temporalio/temporal/common/log/tag"
@@ -81,23 +82,23 @@ var (
 		HeartbeatTimeout:       5 * time.Minute,
 		RetryPolicy:            &activityRetryPolicy,
 	}
-	tlScannerWFStartOptions = cclient.StartWorkflowOptions{
+	tlScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    tqScannerWFID,
 		TaskQueue:             tqScannerTaskQueueName,
 		WorkflowRunTimeout:    5 * 24 * time.Hour,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
-	historyScannerWFStartOptions = cclient.StartWorkflowOptions{
+	historyScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    historyScannerWFID,
 		TaskQueue:             historyScannerTaskQueueName,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
-	executionsScannerWFStartOptions = cclient.StartWorkflowOptions{
+	executionsScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    executionsScannerWFID,
 		TaskQueue:             executionsScannerTaskQueueName,
-		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}
 )

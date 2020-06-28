@@ -120,7 +120,7 @@ func newWorkflowOptions(id string, executionTimeout time.Duration) client.StartW
 		TaskQueue:             taskQueueName,
 		WorkflowRunTimeout:    executionTimeout,
 		WorkflowTaskTimeout:   decisionTaskTimeout,
-		WorkflowIDReusePolicy: client.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 }
 
@@ -142,7 +142,7 @@ func newChildWorkflowOptions(namespace string, wfID string) workflow.ChildWorkfl
 		TaskQueue:             taskQueueName,
 		WorkflowRunTimeout:    childWorkflowTimeout,
 		WorkflowTaskTimeout:   decisionTaskTimeout,
-		WorkflowIDReusePolicy: client.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 }
 

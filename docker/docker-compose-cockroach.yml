@@ -14,7 +14,7 @@ services:
     command: ["start", "--insecure"]
 
   temporal:
-    image: temporalio/auto-setup:0.25.0
+    image: temporalio/auto-setup:0.26.0
     ports:
      - "7233:7233"
     environment:
@@ -30,7 +30,7 @@ services:
     - cockroach:postgres
     
   temporal-web:
-    image: temporalio/web:0.25.0
+    image: temporalio/web:0.26.0
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:

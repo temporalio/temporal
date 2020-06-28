@@ -30,11 +30,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal/activity"
-	"go.uber.org/zap"
-
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
+	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -170,6 +169,5 @@ func archivalWorkflowTest(ctx workflow.Context) error {
 }
 
 func (s *workflowSuite) registerWorkflowsForReplayer(env worker.WorkflowReplayer) {
-	env.RegisterWorkflow(archivalWorkflowTest)
 	env.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
 }
