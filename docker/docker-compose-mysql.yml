@@ -14,7 +14,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   temporal:
-    image: temporalio/auto-setup:0.25.0
+    image: temporalio/auto-setup:0.26.0
     ports:
      - "7233:7233"
     environment:
