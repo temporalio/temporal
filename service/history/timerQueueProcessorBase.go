@@ -420,8 +420,9 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 		return nil, err
 	}
 
+	taskStartTime := t.timeSource.Now()
 	for _, task := range timerTasks {
-		if submitted := t.submitTask(task); !submitted {
+		if submitted := t.submitTask(task, taskStartTime); !submitted {
 			// not submitted due to shard shutdown
 			return nil, nil
 		}
@@ -437,6 +438,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 
 func (t *timerQueueProcessorBase) submitTask(
 	taskInfo task.Info,
+	taskStartTime time.Time,
 ) bool {
 	if !t.isPriorityTaskProcessorEnabled() {
 		return t.taskProcessor.addTask(
@@ -444,6 +446,7 @@ func (t *timerQueueProcessorBase) submitTask(
 				t.timerProcessor,
 				taskInfo,
 				initializeLoggerForTask(t.shard.GetShardID(), taskInfo, t.logger),
+				taskStartTime,
 			),
 		)
 	}

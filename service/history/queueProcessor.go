@@ -348,9 +348,10 @@ func (p *queueProcessorBase) processBatch() {
 		return
 	}
 
+	taskStartTime := p.timeSource.Now()
 	for _, task := range tasks {
-		if submitted := p.submitTask(task); !submitted {
-			// submitted since processor has been shutdown
+		if submitted := p.submitTask(task, taskStartTime); !submitted {
+			// not submitted since processor has been shutdown
 			return
 		}
 	}
@@ -366,6 +367,7 @@ func (p *queueProcessorBase) processBatch() {
 
 func (p *queueProcessorBase) submitTask(
 	taskInfo task.Info,
+	taskStartTime time.Time,
 ) bool {
 	if !p.isPriorityTaskProcessorEnabled() {
 		return p.taskProcessor.addTask(
@@ -373,6 +375,7 @@ func (p *queueProcessorBase) submitTask(
 				p.processor,
 				taskInfo,
 				initializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),
+				taskStartTime,
 			),
 		)
 	}
