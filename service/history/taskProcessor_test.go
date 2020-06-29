@@ -124,7 +124,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
-	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger, s.mockShard.GetTimeSource().Now())
 	var taskFilterErr task.Filter = func(task task.Info) (bool, error) {
 		return false, errors.New("some random error")
 	}
@@ -143,7 +143,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
-	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger, s.mockShard.GetTimeSource().Now())
 	taskInfo.shouldProcessTask = false
 	var taskFilter task.Filter = func(task task.Info) (bool, error) {
 		return false, nil
@@ -159,7 +159,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
-	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger, s.mockShard.GetTimeSource().Now())
 	var taskFilter task.Filter = func(task task.Info) (bool, error) {
 		return true, nil
 	}
@@ -175,7 +175,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger, s.mockShard.GetTimeSource().Now())
 	var taskFilter task.Filter = func(task task.Info) (bool, error) {
 		return true, nil
 	}
@@ -193,7 +193,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() 
 func (s *taskProcessorSuite) TestHandleTaskError_EntityNotExists() {
 	err := &workflow.EntityNotExistsError{}
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
@@ -201,7 +201,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
 	err := task.ErrTaskRetry
 	delay := time.Second
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	go func() {
 		time.Sleep(delay)
 		s.notificationChan <- struct{}{}
@@ -216,14 +216,14 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
 func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskDiscarded() {
 	err := task.ErrTaskDiscarded
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
 	err := &workflow.DomainNotActiveError{}
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	taskInfo.startTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
@@ -234,13 +234,13 @@ func (s *taskProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
 func (s *taskProcessorSuite) TestHandleTaskError_CurrentWorkflowConditionFailedError() {
 	err := &persistence.CurrentWorkflowConditionFailedError{}
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_RandomErr() {
 	err := errors.New("random error")
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger, s.mockShard.GetTimeSource().Now())
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }

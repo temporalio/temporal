@@ -82,12 +82,13 @@ func newTaskInfo(
 	processor taskExecutor,
 	task task.Info,
 	logger log.Logger,
+	startTime time.Time,
 ) *taskInfo {
 	return &taskInfo{
 		processor:         processor,
 		task:              task,
 		attempt:           0,
-		startTime:         time.Now(), // used for metrics
+		startTime:         startTime, // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
 	}

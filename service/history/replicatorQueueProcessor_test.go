@@ -153,7 +153,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger, s.mockShard.GetTimeSource().Now()))
 	s.Nil(err)
 }
 
@@ -201,7 +201,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger, s.mockShard.GetTimeSource().Now()))
 	s.Nil(err)
 }
 
@@ -250,7 +250,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger, s.mockShard.GetTimeSource().Now()))
 	s.Nil(err)
 }
 
@@ -360,7 +360,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger, s.mockShard.GetTimeSource().Now()))
 	s.Nil(err)
 }
 
@@ -469,7 +469,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger, s.mockShard.GetTimeSource().Now()))
 	s.Nil(err)
 }
 
