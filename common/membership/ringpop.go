@@ -73,8 +73,10 @@ func (r *RingPop) Start(bootstrapHostPorts []string) {
 	}
 
 	bootParams := &swim.BootstrapOptions{
-		MaxJoinDuration:  r.maxJoinDuration,
-		DiscoverProvider: statichosts.New(bootstrapHostPorts...),
+		ParallelismFactor: 10,
+		JoinSize:          1,
+		MaxJoinDuration:   r.maxJoinDuration,
+		DiscoverProvider:  statichosts.New(bootstrapHostPorts...),
 	}
 
 	_, err := r.Ringpop.Bootstrap(bootParams)
