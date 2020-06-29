@@ -41,7 +41,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
@@ -172,14 +172,14 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
-	stickyTl := "stickyTaskList"
+	tl := "testTaskQueue"
+	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
-	executionInfo.StickyTaskList = stickyTl
+	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -201,7 +201,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -219,9 +219,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	expectedResponse.StickyExecutionEnabled = false
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
-		Name: executionInfo.TaskList,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
@@ -240,15 +240,15 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
-	stickyTl := "stickyTaskList"
+	tl := "testTaskQueue"
+	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdatedTimestamp = time.Now()
-	executionInfo.StickyTaskList = stickyTl
+	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -270,7 +270,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -288,9 +288,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
-		Name: executionInfo.TaskList,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	currentBranchTokken, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
@@ -313,7 +313,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
@@ -324,7 +324,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -343,7 +343,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
@@ -354,7 +354,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -373,7 +373,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	ms := createMutableState(msBuilder)
@@ -387,7 +387,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -407,7 +407,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
@@ -424,7 +424,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -444,7 +444,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 
@@ -471,7 +471,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -491,7 +491,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 		RunId:      testRunID,
 	}
 
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	identity := "testIdentity"
 	requestID := "testRecordDecisionTaskRetrySameRequestID"
 
@@ -515,7 +515,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -536,7 +536,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 		RunId:      testRunID,
 	}
 
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	identity := "testIdentity"
 	requestID := "testRecordDecisionTaskRetrySameRequestID"
 
@@ -560,7 +560,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -580,7 +580,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		RunId:      testRunID,
 	}
 
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
@@ -603,7 +603,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -622,7 +622,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		RunId:      testRunID,
 	}
 
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
@@ -654,7 +654,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -682,7 +682,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
@@ -693,7 +693,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -715,7 +715,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	activityID := "activity1_id"
 	activityType := "activity_type1"
@@ -746,7 +746,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
 			Identity: identity,
@@ -765,7 +765,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	ms1 := createMutableState(msBuilder)
@@ -801,7 +801,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	}
 
 	identity := "testIdentity"
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	msBuilder.GetExecutionInfo().State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
@@ -848,7 +848,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	taskToken := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
@@ -904,7 +904,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	namespaceID := testNamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
@@ -917,7 +917,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 20,
 			WorkflowRunTimeoutSeconds:       1,
 			WorkflowTaskTimeoutSeconds:      2,
@@ -934,7 +934,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	requestID := "requestID"
 	lastWriteVersion := common.EmptyVersion
@@ -955,7 +955,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
@@ -971,7 +971,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
@@ -991,7 +991,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
@@ -1009,7 +1009,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
@@ -1054,7 +1054,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 				Namespace:                       namespaceID,
 				WorkflowId:                      workflowID,
 				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskList},
+				TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 				WorkflowExecutionTimeoutSeconds: 1,
 				WorkflowTaskTimeoutSeconds:      2,
 				Identity:                        identity,
@@ -1079,7 +1079,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	namespaceID := testNamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
@@ -1135,7 +1135,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 					Namespace:                       namespaceID,
 					WorkflowId:                      workflowID,
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                        &tasklistpb.TaskList{Name: taskList},
+					TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 					WorkflowExecutionTimeoutSeconds: 1,
 					WorkflowTaskTimeoutSeconds:      2,
 					Identity:                        identity,
@@ -1205,7 +1205,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	namespaceID := testNamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1217,7 +1217,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
@@ -1246,7 +1246,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	namespaceID := testNamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1258,7 +1258,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
@@ -1288,7 +1288,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	workflowID := "wId"
 	runID := testRunID
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1299,7 +1299,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                           input,
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
@@ -1340,7 +1340,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	workflowID := "wId"
 	runID := testRunID
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1351,7 +1351,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                           input,
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
@@ -1400,7 +1400,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	workflowID := "wId"
 	runID := testRunID
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1411,7 +1411,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                           input,
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,

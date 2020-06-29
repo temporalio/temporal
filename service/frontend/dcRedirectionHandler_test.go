@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal-proto/workflowservicemock/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -121,25 +121,25 @@ func (s *dcRedirectionHandlerSuite) TearDownTest() {
 	s.mockDCRedirectionPolicy.AssertExpectations(s.T())
 }
 
-func (s *dcRedirectionHandlerSuite) TestDescribeTaskList() {
-	apiName := "DescribeTaskList"
+func (s *dcRedirectionHandlerSuite) TestDescribeTaskQueue() {
+	apiName := "DescribeTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
-	req := &workflowservice.DescribeTaskListRequest{
+	req := &workflowservice.DescribeTaskQueueRequest{
 		Namespace: s.namespace,
 	}
-	resp, err := s.handler.DescribeTaskList(context.Background(), req)
+	resp, err := s.handler.DescribeTaskQueue(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().DescribeTaskList(gomock.Any(), req).Return(&workflowservice.DescribeTaskListResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().DescribeTaskQueue(gomock.Any(), req).Return(&workflowservice.DescribeTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().DescribeTaskList(gomock.Any(), req).Return(&workflowservice.DescribeTaskListResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().DescribeTaskQueue(gomock.Any(), req).Return(&workflowservice.DescribeTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }
@@ -470,25 +470,25 @@ func (s *dcRedirectionHandlerSuite) TestRequestCancelWorkflowExecution() {
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestResetStickyTaskList() {
-	apiName := "ResetStickyTaskList"
+func (s *dcRedirectionHandlerSuite) TestResetStickyTaskQueue() {
+	apiName := "ResetStickyTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
-	req := &workflowservice.ResetStickyTaskListRequest{
+	req := &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
 	}
-	resp, err := s.handler.ResetStickyTaskList(context.Background(), req)
+	resp, err := s.handler.ResetStickyTaskQueue(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().ResetStickyTaskList(gomock.Any(), req).Return(&workflowservice.ResetStickyTaskListResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().ResetStickyTaskQueue(gomock.Any(), req).Return(&workflowservice.ResetStickyTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().ResetStickyTaskList(gomock.Any(), req).Return(&workflowservice.ResetStickyTaskListResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().ResetStickyTaskQueue(gomock.Any(), req).Return(&workflowservice.ResetStickyTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }
@@ -828,29 +828,29 @@ func (s *dcRedirectionHandlerSuite) TestTerminateWorkflowExecution() {
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestListTaskListPartitions() {
-	apiName := "ListTaskListPartitions"
+func (s *dcRedirectionHandlerSuite) TestListTaskQueuePartitions() {
+	apiName := "ListTaskQueuePartitions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
-	req := &workflowservice.ListTaskListPartitionsRequest{
+	req := &workflowservice.ListTaskQueuePartitionsRequest{
 		Namespace: s.namespace,
-		TaskList: &tasklistpb.TaskList{
+		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "test_tesk_list",
 			Kind: 0,
 		},
 	}
-	resp, err := s.handler.ListTaskListPartitions(context.Background(), req)
+	resp, err := s.handler.ListTaskQueuePartitions(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().ListTaskListPartitions(gomock.Any(), req).Return(&workflowservice.ListTaskListPartitionsResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().ListTaskQueuePartitions(gomock.Any(), req).Return(&workflowservice.ListTaskQueuePartitionsResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().ListTaskListPartitions(gomock.Any(), req).Return(&workflowservice.ListTaskListPartitionsResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().ListTaskQueuePartitions(gomock.Any(), req).Return(&workflowservice.ListTaskQueuePartitionsResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }

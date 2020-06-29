@@ -200,7 +200,7 @@ type Config struct {
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Decision settings
-	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	// TODO https://github.com/temporalio/temporal/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// DefaultWorkflowTaskTimeout the default decision task timeout

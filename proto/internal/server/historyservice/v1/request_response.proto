@@ -25,7 +25,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice/v1
 
 import "temporal/common/v1/message.proto";
 import "temporal/history/v1/message.proto";
-import "temporal/tasklist/v1/message.proto";
+import "temporal/taskqueue/v1/message.proto";
 import "temporal/enums/v1/workflow.proto";
 import "temporal/workflow/v1/message.proto";
 import "temporal/query/v1/message.proto";
@@ -72,21 +72,21 @@ message GetMutableStateResponse {
     int64 next_event_id = 3;
     int64 previous_started_event_id = 4;
     int64 last_first_event_id = 5;
-    temporal.tasklist.v1.TaskList task_list = 6;
-    temporal.tasklist.v1.TaskList sticky_task_list = 7;
+    temporal.taskqueue.v1.TaskQueue task_queue = 6;
+    temporal.taskqueue.v1.TaskQueue sticky_task_queue = 7;
     string client_library_version = 8;
     string client_feature_version = 9;
     string client_impl = 10;
     //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
     bool is_workflow_running = 11;
-    int32 sticky_task_list_schedule_to_start_timeout = 12;
+    int32 sticky_task_queue_schedule_to_start_timeout = 12;
     int32 event_store_version = 13;
     bytes current_branch_token = 14;
     map<string, server.replication.v1.ReplicationInfo> replication_info = 15;
     server.enums.v1.WorkflowExecutionState workflow_state = 16;
     temporal.enums.v1.WorkflowExecutionStatus workflow_status = 17;
     server.history.v1.VersionHistories version_histories = 18;
-    bool is_sticky_task_list_enabled = 19;
+    bool is_sticky_task_queue_enabled = 19;
 }
 
 message PollMutableStateRequest {
@@ -102,12 +102,12 @@ message PollMutableStateResponse {
     int64 next_event_id = 3;
     int64 previous_started_event_id = 4;
     int64 last_first_event_id = 5;
-    temporal.tasklist.v1.TaskList task_list = 6;
-    temporal.tasklist.v1.TaskList sticky_task_list = 7;
+    temporal.taskqueue.v1.TaskQueue task_queue = 6;
+    temporal.taskqueue.v1.TaskQueue sticky_task_queue = 7;
     string client_library_version = 8;
     string client_feature_version = 9;
     string client_impl = 10;
-    int32 sticky_task_list_schedule_to_start_timeout = 11;
+    int32 sticky_task_queue_schedule_to_start_timeout = 11;
     bytes current_branch_token = 12;
     map<string, server.replication.v1.ReplicationInfo> replication_info = 13;
     server.history.v1.VersionHistories version_histories = 14;
@@ -115,12 +115,12 @@ message PollMutableStateResponse {
     temporal.enums.v1.WorkflowExecutionStatus workflow_status = 16;
 }
 
-message ResetStickyTaskListRequest {
+message ResetStickyTaskQueueRequest {
     string namespace_id = 1;
     temporal.common.v1.WorkflowExecution execution = 2;
 }
 
-message ResetStickyTaskListResponse {
+message ResetStickyTaskQueueResponse {
 }
 
 message RecordDecisionTaskStartedRequest {
@@ -142,7 +142,7 @@ message RecordDecisionTaskStartedResponse {
     int64 attempt = 6;
     bool sticky_execution_enabled = 7;
     server.history.v1.TransientDecisionInfo decision_info = 8;
-    temporal.tasklist.v1.TaskList workflow_execution_task_list = 9;
+    temporal.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     int32 event_store_version = 10;
     bytes branch_token = 11;
     int64 scheduled_timestamp = 12;

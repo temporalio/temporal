@@ -84,20 +84,20 @@ func (c *metricClient) DescribeNamespace(
 	return resp, err
 }
 
-func (c *metricClient) DescribeTaskList(
+func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
+	request *workflowservice.DescribeTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeTaskListResponse, error) {
+) (*workflowservice.DescribeTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskListScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeTaskList(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -408,20 +408,20 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) ResetStickyTaskList(
+func (c *metricClient) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
+	request *workflowservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetStickyTaskListResponse, error) {
+) (*workflowservice.ResetStickyTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskListScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientResetStickyTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.ResetStickyTaskList(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.ResetStickyTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -713,20 +713,20 @@ func (c *metricClient) GetClusterInfo(
 	return resp, err
 }
 
-func (c *metricClient) ListTaskListPartitions(
+func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
+	request *workflowservice.ListTaskQueuePartitionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListTaskListPartitionsResponse, error) {
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListTaskListPartitionsScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListTaskListPartitionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListTaskListPartitions(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientLatency)
+	resp, err := c.client.ListTaskQueuePartitions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListTaskListPartitionsScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

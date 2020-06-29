@@ -41,7 +41,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common/log/tag"
@@ -51,12 +51,12 @@ import (
 func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	id := "integration-continue-as-new-workflow-test"
 	wt := "integration-continue-as-new-workflow-test-type"
-	tl := "integration-continue-as-new-workflow-test-tasklist"
+	tl := "integration-continue-as-new-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -73,7 +73,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		Header:                     header,
 		Memo:                       memo,
@@ -105,7 +105,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
-					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
 					Header:                     header,
 					Memo:                       memo,
@@ -129,7 +129,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -155,19 +155,19 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	id := "integration-continue-as-new-workflow-timeout-test"
 	wt := "integration-continue-as-new-workflow-timeout-test-type"
-	tl := "integration-continue-as-new-workflow-timeout-test-tasklist"
+	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -193,7 +193,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
-					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeoutSeconds:  1, // set timeout to 1
 					WorkflowTaskTimeoutSeconds: 1,
@@ -213,7 +213,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -256,19 +256,19 @@ GetHistoryLoop:
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	id := "integration-continue-as-new-workflow-timeout-test"
 	wt := "integration-continue-as-new-workflow-timeout-test-type"
-	tl := "integration-continue-as-new-workflow-timeout-test-tasklist"
+	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                       uuid.New(),
 		Namespace:                       s.namespace,
 		WorkflowId:                      id,
 		WorkflowType:                    workflowType,
-		TaskList:                        taskList,
+		TaskQueue:                       taskQueue,
 		Input:                           nil,
 		WorkflowExecutionTimeoutSeconds: 5,
 		Identity:                        identity,
@@ -290,7 +290,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 			DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 				WorkflowType:               workflowType,
-				TaskList:                   taskList,
+				TaskQueue:                  taskQueue,
 				Input:                      nil,
 				WorkflowRunTimeoutSeconds:  100,
 				WorkflowTaskTimeoutSeconds: 1,
@@ -301,7 +301,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -354,19 +354,19 @@ GetHistoryLoop:
 func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	id := "integration-wf-continue-as-new-task-id-test"
 	wt := "integration-wf-continue-as-new-task-id-type"
-	tl := "integration-wf-continue-as-new-task-id-tasklist"
+	tl := "integration-wf-continue-as-new-task-id-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -392,7 +392,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
-					TaskList:                   taskList,
+					TaskQueue:                  taskQueue,
 					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  100,
 					WorkflowTaskTimeoutSeconds: 1,
@@ -412,7 +412,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -444,7 +444,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	childID := "integration-child-workflow-with-continue-as-new-test-child"
 	wtParent := "integration-child-workflow-with-continue-as-new-test-parent-type"
 	wtChild := "integration-child-workflow-with-continue-as-new-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-test-tasklist"
+	tl := "integration-child-workflow-with-continue-as-new-test-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{}
@@ -453,14 +453,14 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	childWorkflowType := &commonpb.WorkflowType{}
 	childWorkflowType.Name = wtChild
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 parentID,
 		WorkflowType:               parentWorkflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -550,7 +550,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,

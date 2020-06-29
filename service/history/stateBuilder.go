@@ -199,7 +199,7 @@ func (b *stateBuilderImpl) applyEvents(
 			decision, err := b.mutableState.ReplicateDecisionTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
-				attributes.TaskList.GetName(),
+				attributes.TaskQueue.GetName(),
 				attributes.GetStartToCloseTimeoutSeconds(),
 				attributes.GetAttempt(),
 				event.GetTimestamp(),

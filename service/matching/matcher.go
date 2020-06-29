@@ -39,7 +39,7 @@ import (
 
 // TaskMatcher matches a task producer with a task consumer
 // Producers are usually rpc calls from history or taskReader
-// that drains backlog from db. Consumers are the task list pollers
+// that drains backlog from db. Consumers are the task queue pollers
 type TaskMatcher struct {
 	// synchronous task channel to match producer/consumer
 	taskC chan *internalTask
@@ -53,7 +53,7 @@ type TaskMatcher struct {
 
 	fwdr          *Forwarder
 	scope         func() metrics.Scope // namespace metric scope
-	numPartitions func() int           // number of task list partitions
+	numPartitions func() int           // number of task queue partitions
 }
 
 const (
@@ -61,12 +61,12 @@ const (
 	_defaultTaskDispatchRPSTTL = time.Minute
 )
 
-var errTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
+var errTaskqueueThrottled = errors.New("cannot add to taskqueue, limit exceeded")
 
 // newTaskMatcher returns an task matcher instance. The returned instance can be
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
-func newTaskMatcher(config *taskListConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dPtr := _defaultTaskDispatchRPS
 	limiter := quotas.NewRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
 	return &TaskMatcher{
@@ -87,7 +87,7 @@ func newTaskMatcher(config *taskListConfig, fwdr *Forwarder, scopeFunc func() me
 // task. This method should ONLY be used for sync match.
 //
 // When a local poller is not available and forwarding to a parent
-// task list partition is possible, this method will attempt forwarding
+// task queue partition is possible, this method will attempt forwarding
 // to the parent partition.
 //
 // Cases when this method will block:
@@ -99,7 +99,7 @@ func newTaskMatcher(config *taskListConfig, fwdr *Forwarder, scopeFunc func() me
 //
 // Forwarded tasks that originated from db backlog:
 // When this method is called with a task that is forwarded from a
-// remote partition and if (1) this task list is root (2) task
+// remote partition and if (1) this task queue is root (2) task
 // was from db backlog - this method will block until context timeout
 // trying to match with a poller. The caller is expected to set the
 // correct context timeout.
@@ -114,7 +114,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if !task.isForwarded() {
 		rsv, err = tm.ratelimit(ctx)
 		if err != nil {
-			tm.scope().IncCounter(metrics.SyncThrottlePerTaskListCounter)
+			tm.scope().IncCounter(metrics.SyncThrottlePerTaskQueueCounter)
 			return false, err
 		}
 	}
@@ -322,16 +322,16 @@ func (tm *TaskMatcher) pollOrForward(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	case token := <-tm.fwdrPollReqTokenC():
 		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
@@ -351,16 +351,16 @@ func (tm *TaskMatcher) poll(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	}
 }
@@ -373,13 +373,13 @@ func (tm *TaskMatcher) pollNonBlocking(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	default:
 		return nil, ErrNoTasks
@@ -421,7 +421,7 @@ func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error)
 		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
 			rsv.Cancel()
 		}
-		return nil, errTasklistThrottled
+		return nil, errTaskqueueThrottled
 	}
 
 	time.Sleep(rsv.Delay())

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
@@ -180,7 +180,7 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 		if decisionInfo.StartedID == common.EmptyEventID {
 			return newPushDecisionToMatchingInfo(
 				decisionTimeout,
-				tasklistpb.TaskList{Name: transferTask.TaskList},
+				taskqueuepb.TaskQueue{Name: transferTask.TaskQueue},
 			), nil
 		}
 
@@ -257,7 +257,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowHistoryLength,
 			transferTask.GetTaskId(),
 			visibilityMemo,
-			executionInfo.TaskList,
+			executionInfo.TaskQueue,
 			searchAttr,
 		)
 	}
@@ -450,7 +450,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			transferTask.GetTaskId(),
-			executionInfo.TaskList,
+			executionInfo.TaskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -464,7 +464,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
-		executionInfo.TaskList,
+		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -544,7 +544,7 @@ func (t *transferQueueStandbyTaskExecutor) pushDecision(
 	timeout := common.MinInt32(pushDecisionInfo.decisionScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueTaskExecutorBase.pushDecision(
 		task.(*persistenceblobs.TransferTaskInfo),
-		&pushDecisionInfo.tasklist,
+		&pushDecisionInfo.taskqueue,
 		timeout,
 	)
 }

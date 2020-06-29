@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/enums"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -761,9 +762,13 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(handler.namespaceEntry.GetInfo().Name)
-	if !enabled {
+	if enabled {
+		enums.SetDefaultParentClosePolicy(&attr.ParentClosePolicy)
+	} else {
 		attr.ParentClosePolicy = enumspb.PARENT_CLOSE_POLICY_ABANDON
 	}
+
+	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
 
 	requestID := uuid.New()
 	_, _, err = handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
@@ -890,7 +895,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                  attr.WorkflowType,
-		TaskList:                      attr.TaskList,
+		TaskQueue:                     attr.TaskQueue,
 		RetryPolicy:                   attr.RetryPolicy,
 		Input:                         attr.Input,
 		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,

@@ -51,7 +51,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -209,7 +209,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	workflowID := "ndc-single-branch-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
@@ -234,7 +234,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 			workflowID,
 			runID,
 			workflowType,
-			tasklist,
+			taskqueue,
 			versionHistory,
 			historyBatch,
 			historyClient,
@@ -298,7 +298,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	workflowID := "ndc-multiple-branches-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
@@ -352,7 +352,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			workflowID,
 			runID,
 			workflowType,
-			tasklist,
+			taskqueue,
 			baseVersionHistory,
 			baseBranch,
 			historyClient,
@@ -361,7 +361,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			workflowID,
 			runID,
 			workflowType,
-			tasklist,
+			taskqueue,
 			branchVersionHistory1,
 			branch1,
 			historyClient,
@@ -370,7 +370,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			workflowID,
 			runID,
 			workflowType,
-			tasklist,
+			taskqueue,
 			branchVersionHistory2,
 			branch2,
 			historyClient,
@@ -385,7 +385,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	runID := uuid.New()
 
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 	identity := "worker-identity"
 
 	// active has initial version 0
@@ -399,7 +399,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
@@ -412,7 +412,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -461,7 +461,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                         nil,
 					ScheduleToCloseTimeoutSeconds: 20,
 					ScheduleToStartTimeoutSeconds: 20,
@@ -499,7 +499,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -543,7 +543,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -605,7 +605,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   30,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -664,7 +664,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory1,
 		eventsBatch1,
 		historyClient,
@@ -673,7 +673,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory3,
 		eventsBatch3,
 		historyClient,
@@ -682,7 +682,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory2,
 		eventsBatch2,
 		historyClient,
@@ -696,7 +696,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	runID := uuid.New()
 
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 	identity := "worker-identity"
 
 	// active has initial version 0
@@ -710,7 +710,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
@@ -723,7 +723,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -772,7 +772,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                         nil,
 					ScheduleToCloseTimeoutSeconds: 20,
 					ScheduleToStartTimeoutSeconds: 20,
@@ -810,7 +810,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -854,7 +854,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -907,7 +907,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 					NewExecutionRunId:            uuid.New(),
 					WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                     &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                        nil,
 					WorkflowRunTimeoutSeconds:    1000,
 					WorkflowTaskTimeoutSeconds:   1000,
@@ -936,7 +936,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory1,
 		eventsBatch1,
 		historyClient,
@@ -945,7 +945,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory2,
 		eventsBatch2,
 		historyClient,
@@ -954,7 +954,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory3,
 		eventsBatch3,
 		historyClient,
@@ -966,7 +966,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	workflowID := "ndc-single-branch-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
@@ -990,7 +990,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 		historyClient,
@@ -1017,7 +1017,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		historyBatch,
 		historyClient,
@@ -1029,7 +1029,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	workflowID := "ndc-single-branch-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 	version := int64(101)
 	isWorkflowFinished := false
 
@@ -1069,7 +1069,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory,
 		baseBranch,
 		historyClient,
@@ -1094,7 +1094,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		newVersionHistory,
 		newBranch,
 		historyClient,
@@ -1127,7 +1127,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		staleVersionHistory,
 		staleBranch,
 		historyClient,
@@ -1139,7 +1139,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	workflowID := "ndc-re-send-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "ndc-re-send-workflow-type"
-	tasklist := "event-generator-taskList"
+	taskqueue := "event-generator-taskQueue"
 	identity := "ndc-re-send-test"
 
 	historyClient := s.active.GetHistoryClient()
@@ -1180,7 +1180,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                           nil,
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
@@ -1193,7 +1193,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -1242,7 +1242,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                         nil,
 					ScheduleToCloseTimeoutSeconds: 20,
 					ScheduleToStartTimeoutSeconds: 20,
@@ -1280,7 +1280,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -1324,7 +1324,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -1362,7 +1362,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 					DecisionTaskCompletedEventId:  4,
 					ActivityId:                    "0",
 					ActivityType:                  &commonpb.ActivityType{Name: "activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                         nil,
 					ScheduleToCloseTimeoutSeconds: 20,
 					ScheduleToStartTimeoutSeconds: 20,
@@ -1404,7 +1404,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   30,
 				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
 					Attempt:                    0,
 				}},
@@ -1482,7 +1482,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory1,
 		eventsBatch1,
 		historyClient,
@@ -1491,7 +1491,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory3,
 		eventsBatch3,
 		historyClient,
@@ -1500,7 +1500,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory2,
 		eventsBatch2,
 		historyClient,
@@ -1509,7 +1509,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		workflowID,
 		runID,
 		workflowType,
-		tasklist,
+		taskqueue,
 		versionHistory4,
 		eventsBatch4,
 		historyClient,
@@ -1637,7 +1637,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	runID string,
 	version int64,
 	workflowType string,
-	taskList string,
+	taskQueue string,
 ) *serialization.DataBlob {
 
 	// TODO temporary code to generate first event & version history
@@ -1663,9 +1663,9 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 				RunId:      uuid.New(),
 			},
 			ParentInitiatedEventId: event.GetEventId(),
-			TaskList: &tasklistpb.TaskList{
-				Name: taskList,
-				Kind: enumspb.TASK_LIST_KIND_NORMAL,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			WorkflowRunTimeoutSeconds:            10,
 			WorkflowTaskTimeoutSeconds:           10,
@@ -1716,14 +1716,14 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	workflowID string,
 	runID string,
 	workflowType string,
-	tasklist string,
+	taskqueue string,
 	batch *historypb.History,
 ) (*serialization.DataBlob, *serialization.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]
 	newRunEventBlob := s.generateNewRunHistory(
-		lastEvent, s.namespace, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
+		lastEvent, s.namespace, workflowID, runID, lastEvent.GetVersion(), workflowType, taskqueue,
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
@@ -1736,13 +1736,13 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	workflowID string,
 	runID string,
 	workflowType string,
-	tasklist string,
+	taskqueue string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*historypb.History,
 	historyClient host.HistoryClient,
 ) {
 	for _, batch := range eventBatches {
-		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
+		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 		req := &historyservice.ReplicateEventsV2Request{
 			NamespaceId: s.namespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1767,12 +1767,12 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	workflowID string,
 	runID string,
 	workflowType string,
-	tasklist string,
+	taskqueue string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*historypb.History,
 ) {
 	for _, batch := range eventBatches {
-		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
+		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
 		taskType := enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
 		replicationTask := &replicationgenpb.ReplicationTask{

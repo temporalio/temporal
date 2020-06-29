@@ -34,7 +34,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -74,7 +74,7 @@ type (
 )
 
 const (
-	reservedTaskListPrefix = "/__temporal_sys/"
+	reservedTaskQueuePrefix = "/__temporal_sys/"
 )
 
 func newDecisionAttrValidator(
@@ -211,8 +211,8 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("ScheduleActivityTaskDecisionAttributes is not set on decision.")
 	}
 
-	defaultTaskListName := ""
-	if _, err := v.validatedTaskList(attributes.TaskList, defaultTaskListName); err != nil {
+	defaultTaskQueueName := ""
+	if _, err := v.validatedTaskQueue(attributes.TaskQueue, defaultTaskQueueName); err != nil {
 		return err
 	}
 
@@ -503,12 +503,12 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	// Inherit Tasklist from previous execution if not provided on decision
-	taskList, err := v.validatedTaskList(attributes.TaskList, executionInfo.TaskList)
+	// Inherit Taskqueue from previous execution if not provided on decision
+	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
 	if err != nil {
 		return err
 	}
-	attributes.TaskList = taskList
+	attributes.TaskQueue = taskQueue
 
 	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
@@ -589,12 +589,12 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	// Inherit tasklist from parent workflow execution if not provided on decision
-	taskList, err := v.validatedTaskList(attributes.TaskList, parentInfo.TaskList)
+	// Inherit taskqueue from parent workflow execution if not provided on decision
+	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
 		return err
 	}
-	attributes.TaskList = taskList
+	attributes.TaskQueue = taskQueue
 
 	// Inherit workflow timeout from parent workflow execution if not provided on decision
 	if attributes.GetWorkflowExecutionTimeoutSeconds() <= 0 {
@@ -614,33 +614,33 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	return nil
 }
 
-func (v *decisionAttrValidator) validatedTaskList(
-	taskList *tasklistpb.TaskList,
+func (v *decisionAttrValidator) validatedTaskQueue(
+	taskQueue *taskqueuepb.TaskQueue,
 	defaultVal string,
-) (*tasklistpb.TaskList, error) {
+) (*taskqueuepb.TaskQueue, error) {
 
-	if taskList == nil {
-		taskList = &tasklistpb.TaskList{}
+	if taskQueue == nil {
+		taskQueue = &taskqueuepb.TaskQueue{}
 	}
 
-	if taskList.GetName() == "" {
+	if taskQueue.GetName() == "" {
 		if defaultVal == "" {
-			return taskList, serviceerror.NewInvalidArgument("missing task list name")
+			return taskQueue, serviceerror.NewInvalidArgument("missing task queue name")
 		}
-		taskList.Name = defaultVal
-		return taskList, nil
+		taskQueue.Name = defaultVal
+		return taskQueue, nil
 	}
 
-	name := taskList.GetName()
+	name := taskQueue.GetName()
 	if len(name) > v.maxIDLengthLimit {
-		return taskList, serviceerror.NewInvalidArgument(fmt.Sprintf("task list name exceeds length limit of %v", v.maxIDLengthLimit))
+		return taskQueue, serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name exceeds length limit of %v", v.maxIDLengthLimit))
 	}
 
-	if strings.HasPrefix(name, reservedTaskListPrefix) {
-		return taskList, serviceerror.NewInvalidArgument(fmt.Sprintf("task list name cannot start with reserved prefix %v", reservedTaskListPrefix))
+	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
+		return taskQueue, serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix))
 	}
 
-	return taskList, nil
+	return taskQueue, nil
 }
 
 func (v *decisionAttrValidator) validateCrossNamespaceCall(

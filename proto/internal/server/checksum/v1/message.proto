@@ -52,6 +52,6 @@ message MutableStateChecksumPayload {
     repeated int64 pending_req_cancel_initiated_ids = 17;
     repeated int64 pending_child_initiated_ids = 18;
 
-    string sticky_task_list_name = 19;
+    string sticky_task_queue_name = 19;
     server.history.v1.VersionHistories version_histories = 20;
 }

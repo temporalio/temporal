@@ -42,7 +42,7 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
@@ -250,8 +250,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowTaskTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
@@ -286,8 +286,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -315,8 +315,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -345,8 +345,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -364,7 +364,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	s.Equal(errWorkflowTypeNotSet, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
@@ -375,7 +375,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
+		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
@@ -388,7 +388,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskListNotSet, err)
+	s.Equal(errTaskQueueNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {
@@ -402,8 +402,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: -1,
 		WorkflowRunTimeoutSeconds:       1,
@@ -431,8 +431,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       -1,
@@ -460,8 +460,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: "task-list",
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
 		},
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       1,

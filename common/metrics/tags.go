@@ -34,7 +34,7 @@ const (
 	instance      = "instance"
 	namespace     = "namespace"
 	targetCluster = "target_cluster"
-	taskList      = "tasklist"
+	taskQueue     = "taskqueue"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
 	decisionType  = "decisionType"
@@ -56,7 +56,7 @@ type (
 
 	namespaceUnknownTag struct{}
 
-	taskListUnknownTag struct{}
+	taskQueueUnknownTag struct{}
 
 	instanceTag struct {
 		value string
@@ -66,7 +66,7 @@ type (
 		value string
 	}
 
-	taskListTag struct {
+	taskQueueTag struct {
 		value string
 	}
 
@@ -108,19 +108,19 @@ func NamespaceUnknownTag() Tag {
 	return namespaceUnknownTag{}
 }
 
-// Key returns the key of the tasklist unknown tag
-func (d taskListUnknownTag) Key() string {
+// Key returns the key of the taskqueue unknown tag
+func (d taskQueueUnknownTag) Key() string {
 	return namespace
 }
 
-// Value returns the value of the tasklist unknown tag
-func (d taskListUnknownTag) Value() string {
+// Value returns the value of the taskqueue unknown tag
+func (d taskQueueUnknownTag) Value() string {
 	return unknownValue
 }
 
-// TaskListUnknownTag returns a new tasklist:unknown tag-value
-func TaskListUnknownTag() Tag {
-	return taskListUnknownTag{}
+// TaskQueueUnknownTag returns a new taskqueue:unknown tag-value
+func TaskQueueUnknownTag() Tag {
+	return taskQueueUnknownTag{}
 }
 
 // Key returns the key of the namespace unknown tag
@@ -166,21 +166,21 @@ func (d targetClusterTag) Value() string {
 	return d.value
 }
 
-// TaskListTag returns a new task list tag.
-func TaskListTag(value string) Tag {
+// TaskQueueTag returns a new task queue tag.
+func TaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return taskListTag{sanitizer.Value(value)}
+	return taskQueueTag{sanitizer.Value(value)}
 }
 
-// Key returns the key of the task list tag
-func (d taskListTag) Key() string {
-	return taskList
+// Key returns the key of the task queue tag
+func (d taskQueueTag) Key() string {
+	return taskQueue
 }
 
-// Value returns the value of the task list tag
-func (d taskListTag) Value() string {
+// Value returns the value of the task queue tag
+func (d taskQueueTag) Value() string {
 	return d.value
 }
 

@@ -39,7 +39,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/atomic"
 
@@ -51,16 +51,16 @@ import (
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	id := "interation-query-workflow-test-sticky"
 	wt := "interation-query-workflow-test-sticky-type"
-	tl := "interation-query-workflow-test-sticky-tasklist"
-	stl := "interation-query-workflow-test-sticky-tasklist-sticky"
+	tl := "interation-query-workflow-test-sticky-taskqueue"
+	stl := "interation-query-workflow-test-sticky-taskqueue-sticky"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
-	stickyTaskList := &tasklistpb.TaskList{Name: stl}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl}
 	stickyScheduleToStartTimeoutSeconds := 10
 
 	// Start workflow execution
@@ -69,7 +69,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -97,7 +97,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -135,14 +135,14 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	poller := &TaskPoller{
 		Engine:                              s.engine,
 		Namespace:                           s.namespace,
-		TaskList:                            taskList,
+		TaskQueue:                           taskQueue,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
 		ActivityHandler:                     atHandler,
 		QueryHandler:                        queryHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
-		StickyTaskList:                      stickyTaskList,
+		StickyTaskQueue:                     stickyTaskQueue,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
@@ -211,16 +211,16 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	id := "interation-query-workflow-test-sticky-timeout"
 	wt := "interation-query-workflow-test-sticky-timeout-type"
-	tl := "interation-query-workflow-test-sticky-timeout-tasklist"
-	stl := "interation-query-workflow-test-sticky-timeout-tasklist-sticky"
+	tl := "interation-query-workflow-test-sticky-timeout-taskqueue"
+	stl := "interation-query-workflow-test-sticky-timeout-taskqueue-sticky"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
-	stickyTaskList := &tasklistpb.TaskList{Name: stl}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl}
 	stickyScheduleToStartTimeoutSeconds := 10
 
 	// Start workflow execution
@@ -229,7 +229,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -257,7 +257,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -295,14 +295,14 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	poller := &TaskPoller{
 		Engine:                              s.engine,
 		Namespace:                           s.namespace,
-		TaskList:                            taskList,
+		TaskQueue:                           taskQueue,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
 		ActivityHandler:                     atHandler,
 		QueryHandler:                        queryHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
-		StickyTaskList:                      stickyTaskList,
+		StickyTaskQueue:                     stickyTaskQueue,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
@@ -335,8 +335,8 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		// here we poll on normal tasklist, to simulate a worker crash and restart
-		// on the server side, server will first try the sticky tasklist and then the normal tasklist
+		// here we poll on normal taskqueue, to simulate a worker crash and restart
+		// on the server side, server will first try the sticky taskqueue and then the normal taskqueue
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
@@ -358,14 +358,14 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	id := "integration-query-workflow-test-non-sticky"
 	wt := "integration-query-workflow-test-non-sticky-type"
-	tl := "integration-query-workflow-test-non-sticky-tasklist"
+	tl := "integration-query-workflow-test-non-sticky-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -373,7 +373,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -401,7 +401,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -438,7 +438,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -566,14 +566,14 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	id := "integration-query-workflow-test-consistent-piggyback-query"
 	wt := "integration-query-workflow-test-consistent-piggyback-query-type"
-	tl := "integration-query-workflow-test-consistent-piggyback-query-tasklist"
+	tl := "integration-query-workflow-test-consistent-piggyback-query-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -581,7 +581,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -610,7 +610,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -654,7 +654,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -750,14 +750,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	id := "integration-query-workflow-test-consistent-timeout"
 	wt := "integration-query-workflow-test-consistent-timeout-type"
-	tl := "integration-query-workflow-test-consistent-timeout-tasklist"
+	tl := "integration-query-workflow-test-consistent-timeout-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -765,7 +765,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
@@ -793,7 +793,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
@@ -837,7 +837,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -908,14 +908,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonSticky() {
 	id := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky"
 	wt := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky-type"
-	tl := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky-tasklist"
+	tl := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -923,7 +923,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
@@ -952,7 +952,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
@@ -998,7 +998,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -1091,18 +1091,18 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky() {
 	id := "integration-query-workflow-test-consistent-new-decision-task-sticky"
 	wt := "integration-query-workflow-test-consistent-new-decision-task-sticky-type"
-	tl := "integration-query-workflow-test-consistent-new-decision-task-sticky-tasklist"
-	stl := "integration-query-workflow-test-consistent-new-decision-task-sticky-tasklist-sticky"
+	tl := "integration-query-workflow-test-consistent-new-decision-task-sticky-taskqueue"
+	stl := "integration-query-workflow-test-consistent-new-decision-task-sticky-taskqueue-sticky"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
-	stickyTaskList := &tasklistpb.TaskList{}
-	stickyTaskList.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{}
+	stickyTaskQueue.Name = stl
 	stickyScheduleToStartTimeoutSeconds := 10
 
 	// Start workflow execution
@@ -1111,7 +1111,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
@@ -1139,7 +1139,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
@@ -1185,14 +1185,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	poller := &TaskPoller{
 		Engine:                              s.engine,
 		Namespace:                           s.namespace,
-		TaskList:                            taskList,
+		TaskQueue:                           taskQueue,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
 		ActivityHandler:                     atHandler,
 		QueryHandler:                        queryHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
-		StickyTaskList:                      stickyTaskList,
+		StickyTaskQueue:                     stickyTaskQueue,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
@@ -1309,13 +1309,13 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	id := "integration-test-query-workflow-before-first-decision"
 	wt := "integration-test-query-workflow-before-first-decision-type"
-	tl := "integration-test-query-workflow-before-first-decision-tasklist"
+	tl := "integration-test-query-workflow-before-first-decision-taskqueue"
 	identity := "worker1"
 	queryType := "test-query"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1323,7 +1323,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,

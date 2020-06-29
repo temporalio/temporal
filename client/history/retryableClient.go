@@ -162,15 +162,15 @@ func (c *retryableClient) PollMutableState(
 	return resp, err
 }
 
-func (c *retryableClient) ResetStickyTaskList(
+func (c *retryableClient) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *historyservice.ResetStickyTaskListRequest,
-	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
+	request *historyservice.ResetStickyTaskQueueRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
 
-	var resp *historyservice.ResetStickyTaskListResponse
+	var resp *historyservice.ResetStickyTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
+		resp, err = c.client.ResetStickyTaskQueue(ctx, request, opts...)
 		return err
 	}
 

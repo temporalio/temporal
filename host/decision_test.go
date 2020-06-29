@@ -33,7 +33,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common/codec"
@@ -48,13 +48,13 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{
+	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	stikyTaskList := &tasklistpb.TaskList{
-		Name: "test-sticky-tasklist",
-		Kind: enumspb.TASK_LIST_KIND_STICKY,
+	stikyTaskQueue := &taskqueuepb.TaskQueue{
+		Name: "test-sticky-taskqueue",
+		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -62,7 +62,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  20,
 		WorkflowTaskTimeoutSeconds: 3,
@@ -82,7 +82,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	// start decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -96,8 +96,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		resp2, err2 := s.engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Decisions: []*decisionpb.Decision{},
-			StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-				WorkerTaskList:                stikyTaskList,
+			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				WorkerTaskQueue:               stikyTaskQueue,
 				ScheduleToStartTimeoutSeconds: 5,
 			},
 			ReturnNewDecisionTask:      true,
@@ -109,7 +109,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 			resp, err := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 				Namespace: s.namespace,
-				TaskList:  taskList,
+				TaskQueue: taskQueue,
 				Identity:  identity,
 			})
 			s.NoError(err)
@@ -133,8 +133,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 				},
 				},
 			}},
-		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-			WorkerTaskList:                stikyTaskList,
+		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
 		ReturnNewDecisionTask:      true,
@@ -154,13 +154,13 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{
+	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	stikyTaskList := &tasklistpb.TaskList{
-		Name: "test-sticky-tasklist",
-		Kind: enumspb.TASK_LIST_KIND_STICKY,
+	stikyTaskQueue := &taskqueuepb.TaskQueue{
+		Name: "test-sticky-taskqueue",
+		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -168,7 +168,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  20,
 		WorkflowTaskTimeoutSeconds: 5,
@@ -188,7 +188,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	// start decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -199,8 +199,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	resp2, err2 := s.engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
 		Decisions: []*decisionpb.Decision{},
-		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-			WorkerTaskList:                stikyTaskList,
+		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
 		ReturnNewDecisionTask:      true,
@@ -220,8 +220,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 						"result": payloads.EncodeString("local activity result"),
 					}}},
 			}},
-		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-			WorkerTaskList:                stikyTaskList,
+		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
 		ReturnNewDecisionTask:      true,
@@ -241,8 +241,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 						"result": payloads.EncodeString("local activity result"),
 					}}},
 			}},
-		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-			WorkerTaskList:                stikyTaskList,
+		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
 		ReturnNewDecisionTask:      true,
@@ -260,8 +260,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				},
 				},
 			}},
-		StickyAttributes: &tasklistpb.StickyExecutionAttributes{
-			WorkerTaskList:                stikyTaskList,
+		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
 		},
 		ReturnNewDecisionTask:      true,
@@ -299,14 +299,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -337,7 +337,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -372,14 +372,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -399,7 +399,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	// start decision to make signals into bufferedEvents
 	_, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -445,14 +445,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -474,7 +474,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	// start decision to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -530,14 +530,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -558,7 +558,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
-			TaskList:  taskList,
+			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
 		s.NoError(err1)
@@ -595,7 +595,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -633,14 +633,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -661,7 +661,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
-			TaskList:  taskList,
+			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
 		s.NoError(err1)
@@ -687,7 +687,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	// start decision to make signals into bufferedEvents
 	_, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)
@@ -733,14 +733,14 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &tasklistpb.TaskList{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               workflowType,
-		TaskList:                   taskList,
+		TaskQueue:                  taskQueue,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  3,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -761,7 +761,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	for i := 0; i < 10; i++ {
 		resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 			Namespace: s.namespace,
-			TaskList:  taskList,
+			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
 		s.NoError(err1)
@@ -787,7 +787,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	// start decision to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
 		Namespace: s.namespace,
-		TaskList:  taskList,
+		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
 	s.NoError(err1)

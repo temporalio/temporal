@@ -183,7 +183,7 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 
 func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int {
 	size := len(executionInfo.WorkflowID)
-	size += len(executionInfo.TaskList)
+	size += len(executionInfo.TaskQueue)
 	size += len(executionInfo.WorkflowTypeName)
 	size += len(executionInfo.ParentWorkflowID)
 

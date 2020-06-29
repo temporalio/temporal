@@ -38,13 +38,13 @@ const (
 	decisionTaskTimeout           = 10 * time.Second
 	activityTaskTimeout           = 3 * time.Minute
 	childWorkflowTimeout          = 6 * time.Minute
-	taskListName                  = "canary-task-queue"
+	taskQueueName                 = "canary-task-queue"
 	ctxKeyActivityRuntime         = "runtime"
 	ctxKeyActivityArchivalRuntime = "runtime-archival"
 	ctxKeyActivitySystemClient    = "system-client"
 	archivalNamespace             = "canary-archival-namespace"
 	systemNamespace               = "temporal-system"
-	archivalTaskListName          = "canary-archival-task-queue"
+	archivalTaskQueueName         = "canary-archival-task-queue"
 )
 
 // workflowVersion represents the current version of every single

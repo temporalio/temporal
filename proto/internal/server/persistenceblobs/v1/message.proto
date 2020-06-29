@@ -30,7 +30,7 @@ import "temporal/common/v1/message.proto";
 import "temporal/enums/v1/workflow.proto";
 import "temporal/enums/v1/namespace.proto";
 import "temporal/namespace/v1/message.proto";
-import "temporal/enums/v1/task_list.proto";
+import "temporal/enums/v1/task_queue.proto";
 import "temporal/failure/v1/message.proto";
 
 import "server/enums/v1/common.proto";
@@ -64,7 +64,7 @@ message ActivityInfo {
     int64 cancel_request_id = 17;
     int32 timer_task_status = 18;
     int32 attempt = 19;
-    string task_list = 20;
+    string task_queue = 20;
     string started_identity = 21;
     bool has_retry_policy = 22;
     int32 retry_initial_interval_seconds = 23;
@@ -138,7 +138,7 @@ message TransferTaskInfo {
     string target_namespace_id = 5;
     string target_workflow_id = 6;
     string target_run_id = 7;
-    string task_list = 8;
+    string task_queue = 8;
     bool target_child_workflow_only = 9;
     int64 schedule_id = 10;
     int64 version = 11;
@@ -195,11 +195,11 @@ message AllocatedTaskInfo {
     int64 task_id = 8;
 }
 
-message TaskListInfo {
+message TaskQueueInfo {
     string namespace_id = 1;
     string name = 2;
-    temporal.enums.v1.TaskListType task_type = 3;
-    temporal.enums.v1.TaskListKind kind = 5;
+    temporal.enums.v1.TaskQueueType task_type = 3;
+    temporal.enums.v1.TaskQueueKind kind = 5;
     int64 ack_level = 6;
     google.protobuf.Timestamp expiry = 7;
     google.protobuf.Timestamp last_updated = 8;
@@ -239,7 +239,7 @@ message WorkflowExecutionInfo {
     int64 completion_event_batch_id = 5;
     bytes completion_event = 6;
     string completion_event_encoding = 7;
-    string task_list = 8;
+    string task_queue = 8;
     string workflow_type_name = 9;
     int32 workflow_execution_timeout_seconds = 10;
     int32 workflow_run_timeout_seconds = 11;
@@ -263,7 +263,7 @@ message WorkflowExecutionInfo {
     int64 decision_original_scheduled_timestamp_nanos = 32;
     string decision_request_id = 34;
     string cancel_request_id = 35;
-    string sticky_task_list = 36;
+    string sticky_task_queue = 36;
     int64 sticky_schedule_to_start_timeout = 37;
     int64 retry_attempt = 38;
     int32 retry_initial_interval_seconds = 39;

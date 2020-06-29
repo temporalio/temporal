@@ -51,7 +51,7 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/client"
@@ -162,7 +162,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
-		if err := ioutil.WriteFile(outputFileName, data, 0777); err != nil {
+		if err := ioutil.WriteFile(outputFileName, data, 0666); err != nil {
 			ErrorAndExit("Failed to export history data file.", err)
 		}
 	}
@@ -182,7 +182,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	serviceClient := cFactory.FrontendClient(c)
 
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
-	taskList := getRequiredOption(c, FlagTaskList)
+	taskQueue := getRequiredOption(c, FlagTaskQueue)
 	workflowType := getRequiredOption(c, FlagWorkflowType)
 	et := c.Int(FlagExecutionTimeout)
 	if et == 0 {
@@ -210,8 +210,8 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		WorkflowType: &commonpb.WorkflowType{
 			Name: workflowType,
 		},
-		TaskList: &tasklistpb.TaskList{
-			Name: taskList,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
 		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: int32(et),
@@ -262,7 +262,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			{"Run Id", resp.GetRunId()},
 			{"Type", workflowType},
 			{"Namespace", namespace},
-			{"Task List", taskList},
+			{"Task Queue", taskQueue},
 			{"Args", truncate(payloads.ToString(input))}, // in case of large input
 		}
 		table.SetBorder(false)
@@ -971,7 +971,7 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Task List", "Start Time", "Execution Time"}
+	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Task Queue", "Start Time", "Execution Time"}
 	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	if !queryOpen {
 		header = append(header, "End Time")
@@ -1070,7 +1070,7 @@ func appendWorkflowExecutionsToTable(
 			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
 			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
 		}
-		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskList(), startTime, executionTime}
+		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskQueue(), startTime, executionTime}
 		if !queryOpen {
 			row = append(row, closeTime)
 		}

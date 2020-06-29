@@ -29,6 +29,9 @@
 package history
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	enums "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice/v1"
@@ -42,8 +45,6 @@ import (
 	failure "go.temporal.io/temporal-proto/failure/v1"
 	history "go.temporal.io/temporal-proto/history/v1"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
-	reflect "reflect"
-	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -1533,18 +1534,18 @@ func (mr *MockmutableStateMockRecorder) IsSignalRequested(requestID interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSignalRequested", reflect.TypeOf((*MockmutableState)(nil).IsSignalRequested), requestID)
 }
 
-// IsStickyTaskListEnabled mocks base method.
-func (m *MockmutableState) IsStickyTaskListEnabled() bool {
+// IsStickyTaskQueueEnabled mocks base method.
+func (m *MockmutableState) IsStickyTaskQueueEnabled() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsStickyTaskListEnabled")
+	ret := m.ctrl.Call(m, "IsStickyTaskQueueEnabled")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// IsStickyTaskListEnabled indicates an expected call of IsStickyTaskListEnabled.
-func (mr *MockmutableStateMockRecorder) IsStickyTaskListEnabled() *gomock.Call {
+// IsStickyTaskQueueEnabled indicates an expected call of IsStickyTaskQueueEnabled.
+func (mr *MockmutableStateMockRecorder) IsStickyTaskQueueEnabled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskListEnabled", reflect.TypeOf((*MockmutableState)(nil).IsStickyTaskListEnabled))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskQueueEnabled", reflect.TypeOf((*MockmutableState)(nil).IsStickyTaskQueueEnabled))
 }
 
 // IsWorkflowExecutionRunning mocks base method.

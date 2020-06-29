@@ -28,7 +28,7 @@ import (
 	"context"
 	"strings"
 
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
@@ -61,7 +61,7 @@ func (c *metricClient) AddActivityTask(
 	c.emitForwardedFromStats(
 		metrics.MatchingClientAddActivityTaskScope,
 		request.GetForwardedFrom(),
-		request.TaskList,
+		request.TaskQueue,
 	)
 
 	resp, err := c.client.AddActivityTask(ctx, request, opts...)
@@ -85,7 +85,7 @@ func (c *metricClient) AddDecisionTask(
 	c.emitForwardedFromStats(
 		metrics.MatchingClientAddDecisionTaskScope,
 		request.GetForwardedFrom(),
-		request.TaskList,
+		request.TaskQueue,
 	)
 
 	resp, err := c.client.AddDecisionTask(ctx, request, opts...)
@@ -110,7 +110,7 @@ func (c *metricClient) PollForActivityTask(
 		c.emitForwardedFromStats(
 			metrics.MatchingClientPollForActivityTaskScope,
 			request.GetForwardedFrom(),
-			request.PollRequest.TaskList,
+			request.PollRequest.TaskQueue,
 		)
 	}
 
@@ -136,7 +136,7 @@ func (c *metricClient) PollForDecisionTask(
 		c.emitForwardedFromStats(
 			metrics.MatchingClientPollForDecisionTaskScope,
 			request.GetForwardedFrom(),
-			request.PollRequest.TaskList,
+			request.PollRequest.TaskQueue,
 		)
 	}
 
@@ -161,7 +161,7 @@ func (c *metricClient) QueryWorkflow(
 	c.emitForwardedFromStats(
 		metrics.MatchingClientQueryWorkflowScope,
 		request.GetForwardedFrom(),
-		request.TaskList,
+		request.TaskQueue,
 	)
 
 	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
@@ -210,53 +210,53 @@ func (c *metricClient) CancelOutstandingPoll(
 	return resp, err
 }
 
-func (c *metricClient) DescribeTaskList(
+func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
-	request *matchingservice.DescribeTaskListRequest,
-	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskListScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeTaskList(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) ListTaskListPartitions(
+func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *matchingservice.ListTaskListPartitionsRequest,
-	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListTaskListPartitions(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientLatency)
+	resp, err := c.client.ListTaskQueuePartitions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskList *tasklistpb.TaskList) {
-	if taskList == nil {
+func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskQueue *taskqueuepb.TaskQueue) {
+	if taskQueue == nil {
 		return
 	}
-	isChildPartition := strings.HasPrefix(taskList.GetName(), taskListPartitionPrefix)
+	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
 		c.metricsClient.IncCounter(scope, metrics.MatchingClientForwardedCounter)
 	default:
 		if isChildPartition {
-			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskListName)
+			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskQueueName)
 		}
 	}
 }

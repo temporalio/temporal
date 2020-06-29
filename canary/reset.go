@@ -88,7 +88,7 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 
 	expiration := time.Duration(info.WorkflowRunTimeoutSeconds) * time.Second
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		ScheduleToStartTimeout: expiration,
 		StartToCloseTimeout:    expiration,
 	})
@@ -121,14 +121,14 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 	}
 
 	activityCtxWithRetry := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		ScheduleToCloseTimeout: expiration,
 		ScheduleToStartTimeout: expiration,
 		StartToCloseTimeout:    expiration,
 		RetryPolicy:            retryPolicy,
 	})
 	activityCtxNoRetry := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskList:               taskListName,
+		TaskQueue:              taskQueueName,
 		ScheduleToStartTimeout: expiration,
 		StartToCloseTimeout:    expiration,
 	})

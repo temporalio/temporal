@@ -89,8 +89,8 @@ type IntPropertyFn func(opts ...FilterOption) int
 // IntPropertyFnWithNamespaceFilter is a wrapper to get int property from dynamic config with namespace as filter
 type IntPropertyFnWithNamespaceFilter func(namespace string) int
 
-// IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskList, taskType
-type IntPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) int
+// IntPropertyFnWithTaskQueueInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskQueue, taskType
+type IntPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int
 
 // IntPropertyFnWithShardIDFilter is a wrapper to get int property from dynamic config with shardID as filter
 type IntPropertyFnWithShardIDFilter func(shardID int) int
@@ -110,8 +110,8 @@ type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
 // DurationPropertyFnWithNamespaceIDFilter is a wrapper to get duration property from dynamic config with namespaceID as filter
 type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
 
-// DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskList, taskType
-type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) time.Duration
+// DurationPropertyFnWithTaskQueueInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskQueue, taskType
+type DurationPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
 
 // DurationPropertyFnWithShardIDFilter is a wrapper to get duration property from dynamic config with shardID as filter
 type DurationPropertyFnWithShardIDFilter func(shardID int) time.Duration
@@ -134,8 +134,8 @@ type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
 // BoolPropertyFnWithNamespaceIDFilter is a wrapper to get bool property from dynamic config
 type BoolPropertyFnWithNamespaceIDFilter func(id string) bool
 
-// BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskList, taskType
-type BoolPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType enumspb.TaskListType) bool
+// BoolPropertyFnWithTaskQueueInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskQueue, taskType
+type BoolPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
 
 // GetProperty gets a interface property and returns defaultValue if property is not found
 func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
@@ -182,12 +182,12 @@ func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int
 	}
 }
 
-// GetIntPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue int) IntPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType enumspb.TaskListType) int {
+// GetIntPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue int) IntPropertyFnWithTaskQueueInfoFilters {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
 		val, err := c.client.GetIntValue(
 			key,
-			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {
@@ -278,12 +278,12 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 	}
 }
 
-// GetDurationPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType enumspb.TaskListType) time.Duration {
+// GetDurationPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskQueueInfoFilters {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
-			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {
@@ -382,12 +382,12 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValu
 	}
 }
 
-// GetBoolPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an bool
-func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType enumspb.TaskListType) bool {
+// GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an bool
+func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskQueueInfoFilters {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
 		val, err := c.client.GetBoolValue(
 			key,
-			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {

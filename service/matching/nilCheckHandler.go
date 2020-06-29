@@ -109,18 +109,18 @@ func (h *NilCheckHandler) CancelOutstandingPoll(ctx context.Context, request *ma
 	return resp, err
 }
 
-func (h *NilCheckHandler) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
-	resp, err := h.parentHandler.DescribeTaskList(ctx, request)
+func (h *NilCheckHandler) DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error) {
+	resp, err := h.parentHandler.DescribeTaskQueue(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.DescribeTaskListResponse{}
+		resp = &matchingservice.DescribeTaskQueueResponse{}
 	}
 	return resp, err
 }
 
-func (h *NilCheckHandler) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	resp, err := h.parentHandler.ListTaskListPartitions(ctx, request)
+func (h *NilCheckHandler) ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	resp, err := h.parentHandler.ListTaskQueuePartitions(ctx, request)
 	if resp == nil && err == nil {
-		resp = &matchingservice.ListTaskListPartitionsResponse{}
+		resp = &matchingservice.ListTaskQueuePartitionsResponse{}
 	}
 	return resp, err
 }

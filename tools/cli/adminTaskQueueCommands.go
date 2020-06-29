@@ -32,55 +32,55 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/common/persistence"
 )
 
-// AdminDescribeTaskList displays poller and status information of task list.
-func AdminDescribeTaskList(c *cli.Context) {
+// AdminDescribeTaskQueue displays poller and status information of task queue.
+func AdminDescribeTaskQueue(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
-	taskList := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	taskQueue := getRequiredOption(c, FlagTaskQueue)
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
-		ErrorAndExit("Failed to parse TaskList Type", err)
+		ErrorAndExit("Failed to parse TaskQueue Type", err)
 	}
-	tlType := enumspb.TaskListType(tlTypeInt)
-	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
-		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	tlType := enumspb.TaskQueueType(tlTypeInt)
+	if tlType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskQueue type Unspecified is currently not supported", nil)
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	request := &workflowservice.DescribeTaskListRequest{
-		Namespace:             namespace,
-		TaskList:              &tasklistpb.TaskList{Name: taskList},
-		TaskListType:          tlType,
-		IncludeTaskListStatus: true,
+	request := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+		TaskQueueType:          tlType,
+		IncludeTaskQueueStatus: true,
 	}
 
-	response, err := frontendClient.DescribeTaskList(ctx, request)
+	response, err := frontendClient.DescribeTaskQueue(ctx, request)
 	if err != nil {
-		ErrorAndExit("Operation DescribeTaskList failed.", err)
+		ErrorAndExit("Operation DescribeTaskQueue failed.", err)
 	}
 
-	taskListStatus := response.GetTaskListStatus()
-	if taskListStatus == nil {
-		ErrorAndExit(colorMagenta("No tasklist status information."), nil)
+	taskQueueStatus := response.GetTaskQueueStatus()
+	if taskQueueStatus == nil {
+		ErrorAndExit(colorMagenta("No taskqueue status information."), nil)
 	}
-	printTaskListStatus(taskListStatus)
+	printTaskQueueStatus(taskQueueStatus)
 	fmt.Printf("\n")
 
 	pollers := response.Pollers
 	if len(pollers) == 0 {
-		ErrorAndExit(colorMagenta("No poller for tasklist: "+taskList), nil)
+		ErrorAndExit(colorMagenta("No poller for taskqueue: "+taskQueue), nil)
 	}
 	printPollerInfo(pollers, tlType)
 }
 
-func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
-	taskIDBlock := taskListStatus.GetTaskIdBlock()
+func printTaskQueueStatus(taskQueueStatus *taskqueuepb.TaskQueueStatus) {
+	taskIDBlock := taskQueueStatus.GetTaskIdBlock()
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
@@ -88,19 +88,19 @@ func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
 	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskId", "Lease End TaskId"})
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
-	table.Append([]string{strconv.FormatInt(taskListStatus.GetReadLevel(), 10),
-		strconv.FormatInt(taskListStatus.GetAckLevel(), 10),
-		strconv.FormatInt(taskListStatus.GetBacklogCountHint(), 10),
+	table.Append([]string{strconv.FormatInt(taskQueueStatus.GetReadLevel(), 10),
+		strconv.FormatInt(taskQueueStatus.GetAckLevel(), 10),
+		strconv.FormatInt(taskQueueStatus.GetBacklogCountHint(), 10),
 		strconv.FormatInt(taskIDBlock.GetStartId(), 10),
 		strconv.FormatInt(taskIDBlock.GetEndId(), 10)})
 	table.Render()
 }
 
-func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.TaskListType) {
+func printPollerInfo(pollers []*taskqueuepb.PollerInfo, taskQueueType enumspb.TaskQueueType) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == enumspb.TASK_LIST_TYPE_ACTIVITY {
+	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
@@ -113,17 +113,17 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType enumspb.Task
 	table.Render()
 }
 
-// AdminListTaskListTasks displays task information
-func AdminListTaskListTasks(c *cli.Context) {
+// AdminListTaskQueueTasks displays task information
+func AdminListTaskQueueTasks(c *cli.Context) {
 	namespace := getRequiredOption(c, FlagNamespaceID)
-	tlName := getRequiredOption(c, FlagTaskList)
-	tlTypeInt, err := stringToEnum(c.String(FlagTaskListType), enumspb.TaskListType_value)
+	tlName := getRequiredOption(c, FlagTaskQueue)
+	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
-		ErrorAndExit("Failed to parse TaskList Type", err)
+		ErrorAndExit("Failed to parse TaskQueue Type", err)
 	}
-	tlType := enumspb.TaskListType(tlTypeInt)
-	if tlType == enumspb.TASK_LIST_TYPE_UNSPECIFIED {
-		ErrorAndExit("TaskList type Unspecified is currently not supported", nil)
+	tlType := enumspb.TaskQueueType(tlTypeInt)
+	if tlType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		ErrorAndExit("TaskQueue type Unspecified is currently not supported", nil)
 	}
 	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
 	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
@@ -136,7 +136,7 @@ func AdminListTaskListTasks(c *cli.Context) {
 		ErrorAndExit("Failed to initialize task manager", err)
 	}
 
-	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskList: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
+	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskQueue: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		response, err := taskManager.GetTasks(req)
 		if err != nil {
@@ -156,7 +156,7 @@ func AdminListTaskListTasks(c *cli.Context) {
 				}
 				filteredTasks = append(filteredTasks, task)
 			}
-			
+
 			tasks = filteredTasks
 		}
 

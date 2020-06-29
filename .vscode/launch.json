@@ -65,8 +65,8 @@
 			"args": [
 				"workflow",
 				"run",
-				"--tasklist",
-				"TestTaskList",
+				"--taskqueue",
+				"TestTaskQueue",
 				"--workflow_type",
 				"TestWorkflow_test",
 				"--execution_timeout",

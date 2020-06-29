@@ -46,7 +46,7 @@ import (
 	filterpb "go.temporal.io/temporal-proto/filter/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
@@ -88,7 +88,7 @@ func TestIntegrationSuite(t *testing.T) {
 func (s *integrationSuite) TestStartWorkflowExecution() {
 	id := "integration-start-workflow-test"
 	wt := "integration-start-workflow-test-type"
-	tl := "integration-start-workflow-test-tasklist"
+	tl := "integration-start-workflow-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -96,7 +96,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		Namespace:                 s.namespace,
 		WorkflowId:                id,
 		WorkflowType:              &commonpb.WorkflowType{Name: wt},
-		TaskList:                  &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tl},
 		Input:                     nil,
 		WorkflowRunTimeoutSeconds: 100,
 		Identity:                  identity,
@@ -127,7 +127,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -143,7 +143,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 func (s *integrationSuite) TestTerminateWorkflow() {
 	id := "integration-terminate-workflow-test"
 	wt := "integration-terminate-workflow-test-type"
-	tl := "integration-terminate-workflow-test-tasklist"
+	tl := "integration-terminate-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -152,7 +152,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -178,7 +178,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
@@ -205,7 +205,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -269,7 +269,7 @@ StartNewExecutionLoop:
 			Namespace:                  s.namespace,
 			WorkflowId:                 id,
 			WorkflowType:               &commonpb.WorkflowType{Name: wt},
-			TaskList:                   &tasklistpb.TaskList{Name: tl},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 			Input:                      nil,
 			WorkflowRunTimeoutSeconds:  100,
 			WorkflowTaskTimeoutSeconds: 1,
@@ -295,7 +295,7 @@ StartNewExecutionLoop:
 func (s *integrationSuite) TestSequentialWorkflow() {
 	id := "integration-sequential-workflow-test"
 	wt := "integration-sequential-workflow-test-type"
-	tl := "integration-sequential-workflow-test-tasklist"
+	tl := "integration-sequential-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -304,7 +304,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -331,7 +331,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
@@ -372,7 +372,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -402,7 +402,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	id := "integration-complete-decision-create-new-test"
 	wt := "integration-complete-decision-create-new-test-type"
-	tl := "integration-complete-decision-create-new-test-tasklist"
+	tl := "integration-complete-decision-create-new-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -410,7 +410,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -447,8 +447,8 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
-		StickyTaskList:  &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
+		StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -480,7 +480,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	id := "integration-timeouts-workflow-test"
 	wt := "integration-timeouts-workflow-test-type"
-	tl := "integration-timeouts-workflow-test-tasklist"
+	tl := "integration-timeouts-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_timer"
 
@@ -489,7 +489,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -517,7 +517,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 1,
 					ScheduleToStartTimeoutSeconds: 1,
@@ -549,7 +549,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -597,7 +597,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 func (s *integrationSuite) TestWorkflowRetry() {
 	id := "integration-wf-retry-test"
 	wt := "integration-wf-retry-type"
-	tl := "integration-wf-retry-tasklist"
+	tl := "integration-wf-retry-taskqueue"
 	identity := "worker1"
 
 	initialIntervalInSeconds := 1
@@ -608,7 +608,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -656,7 +656,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -699,7 +699,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 func (s *integrationSuite) TestWorkflowRetryFailures() {
 	id := "integration-wf-retry-failures-test"
 	wt := "integration-wf-retry-failures-type"
-	tl := "integration-wf-retry-failures-tasklist"
+	tl := "integration-wf-retry-failures-taskqueue"
 	identity := "worker1"
 
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) decisionTaskHandler {
@@ -737,7 +737,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -761,7 +761,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -792,7 +792,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -816,7 +816,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	poller = &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -833,7 +833,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 func (s *integrationSuite) TestCronWorkflow() {
 	id := "integration-wf-cron-test"
 	wt := "integration-wf-cron-type"
-	tl := "integration-wf-cron-tasklist"
+	tl := "integration-wf-cron-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 3s"
 
@@ -854,7 +854,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -899,7 +899,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -1039,7 +1039,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 func (s *integrationSuite) TestCronWorkflowTimeout() {
 	id := "integration-wf-cron-timeout-test"
 	wt := "integration-wf-cron-timeout-type"
-	tl := "integration-wf-cron-timeout-tasklist"
+	tl := "integration-wf-cron-timeout-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 3s"
 
@@ -1059,7 +1059,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  1, // set workflow timeout to 1s
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1093,7 +1093,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -1139,7 +1139,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 func (s *integrationSuite) TestSequential_UserTimers() {
 	id := "integration-sequential-user-timers-test"
 	wt := "integration-sequential-user-timers-test-type"
-	tl := "integration-sequential-user-timers-test-tasklist"
+	tl := "integration-sequential-user-timers-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1147,7 +1147,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1189,7 +1189,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -1212,7 +1212,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	id := "integration-rate-limit-buffered-events-test"
 	wt := "integration-rate-limit-buffered-events-test-type"
-	tl := "integration-rate-limit-buffered-events-test-tasklist"
+	tl := "integration-rate-limit-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -1221,7 +1221,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -1281,7 +1281,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -1308,7 +1308,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 func (s *integrationSuite) TestBufferedEvents() {
 	id := "integration-buffered-events-test"
 	wt := "integration-buffered-events-test-type"
-	tl := "integration-buffered-events-test-tasklist"
+	tl := "integration-buffered-events-test-taskqueue"
 	identity := "worker1"
 	signalName := "buffered-signal"
 
@@ -1318,7 +1318,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1356,7 +1356,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -1384,7 +1384,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -1425,7 +1425,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	id := "integration-describe-wfe-test"
 	wt := "integration-describe-wfe-test-type"
-	tl := "integration-describe-wfe-test-tasklist"
+	tl := "integration-describe-wfe-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -1434,7 +1434,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1475,7 +1475,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -1502,7 +1502,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -1550,7 +1550,7 @@ func (s *integrationSuite) TestVisibility() {
 	id1 := "integration-visibility-test1"
 	id2 := "integration-visibility-test2"
 	wt := "integration-visibility-test-type"
-	tl := "integration-visibility-test-tasklist"
+	tl := "integration-visibility-test-taskqueue"
 	identity := "worker1"
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -1558,7 +1558,7 @@ func (s *integrationSuite) TestVisibility() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id1,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -1582,7 +1582,7 @@ func (s *integrationSuite) TestVisibility() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -1620,7 +1620,7 @@ func (s *integrationSuite) TestVisibility() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id2,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -1678,8 +1678,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	childID := "integration-child-workflow-test-child"
 	wtParent := "integration-child-workflow-test-parent-type"
 	wtChild := "integration-child-workflow-test-child-type"
-	tlParent := "integration-child-workflow-test-parent-tasklist"
-	tlChild := "integration-child-workflow-test-child-tasklist"
+	tlParent := "integration-child-workflow-test-parent-taskqueue"
+	tlChild := "integration-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{}
@@ -1688,10 +1688,10 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	childWorkflowType := &commonpb.WorkflowType{}
 	childWorkflowType.Name = wtChild
 
-	taskListParent := &tasklistpb.TaskList{}
-	taskListParent.Name = tlParent
-	taskListChild := &tasklistpb.TaskList{}
-	taskListChild.Name = tlChild
+	taskQueueParent := &taskqueuepb.TaskQueue{}
+	taskQueueParent.Name = tlParent
+	taskQueueChild := &taskqueuepb.TaskQueue{}
+	taskQueueChild.Name = tlChild
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -1702,7 +1702,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 parentID,
 		WorkflowType:               parentWorkflowType,
-		TaskList:                   taskListParent,
+		TaskQueue:                  taskQueueParent,
 		Input:                      nil,
 		Header:                     header,
 		WorkflowRunTimeoutSeconds:  100,
@@ -1747,7 +1747,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 						WorkflowId:                 childID,
 						WorkflowType:               childWorkflowType,
-						TaskList:                   taskListChild,
+						TaskQueue:                  taskQueueChild,
 						Input:                      payloads.EncodeString("child-workflow-input"),
 						Header:                     header,
 						WorkflowRunTimeoutSeconds:  200,
@@ -1801,7 +1801,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	pollerParent := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskListParent,
+		TaskQueue:       taskQueueParent,
 		Identity:        identity,
 		DecisionHandler: dtHandlerParent,
 		Logger:          s.Logger,
@@ -1811,7 +1811,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	pollerChild := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskListChild,
+		TaskQueue:       taskQueueChild,
 		Identity:        identity,
 		DecisionHandler: dtHandlerChild,
 		Logger:          s.Logger,
@@ -1866,8 +1866,8 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	childID := "integration-cron-child-workflow-test-child"
 	wtParent := "integration-cron-child-workflow-test-parent-type"
 	wtChild := "integration-cron-child-workflow-test-child-type"
-	tlParent := "integration-cron-child-workflow-test-parent-tasklist"
-	tlChild := "integration-cron-child-workflow-test-child-tasklist"
+	tlParent := "integration-cron-child-workflow-test-parent-taskqueue"
+	tlChild := "integration-cron-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	cronSchedule := "@every 3s"
@@ -1877,15 +1877,15 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 
-	taskListParent := &tasklistpb.TaskList{Name: tlParent}
-	taskListChild := &tasklistpb.TaskList{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                  uuid.New(),
 		Namespace:                  s.namespace,
 		WorkflowId:                 parentID,
 		WorkflowType:               parentWorkflowType,
-		TaskList:                   taskListParent,
+		TaskQueue:                  taskQueueParent,
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -1915,7 +1915,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 					WorkflowId:                 childID,
 					WorkflowType:               childWorkflowType,
-					TaskList:                   taskListChild,
+					TaskQueue:                  taskQueueChild,
 					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  200,
 					WorkflowTaskTimeoutSeconds: 2,
@@ -1951,7 +1951,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	pollerParent := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskListParent,
+		TaskQueue:       taskQueueParent,
 		Identity:        identity,
 		DecisionHandler: dtHandlerParent,
 		Logger:          s.Logger,
@@ -1961,7 +1961,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	pollerChild := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskListChild,
+		TaskQueue:       taskQueueChild,
 		Identity:        identity,
 		DecisionHandler: dtHandlerChild,
 		Logger:          s.Logger,
@@ -2067,7 +2067,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 
 	id := "integration-workflow-timeout"
 	wt := "integration-workflow-timeout-type"
-	tl := "integration-workflow-timeout-tasklist"
+	tl := "integration-workflow-timeout-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -2075,7 +2075,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  1,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -2143,7 +2143,7 @@ ListClosedLoop:
 func (s *integrationSuite) TestDecisionTaskFailed() {
 	id := "integration-decisiontask-failed-test"
 	wt := "integration-decisiontask-failed-test-type"
-	tl := "integration-decisiontask-failed-test-tasklist"
+	tl := "integration-decisiontask-failed-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -2153,7 +2153,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
@@ -2209,7 +2209,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -2248,7 +2248,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -2338,10 +2338,10 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
 }
 
-func (s *integrationSuite) TestDescribeTaskList() {
+func (s *integrationSuite) TestDescribeTaskQueue() {
 	workflowID := "integration-get-poller-history"
 	wt := "integration-get-poller-history-type"
-	tl := "integration-get-poller-history-tasklist"
+	tl := "integration-get-poller-history-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -2351,7 +2351,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 workflowID,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -2380,7 +2380,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
@@ -2406,7 +2406,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -2415,11 +2415,11 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	}
 
 	// this function poll events from history side
-	testDescribeTaskList := func(namespace string, tasklist *tasklistpb.TaskList, tasklistType enumspb.TaskListType) []*tasklistpb.PollerInfo {
-		responseInner, errInner := s.engine.DescribeTaskList(NewContext(), &workflowservice.DescribeTaskListRequest{
-			Namespace:    namespace,
-			TaskList:     tasklist,
-			TaskListType: tasklistType,
+	testDescribeTaskQueue := func(namespace string, taskqueue *taskqueuepb.TaskQueue, taskqueueType enumspb.TaskQueueType) []*taskqueuepb.PollerInfo {
+		responseInner, errInner := s.engine.DescribeTaskQueue(NewContext(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     namespace,
+			TaskQueue:     taskqueue,
+			TaskQueueType: taskqueueType,
 		})
 
 		s.NoError(errInner)
@@ -2428,17 +2428,17 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	before := time.Now()
 
-	// when no one polling on the tasklist (activity or decision), there shall be no poller information
-	pollerInfos := testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_ACTIVITY)
+	// when no one polling on the taskqueue (activity or decision), there shall be no poller information
+	pollerInfos := testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_DECISION)
+	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_DECISION)
 	s.Empty(pollerInfos)
 
 	_, errDecision := poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(errDecision)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_DECISION)
+	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_DECISION)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2446,12 +2446,12 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, enumspb.TASK_LIST_TYPE_DECISION)
+	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_DECISION)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2461,7 +2461,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 func (s *integrationSuite) TestTransientDecisionTimeout() {
 	id := "integration-transient-decision-timeout-test"
 	wt := "integration-transient-decision-timeout-test-type"
-	tl := "integration-transient-decision-timeout-test-tasklist"
+	tl := "integration-transient-decision-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2470,7 +2470,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 2,
@@ -2517,7 +2517,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -2551,7 +2551,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	id := "integration-no-transient-decision-after-flush-buffered-events-test"
 	wt := "integration-no-transient-decision-after-flush-buffered-events-test-type"
-	tl := "integration-no-transient-decision-after-flush-buffered-events-test-tasklist"
+	tl := "integration-no-transient-decision-after-flush-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2560,7 +2560,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 20,
@@ -2597,7 +2597,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
-					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  1000,
 					WorkflowTaskTimeoutSeconds: 100,
@@ -2617,7 +2617,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
@@ -2642,7 +2642,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 func (s *integrationSuite) TestRelayDecisionTimeout() {
 	id := "integration-relay-decision-timeout-test"
 	wt := "integration-relay-decision-timeout-test-type"
-	tl := "integration-relay-decision-timeout-test-tasklist"
+	tl := "integration-relay-decision-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2651,7 +2651,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 2,
@@ -2688,7 +2688,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -2737,7 +2737,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	id := "integration-task-processing-protection-for-rate-limit-error-test"
 	wt := "integration-task-processing-protection-for-rate-limit-error-test-type"
-	tl := "integration-task-processing-protection-for-rate-limit-error-test-tasklist"
+	tl := "integration-task-processing-protection-for-rate-limit-error-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2746,7 +2746,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  601,
 		WorkflowTaskTimeoutSeconds: 600,
@@ -2800,7 +2800,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -2848,12 +2848,12 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 	id := "integration-sticky-timeout-non-transient-decision"
 	wt := "integration-sticky-timeout-non-transient-decision-type"
-	tl := "integration-sticky-timeout-non-transient-decision-tasklist"
-	stl := "integration-sticky-timeout-non-transient-decision-tasklist-sticky"
+	tl := "integration-sticky-timeout-non-transient-decision-taskqueue"
+	stl := "integration-sticky-timeout-non-transient-decision-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskList := &tasklistpb.TaskList{}
-	stickyTaskList.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{}
+	stickyTaskQueue.Name = stl
 	stickyScheduleToStartTimeoutSeconds := 2
 
 	// Start workflow execution
@@ -2862,7 +2862,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -2926,12 +2926,12 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 	poller := &TaskPoller{
 		Engine:                              s.engine,
 		Namespace:                           s.namespace,
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
-		StickyTaskList:                      stickyTaskList,
+		StickyTaskQueue:                     stickyTaskQueue,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
@@ -3015,15 +3015,15 @@ WaitForStickyTimeoutLoop:
 	s.Equal(2, failedDecisions, "Mismatched failed decision count")
 }
 
-func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
+func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 	id := "integration-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "integration-reset-sticky-fire-schedule-to-start-timeout-type"
-	tl := "integration-reset-sticky-fire-schedule-to-start-timeout-tasklist"
-	stl := "integration-reset-sticky-fire-schedule-to-start-timeout-tasklist-sticky"
+	tl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
+	stl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskList := &tasklistpb.TaskList{}
-	stickyTaskList.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{}
+	stickyTaskQueue.Name = stl
 	stickyScheduleToStartTimeoutSeconds := 2
 
 	// Start workflow execution
@@ -3032,7 +3032,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -3084,12 +3084,12 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 	poller := &TaskPoller{
 		Engine:                              s.engine,
 		Namespace:                           s.namespace,
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
-		StickyTaskList:                      stickyTaskList,
+		StickyTaskQueue:                     stickyTaskQueue,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
@@ -3106,8 +3106,8 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		RequestId:         uuid.New(),
 	})
 
-	//Reset sticky tasklist before sticky decision task starts
-	s.engine.ResetStickyTaskList(NewContext(), &workflowservice.ResetStickyTaskListRequest{
+	//Reset sticky taskqueue before sticky decision task starts
+	s.engine.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,
 	})
@@ -3182,7 +3182,7 @@ WaitForStickyTimeoutLoop:
 func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	id := "integration-buffered-events-out-of-order-test"
 	wt := "integration-buffered-events-out-of-order-test-type"
-	tl := "integration-buffered-events-out-of-order-test-tasklist"
+	tl := "integration-buffered-events-out-of-order-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -3191,7 +3191,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 20,
@@ -3231,7 +3231,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 					ActivityId:                    "Activity-1",
 					ActivityType:                  &commonpb.ActivityType{Name: "ActivityType"},
 					Namespace:                     s.namespace,
-					TaskList:                      &tasklistpb.TaskList{Name: tl},
+					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 					Input:                         payloads.EncodeString("some random activity input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 100,
@@ -3270,7 +3270,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
@@ -3343,7 +3343,7 @@ type startFunc func() (RunIdGetter, error)
 func (s *integrationSuite) TestStartWithMemo() {
 	id := "integration-start-with-memo-test"
 	wt := "integration-start-with-memo-test-type"
-	tl := "integration-start-with-memo-test-tasklist"
+	tl := "integration-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
@@ -3357,7 +3357,7 @@ func (s *integrationSuite) TestStartWithMemo() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -3368,13 +3368,13 @@ func (s *integrationSuite) TestStartWithMemo() {
 	fn := func() (RunIdGetter, error) {
 		return s.engine.StartWorkflowExecution(NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &tasklistpb.TaskList{Name: tl}, memo)
+	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl}, memo)
 }
 
 func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	id := "integration-signal-with-start-with-memo-test"
 	wt := "integration-signal-with-start-with-memo-test-type"
-	tl := "integration-signal-with-start-with-memo-test-tasklist"
+	tl := "integration-signal-with-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
@@ -3390,7 +3390,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
@@ -3403,13 +3403,13 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	fn := func() (RunIdGetter, error) {
 		return s.engine.SignalWithStartWorkflowExecution(NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &tasklistpb.TaskList{Name: tl}, memo)
+	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl}, memo)
 }
 
 func (s *integrationSuite) TestCancelTimer() {
 	id := "integration-cancel-timer-test"
 	wt := "integration-cancel-timer-test-type"
-	tl := "integration-cancel-timer-test-tasklist"
+	tl := "integration-cancel-timer-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -3417,7 +3417,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1000,
@@ -3491,7 +3491,7 @@ func (s *integrationSuite) TestCancelTimer() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -3540,7 +3540,7 @@ func (s *integrationSuite) TestCancelTimer() {
 func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	id := "integration-cancel-timer-fired-and-buffered-test"
 	wt := "integration-cancel-timer-fired-and-buffered-test-type"
-	tl := "integration-cancel-timer-fired-and-buffered-test-tasklist"
+	tl := "integration-cancel-timer-fired-and-buffered-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -3548,7 +3548,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		Namespace:                  s.namespace,
 		WorkflowId:                 id,
 		WorkflowType:               &commonpb.WorkflowType{Name: wt},
-		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1000,
@@ -3623,7 +3623,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        &tasklistpb.TaskList{Name: tl},
+		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
@@ -3670,7 +3670,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
-func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, taskList *tasklistpb.TaskList, memo *commonpb.Memo) {
+func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo) {
 	identity := "worker1"
 
 	we, err0 := startFn()
@@ -3691,7 +3691,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	poller := &TaskPoller{
 		Engine:          s.engine,
 		Namespace:       s.namespace,
-		TaskList:        taskList,
+		TaskQueue:       taskQueue,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		Logger:          s.Logger,
