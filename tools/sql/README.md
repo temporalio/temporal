@@ -16,12 +16,14 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 - Cadence officially support MySQL and Postgres for SQL. 
 - For other SQL database, you can add it easily as we do for MySQL/Postgres following our code in sql-extensions  
 
+Note: The binaries can also be found in the `ubercadence/server` docker images
+
 ### Do one time database creation and schema setup for a new cluster
 - All command below are taking MySQL as example. For postgres, simply use with "--plugin postgres"
 
 ```
-cadence-sql-tool --ep $SQL_HOST_ADDR -p $port create --plugin mysql --db cadence
-cadence-sql-tool --ep $SQL_HOST_ADDR -p $port create --plugin mysql --db cadence_visibility
+./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql create-database --db cadence
+./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql create-database --db cadence_visibility
 ```
 
 ```
