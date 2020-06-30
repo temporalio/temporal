@@ -94,11 +94,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		if failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_START_TO_CLOSE &&
-			failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return false
-		}
-		return true
+		return failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_START_TO_CLOSE &&
+			failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_HEARTBEAT
 	}
 
 	if failure.GetServerFailureInfo() != nil {
