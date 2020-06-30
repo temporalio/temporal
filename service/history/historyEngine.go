@@ -283,39 +283,44 @@ func NewEngineWithShardContext(
 		)
 	}
 
-	nDCHistoryResender := xdc.NewNDCHistoryResender(
-		shard.GetDomainCache(),
-		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
-		func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-			return shard.GetService().GetHistoryClient().ReplicateEventsV2(ctx, request)
-		},
-		shard.GetService().GetPayloadSerializer(),
-		nil,
-		shard.GetLogger(),
-	)
-	historyRereplicator := xdc.NewHistoryRereplicator(
-		currentClusterName,
-		shard.GetDomainCache(),
-		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
-		func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-			return shard.GetService().GetHistoryClient().ReplicateRawEvents(ctx, request)
-		},
-		shard.GetService().GetPayloadSerializer(),
-		replicationTimeout,
-		nil,
-		shard.GetLogger(),
-	)
-	replicationTaskExecutor := replication.NewTaskExecutor(
-		shard,
-		shard.GetDomainCache(),
-		nDCHistoryResender,
-		historyRereplicator,
-		historyEngImpl,
-		shard.GetMetricsClient(),
-		shard.GetLogger(),
-	)
 	var replicationTaskProcessors []replication.TaskProcessor
+	replicationTaskExecutors := make(map[string]replication.TaskExecutor)
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
+		sourceCluster := replicationTaskFetcher.GetSourceCluster()
+		nDCHistoryResender := xdc.NewNDCHistoryResender(
+			shard.GetDomainCache(),
+			shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster),
+			func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
+				return shard.GetService().GetHistoryClient().ReplicateEventsV2(ctx, request)
+			},
+			shard.GetService().GetPayloadSerializer(),
+			nil,
+			shard.GetLogger(),
+		)
+		historyRereplicator := xdc.NewHistoryRereplicator(
+			currentClusterName,
+			shard.GetDomainCache(),
+			shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster),
+			func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
+				return shard.GetService().GetHistoryClient().ReplicateRawEvents(ctx, request)
+			},
+			shard.GetService().GetPayloadSerializer(),
+			replicationTimeout,
+			nil,
+			shard.GetLogger(),
+		)
+		replicationTaskExecutor := replication.NewTaskExecutor(
+			sourceCluster,
+			shard,
+			shard.GetDomainCache(),
+			nDCHistoryResender,
+			historyRereplicator,
+			historyEngImpl,
+			shard.GetMetricsClient(),
+			shard.GetLogger(),
+		)
+		replicationTaskExecutors[sourceCluster] = replicationTaskExecutor
+
 		replicationTaskProcessor := replication.NewTaskProcessor(
 			shard,
 			historyEngImpl,
@@ -327,7 +332,7 @@ func NewEngineWithShardContext(
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
-	replicationMessageHandler := replication.NewDLQHandler(shard, replicationTaskExecutor)
+	replicationMessageHandler := replication.NewDLQHandler(shard, replicationTaskExecutors)
 	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
 	shard.SetEngine(historyEngImpl)

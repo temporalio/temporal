@@ -26,11 +26,16 @@ import (
 	"context"
 
 	"github.com/uber/cadence/.gen/go/replicator"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/shard"
+)
+
+var (
+	errInvalidCluster = &workflow.BadRequestError{Message: "Invalid target cluster name."}
 )
 
 type (
@@ -57,9 +62,9 @@ type (
 	}
 
 	dlqHandlerImpl struct {
-		taskExecutor TaskExecutor
-		shard        shard.Context
-		logger       log.Logger
+		taskExecutors map[string]TaskExecutor
+		shard         shard.Context
+		logger        log.Logger
 	}
 )
 
@@ -68,13 +73,17 @@ var _ DLQHandler = (*dlqHandlerImpl)(nil)
 // NewDLQHandler initialize the replication message DLQ handler
 func NewDLQHandler(
 	shard shard.Context,
-	taskExecutor TaskExecutor,
+	taskExecutors map[string]TaskExecutor,
 ) DLQHandler {
 
+	if taskExecutors == nil {
+		panic("Failed to initialize replication DLQ handler due to nil task executors")
+	}
+
 	return &dlqHandlerImpl{
-		shard:        shard,
-		taskExecutor: taskExecutor,
-		logger:       shard.GetLogger(),
+		shard:         shard,
+		taskExecutors: taskExecutors,
+		logger:        shard.GetLogger(),
 	}
 }
 
@@ -184,6 +193,10 @@ func (r *dlqHandlerImpl) MergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
+	if _, ok := r.taskExecutors[sourceCluster]; !ok {
+		return nil, errInvalidCluster
+	}
+
 	tasks, ackLevel, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
@@ -193,8 +206,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	)
 
 	for _, task := range tasks {
-		if _, err := r.taskExecutor.execute(
-			sourceCluster,
+		if _, err := r.taskExecutors[sourceCluster].execute(
 			task,
 			true,
 		); err != nil {

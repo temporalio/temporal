@@ -55,6 +55,8 @@ type (
 		executionManager *mocks.ExecutionManager
 		shardManager     *mocks.ShardManager
 		taskExecutor     *MockTaskExecutor
+		taskExecutors    map[string]TaskExecutor
+		sourceCluster    string
 
 		messageHandler *dlqHandlerImpl
 	}
@@ -96,11 +98,14 @@ func (s *dlqHandlerSuite) SetupTest() {
 	s.shardManager = s.mockShard.Resource.ShardMgr
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
+	s.taskExecutors = make(map[string]TaskExecutor)
 	s.taskExecutor = NewMockTaskExecutor(s.controller)
+	s.sourceCluster = "test"
+	s.taskExecutors[s.sourceCluster] = s.taskExecutor
 
 	s.messageHandler = NewDLQHandler(
 		s.mockShard,
-		s.taskExecutor,
+		s.taskExecutors,
 	).(*dlqHandlerImpl)
 }
 
@@ -111,7 +116,6 @@ func (s *dlqHandlerSuite) TearDownTest() {
 
 func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	ctx := context.Background()
-	sourceCluster := "test"
 	lastMessageID := int64(1)
 	pageSize := 1
 	pageToken := []byte{}
@@ -128,7 +132,7 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		},
 	}
 	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
-		SourceClusterName: sourceCluster,
+		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     -1,
 			MaxReadLevel:  lastMessageID,
@@ -137,11 +141,11 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		},
 	}).Return(resp, nil).Times(1)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&replicator.GetDLQReplicationMessagesResponse{}, nil)
-	tasks, token, err := s.messageHandler.ReadMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	tasks, token, err := s.messageHandler.ReadMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 	s.Nil(tasks)
@@ -165,7 +169,6 @@ func (s *dlqHandlerSuite) TestPurgeMessages_OK() {
 
 func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 	ctx := context.Background()
-	sourceCluster := "test"
 	lastMessageID := int64(1)
 	pageSize := 1
 	pageToken := []byte{}
@@ -182,7 +185,7 @@ func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 		},
 	}
 	s.executionManager.On("GetReplicationTasksFromDLQ", &persistence.GetReplicationTasksFromDLQRequest{
-		SourceClusterName: sourceCluster,
+		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			ReadLevel:     -1,
 			MaxReadLevel:  lastMessageID,
@@ -191,7 +194,7 @@ func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 		},
 	}).Return(resp, nil).Times(1)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),
 		SourceTaskId:          common.Int64Ptr(lastMessageID),
@@ -204,17 +207,17 @@ func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 				replicationTask,
 			},
 		}, nil)
-	s.taskExecutor.EXPECT().execute(sourceCluster, replicationTask, true).Return(0, nil).Times(1)
+	s.taskExecutor.EXPECT().execute(replicationTask, true).Return(0, nil).Times(1)
 	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			SourceClusterName:    sourceCluster,
+			SourceClusterName:    s.sourceCluster,
 			ExclusiveBeginTaskID: -1,
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
 	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
 
-	token, err := s.messageHandler.MergeMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	token, err := s.messageHandler.MergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 }

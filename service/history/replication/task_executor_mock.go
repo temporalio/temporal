@@ -59,16 +59,16 @@ func (m *MockTaskExecutor) EXPECT() *MockTaskExecutorMockRecorder {
 }
 
 // execute mocks base method
-func (m *MockTaskExecutor) execute(sourceCluster string, replicationTask *replicator.ReplicationTask, forceApply bool) (int, error) {
+func (m *MockTaskExecutor) execute(replicationTask *replicator.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "execute", sourceCluster, replicationTask, forceApply)
+	ret := m.ctrl.Call(m, "execute", replicationTask, forceApply)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // execute indicates an expected call of execute
-func (mr *MockTaskExecutorMockRecorder) execute(sourceCluster, replicationTask, forceApply interface{}) *gomock.Call {
+func (mr *MockTaskExecutorMockRecorder) execute(replicationTask, forceApply interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockTaskExecutor)(nil).execute), sourceCluster, replicationTask, forceApply)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockTaskExecutor)(nil).execute), replicationTask, forceApply)
 }

@@ -41,11 +41,12 @@ import (
 type (
 	// TaskExecutor is the executor for replication task
 	TaskExecutor interface {
-		execute(sourceCluster string, replicationTask *r.ReplicationTask, forceApply bool) (int, error)
+		execute(replicationTask *r.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	taskExecutorImpl struct {
 		currentCluster      string
+		sourceCluster       string
 		shard               shard.Context
 		domainCache         cache.DomainCache
 		nDCHistoryResender  xdc.NDCHistoryResender
@@ -62,6 +63,7 @@ var _ TaskExecutor = (*taskExecutorImpl)(nil)
 // NewTaskExecutor creates an replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
+	sourceCluster string,
 	shard shard.Context,
 	domainCache cache.DomainCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -72,6 +74,7 @@ func NewTaskExecutor(
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:      shard.GetClusterMetadata().GetCurrentClusterName(),
+		sourceCluster:       sourceCluster,
 		shard:               shard,
 		domainCache:         domainCache,
 		nDCHistoryResender:  nDCHistoryResender,
@@ -83,7 +86,6 @@ func NewTaskExecutor(
 }
 
 func (e *taskExecutorImpl) execute(
-	sourceCluster string,
 	replicationTask *r.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
@@ -99,7 +101,7 @@ func (e *taskExecutorImpl) execute(
 		err = e.handleActivityTask(replicationTask, forceApply)
 	case r.ReplicationTaskTypeHistory:
 		scope = metrics.HistoryReplicationTaskScope
-		err = e.handleHistoryReplicationTask(sourceCluster, replicationTask, forceApply)
+		err = e.handleHistoryReplicationTask(replicationTask, forceApply)
 	case r.ReplicationTaskTypeHistoryMetadata:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
@@ -201,7 +203,6 @@ func (e *taskExecutorImpl) handleActivityTask(
 
 //TODO: remove this part after 2DC deprecation
 func (e *taskExecutorImpl) handleHistoryReplicationTask(
-	sourceCluster string,
 	task *r.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -213,7 +214,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	}
 
 	request := &history.ReplicateEventsRequest{
-		SourceCluster: common.StringPtr(sourceCluster),
+		SourceCluster: common.StringPtr(e.sourceCluster),
 		DomainUUID:    attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,

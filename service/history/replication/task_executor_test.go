@@ -117,6 +117,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 
 	s.taskHandler = NewTaskExecutor(
+		s.currentCluster,
 		s.mockShard,
 		s.mockDomainCache,
 		s.nDCHistoryResender,
@@ -213,7 +214,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.taskHandler.execute(s.currentCluster, task, true)
+	_, err := s.taskHandler.execute(task, true)
 	s.NoError(err)
 }
 
@@ -240,7 +241,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.taskHandler.execute(s.currentCluster, task, true)
+	_, err := s.taskHandler.execute(task, true)
 	s.NoError(err)
 }
 
@@ -265,6 +266,6 @@ func (s *taskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
-	_, err := s.taskHandler.execute(s.currentCluster, task, true)
+	_, err := s.taskHandler.execute(task, true)
 	s.NoError(err)
 }
