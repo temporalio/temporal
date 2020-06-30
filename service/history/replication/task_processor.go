@@ -377,7 +377,6 @@ func (p *taskProcessorImpl) processSingleTask(replicationTask *r.ReplicationTask
 func (p *taskProcessorImpl) processTaskOnce(replicationTask *r.ReplicationTask) error {
 	startTime := time.Now()
 	scope, err := p.taskExecutor.execute(
-		p.sourceCluster,
 		replicationTask,
 		false)
 
