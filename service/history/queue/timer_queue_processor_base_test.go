@@ -511,14 +511,15 @@ func (s *timerQueueProcessorBaseSuite) TestNotifyNewTimes() {
 	}
 }
 
-func (s *timerQueueProcessorBaseSuite) TestProcessBatch_SkipRead() {
+func (s *timerQueueProcessorBaseSuite) TestProcessQueueCollections_SkipRead() {
 	now := time.Now()
+	queueLevel := 0
 	shardMaxReadLevel := newTimerTaskKey(now, 0)
 	ackLevel := newTimerTaskKey(now.Add(50*time.Millisecond), 0)
 	maxLevel := newTimerTaskKey(now.Add(10*time.Second), 0)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
@@ -532,7 +533,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_SkipRead() {
 	}
 
 	timerQueueProcessBase := s.newTestTimerQueueProcessBase(processingQueueStates, updateMaxReadLevel, nil, nil, taskInitializer)
-	timerQueueProcessBase.processBatch()
+	timerQueueProcessBase.processQueueCollections(map[int]struct{}{queueLevel: {}})
 
 	s.Len(timerQueueProcessBase.processingQueueCollections, 1)
 	s.Len(timerQueueProcessBase.processingQueueCollections[0].Queues(), 1)
@@ -544,8 +545,9 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_SkipRead() {
 
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
-	// check if timer gate is updated
+	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
 	time.Sleep(100 * time.Millisecond)
+	s.True(timerQueueProcessBase.nextPollTime[queueLevel].Before(s.mockShard.GetTimeSource().Now()))
 	select {
 	case <-timerQueueProcessBase.timerGate.FireChan():
 	default:
@@ -558,12 +560,13 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_HasNextPage() {
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
 
 	now := time.Now()
+	queueLevel := 0
 	ackLevel := newTimerTaskKey(now.Add(-5*time.Second), 0)
 	shardMaxReadLevel := newTimerTaskKey(now.Add(1*time.Second), 0)
 	maxLevel := newTimerTaskKey(now.Add(10*time.Second), 0)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"excludedDomain": {}}, true),
@@ -617,7 +620,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_HasNextPage() {
 	s.mockTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).AnyTimes()
 
 	timerQueueProcessBase := s.newTestTimerQueueProcessBase(processingQueueStates, updateMaxReadLevel, nil, nil, taskInitializer)
-	timerQueueProcessBase.processBatch()
+	timerQueueProcessBase.processQueueCollections(map[int]struct{}{queueLevel: {}})
 
 	s.Len(timerQueueProcessBase.processingQueueCollections, 1)
 	s.Len(timerQueueProcessBase.processingQueueCollections[0].Queues(), 1)
@@ -636,7 +639,14 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_HasNextPage() {
 		nextPageToken: response.NextPageToken,
 	}, timerQueueProcessBase.processingQueueReadProgress[0])
 
-	s.True(timerQueueProcessBase.newTime.IsZero())
+	s.True(timerQueueProcessBase.nextPollTime[queueLevel].IsZero())
+	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-timerQueueProcessBase.timerGate.FireChan():
+	default:
+		s.Fail("timer gate should fire")
+	}
 }
 
 func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead() {
@@ -644,12 +654,13 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead(
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
 
 	now := time.Now()
+	queueLevel := 0
 	ackLevel := newTimerTaskKey(now.Add(-5*time.Second), 0)
 	shardMaxReadLevel := newTimerTaskKey(now.Add(1*time.Second), 0)
 	maxLevel := newTimerTaskKey(now.Add(10*time.Second), 0)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"excludedDomain": {}}, true),
@@ -711,7 +722,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead(
 		maxReadLevel:  shardMaxReadLevel,
 		nextPageToken: requestNextPageToken,
 	}
-	timerQueueProcessBase.processBatch()
+	timerQueueProcessBase.processQueueCollections(map[int]struct{}{queueLevel: {}})
 
 	s.Len(timerQueueProcessBase.processingQueueCollections, 1)
 	s.Len(timerQueueProcessBase.processingQueueCollections[0].Queues(), 1)
@@ -724,7 +735,8 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead(
 
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
-	// check if timer gate is updated
+	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
+	s.Equal(lookAheadTaskTimestamp, timerQueueProcessBase.nextPollTime[queueLevel])
 	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-timerQueueProcessBase.timerGate.FireChan():
@@ -738,12 +750,13 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_NoLookAhead()
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
 
 	now := time.Now()
+	queueLevel := 0
 	ackLevel := newTimerTaskKey(now.Add(-5*time.Second), 0)
 	shardMaxReadLevel := newTimerTaskKey(now.Add(1*time.Second), 0)
 	maxLevel := newTimerTaskKey(now.Add(10*time.Second), 0)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"excludedDomain": {}}, true),
@@ -812,7 +825,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_NoLookAhead()
 		maxReadLevel:  shardMaxReadLevel,
 		nextPageToken: requestNextPageToken,
 	}
-	timerQueueProcessBase.processBatch()
+	timerQueueProcessBase.processQueueCollections(map[int]struct{}{queueLevel: {}})
 
 	s.Len(timerQueueProcessBase.processingQueueCollections, 1)
 	s.Len(timerQueueProcessBase.processingQueueCollections[0].Queues(), 1)
@@ -825,7 +838,14 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_NoLookAhead()
 
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
-	s.True(timerQueueProcessBase.newTime.IsZero())
+	_, ok := timerQueueProcessBase.nextPollTime[queueLevel]
+	s.False(ok)
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-timerQueueProcessBase.timerGate.FireChan():
+		s.Fail("timer gate should not fire")
+	default:
+	}
 }
 
 func (s *timerQueueProcessorBaseSuite) newTestTimerQueueProcessBase(

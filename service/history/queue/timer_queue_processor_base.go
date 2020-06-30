@@ -66,7 +66,6 @@ type (
 		shard           shard.Context
 		taskProcessor   task.Processor
 		redispatchQueue collection.Queue
-		timerGate       TimerGate
 
 		options               *queueProcessorOptions
 		updateMaxReadLevel    updateMaxReadLevelFn
@@ -78,11 +77,15 @@ type (
 		metricsClient metrics.Client
 		metricsScope  metrics.Scope
 
-		rateLimiter  quotas.Limiter
-		lastPollTime time.Time
-		status       int32
-		shutdownWG   sync.WaitGroup
-		shutdownCh   chan struct{}
+		rateLimiter         quotas.Limiter
+		pollTimeLock        sync.Mutex
+		pollTimeUpdateTimer map[int]*time.Timer
+		nextPollTime        map[int]time.Time
+		timerGate           TimerGate
+
+		status     int32
+		shutdownWG sync.WaitGroup
+		shutdownCh chan struct{}
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -115,7 +118,6 @@ func newTimerQueueProcessorBase(
 		shard:           shard,
 		taskProcessor:   taskProcessor,
 		redispatchQueue: redispatchQueue,
-		timerGate:       timerGate,
 
 		options:               options,
 		updateMaxReadLevel:    updateMaxReadLevel,
@@ -132,10 +134,13 @@ func newTimerQueueProcessorBase(
 				return float64(options.MaxPollRPS())
 			},
 		),
-		lastPollTime: time.Time{},
-		status:       common.DaemonStatusInitialized,
-		shutdownCh:   make(chan struct{}),
-		newTimerCh:   make(chan struct{}, 1),
+		pollTimeUpdateTimer: make(map[int]*time.Timer),
+		nextPollTime:        make(map[int]time.Time),
+		timerGate:           timerGate,
+
+		status:     common.DaemonStatusInitialized,
+		shutdownCh: make(chan struct{}),
+		newTimerCh: make(chan struct{}, 1),
 
 		processingQueueCollections: newProcessingQueueCollections(
 			processingQueueStates,
@@ -170,6 +175,11 @@ func (t *timerQueueProcessorBase) Stop() {
 
 	t.timerGate.Close()
 	close(t.shutdownCh)
+	t.pollTimeLock.Lock()
+	for _, timer := range t.pollTimeUpdateTimer {
+		timer.Stop()
+	}
+	t.pollTimeLock.Unlock()
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("", tag.LifeCycleStopTimedout)
@@ -178,12 +188,6 @@ func (t *timerQueueProcessorBase) Stop() {
 
 func (t *timerQueueProcessorBase) processorPump() {
 	defer t.shutdownWG.Done()
-
-	pollTimer := time.NewTimer(backoff.JitDuration(
-		t.options.MaxPollInterval(),
-		t.options.MaxPollIntervalJitterCoefficient(),
-	))
-	defer pollTimer.Stop()
 
 	updateAckTimer := time.NewTimer(backoff.JitDuration(
 		t.options.UpdateAckInterval(),
@@ -209,27 +213,32 @@ processorPumpLoop:
 		case <-t.shutdownCh:
 			break processorPumpLoop
 		case <-t.timerGate.FireChan():
-			if t.redispatchQueue.Len() <= t.options.MaxRedispatchQueueSize() {
-				t.processBatch()
-				continue
+			if t.redispatchQueue.Len() > t.options.MaxRedispatchQueueSize() {
+				RedispatchTasks(
+					t.redispatchQueue,
+					t.taskProcessor,
+					t.logger,
+					t.metricsScope,
+					t.shutdownCh,
+				)
+				t.timerGate.Update(time.Time{})
+				continue processorPumpLoop
 			}
 
-			RedispatchTasks(
-				t.redispatchQueue,
-				t.taskProcessor,
-				t.logger,
-				t.metricsScope,
-				t.shutdownCh,
-			)
-			t.notifyNewTimer(time.Time{})
-		case <-pollTimer.C:
-			if t.lastPollTime.Add(t.options.MaxPollInterval()).Before(t.shard.GetTimeSource().Now()) {
-				t.processBatch()
+			t.pollTimeLock.Lock()
+			levels := make(map[int]struct{})
+			now := t.shard.GetCurrentTime(t.clusterName)
+			for level, pollTime := range t.nextPollTime {
+				if !now.Before(pollTime) {
+					levels[level] = struct{}{}
+					delete(t.nextPollTime, level)
+				} else {
+					t.timerGate.Update(pollTime)
+				}
 			}
-			pollTimer.Reset(backoff.JitDuration(
-				t.options.MaxPollInterval(),
-				t.options.MaxPollIntervalJitterCoefficient(),
-			))
+			t.pollTimeLock.Unlock()
+
+			t.processQueueCollections(levels)
 		case <-updateAckTimer.C:
 			processFinished, err := t.updateAckLevel()
 			if err == shard.ErrShardClosed || (err == nil && processFinished) {
@@ -248,7 +257,7 @@ processorPumpLoop:
 
 			// New Timer has arrived.
 			t.metricsScope.IncCounter(metrics.NewTimerNotifyCounter)
-			t.timerGate.Update(newTime)
+			t.upsertPollTime(defaultProcessingQueueLevel, newTime)
 		case <-redispatchTimer.C:
 			RedispatchTasks(
 				t.redispatchQueue,
@@ -271,40 +280,35 @@ processorPumpLoop:
 	}
 }
 
-func (t *timerQueueProcessorBase) processBatch() {
-	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
-	if err := t.rateLimiter.Wait(ctx); err != nil {
-		cancel()
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
-		return
-	}
-	cancel()
-
-	t.lastPollTime = t.shard.GetTimeSource().Now()
-
+func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{}) {
 	t.queueCollectionsLock.RLock()
 	queueCollections := t.processingQueueCollections
 	t.queueCollectionsLock.RUnlock()
 
-	for level, queueCollection := range queueCollections {
+	for _, queueCollection := range queueCollections {
 		t.queueCollectionsLock.RLock()
+		level := queueCollection.Level()
+		if _, ok := levels[level]; !ok {
+			t.queueCollectionsLock.RUnlock()
+			continue
+		}
+
 		activeQueue := queueCollection.ActiveQueue()
 		if activeQueue == nil {
+			// process for this queue collection has finished
+			// it's possible that new queue will be added to this collection later though,
+			// pollTime will be updated after split/merge
 			t.queueCollectionsLock.RUnlock()
 			continue
 		}
 
 		var nextPageToken []byte
 		readLevel := activeQueue.State().ReadLevel()
-		maxReadLevel := activeQueue.State().MaxLevel()
+		maxReadLevel := minTaskKey(activeQueue.State().MaxLevel(), t.updateMaxReadLevel())
 		lookAheadMaxLevel := activeQueue.State().MaxLevel()
 		domainFilter := activeQueue.State().DomainFilter()
 		t.queueCollectionsLock.RUnlock()
 
-		shardMaxReadLevel := t.updateMaxReadLevel()
-		if shardMaxReadLevel.Less(maxReadLevel) {
-			maxReadLevel = shardMaxReadLevel
-		}
 		if progress, ok := t.processingQueueReadProgress[level]; ok {
 			if progress.currentQueue == activeQueue {
 				readLevel = progress.readLevel
@@ -316,18 +320,38 @@ func (t *timerQueueProcessorBase) processBatch() {
 
 		if !readLevel.Less(maxReadLevel) {
 			// notify timer gate about the min time
-			t.timerGate.Update(readLevel.(timerTaskKey).visibilityTimestamp)
+			t.upsertPollTime(level, readLevel.(timerTaskKey).visibilityTimestamp)
 			continue
 		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
+		if err := t.rateLimiter.Wait(ctx); err != nil {
+			cancel()
+			if level == defaultProcessingQueueLevel {
+				t.upsertPollTime(level, time.Time{})
+			} else {
+				t.upsertPollTimeUpdateTimer(level, nonDefaultQueueBackoffDuration)
+			}
+			continue
+		}
+		cancel()
 
 		timerTaskInfos, lookAheadTask, nextPageToken, err := t.readAndFilterTasks(readLevel, maxReadLevel, nextPageToken, lookAheadMaxLevel)
 		if err != nil {
 			t.logger.Error("Processor unable to retrieve tasks", tag.Error(err))
-			t.notifyNewTimer(time.Time{}) // re-enqueue the event
-			return
+			t.upsertPollTime(level, time.Time{}) // re-enqueue the event
+			continue
 		}
 
+		// set up update timer here instead of modifying pollTime directly so that the interval is w.r.t
+		// real time.
+		t.upsertPollTimeUpdateTimer(level, backoff.JitDuration(
+			t.options.MaxPollInterval(),
+			t.options.MaxPollIntervalJitterCoefficient(),
+		))
+
 		tasks := make(map[task.Key]task.Task)
+		taskChFull := false
 		for _, taskInfo := range timerTaskInfos {
 			if !domainFilter.Filter(taskInfo.GetDomainID()) {
 				continue
@@ -335,22 +359,46 @@ func (t *timerQueueProcessorBase) processBatch() {
 
 			task := t.taskInitializer(taskInfo)
 			tasks[newTimerTaskKey(taskInfo.GetVisibilityTimestamp(), taskInfo.GetTaskID())] = task
-			if submitted := t.submitTask(task); !submitted {
-				// not submitted since processor has been shutdown
+			submitted, err := t.submitTask(task)
+			if err != nil {
+				// only err here is due to the fact that processor has been shutdown
+				// return instead of continue
 				return
 			}
+			taskChFull = taskChFull || !submitted
 		}
 
 		var newReadLevel task.Key
 		if len(nextPageToken) == 0 {
 			if lookAheadTask != nil {
+				// lookAheadTask may exist only when nextPageToken is empty
+				t.upsertPollTime(level, lookAheadTask.VisibilityTimestamp)
 				newReadLevel = minTaskKey(maxReadLevel, newTimerTaskKey(lookAheadTask.GetVisibilityTimestamp(), 0))
 			} else {
-				t.notifyNewTimer(time.Time{})
+				// we have no idea when the next poll should happen
+				if taskKeyEquals(maxReadLevel, lookAheadMaxLevel) {
+					// this means processing queue's max level is less than shard max read level, so
+					// no more tasks will be generated for this processing queue, enqueue an event
+					// to process the next queue in the queue collection if exists.
+					t.upsertPollTime(level, time.Time{})
+				} else if level != defaultProcessingQueueLevel {
+					// new tasks can be still generated for this processing queue's and we need to check later.
+					// note that we only need to update the poll time for non-default queue. Poll time
+					// for default queue will be updated when notifyNewTask are called.
+					// since we are waiting for new tasks, we should use the cluster's time instead of real time. So
+					// we don't need to create an update timer here.
+					t.upsertPollTime(level, t.shard.GetCurrentTime(t.clusterName).Add(nonDefaultQueueBackoffDuration))
+				}
 				newReadLevel = maxReadLevel
 			}
 		} else {
-			t.notifyNewTimer(time.Time{})
+			// more tasks should be loaded for this processing queue
+			// record the current progress and update the poll time
+			if level == defaultProcessingQueueLevel || !taskChFull {
+				t.upsertPollTime(level, time.Time{})
+			} else {
+				t.upsertPollTimeUpdateTimer(level, nonDefaultQueueBackoffDuration)
+			}
 			t.processingQueueReadProgress[level] = timeTaskReadProgress{
 				currentQueue:  activeQueue,
 				readLevel:     readLevel,
@@ -362,10 +410,6 @@ func (t *timerQueueProcessorBase) processBatch() {
 		t.queueCollectionsLock.Lock()
 		queueCollection.AddTasks(tasks, newReadLevel)
 		t.queueCollectionsLock.Unlock()
-
-		if lookAheadTask != nil {
-			t.timerGate.Update(lookAheadTask.VisibilityTimestamp)
-		}
 	}
 }
 
@@ -433,6 +477,11 @@ func (t *timerQueueProcessorBase) splitQueue() {
 		t.processingQueueCollections,
 		splitPolicy,
 	)
+
+	// there can be new queue collections created or new queues added to an existing collection
+	for _, queueCollections := range t.processingQueueCollections {
+		t.upsertPollTime(queueCollections.Level(), time.Time{})
+	}
 }
 
 func (t *timerQueueProcessorBase) readAndFilterTasks(
@@ -569,15 +618,61 @@ func (t *timerQueueProcessorBase) notifyNewTimer(
 	}
 }
 
+func (t *timerQueueProcessorBase) upsertPollTime(level int, newPollTime time.Time) {
+	t.pollTimeLock.Lock()
+	defer t.pollTimeLock.Unlock()
+
+	if currentPollTime, ok := t.nextPollTime[level]; !ok || newPollTime.Before(currentPollTime) {
+		if timer, ok := t.pollTimeUpdateTimer[level]; ok {
+			// there's a pending poll for this processing queue collection, cancel it
+			timer.Stop()
+			delete(t.pollTimeUpdateTimer, level)
+		}
+
+		t.nextPollTime[level] = newPollTime
+		t.timerGate.Update(newPollTime)
+	}
+}
+
+// upsertPollTimeUpdateTimer will trigger a poll for the specified processing queue collection
+// after a certain period of (real) time. This means for standby timer, even if the cluster time
+// has not been updated, the poll will still be triggered when the timer fired. Use this function
+// for delaying the load for processing queue. If a poll should be triggered immediately
+// use upsertPollTime.
+func (t *timerQueueProcessorBase) upsertPollTimeUpdateTimer(level int, delay time.Duration) {
+	t.pollTimeLock.Lock()
+	defer t.pollTimeLock.Unlock()
+
+	if currentTimer, ok := t.pollTimeUpdateTimer[level]; ok {
+		// there's a pending poll for this processing queue collection, cancel it
+		currentTimer.Stop()
+	}
+
+	t.pollTimeUpdateTimer[level] = time.AfterFunc(delay, func() {
+		select {
+		case <-t.shutdownCh:
+			return
+		default:
+		}
+
+		t.pollTimeLock.Lock()
+		defer t.pollTimeLock.Unlock()
+
+		t.nextPollTime[level] = time.Time{}
+		t.timerGate.Update(time.Time{})
+		delete(t.pollTimeUpdateTimer, level)
+	})
+}
+
 func (t *timerQueueProcessorBase) submitTask(
 	task task.Task,
-) bool {
+) (bool, error) {
 	submitted, err := t.taskProcessor.TrySubmit(task)
 	if err != nil {
 		select {
 		case <-t.shutdownCh:
 			// if error is due to shard shutdown
-			return false
+			return false, err
 		default:
 			// otherwise it might be error from domain cache etc, add
 			// the task to redispatch queue so that it can be retried
@@ -586,9 +681,10 @@ func (t *timerQueueProcessorBase) submitTask(
 	}
 	if err != nil || !submitted {
 		t.redispatchQueue.Add(task)
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 func (t *timerQueueProcessorBase) getProcessingQueueStates() []ProcessingQueueState {

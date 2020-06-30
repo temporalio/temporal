@@ -22,6 +22,7 @@ package queue
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -163,12 +164,13 @@ func (s *transferQueueProcessorBaseSuite) TestUpdateAckLevel_ProcessNotFinished(
 	s.Equal(int64(2), updateAckLevel)
 }
 
-func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_FullRead() {
+func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage_FullRead() {
+	queueLevel := 0
 	ackLevel := newTransferTaskKey(0)
 	maxLevel := newTransferTaskKey(1000)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
@@ -220,29 +222,29 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_FullRead()
 		taskInitializer,
 	)
 
-	processorBase.processBatch()
+	processorBase.processQueueCollections(map[int]struct{}{0: {}})
 
 	queueCollection := processorBase.processingQueueCollections[0]
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(maxLevel, queueCollection.Queues()[0].State().ReadLevel()))
 
-	newTasks := false
+	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now()))
+	time.Sleep(time.Millisecond * 100)
 	select {
-	case <-processorBase.notifyCh:
-		newTasks = true
+	case <-processorBase.nextPollTimer.FireChan():
 	default:
+		s.Fail("poll timer should fire")
 	}
-
-	s.True(newTasks)
 }
 
-func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_PartialRead() {
+func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage_PartialRead() {
+	queueLevel := 1 // non default queue
 	ackLevel := newTransferTaskKey(0)
 	maxLevel := newTransferTaskKey(1000)
 	shardMaxLevel := newTransferTaskKey(500)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
@@ -288,28 +290,28 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_PartialRea
 		taskInitializer,
 	)
 
-	processorBase.processBatch()
+	processorBase.processQueueCollections(map[int]struct{}{1: {}})
 
 	queueCollection := processorBase.processingQueueCollections[0]
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(shardMaxLevel, queueCollection.Queues()[0].State().ReadLevel()))
 
-	newTasks := false
+	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now().Add(nonDefaultQueueBackoffDuration)))
+	time.Sleep(time.Millisecond * 100)
 	select {
-	case <-processorBase.notifyCh:
-		newTasks = true
+	case <-processorBase.nextPollTimer.FireChan():
+		s.Fail("poll timer should not fire")
 	default:
 	}
-
-	s.False(newTasks)
 }
 
-func (s *transferQueueProcessorBaseSuite) TestProcessBatch_WithNextPage() {
+func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_WithNextPage() {
+	queueLevel := 0
 	ackLevel := newTransferTaskKey(0)
 	maxLevel := newTransferTaskKey(1000)
 	processingQueueStates := []ProcessingQueueState{
 		NewProcessingQueueState(
-			0,
+			queueLevel,
 			ackLevel,
 			maxLevel,
 			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
@@ -359,20 +361,20 @@ func (s *transferQueueProcessorBaseSuite) TestProcessBatch_WithNextPage() {
 		taskInitializer,
 	)
 
-	processorBase.processBatch()
+	processorBase.processQueueCollections(map[int]struct{}{0: {}})
 
 	queueCollection := processorBase.processingQueueCollections[0]
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(newTransferTaskKey(500), queueCollection.Queues()[0].State().ReadLevel()))
 
-	newTasks := false
+	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now()))
+	time.Sleep(time.Millisecond * 100)
 	select {
-	case <-processorBase.notifyCh:
-		newTasks = true
-	default:
-	}
+	case <-processorBase.nextPollTimer.FireChan():
 
-	s.True(newTasks)
+	default:
+		s.Fail("poll timer should fire")
+	}
 }
 
 func (s *transferQueueProcessorBaseSuite) TestReadTasks_NoNextPage() {
