@@ -93,15 +93,15 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		return false
 	}
 
-	if failure.GetApplicationFailureInfo().GetNonRetryable() || failure.GetServerFailureInfo().GetNonRetryable() {
-		return false
-	}
-
 	if failure.GetTimeoutFailureInfo() != nil {
 		if failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_START_TO_CLOSE &&
 			failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			return false
 		}
+	}
+
+	if failure.GetApplicationFailureInfo().GetNonRetryable() || failure.GetServerFailureInfo().GetNonRetryable() {
+		return false
 	}
 
 	if failure.GetApplicationFailureInfo() != nil {
@@ -117,8 +117,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 }
 
 func getCauseFailure(failure *failurepb.Failure) *failurepb.Failure {
-	for ; failure.GetCause() != nil; failure = failure.GetCause() {
+	// Unwrap failures till the first ApplicationFailure because only first ApplicationFailure controls retryable.
+	for ; failure.GetCause() != nil && failure.GetApplicationFailureInfo() == nil; failure = failure.GetCause() {
 	}
-
 	return failure
 }
