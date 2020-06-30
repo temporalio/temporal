@@ -153,6 +153,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 					TransferFailoverLevels:  map[string]persistence.TransferFailoverLevel{},
 					TimerFailoverLevels:     map[string]persistence.TimerFailoverLevel{},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDLQAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil).Once()
@@ -235,6 +236,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 					TransferFailoverLevels:  map[string]persistence.TransferFailoverLevel{},
 					TimerFailoverLevels:     map[string]persistence.TimerFailoverLevel{},
 					ClusterReplicationLevel: map[string]int64{},
+					ReplicationDLQAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil).Once()
@@ -324,6 +326,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 				TransferFailoverLevels:  map[string]persistence.TransferFailoverLevel{},
 				TimerFailoverLevels:     map[string]persistence.TimerFailoverLevel{},
 				ClusterReplicationLevel: map[string]int64{},
+				ReplicationDLQAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -398,6 +401,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 				TransferFailoverLevels:  map[string]persistence.TransferFailoverLevel{},
 				TimerFailoverLevels:     map[string]persistence.TimerFailoverLevel{},
 				ClusterReplicationLevel: map[string]int64{},
+				ReplicationDLQAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -607,6 +611,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *eng
 			TransferFailoverLevels:  map[string]persistence.TransferFailoverLevel{},
 			TimerFailoverLevels:     map[string]persistence.TimerFailoverLevel{},
 			ClusterReplicationLevel: map[string]int64{},
+			ReplicationDLQAckLevel:  map[string]int64{},
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil).Once()

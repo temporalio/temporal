@@ -202,6 +202,8 @@ func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask(
 			DomainId:   common.StringPtr(domainID),
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
+			FirstEventId: common.Int64Ptr(1),
+			NextEventId: common.Int64Ptr(1),
 		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
@@ -212,6 +214,8 @@ func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask(
 			RunID:               runID,
 			TaskType:            persistence.ReplicationTaskTypeHistory,
 			LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+			FirstEventID:        int64(1),
+			NextEventID:         int64(2),
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -252,11 +256,98 @@ func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTas
 			RunID:        runID,
 			TaskType:     persistence.ReplicationTaskTypeHistory,
 			FirstEventID: 1,
-			NextEventID:  1,
+			NextEventID:  2,
 			Version:      1,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
 	err = s.taskProcessor.putReplicationTaskToDLQ(task)
 	s.NoError(err)
+}
+
+func (s *taskProcessorSuite) TestGenerateDLQRequest_ReplicationTaskTypeHistoryV2() {
+	domainID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	events := []*shared.HistoryEvent{
+		{
+			EventId: common.Int64Ptr(1),
+			Version: common.Int64Ptr(1),
+		},
+	}
+	serializer := s.mockShard.GetPayloadSerializer()
+	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
+	s.NoError(err)
+	task := &replicator.ReplicationTask{
+		TaskType: replicator.ReplicationTaskTypeHistoryV2.Ptr(),
+		HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
+			DomainId:   common.StringPtr(domainID),
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+			Events: &shared.DataBlob{
+				EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+				Data:         data.Data,
+			},
+		},
+	}
+	request, err := s.taskProcessor.generateDLQRequest(task)
+	s.NoError(err)
+	s.Equal("standby", request.SourceClusterName)
+	s.Equal(int64(1), request.TaskInfo.FirstEventID)
+	s.Equal(int64(2), request.TaskInfo.NextEventID)
+	s.Equal(int64(1), request.TaskInfo.GetVersion())
+	s.Equal(domainID, request.TaskInfo.GetDomainID())
+	s.Equal(workflowID, request.TaskInfo.GetWorkflowID())
+	s.Equal(runID, request.TaskInfo.GetRunID())
+	s.Equal(persistence.ReplicationTaskTypeHistory, request.TaskInfo.GetTaskType())
+}
+
+func (s *taskProcessorSuite) TestGenerateDLQRequest_ReplicationTaskTypeHistory() {
+	domainID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicator.ReplicationTask{
+		TaskType: replicator.ReplicationTaskTypeHistory.Ptr(),
+		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
+			DomainId:     common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			RunId:        common.StringPtr(runID),
+			FirstEventId: common.Int64Ptr(1),
+			NextEventId:  common.Int64Ptr(1),
+			Version:      common.Int64Ptr(1),
+		},
+	}
+	request, err := s.taskProcessor.generateDLQRequest(task)
+	s.NoError(err)
+	s.Equal("standby", request.SourceClusterName)
+	s.Equal(int64(1), request.TaskInfo.FirstEventID)
+	s.Equal(int64(2), request.TaskInfo.NextEventID)
+	s.Equal(int64(1), request.TaskInfo.GetVersion())
+	s.Equal(domainID, request.TaskInfo.GetDomainID())
+	s.Equal(workflowID, request.TaskInfo.GetWorkflowID())
+	s.Equal(runID, request.TaskInfo.GetRunID())
+	s.Equal(persistence.ReplicationTaskTypeHistory, request.TaskInfo.GetTaskType())
+}
+
+func (s *taskProcessorSuite) TestGenerateDLQRequest_ReplicationTaskTypeSyncActivity() {
+	domainID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicator.ReplicationTask{
+		TaskType: replicator.ReplicationTaskTypeSyncActivity.Ptr(),
+		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
+			DomainId:    common.StringPtr(domainID),
+			WorkflowId:  common.StringPtr(workflowID),
+			RunId:       common.StringPtr(runID),
+			ScheduledId: common.Int64Ptr(1),
+		},
+	}
+	request, err := s.taskProcessor.generateDLQRequest(task)
+	s.NoError(err)
+	s.Equal("standby", request.SourceClusterName)
+	s.Equal(int64(1), request.TaskInfo.ScheduledID)
+	s.Equal(domainID, request.TaskInfo.GetDomainID())
+	s.Equal(workflowID, request.TaskInfo.GetWorkflowID())
+	s.Equal(runID, request.TaskInfo.GetRunID())
+	s.Equal(persistence.ReplicationTaskTypeSyncActivity, request.TaskInfo.GetTaskType())
 }

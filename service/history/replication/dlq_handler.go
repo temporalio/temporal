@@ -119,7 +119,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-	taskInfo := make([]*replicator.ReplicationTaskInfo, len(resp.Tasks))
+	taskInfo := make([]*replicator.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		taskInfo = append(taskInfo, &replicator.ReplicationTaskInfo{
 			DomainID:     common.StringPtr(task.GetDomainID()),
@@ -133,16 +133,20 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 			ScheduledID:  common.Int64Ptr(task.ScheduledID),
 		})
 	}
-	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(
-		ctx,
-		&replicator.GetDLQReplicationMessagesRequest{
-			TaskInfos: taskInfo,
-		},
-	)
-	if err != nil {
-		return nil, ackLevel, nil, err
+	response := &replicator.GetDLQReplicationMessagesResponse{}
+	if len(taskInfo) > 0 {
+		response, err = remoteAdminClient.GetDLQReplicationMessages(
+			ctx,
+			&replicator.GetDLQReplicationMessagesRequest{
+				TaskInfos: taskInfo,
+			},
+		)
+		if err != nil {
+			return nil, ackLevel, nil, err
+		}
 	}
-	return dlqResponse.ReplicationTasks, ackLevel, resp.NextPageToken, nil
+
+	return response.ReplicationTasks, ackLevel, resp.NextPageToken, nil
 }
 
 func (r *dlqHandlerImpl) PurgeMessages(
@@ -213,7 +217,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		sourceCluster,
 		lastMessageID,
 	); err != nil {
-		r.logger.Error("Failed to purge history replication message", tag.Error(err))
+		r.logger.Error("Failed to merge history replication message", tag.Error(err))
 		// The update ack level should not block the call. Ignore the error.
 	}
 	return token, nil

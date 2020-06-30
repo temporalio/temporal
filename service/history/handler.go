@@ -1701,7 +1701,7 @@ func (h *Handler) GetDLQReplicationMessages(
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*r.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*r.ReplicationTask, 0, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}

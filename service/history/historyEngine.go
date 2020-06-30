@@ -3018,7 +3018,7 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
 	defer sw.Stop()
 
-	tasks := make([]*r.ReplicationTask, len(taskInfos))
+	tasks := make([]*r.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
 		if err != nil {

@@ -1802,6 +1802,8 @@ func createShardInfo(
 			info.DomainNotificationVersion = v.(int64)
 		case "cluster_replication_level":
 			info.ClusterReplicationLevel = v.(map[string]int64)
+		case "replication_dlq_ack_level":
+			info.ReplicationDLQAckLevel = v.(map[string]int64)
 		case "pending_failover_markers":
 			pendingFailoverMarkersRawData = v.([]byte)
 		case "pending_failover_markers_encoding":
@@ -1821,6 +1823,9 @@ func createShardInfo(
 	}
 	if info.ClusterReplicationLevel == nil {
 		info.ClusterReplicationLevel = make(map[string]int64)
+	}
+	if info.ReplicationDLQAckLevel == nil {
+		info.ReplicationDLQAckLevel = make(map[string]int64)
 	}
 	info.PendingFailoverMarkers = p.NewDataBlob(
 		pendingFailoverMarkersRawData,

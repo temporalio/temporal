@@ -111,7 +111,8 @@ const (
 		`cluster_timer_ack_level: ?, ` +
 		`domain_notification_version: ?, ` +
 		`cluster_replication_level: ?, ` +
-		`pending_failover_markers: ?,` +
+		`replication_dlq_ack_level: ?, ` +
+		`pending_failover_markers: ?, ` +
 		`pending_failover_markers_encoding: ? ` +
 		`}`
 
@@ -973,6 +974,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		shardInfo.ReplicationDLQAckLevel,
 		markerData,
 		markerEncoding,
 		shardInfo.RangeID)
@@ -1052,6 +1054,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		shardInfo.ReplicationDLQAckLevel,
 		markerData,
 		markerEncoding,
 		shardInfo.RangeID,
@@ -2829,7 +2832,7 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
-		request.ReadLevel+int64(request.BatchSize),
+		request.MaxReadLevel,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query)
