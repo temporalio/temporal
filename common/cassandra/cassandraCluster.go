@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/gocql/gocql"
-
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -49,6 +48,10 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	if cfg.Datacenter != "" {
 		cluster.HostFilter = gocql.DataCentreHostFilter(cfg.Datacenter)
 	}
+	if cfg.Region != "" {
+		cluster.HostFilter = RegionHostFilter(cfg.Region)
+	}
+
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		cluster.SslOpts = &gocql.SslOptions{
 			CertPath:               cfg.TLS.CertFile,
@@ -68,6 +71,16 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 
 	return cluster
+}
+
+func RegionHostFilter(region string)  gocql.HostFilter {
+	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
+		applicationRegion := region
+		if len(host.DataCenter()) < 3 {
+			return false
+		}
+		return host.DataCenter()[:3] == applicationRegion
+	})
 }
 
 func parseHosts(input string) []string {

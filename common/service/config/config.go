@@ -196,6 +196,8 @@ type (
 		Password string `yaml:"password"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
+		// Region is the region filter arg for cassandra
+		Region string `yaml:"region"`
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
