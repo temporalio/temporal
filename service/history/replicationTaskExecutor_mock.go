@@ -29,10 +29,9 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	repication "go.temporal.io/server/api/replication/v1"
+	reflect "reflect"
 )
 
 // MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface.
@@ -59,16 +58,16 @@ func (m *MockreplicationTaskExecutor) EXPECT() *MockreplicationTaskExecutorMockR
 }
 
 // execute mocks base method.
-func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *repication.ReplicationTask, forceApply bool) (int, error) {
+func (m *MockreplicationTaskExecutor) execute(replicationTask *repication.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "execute", sourceCluster, replicationTask, forceApply)
+	ret := m.ctrl.Call(m, "execute", replicationTask, forceApply)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // execute indicates an expected call of execute.
-func (mr *MockreplicationTaskExecutorMockRecorder) execute(sourceCluster, replicationTask, forceApply interface{}) *gomock.Call {
+func (mr *MockreplicationTaskExecutorMockRecorder) execute(replicationTask, forceApply interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockreplicationTaskExecutor)(nil).execute), sourceCluster, replicationTask, forceApply)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockreplicationTaskExecutor)(nil).execute), replicationTask, forceApply)
 }
