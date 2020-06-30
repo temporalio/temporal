@@ -54,6 +54,10 @@ import (
 
 var _ adminserviceserver.Interface = (*AdminHandler)(nil)
 
+var (
+	errMaxMessageIDNotSet = &gen.BadRequestError{Message: "Max messageID is not set."}
+)
+
 type (
 	// AdminHandler - Thrift handler interface for admin service
 	AdminHandler struct {
@@ -878,7 +882,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	}
 
 	if !request.IsSetInclusiveEndMessageID() {
-		request.InclusiveEndMessageID = common.Int64Ptr(common.EndMessageID)
+		return adh.error(errMaxMessageIDNotSet, scope)
 	}
 
 	var op func() error
@@ -926,7 +930,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}
 
 	if !request.IsSetInclusiveEndMessageID() {
-		request.InclusiveEndMessageID = common.Int64Ptr(common.EndMessageID)
+		return nil, adh.error(errMaxMessageIDNotSet, scope)
 	}
 
 	var token []byte

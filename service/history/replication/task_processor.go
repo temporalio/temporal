@@ -389,7 +389,8 @@ func (p *taskProcessorImpl) processTaskOnce(replicationTask *r.ReplicationTask) 
 			metrics.ReplicationTaskFetcherScope,
 			metrics.TargetClusterTag(p.sourceCluster),
 		).IncCounter(metrics.ReplicationTasksApplied)
-		p.metricsClient.Scope(scope).RecordTimer(metrics.TaskProcessingLatency, time.Now().Sub(startTime))
+		p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).
+			RecordTimer(metrics.TaskProcessingLatency, time.Now().Sub(startTime))
 	}
 
 	return err
@@ -457,7 +458,7 @@ func (p *taskProcessorImpl) generateDLQRequest(
 				TaskID:              replicationTask.GetSourceTaskId(),
 				TaskType:            persistence.ReplicationTaskTypeHistory,
 				FirstEventID:        taskAttributes.GetFirstEventId(),
-				NextEventID:         taskAttributes.GetNextEventId(),
+				NextEventID:         taskAttributes.GetNextEventId() + 1,
 				Version:             taskAttributes.GetVersion(),
 				LastReplicationInfo: toPersistenceReplicationInfo(taskAttributes.GetReplicationInfo()),
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
@@ -486,7 +487,7 @@ func (p *taskProcessorImpl) generateDLQRequest(
 				TaskID:       replicationTask.GetSourceTaskId(),
 				TaskType:     persistence.ReplicationTaskTypeHistory,
 				FirstEventID: events[0].GetEventId(),
-				NextEventID:  events[len(events)-1].GetEventId(),
+				NextEventID:  events[len(events)-1].GetEventId() + 1,
 				Version:      events[0].GetVersion(),
 			},
 		}, nil

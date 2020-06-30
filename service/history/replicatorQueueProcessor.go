@@ -440,7 +440,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
 	)
-	taskGeneratedTimer := replicationScope.StartTimer(metrics.ReplicatorLatency)
+	taskGeneratedTimer := replicationScope.StartTimer(metrics.TaskLatency)
 	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
 	if err != nil {
 		return nil, err

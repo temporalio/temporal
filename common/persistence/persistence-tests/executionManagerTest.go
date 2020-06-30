@@ -5115,6 +5115,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		TransferAckLevel:        currentClusterTransferAck,
 		TimerAckLevel:           currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
+		ReplicationDLQAckLevel:  map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5170,6 +5171,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		DomainNotificationVersion: domainNotificationVersion,
 		ClusterReplicationLevel:   map[string]int64{},
+		ReplicationDLQAckLevel:    map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5212,6 +5214,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		DomainNotificationVersion: domainNotificationVersion,
 		ClusterReplicationLevel:   map[string]int64{cluster.TestAlternativeClusterName: 12345},
+		ReplicationDLQAckLevel:    map[string]int64{},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,

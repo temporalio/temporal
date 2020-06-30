@@ -664,6 +664,10 @@ func newAdminDLQCommands() []cli.Command {
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Usage: "The cluster where the task is generated",
+				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardID",
@@ -673,7 +677,7 @@ func newAdminDLQCommands() []cli.Command {
 					Usage: "Max message size to fetch",
 				},
 				cli.IntFlag{
-					Name:  FlagLastMessageID,
+					Name:  FlagLastMessageIDWithAlias,
 					Usage: "The upper boundary of the read message",
 				},
 				cli.StringFlag{
@@ -694,12 +698,16 @@ func newAdminDLQCommands() []cli.Command {
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Usage: "The cluster where the task is generated",
+				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardID",
 				},
 				cli.IntFlag{
-					Name:  FlagLastMessageID,
+					Name:  FlagLastMessageIDWithAlias,
 					Usage: "The upper boundary of the read message",
 				},
 			},
@@ -716,12 +724,16 @@ func newAdminDLQCommands() []cli.Command {
 					Name:  FlagDLQTypeWithAlias,
 					Usage: "Type of DLQ to manage. (Options: domain, history)",
 				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Usage: "The cluster where the task is generated",
+				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardID",
 				},
 				cli.IntFlag{
-					Name:  FlagLastMessageID,
+					Name:  FlagLastMessageIDWithAlias,
 					Usage: "The upper boundary of the read message",
 				},
 			},

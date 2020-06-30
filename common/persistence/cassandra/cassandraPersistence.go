@@ -110,7 +110,8 @@ const (
 		`cluster_transfer_ack_level: ?, ` +
 		`cluster_timer_ack_level: ?, ` +
 		`domain_notification_version: ?, ` +
-		`cluster_replication_level: ? ` +
+		`cluster_replication_level: ?, ` +
+		`replication_dlq_ack_level: ? ` +
 		`}`
 
 	templateWorkflowExecutionType = `{` +
@@ -969,6 +970,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		shardInfo.ReplicationDLQAckLevel,
 		shardInfo.RangeID)
 
 	previous := make(map[string]interface{})
@@ -1045,6 +1047,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 		shardInfo.ClusterTimerAckLevel,
 		shardInfo.DomainNotificationVersion,
 		shardInfo.ClusterReplicationLevel,
+		shardInfo.ReplicationDLQAckLevel,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -2830,7 +2833,7 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
-		request.ReadLevel+int64(request.BatchSize),
+		request.MaxReadLevel,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query)

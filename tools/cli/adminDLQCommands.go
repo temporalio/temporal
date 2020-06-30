@@ -22,7 +22,6 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
+	"github.com/uber/cadence/common/persistence"
 )
 
 const (
@@ -44,6 +44,9 @@ func AdminGetDLQMessages(c *cli.Context) {
 
 	adminClient := cFactory.ServerAdminClient(c)
 	dlqType := getRequiredOption(c, FlagDLQType)
+	sourceCluster := getRequiredOption(c, FlagTargetCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
+	serializer := persistence.NewPayloadSerializer()
 	outputFile := getOutputFile(c.String(FlagOutputFilename))
 	defer outputFile.Close()
 
@@ -51,15 +54,17 @@ func AdminGetDLQMessages(c *cli.Context) {
 	if c.IsSet(FlagMaxMessageCount) {
 		remainingMessageCount = c.Int64(FlagMaxMessageCount)
 	}
-	var lastMessageID *int64
+	lastMessageID := common.EndMessageID
 	if c.IsSet(FlagLastMessageID) {
-		lastMessageID = common.Int64Ptr(c.Int64(FlagLastMessageID))
+		lastMessageID = c.Int64(FlagLastMessageID)
 	}
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := adminClient.ReadDLQMessages(ctx, &replicator.ReadDLQMessagesRequest{
 			Type:                  toQueueType(dlqType),
-			InclusiveEndMessageID: lastMessageID,
+			SourceCluster:         common.StringPtr(sourceCluster),
+			ShardID:               common.Int32Ptr(int32(shardID)),
+			InclusiveEndMessageID: common.Int64Ptr(lastMessageID),
 			MaximumPageSize:       common.Int32Ptr(defaultPageSize),
 			NextPageToken:         paginationToken,
 		})
@@ -82,7 +87,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 		}
 
 		task := item.(*replicator.ReplicationTask)
-		taskStr, err := json.MarshalIndent(task, "", " ")
+		taskStr, err := decodeReplicationTask(task, serializer)
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("fail to encode dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
@@ -102,20 +107,18 @@ func AdminPurgeDLQMessages(c *cli.Context) {
 	defer cancel()
 
 	dlqType := getRequiredOption(c, FlagDLQType)
-
-	var lastMessageID *int64
-	if c.IsSet(FlagLastMessageID) {
-		lastMessageID = common.Int64Ptr(c.Int64(FlagLastMessageID))
-	} else {
-		confirmOrExit("Are you sure to purge all DLQ messages without a upper boundary?")
-	}
+	sourceCluster := getRequiredOption(c, FlagTargetCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
+	lastMessageID := getRequiredInt64Option(c, FlagLastMessageID)
 
 	adminClient := cFactory.ServerAdminClient(c)
 	if err := adminClient.PurgeDLQMessages(ctx, &replicator.PurgeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
-		InclusiveEndMessageID: lastMessageID,
+		SourceCluster:         common.StringPtr(sourceCluster),
+		ShardID:               common.Int32Ptr(int32(shardID)),
+		InclusiveEndMessageID: common.Int64Ptr(lastMessageID),
 	}); err != nil {
-		ErrorAndExit("Failed to purge dlq", nil)
+		ErrorAndExit("Failed to purge dlq", err)
 	}
 	fmt.Println("Successfully purge DLQ Messages.")
 }
@@ -126,18 +129,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	defer cancel()
 
 	dlqType := getRequiredOption(c, FlagDLQType)
-
-	var lastMessageID *int64
-	if c.IsSet(FlagLastMessageID) {
-		lastMessageID = common.Int64Ptr(c.Int64(FlagLastMessageID))
-	} else {
-		confirmOrExit("Are you sure to merge all DLQ messages without a upper boundary?")
-	}
+	sourceCluster := getRequiredOption(c, FlagTargetCluster)
+	shardID := getRequiredIntOption(c, FlagShardID)
+	lastMessageID := getRequiredInt64Option(c, FlagLastMessageID)
 
 	adminClient := cFactory.ServerAdminClient(c)
 	request := &replicator.MergeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
-		InclusiveEndMessageID: lastMessageID,
+		SourceCluster:         common.StringPtr(sourceCluster),
+		ShardID:               common.Int32Ptr(int32(shardID)),
+		InclusiveEndMessageID: common.Int64Ptr(lastMessageID),
 		MaximumPageSize:       common.Int32Ptr(defaultPageSize),
 	}
 
