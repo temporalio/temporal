@@ -505,7 +505,7 @@ type (
 		WorkflowID       string
 		StartTime        time.Time
 		ExecutionTime    time.Time
-		Status           *int32
+		Status           int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
 		Memo             []byte
@@ -520,7 +520,7 @@ type (
 		RunID            *string
 		WorkflowID       *string
 		WorkflowTypeName *string
-		Status           *int32
+		Status           int32
 		MinStartTime     *time.Time
 		MaxStartTime     *time.Time
 		PageSize         *int

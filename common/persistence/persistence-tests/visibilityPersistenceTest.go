@@ -740,7 +740,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED)
+	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	s.Zero(resp.HistoryLength)
 }
 

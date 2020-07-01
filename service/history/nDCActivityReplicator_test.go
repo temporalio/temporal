@@ -1107,7 +1107,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},

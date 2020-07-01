@@ -2961,6 +2961,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, wh.error(errQueryTypeNotSet, scope)
 	}
 
+	enums.SetDefaultQueryRejectCondition(&request.QueryRejectCondition)
+
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, wh.error(err, scope)

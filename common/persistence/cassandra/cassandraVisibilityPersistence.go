@@ -646,6 +646,7 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 			ExecutionTime: executionTime,
 			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
 			TaskQueue:     taskQueue,
+			Status:        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		}
 		return record, true
 	}
@@ -672,7 +673,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
 			CloseTime:     closeTime,
-			Status:        &status,
+			Status:        status,
 			HistoryLength: historyLength,
 			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
 			TaskQueue:     taskQueue,

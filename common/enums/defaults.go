@@ -51,3 +51,9 @@ func SetDefaultParentClosePolicy(f *enumspb.ParentClosePolicy) {
 		*f = enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	}
 }
+
+func SetDefaultQueryRejectCondition(f *enumspb.QueryRejectCondition) {
+	if *f == enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED {
+		*f = enumspb.QUERY_REJECT_CONDITION_NONE
+	}
+}

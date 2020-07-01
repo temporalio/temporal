@@ -473,7 +473,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
-	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -494,7 +494,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
-	go queryWorkflowFn("invalid-query-type", enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+	go queryWorkflowFn("invalid-query-type", enumspb.QUERY_REJECT_CONDITION_NONE)
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
@@ -513,7 +513,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 
-	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -712,7 +712,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -889,7 +889,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+	go queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -1056,7 +1056,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		// at the time the query comes in there will be a started decision task
 		// only once signal completes can queryWorkflow unblock
 		<-time.After(time.Second)
-		queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+		queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
@@ -1261,7 +1261,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		})
 		s.NoError(err)
 
-		queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED)
+		queryWorkflowFn(queryType, enumspb.QUERY_REJECT_CONDITION_NONE)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTaskWithSticky(false, false)

@@ -34,8 +34,8 @@ import (
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT IGNORE INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
@@ -49,11 +49,11 @@ const (
          ORDER BY start_time DESC, run_id
          LIMIT ?`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status IS NULL `
+	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
+	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, status, history_length
-		 FROM executions_visibility WHERE status IS NOT NULL `
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
+		 FROM executions_visibility WHERE status != 1 `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
@@ -71,13 +71,13 @@ const (
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
-		 WHERE namespace_id = ? AND status IS NOT NULL
+		 WHERE namespace_id = ? AND status != 1
 		 AND run_id = ?`
 
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=? AND run_id=?"
 )
 
-var errCloseParams = errors.New("missing one of {status, closeTime, historyLength} params")
+var errCloseParams = errors.New("missing one of {closeTime, historyLength} params")
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
@@ -90,6 +90,7 @@ func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 		row.StartTime,
 		row.ExecutionTime,
 		row.WorkflowTypeName,
+		row.Status,
 		row.Memo,
 		row.Encoding)
 }
@@ -97,7 +98,7 @@ func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
-	case row.Status != nil && row.CloseTime != nil && row.HistoryLength != nil:
+	case row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
 		return mdb.conn.Exec(templateCreateWorkflowExecutionClosed,
@@ -108,7 +109,7 @@ func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.ExecutionTime,
 			row.WorkflowTypeName,
 			closeTime,
-			*row.Status,
+			row.Status,
 			*row.HistoryLength,
 			row.Memo,
 			row.Encoding)
@@ -167,10 +168,10 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			*filter.RunID,
 			*filter.MaxStartTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.Status != nil:
+	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = mdb.conn.Select(&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
-			*filter.Status,
+			filter.Status,
 			filter.NamespaceID,
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
