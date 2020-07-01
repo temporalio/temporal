@@ -78,6 +78,7 @@ var (
 	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
 	errUnknownValueType                                   = serviceerror.NewInvalidArgument("Unknown value type, %v.")
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
+	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
 
 	errFailedUpdateDynamicConfig = serviceerror.NewInternal("Failed to update dynamic config, err: %v.")

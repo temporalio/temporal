@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	failurepb "go.temporal.io/temporal-proto/failure/v1"
 
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -37,10 +38,115 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 )
 
+func Test_IsRetryable(t *testing.T) {
+	a := assert.New(t)
+
+	f := &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_UNSPECIFIED,
+		}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		}},
+	}
+	a.True(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		}},
+	}
+	a.True(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+			NonRetryable: false,
+		}},
+	}
+	a.True(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+			NonRetryable: true,
+		}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			NonRetryable: true,
+		}},
+	}
+	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			NonRetryable: false,
+			Type:         "type",
+		}},
+	}
+	a.True(isRetryable(f, nil))
+	a.True(isRetryable(f, []string{"otherType"}))
+	a.False(isRetryable(f, []string{"otherType", "type"}))
+	a.False(isRetryable(f, []string{"type"}))
+
+	// When any failure is inside ChildWorkflowExecutionFailure, it is always retryable because ChildWorkflow is always retryable.
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
+		Cause: &failurepb.Failure{
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				NonRetryable: true,
+			}},
+		},
+	}
+	a.True(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
+		Cause: &failurepb.Failure{
+			FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
+			Cause: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					NonRetryable: true,
+				}},
+			},
+		},
+	}
+	a.True(isRetryable(f, nil))
+}
+
 func Test_NextRetry(t *testing.T) {
 	a := assert.New(t)
 	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
-	reason := failure.NewServerFailure("some retryable server failure", false)
+	serverFailure := failure.NewServerFailure("some retryable server failure", false)
 	identity := "some-worker-identity"
 
 	// no retry without retry policy
@@ -60,7 +166,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -77,7 +183,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -93,7 +199,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -110,7 +216,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -127,7 +233,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second, interval)
@@ -142,7 +248,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*2, interval)
@@ -157,7 +263,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*4, interval)
@@ -165,7 +271,7 @@ func Test_NextRetry(t *testing.T) {
 	ai.Attempt++
 
 	// test non-retryable error
-	reason = failure.NewServerFailure("some non-retryable server failure", true)
+	serverFailure = failure.NewServerFailure("some non-retryable server failure", true)
 	interval, retryStatus = getBackoffInterval(
 		now,
 		ai.ExpirationTime,
@@ -174,13 +280,13 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
 	a.Equal(enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, retryStatus)
 
-	reason = failure.NewServerFailure("good-reason", false)
+	serverFailure = failure.NewServerFailure("good-reason", false)
 
 	interval, retryStatus = getBackoffInterval(
 		now,
@@ -190,7 +296,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*8, interval)
@@ -207,7 +313,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -224,7 +330,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
@@ -242,7 +348,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(backoff.NoBackoff, interval)
@@ -258,7 +364,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
@@ -276,7 +382,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		reason,
+		serverFailure,
 		ai.NonRetryableErrorTypes,
 	)
 	a.Equal(time.Second*10, interval)
