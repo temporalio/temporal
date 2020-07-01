@@ -199,11 +199,11 @@ func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask(
 	task := &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskTypeHistory.Ptr(),
 		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+			DomainId:     common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			RunId:        common.StringPtr(runID),
 			FirstEventId: common.Int64Ptr(1),
-			NextEventId: common.Int64Ptr(1),
+			NextEventId:  common.Int64Ptr(1),
 		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{

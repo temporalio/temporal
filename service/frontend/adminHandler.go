@@ -57,6 +57,7 @@ var _ adminserviceserver.Interface = (*AdminHandler)(nil)
 var (
 	errMaxMessageIDNotSet = &gen.BadRequestError{Message: "Max messageID is not set."}
 )
+
 type (
 	// AdminHandler - Thrift handler interface for admin service
 	AdminHandler struct {

@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/gocql/gocql"
+
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -73,7 +74,7 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	return cluster
 }
 
-func RegionHostFilter(region string)  gocql.HostFilter {
+func RegionHostFilter(region string) gocql.HostFilter {
 	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
 		applicationRegion := region
 		if len(host.DataCenter()) < 3 {
