@@ -71,7 +71,7 @@ const (
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
 	retryTaskProcessingInitialInterval = 50 * time.Millisecond
-	retryTaskProcessingMaxInterval     = 100 * time.Microsecond
+	retryTaskProcessingMaxInterval     = 100 * time.Millisecond
 	retryTaskProcessingMaxAttempts     = 3
 
 	contextExpireThreshold = 10 * time.Millisecond
