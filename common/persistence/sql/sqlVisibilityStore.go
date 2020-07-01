@@ -139,7 +139,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutions(request *p.ListWorkflo
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
 				PageSize:     &request.PageSize,
 			})
@@ -170,7 +169,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByType(request *p.ListW
 				NamespaceID:      request.NamespaceID,
 				MinStartTime:     &minStartTime,
 				MaxStartTime:     &readLevel.Time,
-				Closed:           true,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
 				PageSize:         &request.PageSize,
@@ -202,7 +200,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *p
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
 				WorkflowID:   &request.WorkflowID,
 				PageSize:     &request.PageSize,
@@ -218,7 +215,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
 				Status:       int32(request.Status),
 				PageSize:     &request.PageSize,
@@ -230,7 +226,6 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	execution := request.Execution
 	rows, err := s.db.SelectFromVisibility(&sqlplugin.VisibilityFilter{
 		NamespaceID: request.NamespaceID,
-		Closed:      true,
 		RunID:       &execution.RunId,
 	})
 	if err != nil {

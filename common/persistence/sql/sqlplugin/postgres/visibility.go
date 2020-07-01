@@ -152,8 +152,9 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 	if filter.MaxStartTime != nil {
 		*filter.MaxStartTime = pdb.converter.ToPostgresDateTime(*filter.MaxStartTime)
 	}
+	// If filter.Status == 0 (UNSPECIFIED) then only closed workflows will be returned (all excluding 1 (RUNNING)).
 	switch {
-	case filter.MinStartTime == nil && filter.RunID != nil && filter.Closed:
+	case filter.MinStartTime == nil && filter.RunID != nil && filter.Status != 1:
 		var row sqlplugin.VisibilityRow
 		err = pdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.NamespaceID, *filter.RunID)
 		if err == nil {
@@ -161,7 +162,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 		}
 	case filter.MinStartTime != nil && filter.WorkflowID != nil:
 		qry := templateGetOpenWorkflowExecutionsByID
-		if filter.Closed {
+		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByID
 		}
 		err = pdb.conn.Select(&rows,
@@ -175,7 +176,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
-		if filter.Closed {
+		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutionsByType
 		}
 		err = pdb.conn.Select(&rows,
@@ -199,7 +200,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			*filter.PageSize)
 	case filter.MinStartTime != nil:
 		qry := templateGetOpenWorkflowExecutions
-		if filter.Closed {
+		if filter.Status != 1 {
 			qry = templateGetClosedWorkflowExecutions
 		}
 		minSt := pdb.converter.ToPostgresDateTime(*filter.MinStartTime)

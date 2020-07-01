@@ -516,7 +516,6 @@ type (
 	// can be used to filter results through a WHERE clause
 	VisibilityFilter struct {
 		NamespaceID      string
-		Closed           bool
 		RunID            *string
 		WorkflowID       *string
 		WorkflowTypeName *string
