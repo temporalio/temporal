@@ -274,10 +274,10 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskList:                 decisionTaskList,
+		TaskQueue:                decisionTaskQueue,
 		WorkflowExecutionTimeout: workflowRunTimeout,
 		WorkflowTaskTimeout:      workflowTaskTimeout,
-		WorkflowIDReusePolicy:    sdkclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()

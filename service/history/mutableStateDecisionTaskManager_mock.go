@@ -29,12 +29,13 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/temporal-proto/enums/v1"
 	failure "go.temporal.io/temporal-proto/failure/v1"
 	history "go.temporal.io/temporal-proto/history/v1"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
-	reflect "reflect"
 )
 
 // MockmutableStateDecisionTaskManager is a mock of mutableStateDecisionTaskManager interface.
@@ -61,18 +62,18 @@ func (m *MockmutableStateDecisionTaskManager) EXPECT() *MockmutableStateDecision
 }
 
 // ReplicateDecisionTaskScheduledEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*decisionInfo, error) {
+func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskQueue string, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*decisionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateDecisionTaskScheduledEvent", version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
+	ret := m.ctrl.Call(m, "ReplicateDecisionTaskScheduledEvent", version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 	ret0, _ := ret[0].(*decisionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReplicateDecisionTaskScheduledEvent indicates an expected call of ReplicateDecisionTaskScheduledEvent.
-func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskScheduledEvent(version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp interface{}) *gomock.Call {
+func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskScheduledEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskScheduledEvent), version, scheduleID, taskList, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateDecisionTaskScheduledEvent", reflect.TypeOf((*MockmutableStateDecisionTaskManager)(nil).ReplicateDecisionTaskScheduledEvent), version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
 // ReplicateTransientDecisionTaskScheduled mocks base method.

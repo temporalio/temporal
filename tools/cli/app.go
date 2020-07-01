@@ -31,7 +31,7 @@ import (
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.25.0"
+	Version = "0.26.0"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -90,10 +90,10 @@ func NewCliApp() *cli.App {
 			Subcommands: newActivityCommands(),
 		},
 		{
-			Name:        "tasklist",
-			Aliases:     []string{"tl"},
-			Usage:       "Operate Temporal task list",
-			Subcommands: newTaskListCommands(),
+			Name:        "taskqueue",
+			Aliases:     []string{"tq"},
+			Usage:       "Operate Temporal task queue",
+			Subcommands: newTaskQueueCommands(),
 		},
 		{
 			Name:        "batch",
@@ -142,10 +142,10 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminElasticSearchCommands(),
 				},
 				{
-					Name:        "tasklist",
-					Aliases:     []string{"tl"},
-					Usage:       "Run admin operation on taskList",
-					Subcommands: newAdminTaskListCommands(),
+					Name:        "taskqueue",
+					Aliases:     []string{"tq"},
+					Usage:       "Run admin operation on taskQueue",
+					Subcommands: newAdminTaskQueueCommands(),
 				},
 				{
 					Name:        "membership",

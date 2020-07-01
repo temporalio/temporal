@@ -209,12 +209,12 @@ func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskIn
 	return result, proto3Decode(b, proto, result)
 }
 
-func TaskListInfoToBlob(info *persistenceblobs.TaskListInfo) (DataBlob, error) {
+func TaskQueueInfoToBlob(info *persistenceblobs.TaskQueueInfo) (DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskListInfo, error) {
-	result := &persistenceblobs.TaskListInfo{}
+func TaskQueueInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskQueueInfo, error) {
+	result := &persistenceblobs.TaskQueueInfo{}
 	return result, proto3Decode(b, proto, result)
 }
 

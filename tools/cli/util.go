@@ -705,11 +705,11 @@ func parseTimeDuration(duration string) (dur time.Duration, err error) {
 	return
 }
 
-func strToTaskListType(str string) enumspb.TaskListType {
+func strToTaskQueueType(str string) enumspb.TaskQueueType {
 	if strings.ToLower(str) == "activity" {
-		return enumspb.TASK_LIST_TYPE_ACTIVITY
+		return enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	}
-	return enumspb.TASK_LIST_TYPE_DECISION
+	return enumspb.TASK_QUEUE_TYPE_DECISION
 }
 
 func getCliIdentity() string {

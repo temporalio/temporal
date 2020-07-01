@@ -37,7 +37,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
@@ -273,7 +273,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	activityID := "activity_id"
 	activityResult := payloads.EncodeString("activity_result")
 
@@ -281,7 +281,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		NamespaceID:          namespaceID,
 		WorkflowID:           we.GetWorkflowId(),
 		RunID:                we.GetRunId(),
-		TaskList:             tl,
+		TaskQueue:            tl,
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
@@ -566,7 +566,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 
 	now := time.Now()
 	workflowType := "some random workflow type"
-	tasklist := "some random tasklist"
+	taskqueue := "some random taskqueue"
 	workflowTimeoutSecond := int32(222)
 	runTimeoutSecond := int32(111)
 	decisionTimeoutSecond := int32(11)
@@ -580,7 +580,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
 			Input:                           nil,
 			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
 			WorkflowRunTimeoutSeconds:       runTimeoutSecond,
@@ -595,7 +595,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Timestamp: now.UnixNano(),
 		EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
 		}},
@@ -642,7 +642,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	di, err := s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		decisionScheduleEvent.GetVersion(),
 		decisionScheduleEvent.GetEventId(),
-		decisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().TaskList.GetName(),
+		decisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().TaskQueue.GetName(),
 		decisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		decisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetAttempt(),
 		0,
@@ -671,7 +671,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Timestamp: now.UnixNano(),
 		EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
+			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
 		}},
@@ -693,7 +693,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	di, err = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		newDecisionScheduleEvent.GetVersion(),
 		newDecisionScheduleEvent.GetEventId(),
-		newDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().TaskList.GetName(),
+		newDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().TaskQueue.GetName(),
 		newDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		newDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetAttempt(),
 		0,
@@ -732,14 +732,14 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
+	tl := "testTaskQueue"
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
 		NamespaceID:          namespaceID,
 		WorkflowID:           we.GetWorkflowId(),
 		RunID:                we.GetRunId(),
-		TaskList:             tl,
+		TaskQueue:            tl,
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,

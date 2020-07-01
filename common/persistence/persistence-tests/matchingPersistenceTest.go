@@ -105,7 +105,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
 
 	for sid, tlName := range tasks {
-		resp, err := s.GetTasks(namespaceID, tlName, enumspb.TASK_LIST_TYPE_ACTIVITY, 100)
+		resp, err := s.GetTasks(namespaceID, tlName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 100)
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
 		s.EqualValues(namespaceID, resp.Tasks[0].Data.GetNamespaceId())
@@ -130,12 +130,12 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	namespaceID := primitives.MustValidateUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
 	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "get-decision-task-test",
 		RunId: "db20f7e2-1a1e-40d9-9278-d8b886738e05"}
-	taskList := "d8b886738e05"
-	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, taskList, 5)
+	taskQueue := "d8b886738e05"
+	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, taskQueue, 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(namespaceID, taskList, enumspb.TASK_LIST_TYPE_DECISION, 1)
+	tasks1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_DECISION, 1)
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
@@ -150,13 +150,13 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
 	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
-	taskList := "48b07ec1915d"
+	taskQueue := "48b07ec1915d"
 	_, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
-		10: taskList,
-		20: taskList,
-		30: taskList,
-		40: taskList,
-		50: taskList,
+		10: taskQueue,
+		20: taskQueue,
+		30: taskQueue,
+		40: taskQueue,
+		50: taskQueue,
 	})
 	s.NoError(err0)
 
@@ -177,8 +177,8 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 		s.Run(fmt.Sprintf("tc_%v_%v", tc.batchSz, tc.readLevel), func() {
 			response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 				NamespaceID: namespaceID,
-				TaskList:    taskList,
-				TaskType:    enumspb.TASK_LIST_TYPE_ACTIVITY,
+				TaskQueue:   taskQueue,
+				TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 				BatchSize:   tc.batchSz,
 				ReadLevel:   tc.readLevel,
 			})
@@ -196,13 +196,13 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
 	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
-	taskList := "48b07ec1915d"
+	taskQueue := "48b07ec1915d"
 	tasks0, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
-		10: taskList,
-		20: taskList,
-		30: taskList,
-		40: taskList,
-		50: taskList,
+		10: taskQueue,
+		20: taskQueue,
+		30: taskQueue,
+		40: taskQueue,
+		50: taskQueue,
 	})
 	s.NoError(err0)
 	s.NotNil(tasks0, "Expected non empty task identifier.")
@@ -211,7 +211,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasksWithID1Response, err1 := s.GetTasks(namespaceID, taskList, enumspb.TASK_LIST_TYPE_ACTIVITY, 5)
+	tasksWithID1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 5)
 
 	s.NoError(err1)
 	tasksWithID1 := tasksWithID1Response.Tasks
@@ -224,7 +224,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.EqualValues(workflowExecution.RunId, t.Data.GetRunId())
 		s.True(t.GetTaskId() > 0)
 
-		err2 := s.CompleteTask(namespaceID, taskList, enumspb.TASK_LIST_TYPE_ACTIVITY, t.GetTaskId())
+		err2 := s.CompleteTask(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY, t.GetTaskId())
 		s.NoError(err2)
 	}
 }
@@ -232,22 +232,22 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 // TestCompleteTasksLessThan test
 func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	namespaceID := uuid.NewRandom().String()
-	taskList := "range-complete-task-tl0"
+	taskQueue := "range-complete-task-tl0"
 	wfExec := commonpb.WorkflowExecution{
 		WorkflowId: "range-complete-task-test",
 		RunId:      uuid.New(),
 	}
 	_, err := s.CreateActivityTasks(namespaceID, wfExec, map[int64]string{
-		10: taskList,
-		20: taskList,
-		30: taskList,
-		40: taskList,
-		50: taskList,
-		60: taskList,
+		10: taskQueue,
+		20: taskQueue,
+		30: taskQueue,
+		40: taskQueue,
+		50: taskQueue,
+		60: taskQueue,
 	})
 	s.NoError(err)
 
-	resp, err := s.GetTasks(namespaceID, taskList, enumspb.TASK_LIST_TYPE_ACTIVITY, 10)
+	resp, err := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 10)
 	s.NoError(err)
 	s.NotNil(resp.Tasks)
 	s.Equal(6, len(resp.Tasks), "getTasks returned wrong number of tasks")
@@ -277,14 +277,14 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	}
 
 	remaining := len(resp.Tasks)
-	req := &p.CompleteTasksLessThanRequest{NamespaceID: namespaceID, TaskListName: taskList, TaskType: enumspb.TASK_LIST_TYPE_ACTIVITY, Limit: 1}
+	req := &p.CompleteTasksLessThanRequest{NamespaceID: namespaceID, TaskQueueName: taskQueue, TaskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, Limit: 1}
 
 	for _, tc := range testCases {
 		req.TaskID = tc.taskID
 		req.Limit = tc.limit
 		nRows, err := s.TaskMgr.CompleteTasksLessThan(req)
 		s.NoError(err)
-		resp, err := s.GetTasks(namespaceID, taskList, enumspb.TASK_LIST_TYPE_ACTIVITY, 10)
+		resp, err := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 10)
 		s.NoError(err)
 		if nRows == p.UnknownNumRowsAffected {
 			s.Equal(0, len(resp.Tasks), "expected all tasks to be deleted")
@@ -299,18 +299,18 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	}
 }
 
-// TestLeaseAndUpdateTaskList test
-func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
+// TestLeaseAndUpdateTaskQueue test
+func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	namespaceID := primitives.MustValidateUUID("00136543-72ad-4615-b7e9-44bca9775b45")
-	taskList := "aaaaaaa"
+	taskQueue := "aaaaaaa"
 	leaseTime := time.Now()
-	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
+	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
-		TaskList:    taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_ACTIVITY,
+		TaskQueue:   taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	})
 	s.NoError(err)
-	tli := response.TaskListInfo
+	tli := response.TaskQueueInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
 	lu, err := types.TimestampFromProto(tli.Data.LastUpdated)
@@ -318,13 +318,13 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
 	leaseTime = time.Now()
-	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
+	response, err = s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
-		TaskList:    taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_ACTIVITY,
+		TaskQueue:   taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	})
 	s.NoError(err)
-	tli = response.TaskListInfo
+	tli = response.TaskQueueInfo
 	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
@@ -332,76 +332,76 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
-	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
+	response, err = s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
-		TaskList:    taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_ACTIVITY,
+		TaskQueue:   taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		RangeID:     1,
 	})
 	s.Error(err)
 	_, ok := err.(*p.ConditionFailedError)
 	s.True(ok)
 
-	taskListInfo := &persistenceblobs.TaskListInfo{
+	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
 		NamespaceId: namespaceID,
-		Name:        taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_ACTIVITY,
+		Name:        taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		AckLevel:    0,
-		Kind:        enumspb.TASK_LIST_KIND_NORMAL,
+		Kind:        enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
-	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
-		TaskListInfo: taskListInfo,
-		RangeID:      2,
+	_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+		TaskQueueInfo: taskQueueInfo,
+		RangeID:       2,
 	})
 	s.NoError(err)
 
-	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
-		TaskListInfo: taskListInfo,
-		RangeID:      3,
+	_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+		TaskQueueInfo: taskQueueInfo,
+		RangeID:       3,
 	})
 	s.Error(err)
 }
 
-// TestLeaseAndUpdateTaskListSticky test
-func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
+// TestLeaseAndUpdateTaskQueueSticky test
+func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	namespaceID := uuid.NewRandom().String()
-	taskList := "aaaaaaa"
-	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		NamespaceID:  namespaceID,
-		TaskList:     taskList,
-		TaskType:     enumspb.TASK_LIST_TYPE_DECISION,
-		TaskListKind: enumspb.TASK_LIST_KIND_STICKY,
+	taskQueue := "aaaaaaa"
+	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
+		NamespaceID:   namespaceID,
+		TaskQueue:     taskQueue,
+		TaskType:      enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskQueueKind: enumspb.TASK_QUEUE_KIND_STICKY,
 	})
 	s.NoError(err)
-	tli := response.TaskListInfo
+	tli := response.TaskQueueInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	s.EqualValues(enumspb.TASK_LIST_KIND_STICKY, tli.Data.Kind)
+	s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, tli.Data.Kind)
 
-	taskListInfo := &persistenceblobs.TaskListInfo{
+	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
 		NamespaceId: namespaceID,
-		Name:        taskList,
-		TaskType:    enumspb.TASK_LIST_TYPE_DECISION,
+		Name:        taskQueue,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_DECISION,
 		AckLevel:    0,
-		Kind:        enumspb.TASK_LIST_KIND_STICKY,
+		Kind:        enumspb.TASK_QUEUE_KIND_STICKY,
 	}
-	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
-		TaskListInfo: taskListInfo,
-		RangeID:      2,
+	_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+		TaskQueueInfo: taskQueueInfo,
+		RangeID:       2,
 	})
 	s.NoError(err) // because update with ttl doesn't check rangeID
 }
 
-func (s *MatchingPersistenceSuite) deleteAllTaskList() {
+func (s *MatchingPersistenceSuite) deleteAllTaskQueue() {
 	var nextPageToken []byte
 	for {
-		resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10, PageToken: nextPageToken})
+		resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10, PageToken: nextPageToken})
 		s.NoError(err)
 		for _, i := range resp.Items {
 			it := i.Data
-			err = s.TaskMgr.DeleteTaskList(&p.DeleteTaskListRequest{
-				TaskList: &p.TaskListKey{
+			err = s.TaskMgr.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
+				TaskQueue: &p.TaskQueueKey{
 					NamespaceID: it.GetNamespaceId(),
 					Name:        it.Name,
 					TaskType:    it.TaskType,
@@ -417,13 +417,13 @@ func (s *MatchingPersistenceSuite) deleteAllTaskList() {
 	}
 }
 
-// TestListWithOneTaskList test
-func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
+// TestListWithOneTaskQueue test
+func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 	if s.TaskMgr.GetName() == "cassandra" {
-		s.T().Skip("ListTaskList API is currently not supported in cassandra")
+		s.T().Skip("ListTaskQueue API is currently not supported in cassandra")
 	}
-	s.deleteAllTaskList()
-	resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
+	s.deleteAllTaskQueue()
+	resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 	s.NoError(err)
 	s.Nil(resp.NextPageToken)
 	s.Equal(0, len(resp.Items))
@@ -434,22 +434,22 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 	for i := 0; i < 10; i++ {
 		rangeID++
 		updatedTime := time.Now().UTC()
-		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-			NamespaceID:  namespaceID,
-			TaskList:     "list-task-list-test-tl0",
-			TaskType:     enumspb.TASK_LIST_TYPE_ACTIVITY,
-			TaskListKind: enumspb.TASK_LIST_KIND_STICKY,
+		_, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
+			NamespaceID:   namespaceID,
+			TaskQueue:     "list-task-queue-test-tl0",
+			TaskType:      enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			TaskQueueKind: enumspb.TASK_QUEUE_KIND_STICKY,
 		})
 		s.NoError(err)
 
-		resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
+		resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 		s.NoError(err)
 
 		s.Equal(1, len(resp.Items))
 		s.EqualValues(namespaceID, resp.Items[0].Data.GetNamespaceId())
-		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
-		s.Equal(enumspb.TASK_LIST_TYPE_ACTIVITY, resp.Items[0].Data.TaskType)
-		s.EqualValues(enumspb.TASK_LIST_KIND_STICKY, resp.Items[0].Data.Kind)
+		s.Equal("list-task-queue-test-tl0", resp.Items[0].Data.Name)
+		s.Equal(enumspb.TASK_QUEUE_TYPE_ACTIVITY, resp.Items[0].Data.TaskType)
+		s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
 		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
@@ -460,13 +460,13 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		updateTL := resp.Items[0].Data
 		updateTL.AckLevel = ackLevel
 		updatedTime = time.Now()
-		_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
-			TaskListInfo: updateTL,
-			RangeID:      rangeID,
+		_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+			TaskQueueInfo: updateTL,
+			RangeID:       rangeID,
 		})
 		s.NoError(err)
 
-		resp, err = s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
+		resp, err = s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
 		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
@@ -474,37 +474,37 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}
 
-	s.deleteAllTaskList()
+	s.deleteAllTaskQueue()
 }
 
-// TestListWithMultipleTaskList test
-func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
+// TestListWithMultipleTaskQueue test
+func (s *MatchingPersistenceSuite) TestListWithMultipleTaskQueue() {
 	if s.TaskMgr.GetName() == "cassandra" {
-		s.T().Skip("ListTaskList API is currently not supported in cassandra")
+		s.T().Skip("ListTaskQueue API is currently not supported in cassandra")
 	}
-	s.deleteAllTaskList()
+	s.deleteAllTaskQueue()
 	namespaceID := uuid.New()
 	tlNames := make(map[string]struct{})
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("test-list-with-multiple-%v", i)
-		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-			NamespaceID:  namespaceID,
-			TaskList:     name,
-			TaskType:     enumspb.TASK_LIST_TYPE_ACTIVITY,
-			TaskListKind: enumspb.TASK_LIST_KIND_NORMAL,
+		_, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
+			NamespaceID:   namespaceID,
+			TaskQueue:     name,
+			TaskType:      enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			TaskQueueKind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		})
 		s.NoError(err)
 		tlNames[name] = struct{}{}
 		listedNames := make(map[string]struct{})
 		var nextPageToken []byte
 		for {
-			resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10, PageToken: nextPageToken})
+			resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10, PageToken: nextPageToken})
 			s.NoError(err)
 			for _, i := range resp.Items {
 				it := i.Data
 				s.EqualValues(namespaceID, it.GetNamespaceId())
-				s.Equal(enumspb.TASK_LIST_TYPE_ACTIVITY, it.TaskType)
-				s.Equal(enumspb.TASK_LIST_KIND_NORMAL, it.Kind)
+				s.Equal(enumspb.TASK_QUEUE_TYPE_ACTIVITY, it.TaskType)
+				s.Equal(enumspb.TASK_QUEUE_KIND_NORMAL, it.Kind)
 				_, ok := listedNames[it.Name]
 				s.False(ok, "list API returns duplicate entries - have: %+v got:%v", listedNames, it.Name)
 				listedNames[it.Name] = struct{}{}
@@ -514,10 +514,10 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 				break
 			}
 		}
-		s.Equal(tlNames, listedNames, "list API returned wrong set of task list names")
+		s.Equal(tlNames, listedNames, "list API returned wrong set of task queue names")
 	}
-	s.deleteAllTaskList()
-	resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
+	s.deleteAllTaskQueue()
+	resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 	s.NoError(err)
 	s.Nil(resp.NextPageToken)
 	s.Equal(0, len(resp.Items))

@@ -38,7 +38,7 @@ import (
 // To help finding available tags, we recommend that all tags to be categorized and placed in the corresponding section.
 // We currently have those categories:
 //   0. Common tags that can't be categorized(or belong to more than one)
-//   1. Workflow: these tags are information that are useful to our customer, like workflow-id/run-id/task-list/...
+//   1. Workflow: these tags are information that are useful to our customer, like workflow-id/run-id/task-queue/...
 //   2. System : these tags are internal information which usually cannot be understood by our customers,
 
 ///////////////////  Common tags defined here ///////////////////
@@ -87,8 +87,8 @@ func workflowListFilterType(listFilterType string) Tag {
 func WorkflowError(error error) Tag { return newErrorTag("wf-error", error) }
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
-func WorkflowTimeoutType(timeoutType int64) Tag {
-	return newInt64("wf-timeout-type", timeoutType)
+func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) Tag {
+	return newStringTag("wf-timeout-type", timeoutType.String())
 }
 
 // WorkflowPollContextTimeout returns tag for WorkflowPollContextTimeout
@@ -264,14 +264,14 @@ func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 	return newInt64("wf-decision-fail-cause", decisionFailCause)
 }
 
-// WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType enumspb.TaskListType) Tag {
-	return newInt32("wf-task-list-type", int32(taskListType))
+// WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
+func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) Tag {
+	return newInt32("wf-task-queue-type", int32(taskQueueType))
 }
 
-// WorkflowTaskListName returns tag for WorkflowTaskListName
-func WorkflowTaskListName(taskListName string) Tag {
-	return newStringTag("wf-task-list-name", taskListName)
+// WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
+func WorkflowTaskQueueName(taskQueueName string) Tag {
+	return newStringTag("wf-task-queue-name", taskQueueName)
 }
 
 // size limit
@@ -848,7 +848,7 @@ func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
 }
 
-// TaskListInfo returns tag for task list info
-func TaskListInfo(s interface{}) Tag {
-	return newObjectTag("task-list-info", s)
+// TaskQueueInfo returns tag for task queue info
+func TaskQueueInfo(s interface{}) Tag {
+	return newObjectTag("task-queue-info", s)
 }

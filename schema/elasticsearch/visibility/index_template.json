@@ -43,7 +43,7 @@
         "KafkaKey": {
           "type": "keyword"
         },
-        "TaskList": {
+        "TaskQueue": {
           "type": "keyword"
         },
         "Attr": {

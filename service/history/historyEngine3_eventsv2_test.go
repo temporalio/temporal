@@ -39,7 +39,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
@@ -167,15 +167,15 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
-	tl := "testTaskList"
-	stickyTl := "stickyTaskList"
+	tl := "testTaskQueue"
+	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdatedTimestamp = time.Now()
-	executionInfo.StickyTaskList = stickyTl
+	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -197,7 +197,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &tasklistpb.TaskList{
+			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -215,9 +215,9 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
-		Name: executionInfo.TaskList,
-		Kind: enumspb.TASK_LIST_KIND_NORMAL,
+	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
 
@@ -240,7 +240,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	namespaceID := testNamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
@@ -253,7 +253,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,
@@ -324,7 +324,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	namespaceID := testNamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
-	taskList := "testTaskList"
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -335,7 +335,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			Namespace:                       namespaceID,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue},
 			WorkflowExecutionTimeoutSeconds: 1,
 			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                        identity,

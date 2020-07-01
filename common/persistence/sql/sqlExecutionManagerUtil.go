@@ -706,12 +706,12 @@ func createTransferTasks(
 		switch task.GetType() {
 		case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 			info.TargetNamespaceId = task.(*p.ActivityTask).NamespaceID
-			info.TaskList = task.(*p.ActivityTask).TaskList
+			info.TaskQueue = task.(*p.ActivityTask).TaskQueue
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
 		case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
 			info.TargetNamespaceId = task.(*p.DecisionTask).NamespaceID
-			info.TaskList = task.(*p.DecisionTask).TaskList
+			info.TaskQueue = task.(*p.DecisionTask).TaskQueue
 			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
 		case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
@@ -893,12 +893,12 @@ func createTimerTasks(
 			switch t := task.(type) {
 			case *p.DecisionTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.ScheduleAttempt
 
 			case *p.ActivityTimeoutTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.Attempt
 
 			case *p.UserTimerTask:
@@ -910,7 +910,7 @@ func createTimerTasks(
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID
-				info.TimeoutType = int32(t.TimeoutType)
+				info.WorkflowBackoffType = t.WorkflowBackoffType
 
 			case *p.WorkflowTimeoutTask:
 				// noop

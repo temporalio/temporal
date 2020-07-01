@@ -37,7 +37,7 @@ import (
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
@@ -80,8 +80,8 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		metricsClient        metrics.Client
-		taskListsLock        sync.RWMutex                   // locks mutation of taskLists
-		taskLists            map[taskListID]taskListManager // Convert to LRU cache
+		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
+		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceCache       cache.NamespaceCache
@@ -100,7 +100,7 @@ var (
 
 	// ErrNoTasks is exported temporarily for integration test
 	ErrNoTasks    = errors.New("No tasks")
-	errPumpClosed = errors.New("Task list pump closed its channel")
+	errPumpClosed = errors.New("Task queue pump closed its channel")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -123,7 +123,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		taskManager:          taskManager,
 		historyService:       historyService,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		taskLists:            make(map[taskListID]taskListManager),
+		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		logger:               logger.WithTags(tag.ComponentMatchingEngine),
 		metricsClient:        metricsClient,
 		matchingClient:       matchingClient,
@@ -136,22 +136,22 @@ func NewEngine(taskManager persistence.TaskManager,
 }
 
 func (e *matchingEngineImpl) Start() {
-	// As task lists are initialized lazily nothing is done on startup at this point.
+	// As task queues are initialized lazily nothing is done on startup at this point.
 }
 
 func (e *matchingEngineImpl) Stop() {
-	// Executes Stop() on each task list outside of lock
-	for _, l := range e.getTaskLists(math.MaxInt32) {
+	// Executes Stop() on each task queue outside of lock
+	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
 }
 
-func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []taskListManager) {
-	e.taskListsLock.RLock()
-	defer e.taskListsLock.RUnlock()
-	lists = make([]taskListManager, 0, len(e.taskLists))
+func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueueManager) {
+	e.taskQueuesLock.RLock()
+	defer e.taskQueuesLock.RUnlock()
+	lists = make([]taskQueueManager, 0, len(e.taskQueues))
 	count := 0
-	for _, tlMgr := range e.taskLists {
+	for _, tlMgr := range e.taskQueues {
 		lists = append(lists, tlMgr)
 		count++
 		if count >= maxCount {
@@ -162,85 +162,85 @@ func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []taskListManager
 }
 
 func (e *matchingEngineImpl) String() string {
-	// Executes taskList.String() on each task list outside of lock
+	// Executes taskQueue.String() on each task queue outside of lock
 	buf := new(bytes.Buffer)
-	for _, l := range e.getTaskLists(1000) {
+	for _, l := range e.getTaskQueues(1000) {
 		fmt.Fprintf(buf, "\n%s", l.String())
 	}
 	return buf.String()
 }
 
-// Returns taskListManager for a task list. If not already cached gets new range from DB and
+// Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind enumspb.TaskListKind) (taskListManager, error) {
-	// The first check is an optimization so almost all requests will have a task list manager
+func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	// The first check is an optimization so almost all requests will have a task queue manager
 	// and return avoiding the write lock
-	e.taskListsLock.RLock()
-	if result, ok := e.taskLists[*taskList]; ok {
-		e.taskListsLock.RUnlock()
+	e.taskQueuesLock.RLock()
+	if result, ok := e.taskQueues[*taskQueue]; ok {
+		e.taskQueuesLock.RUnlock()
 		return result, nil
 	}
-	e.taskListsLock.RUnlock()
-	// If it gets here, write lock and check again in case a task list is created between the two locks
-	e.taskListsLock.Lock()
-	if result, ok := e.taskLists[*taskList]; ok {
-		e.taskListsLock.Unlock()
+	e.taskQueuesLock.RUnlock()
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.taskQueuesLock.Lock()
+	if result, ok := e.taskQueues[*taskQueue]; ok {
+		e.taskQueuesLock.Unlock()
 		return result, nil
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
-	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
+	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
+	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config)
 	if err != nil {
-		e.taskListsLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.taskQueuesLock.Unlock()
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.taskLists[*taskList] = mgr
-	e.taskListsLock.Unlock()
+	e.taskQueues[*taskQueue] = mgr
+	e.taskQueuesLock.Unlock()
 	err = mgr.Start()
 	if err != nil {
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
 
 // For use in tests
-func (e *matchingEngineImpl) updateTaskList(taskList *taskListID, mgr taskListManager) {
-	e.taskListsLock.Lock()
-	defer e.taskListsLock.Unlock()
-	e.taskLists[*taskList] = mgr
+func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQueueManager) {
+	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
+	e.taskQueues[*taskQueue] = mgr
 }
 
-func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
-	e.taskListsLock.Lock()
-	defer e.taskListsLock.Unlock()
-	delete(e.taskLists, *id)
+func (e *matchingEngineImpl) removeTaskQueueManager(id *taskQueueID) {
+	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
+	delete(e.taskQueues, *id)
 }
 
-// AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
+// AddDecisionTask either delivers task directly to waiting poller or save it into task queue persistence.
 func (e *matchingEngineImpl) AddDecisionTask(
 	hCtx *handlerContext,
 	addRequest *matchingservice.AddDecisionTaskRequest,
 ) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
-	taskListName := addRequest.TaskList.GetName()
-	taskListKind := addRequest.TaskList.GetKind()
+	taskQueueName := addRequest.TaskQueue.GetName()
+	taskQueueKind := addRequest.TaskQueue.GetKind()
 
 	// TODO: use tags
 	e.logger.Debug(
-		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
-			addRequest.TaskList.GetName(),
+		fmt.Sprintf("Received AddDecisionTask for taskQueue=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
+			addRequest.TaskQueue.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
 			addRequest.GetScheduleToStartTimeoutSeconds()))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -266,7 +266,7 @@ func (e *matchingEngineImpl) AddDecisionTask(
 	})
 }
 
-// AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
+// AddActivityTask either delivers task directly to waiting poller or save it into task queue persistence.
 func (e *matchingEngineImpl) AddActivityTask(
 	hCtx *handlerContext,
 	addRequest *matchingservice.AddActivityTaskRequest,
@@ -274,21 +274,21 @@ func (e *matchingEngineImpl) AddActivityTask(
 	namespaceID := addRequest.GetNamespaceId()
 	sourceNamespaceID := addRequest.GetSourceNamespaceId()
 	runID := addRequest.Execution.GetRunId()
-	taskListName := addRequest.TaskList.GetName()
-	taskListKind := addRequest.TaskList.GetKind()
+	taskQueueName := addRequest.TaskQueue.GetName()
+	taskQueueKind := addRequest.TaskQueue.GetKind()
 
 	e.logger.Debug(
-		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowId=%v, RunId=%v",
-			taskListName,
+		fmt.Sprintf("Received AddActivityTask for taskQueue=%v WorkflowId=%v, RunId=%v",
+			taskQueueName,
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_ACTIVITY)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -321,24 +321,24 @@ func (e *matchingEngineImpl) PollForDecisionTask(
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
-	taskListName := request.TaskList.GetName()
-	e.logger.Debug("Received PollForDecisionTask for taskList", tag.WorkflowTaskListName(taskListName))
+	taskQueueName := request.TaskQueue.GetName()
+	e.logger.Debug("Received PollForDecisionTask for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
 		if err != nil {
 			return nil, err
 		}
-		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
+		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
 		if err != nil {
 			return nil, err
 		}
-		taskListKind := request.TaskList.GetKind()
-		task, err := e.getTask(pollerCtx, taskList, nil, taskListKind)
+		taskQueueKind := request.TaskQueue.GetKind()
+		task, err := e.getTask(pollerCtx, taskQueue, nil, taskQueueKind)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -370,17 +370,17 @@ pollLoop:
 			}
 
 			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskList.GetName()) != 0 {
+			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
 				isStickyEnabled = true
 			}
 			resp := &historyservice.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId:    mutableStateResp.PreviousStartedEventId,
-				NextEventId:               mutableStateResp.NextEventId,
-				WorkflowType:              mutableStateResp.WorkflowType,
-				StickyExecutionEnabled:    isStickyEnabled,
-				WorkflowExecutionTaskList: mutableStateResp.TaskList,
-				BranchToken:               mutableStateResp.CurrentBranchToken,
-				StartedEventId:            common.EmptyEventID,
+				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
+				NextEventId:                mutableStateResp.NextEventId,
+				WorkflowType:               mutableStateResp.WorkflowType,
+				StickyExecutionEnabled:     isStickyEnabled,
+				WorkflowExecutionTaskQueue: mutableStateResp.TaskQueue,
+				BranchToken:                mutableStateResp.CurrentBranchToken,
+				StartedEventId:             common.EmptyEventID,
 			}
 			return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
 		}
@@ -389,8 +389,8 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.event.GetTaskId()))
+				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskQueue=%v, taskID=%v",
+					taskQueueName, task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -413,8 +413,8 @@ func (e *matchingEngineImpl) PollForActivityTask(
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
-	taskListName := request.TaskList.GetName()
-	e.logger.Debug("Received PollForActivityTask for taskList", tag.Name(taskListName))
+	taskQueueName := request.TaskQueue.GetName()
+	e.logger.Debug("Received PollForActivityTask for taskQueue", tag.Name(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
@@ -422,21 +422,21 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_ACTIVITY)
+		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 		if err != nil {
 			return nil, err
 		}
 
 		var maxDispatch *float64
-		if request.TaskListMetadata != nil && request.TaskListMetadata.MaxTasksPerSecond != nil {
-			maxDispatch = &request.TaskListMetadata.MaxTasksPerSecond.Value
+		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
+			maxDispatch = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskListKind := request.TaskList.GetKind()
-		task, err := e.getTask(pollerCtx, taskList, maxDispatch, taskListKind)
+		taskQueueKind := request.TaskQueue.GetKind()
+		task, err := e.getTask(pollerCtx, taskQueue, maxDispatch, taskQueueKind)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -456,7 +456,7 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.GetTaskId()))
+				e.logger.Debug("Duplicated activity task", tag.Name(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -481,14 +481,14 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	queryRequest *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	namespaceID := queryRequest.GetNamespaceId()
-	taskListName := queryRequest.TaskList.GetName()
-	taskListKind := queryRequest.TaskList.GetKind()
-	taskList, err := newTaskListID(namespaceID, taskListName, enumspb.TASK_LIST_TYPE_DECISION)
+	taskQueueName := queryRequest.TaskQueue.GetName()
+	taskQueueKind := queryRequest.TaskQueue.GetKind()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
 
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +532,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskListCounter)
+		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskQueueCounter)
 		return err
 	}
 	return nil
@@ -552,16 +552,16 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
 	namespaceID := request.GetNamespaceId()
-	taskListType := request.GetTaskListType()
-	taskListName := request.TaskList.GetName()
+	taskQueueType := request.GetTaskQueueType()
+	taskQueueName := request.TaskQueue.GetName()
 	pollerID := request.GetPollerId()
 
-	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return err
 	}
-	taskListKind := request.TaskList.GetKind()
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	taskQueueKind := request.TaskQueue.GetKind()
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return err
 	}
@@ -570,55 +570,55 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	return nil
 }
 
-func (e *matchingEngineImpl) DescribeTaskList(
+func (e *matchingEngineImpl) DescribeTaskQueue(
 	hCtx *handlerContext,
-	request *matchingservice.DescribeTaskListRequest,
-) (*matchingservice.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskQueueRequest,
+) (*matchingservice.DescribeTaskQueueResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := request.DescRequest.GetTaskListType()
-	taskListName := request.DescRequest.TaskList.GetName()
-	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
+	taskQueueType := request.DescRequest.GetTaskQueueType()
+	taskQueueName := request.DescRequest.TaskQueue.GetName()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return nil, err
 	}
-	taskListKind := request.DescRequest.TaskList.GetKind()
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
 
-	return tlMgr.DescribeTaskList(request.DescRequest.GetIncludeTaskListStatus()), nil
+	return tlMgr.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
 }
 
-func (e *matchingEngineImpl) ListTaskListPartitions(
+func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	hCtx *handlerContext,
-	request *matchingservice.ListTaskListPartitionsRequest,
-) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	activityTaskListInfo, err := e.listTaskListPartitions(request, enumspb.TASK_LIST_TYPE_ACTIVITY)
+	request *matchingservice.ListTaskQueuePartitionsRequest,
+) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskListInfo, err := e.listTaskListPartitions(request, enumspb.TASK_LIST_TYPE_DECISION)
+	decisionTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_DECISION)
 	if err != nil {
 		return nil, err
 	}
-	resp := matchingservice.ListTaskListPartitionsResponse{
-		ActivityTaskListPartitions: activityTaskListInfo,
-		DecisionTaskListPartitions: decisionTaskListInfo,
+	resp := matchingservice.ListTaskQueuePartitionsResponse{
+		ActivityTaskQueuePartitions: activityTaskQueueInfo,
+		DecisionTaskQueuePartitions: decisionTaskQueueInfo,
 	}
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType enumspb.TaskListType) ([]*tasklistpb.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetNamespace(),
-		*request.TaskList,
-		taskListType,
+		*request.TaskQueue,
+		taskQueueType,
 	)
 	if err != nil {
 		return nil, err
 	}
-	partitionHostInfo := make([]*tasklistpb.TaskListPartitionMetadata, len(partitions))
+	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
 
 	if err != nil {
 		return nil, err
@@ -626,7 +626,7 @@ func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.Lis
 	for _, partition := range partitions {
 		if host, err := e.getHostInfo(partition); err != nil {
 			partitionHostInfo = append(partitionHostInfo,
-				&tasklistpb.TaskListPartitionMetadata{
+				&taskqueuepb.TaskQueuePartitionMetadata{
 					Key:           partition,
 					OwnerHostName: host,
 				})
@@ -645,27 +645,27 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 
 func (e *matchingEngineImpl) getAllPartitions(
 	namespace string,
-	taskList tasklistpb.TaskList,
-	taskListType enumspb.TaskListType,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
 	var partitionKeys []string
 	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), enumspb.TASK_LIST_TYPE_DECISION)
-	rootPartition := taskListID.GetRoot()
+	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_DECISION)
+	rootPartition := taskQueueID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)
 
 	nWritePartitions := e.config.GetTasksBatchSize
-	n := nWritePartitions(namespace, rootPartition, taskListType)
+	n := nWritePartitions(namespace, rootPartition, taskQueueType)
 	if n <= 0 {
 		return partitionKeys, nil
 	}
 
 	for i := 1; i < n; i++ {
-		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskListPartitionPrefix, rootPartition, i))
+		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, rootPartition, i))
 	}
 
 	return partitionKeys, nil
@@ -673,22 +673,22 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 // Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
-	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind enumspb.TaskListKind,
+	ctx context.Context, taskQueue *taskQueueID, maxDispatchPerSecond *float64, taskQueueKind enumspb.TaskQueueKind,
 ) (*internalTask, error) {
-	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
+	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {
-	e.taskListsLock.Lock()
-	tlMgr, ok := e.taskLists[*id]
+func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+	e.taskQueuesLock.Lock()
+	tlMgr, ok := e.taskQueues[*id]
 	if ok {
-		delete(e.taskLists, *id)
+		delete(e.taskQueues, *id)
 	}
-	e.taskListsLock.Unlock()
+	e.taskQueuesLock.Unlock()
 	if ok {
 		tlMgr.Stop()
 	}
@@ -707,7 +707,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		queryRequest := task.query.request
 		taskToken := &tokengenpb.QueryTask{
 			NamespaceId: queryRequest.GetNamespaceId(),
-			TaskList:    queryRequest.TaskList.Name,
+			TaskQueue:   queryRequest.TaskQueue.Name,
 			TaskId:      task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
@@ -722,7 +722,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
+			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 		}
 	}
 
@@ -754,7 +754,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 	if task.responseC == nil {
 		ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
+		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 
 	taskToken := &tokengenpb.Task{
@@ -855,13 +855,13 @@ func (e *matchingEngineImpl) emitForwardedFromStats(
 	isPollForwarded := len(pollForwardedFrom) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskListCounter)
+		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)
 	case isTaskForwarded:
-		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskListCounter)
+		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskQueueCounter)
 	case isPollForwarded:
-		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskListCounter)
+		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskQueueCounter)
 	default:
-		scope.IncCounter(metrics.LocalToLocalMatchPerTaskListCounter)
+		scope.IncCounter(metrics.LocalToLocalMatchPerTaskQueueCounter)
 	}
 }
 

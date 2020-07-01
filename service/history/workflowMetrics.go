@@ -115,13 +115,13 @@ func emitSessionUpdateStats(
 func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	namespace string,
-	taskList string,
+	taskQueue string,
 	event *historypb.HistoryEvent,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
 		metrics.NamespaceTag(namespace),
-		metrics.TaskListTag(taskList),
+		metrics.TaskQueueTag(taskQueue),
 	)
 
 	switch event.EventType {

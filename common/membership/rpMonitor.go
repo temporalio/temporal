@@ -26,6 +26,8 @@ package membership
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -45,7 +47,9 @@ import (
 
 const (
 	upsertMembershipRecordExpiryDefault = time.Hour * 48
-	healthyHostLastHeartbeatCutoff      = time.Minute * 5
+
+	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
+	healthyHostLastHeartbeatCutoff      = time.Second * 20
 )
 
 type ringpopMonitor struct {
@@ -106,7 +110,7 @@ func (rpo *ringpopMonitor) Start() {
 
 	// TODO - Note this presents a small race condition as we write our identity before we bootstrap ringpop.
 	// This is a current limitation of the current structure of the ringpop library as
-	// we must know our seed nodes before bootsrapping
+	// we must know our seed nodes before bootstrapping
 	bootstrapHostPorts, err := rpo.startHeartbeatAndFetchBootstrapHosts(broadcastAddress)
 	if err != nil {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
@@ -273,7 +277,8 @@ func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertC
 				rpo.logger.Error("Membership upsert failed.", tag.Error(err))
 			}
 
-			time.Sleep(time.Second * 30)
+			jitter := math.Round(rand.Float64() * 5)
+			time.Sleep(time.Second * time.Duration(10 + jitter))
 		}
 	}
 

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
@@ -98,7 +98,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 		tag.TaskID(timerTask.GetTaskId()),
 		tag.TaskType(timerTask.TaskType),
-		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
+		tag.WorkflowTimeoutType(timerTask.TimeoutType),
 		tag.FailoverVersion(timerTask.GetVersion()),
 		tag.TimestampProto(timerTask.VisibilityTimestamp),
 		tag.WorkflowEventID(timerTask.GetEventId()))
@@ -122,7 +122,7 @@ type (
 
 	pushDecisionToMatchingInfo struct {
 		decisionScheduleToStartTimeout int32
-		tasklist                       tasklistpb.TaskList
+		taskqueue                      taskqueuepb.TaskQueue
 	}
 )
 
@@ -158,12 +158,12 @@ func newPushActivityToMatchingInfo(
 
 func newPushDecisionToMatchingInfo(
 	decisionScheduleToStartTimeout int32,
-	tasklist tasklistpb.TaskList,
+	taskqueue taskqueuepb.TaskQueue,
 ) *pushDecisionToMatchingInfo {
 
 	return &pushDecisionToMatchingInfo{
 		decisionScheduleToStartTimeout: decisionScheduleToStartTimeout,
-		tasklist:                       tasklist,
+		taskqueue:                      taskqueue,
 	}
 }
 

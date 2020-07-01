@@ -91,18 +91,18 @@ func (c *clientImpl) DescribeNamespace(
 	return client.DescribeNamespace(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeTaskList(
+func (c *clientImpl) DescribeTaskQueue(
 	ctx context.Context,
-	request *workflowservice.DescribeTaskListRequest,
+	request *workflowservice.DescribeTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeTaskListResponse, error) {
+) (*workflowservice.DescribeTaskQueueResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeTaskList(ctx, request, opts...)
+	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeWorkflowExecution(
@@ -344,18 +344,18 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	return client.RequestCancelWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) ResetStickyTaskList(
+func (c *clientImpl) ResetStickyTaskQueue(
 	ctx context.Context,
-	request *workflowservice.ResetStickyTaskListRequest,
+	request *workflowservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetStickyTaskListResponse, error) {
+) (*workflowservice.ResetStickyTaskQueueResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ResetStickyTaskList(ctx, request, opts...)
+	return client.ResetStickyTaskQueue(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetWorkflowExecution(
@@ -582,11 +582,11 @@ func (c *clientImpl) GetClusterInfo(
 	return client.GetClusterInfo(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListTaskListPartitions(
+func (c *clientImpl) ListTaskQueuePartitions(
 	ctx context.Context,
-	request *workflowservice.ListTaskListPartitionsRequest,
+	request *workflowservice.ListTaskQueuePartitionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListTaskListPartitionsResponse, error) {
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
@@ -594,7 +594,7 @@ func (c *clientImpl) ListTaskListPartitions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 
-	return client.ListTaskListPartitions(ctx, request, opts...)
+	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

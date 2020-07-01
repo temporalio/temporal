@@ -35,7 +35,7 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist/v1"
+	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
 	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
@@ -200,20 +200,20 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	// that logic has a bug which timer task for that sticky decision is not generated
 	// the correct logic should check whether the decision task is a sticky decision
 	// task or not.
-	taskList := &tasklistpb.TaskList{
-		Name: task.TaskList,
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: task.TaskQueue,
 	}
-	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
+	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this decision is an sticky decision
 		// there shall already be an timer set
-		taskList.Kind = enumspb.TASK_LIST_KIND_STICKY
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 		taskTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushDecision(task, taskList, taskTimeout)
+	return t.pushDecision(task, taskQueue, taskTimeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
@@ -289,7 +289,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,
-		executionInfo.TaskList,
+		executionInfo.TaskQueue,
 		searchAttr,
 	)
 	if err != nil {
@@ -698,7 +698,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
-			executionInfo.TaskList,
+			executionInfo.TaskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -712,7 +712,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
-		executionInfo.TaskList,
+		executionInfo.TaskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -1199,7 +1199,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			Namespace:                       targetNamespace,
 			WorkflowId:                      attributes.WorkflowId,
 			WorkflowType:                    attributes.WorkflowType,
-			TaskList:                        attributes.TaskList,
+			TaskQueue:                       attributes.TaskQueue,
 			Input:                           attributes.Input,
 			Header:                          attributes.Header,
 			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,

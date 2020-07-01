@@ -88,23 +88,24 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		return true
 	}
 
-	failure = getCauseFailure(failure)
 	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
 		return false
 	}
 
-	if failure.GetApplicationFailureInfo().GetNonRetryable() || failure.GetServerFailureInfo().GetNonRetryable() {
-		return false
+	if failure.GetTimeoutFailureInfo() != nil {
+		return failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	}
 
-	if failure.GetTimeoutFailureInfo() != nil {
-		if failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_START_TO_CLOSE &&
-			failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return false
-		}
+	if failure.GetServerFailureInfo() != nil {
+		return !failure.GetServerFailureInfo().GetNonRetryable()
 	}
 
 	if failure.GetApplicationFailureInfo() != nil {
+		if failure.GetApplicationFailureInfo().GetNonRetryable() {
+			return false
+		}
+
 		failureType := failure.GetApplicationFailureInfo().GetType()
 		for _, nrt := range nonRetryableTypes {
 			if nrt == failureType {
@@ -112,13 +113,5 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			}
 		}
 	}
-
 	return true
-}
-
-func getCauseFailure(failure *failurepb.Failure) *failurepb.Failure {
-	for ; failure.GetCause() != nil; failure = failure.GetCause() {
-	}
-
-	return failure
 }

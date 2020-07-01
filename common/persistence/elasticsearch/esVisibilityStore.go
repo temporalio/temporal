@@ -90,7 +90,7 @@ type (
 		HistoryLength   int64
 		Memo            []byte
 		Encoding        string
-		TaskList        string
+		TaskQueue       string
 		Attr            map[string]interface{}
 	}
 )
@@ -125,7 +125,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
-		request.TaskList,
+		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.TaskID,
@@ -150,7 +150,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.HistoryLength,
 		request.TaskID,
 		request.Memo.Data,
-		request.TaskList,
+		request.TaskQueue,
 		request.Memo.GetEncoding(),
 		request.SearchAttributes,
 	)
@@ -164,7 +164,7 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
-		request.TaskList,
+		request.TaskQueue,
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.TaskID,
@@ -882,7 +882,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		StartTime:        time.Unix(0, source.StartTime),
 		ExecutionTime:    time.Unix(0, source.ExecutionTime),
 		Memo:             p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
-		TaskList:         source.TaskList,
+		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
 	}
 	if source.CloseTime != 0 {
@@ -894,7 +894,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	return record
 }
 
-func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskList string,
+func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
@@ -903,7 +903,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: workflowTypeName}},
 		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: startTimeUnixNano}},
 		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.TaskList:      {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskList}},
+		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}
@@ -929,7 +929,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
-	historyLength int64, taskID int64, memo []byte, taskList string, encoding common.EncodingType,
+	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding common.EncodingType,
 	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
 	msgType := enumsgenpb.MESSAGE_TYPE_INDEX
@@ -940,7 +940,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: endTimeUnixNano}},
 		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: int64(status)}},
 		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: historyLength}},
-		es.TaskList:        {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskList}},
+		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}

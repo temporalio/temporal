@@ -52,7 +52,7 @@ type (
 		RunTimeout         int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -71,7 +71,7 @@ type (
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 
@@ -86,7 +86,7 @@ type (
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
-		TaskList           string
+		TaskQueue          string
 		SearchAttributes   map[string]*commonpb.Payload
 	}
 

@@ -15,7 +15,7 @@ frontend.validSearchAttributes:
       CloseTime: "Int"
       Status: "Int"
       HistoryLength: "Int"
-      TaskList: "Keyword"
+      TaskQueue: "Keyword"
       CustomStringField: "String"
       CustomKeywordField: "Keyword"
       CustomIntField: "Int"

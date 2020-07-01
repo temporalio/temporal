@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasklist
+package taskqueue
 
 import (
 	"encoding/binary"
@@ -44,9 +44,9 @@ type (
 		nextTaskID  int64
 		tasks       []*persistenceblobs.AllocatedTaskInfo
 	}
-	mockTaskListTable struct {
+	mockTaskQueueTable struct {
 		sync.Mutex
-		info []*p.PersistedTaskListInfo
+		info []*p.PersistedTaskQueueInfo
 	}
 )
 
@@ -58,9 +58,9 @@ func newMockTaskTable() *mockTaskTable {
 	}
 }
 
-func (tbl *mockTaskListTable) generate(name string, idle bool) {
-	tl := p.PersistedTaskListInfo{
-		Data: &persistenceblobs.TaskListInfo{
+func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
+	tq := p.PersistedTaskQueueInfo{
+		Data: &persistenceblobs.TaskQueueInfo{
 			NamespaceId: uuid.New(),
 			Name:        name,
 			LastUpdated: types.TimestampNow(),
@@ -68,12 +68,12 @@ func (tbl *mockTaskListTable) generate(name string, idle bool) {
 		RangeID: 22,
 	}
 	if idle {
-		tl.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
+		tq.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
 	}
-	tbl.info = append(tbl.info, &tl)
+	tbl.info = append(tbl.info, &tq)
 }
 
-func (tbl *mockTaskListTable) list(token []byte, count int) ([]*p.PersistedTaskListInfo, []byte) {
+func (tbl *mockTaskQueueTable) list(token []byte, count int) ([]*p.PersistedTaskQueueInfo, []byte) {
 	tbl.Lock()
 	defer tbl.Unlock()
 	if tbl.info == nil {
@@ -92,10 +92,10 @@ func (tbl *mockTaskListTable) list(token []byte, count int) ([]*p.PersistedTaskL
 	return tbl.info[off : off+count], token
 }
 
-func (tbl *mockTaskListTable) delete(name string) {
+func (tbl *mockTaskQueueTable) delete(name string) {
 	tbl.Lock()
 	defer tbl.Unlock()
-	var newInfo []*p.PersistedTaskListInfo
+	var newInfo []*p.PersistedTaskQueueInfo
 	for _, tl := range tbl.info {
 		if tl.Data.Name != name {
 			newInfo = append(newInfo, tl)
@@ -104,7 +104,7 @@ func (tbl *mockTaskListTable) delete(name string) {
 	tbl.info = newInfo
 }
 
-func (tbl *mockTaskListTable) get(name string) *p.PersistedTaskListInfo {
+func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 	tbl.Lock()
 	defer tbl.Unlock()
 	for _, tl := range tbl.info {

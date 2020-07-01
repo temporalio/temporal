@@ -188,7 +188,7 @@ func StartBatchJob(c *cli.Context) {
 	tcCtx, cancel = newContext(c)
 	defer cancel()
 	options := sdkclient.StartWorkflowOptions{
-		TaskList: batcher.BatcherTaskListName,
+		TaskQueue: batcher.BatcherTaskQueueName,
 		Memo: map[string]interface{}{
 			"Reason": reason,
 		},

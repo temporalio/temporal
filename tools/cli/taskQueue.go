@@ -26,39 +26,39 @@ package cli
 
 import "github.com/urfave/cli"
 
-func newTaskListCommands() []cli.Command {
+func newTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe pollers info of tasklist",
+			Usage:   "Describe pollers info of taskqueue",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTaskListWithAlias,
-					Usage: "TaskList description",
+					Name:  FlagTaskQueueWithAlias,
+					Usage: "TaskQueue description",
 				},
 				cli.StringFlag{
-					Name:  FlagTaskListTypeWithAlias,
+					Name:  FlagTaskQueueTypeWithAlias,
 					Value: "decision",
-					Usage: "Optional TaskList type [decision|activity]",
+					Usage: "Optional TaskQueue type [decision|activity]",
 				},
 			},
 			Action: func(c *cli.Context) {
-				DescribeTaskList(c)
+				DescribeTaskQueue(c)
 			},
 		},
 		{
 			Name:    "list-partition",
 			Aliases: []string{"lp"},
-			Usage:   "List all the tasklist partitions and the hostname for partitions.",
+			Usage:   "List all the taskqueue partitions and the hostname for partitions.",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTaskListWithAlias,
-					Usage: "TaskList description",
+					Name:  FlagTaskQueueWithAlias,
+					Usage: "TaskQueue description",
 				},
 			},
 			Action: func(c *cli.Context) {
-				ListTaskListPartitions(c)
+				ListTaskQueuePartitions(c)
 			},
 		},
 	}
