@@ -118,6 +118,7 @@ func Test_IsRetryable(t *testing.T) {
 	a.False(isRetryable(f, []string{"otherType", "type"}))
 	a.False(isRetryable(f, []string{"type"}))
 
+	// When any failure is inside ChildWorkflowExecutionFailure, it is always retryable because ChildWorkflow is always retryable.
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
 		Cause: &failurepb.Failure{
