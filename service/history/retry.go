@@ -88,14 +88,13 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		return true
 	}
 
-	failure = getCauseFailure(failure)
 	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
 		return false
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		return failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_START_TO_CLOSE &&
-			failure.GetTimeoutFailureInfo().GetTimeoutType() != enumspb.TIMEOUT_TYPE_HEARTBEAT
+		return failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	}
 
 	if failure.GetServerFailureInfo() != nil {
@@ -115,11 +114,4 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		}
 	}
 	return true
-}
-
-func getCauseFailure(failure *failurepb.Failure) *failurepb.Failure {
-	// Extract cause for ChildWorkflowExecutionFailure and ActivityFailure.
-	for ; failure.GetCause() != nil && (failure.GetChildWorkflowExecutionFailureInfo() != nil || failure.GetActivityFailureInfo() != nil); failure = failure.GetCause() {
-	}
-	return failure
 }

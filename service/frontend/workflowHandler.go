@@ -1568,6 +1568,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
+	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
+		return nil, wh.error(errFailureMustHaveApplicationFailureInfo, scope)
+	}
+
 	scope, sw := wh.startRequestProfileWithNamespace(
 		metrics.FrontendRespondActivityTaskFailedScope,
 		namespaceEntry.GetInfo().Name,

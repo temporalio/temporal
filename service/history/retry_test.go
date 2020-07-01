@@ -38,7 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 )
 
-func Test_IsRetry(t *testing.T) {
+func Test_IsRetryable(t *testing.T) {
 	a := assert.New(t)
 
 	f := &failurepb.Failure{
@@ -117,24 +117,16 @@ func Test_IsRetry(t *testing.T) {
 	a.True(isRetryable(f, []string{"otherType"}))
 	a.False(isRetryable(f, []string{"otherType", "type"}))
 	a.False(isRetryable(f, []string{"type"}))
-}
 
-func Test_IsRetry_WrappedFailure(t *testing.T) {
-	a := assert.New(t)
-
-	f := &failurepb.Failure{
+	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
 		Cause: &failurepb.Failure{
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				NonRetryable: false,
-				Type:         "type",
+				NonRetryable: true,
 			}},
 		},
 	}
 	a.True(isRetryable(f, nil))
-	a.True(isRetryable(f, []string{"otherType"}))
-	a.False(isRetryable(f, []string{"otherType", "type"}))
-	a.False(isRetryable(f, []string{"type"}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
@@ -142,59 +134,12 @@ func Test_IsRetry_WrappedFailure(t *testing.T) {
 			FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
 			Cause: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-					Type:         "type",
-				}},
-			},
-		},
-	}
-	a.True(isRetryable(f, nil))
-	a.True(isRetryable(f, []string{"otherType"}))
-	a.False(isRetryable(f, []string{"otherType", "type"}))
-	a.False(isRetryable(f, []string{"type"}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				NonRetryable: false,
-				Type:         "type",
-			}},
-			Cause: &failurepb.Failure{
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					// Inner ApplicationFailureInfo shouldn't change behavour.
 					NonRetryable: true,
-					Type:         "innerType",
 				}},
 			},
 		},
 	}
 	a.True(isRetryable(f, nil))
-	a.True(isRetryable(f, []string{"otherType", "innerType"}))
-	a.False(isRetryable(f, []string{"otherType", "type", "innerType"}))
-	a.False(isRetryable(f, []string{"type", "innerType"}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				NonRetryable: true,
-				Type:         "type",
-			}},
-			Cause: &failurepb.Failure{
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					// Inner ApplicationFailureInfo shouldn't change behavour.
-					NonRetryable: false,
-					Type:         "innerType",
-				}},
-			},
-		},
-	}
-	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{"otherType", "innerType"}))
-	a.False(isRetryable(f, []string{"otherType", "type", "innerType"}))
-	a.False(isRetryable(f, []string{"type", "innerType"}))
-
 }
 
 func Test_NextRetry(t *testing.T) {
