@@ -50,6 +50,10 @@ const (
 
 	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
 	healthyHostLastHeartbeatCutoff = time.Second * 20
+
+	// Indicates how many times we are willing to refresh the bootstrap list and retry ringpop
+	// bootstrap before aborting attempt to join the ring
+	maxBootstrapRetries = 2
 )
 
 type ringpopMonitor struct {
@@ -116,7 +120,11 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.Start(broadcastAddress, bootstrapHostPorts)
+	rpo.rp.Start(
+		bootstrapHostPorts,
+		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager) },
+		healthyHostLastHeartbeatCutoff,
+		maxBootstrapRetries)
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
@@ -239,7 +247,6 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) 
 	var nextPageToken []byte
 
 	for {
-		// Get active hosts in last 5 minutes - Limit page size to 1000.
 		resp, err := manager.GetClusterMembers(
 			&persistence.GetClusterMembersRequest{
 				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,

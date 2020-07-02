@@ -35,8 +35,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber/ringpop-go"
-	"github.com/uber/ringpop-go/discovery/statichosts"
-	"github.com/uber/ringpop-go/swim"
 	"github.com/uber/tchannel-go"
 
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -113,10 +111,6 @@ func NewTestRingpopCluster(
 		cluster.seedNode = cluster.hostAddrs[0]
 	}
 	logger.Info("seedNode", tag.Name(cluster.seedNode))
-	bOptions := new(swim.BootstrapOptions)
-	bOptions.DiscoverProvider = statichosts.New(cluster.seedNode) // just use the first addr as the seed
-	bOptions.MaxJoinDuration = time.Duration(time.Second * 2)
-	bOptions.JoinSize = 1
 
 	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
 	seedMember := &persistence.ClusterMember{
@@ -127,17 +121,28 @@ func NewTestRingpopCluster(
 		LastHeartbeat: time.Now().UTC(),
 	}
 
-	// Tests fallback to single node cluster
-	badSeedMember := &persistence.ClusterMember{
-		HostID:        uuid.NewUUID(),
-		RPCAddress:    seedAddress,
-		RPCPort:       seedPort + 1,
-		SessionStart:  time.Now().UTC(),
-		LastHeartbeat: time.Now().UTC(),
-	}
+	firstGetClusterMemberCall := true
+	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).DoAndReturn(
+		func(_ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
+			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
 
-	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).
-		Return(&persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember, badSeedMember}}, nil).AnyTimes()
+			if firstGetClusterMemberCall {
+				// The first time GetClusterMembers is invoked, we simulate returning a stale/bad heartbeat.
+				// All subsequent calls only return the single "good" seed member
+				// This ensures that we exercise the retry path in bootstrap properly.
+				badSeedMember := &persistence.ClusterMember{
+					HostID:        uuid.NewUUID(),
+					RPCAddress:    seedAddress,
+					RPCPort:       seedPort + 1,
+					SessionStart:  time.Now().UTC(),
+					LastHeartbeat: time.Now().UTC(),
+				}
+				res = &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember, badSeedMember}}
+			}
+
+			firstGetClusterMemberCall = false
+			return res, nil
+		}).AnyTimes()
 
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {

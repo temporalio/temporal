@@ -63,7 +63,12 @@ func NewRingPop(
 }
 
 // Start start ring pop
-func (r *RingPop) Start(currentNodeHostPort string, bootstrapHostPorts []string) {
+func (r *RingPop) Start(
+	initialBootstrapHostPorts []string,
+	bootstrapHostPostRetriever func() ([]string, error),
+	bootstrapRetryBackoffInterval time.Duration,
+	maxRetries int,
+) {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
@@ -72,29 +77,46 @@ func (r *RingPop) Start(currentNodeHostPort string, bootstrapHostPorts []string)
 		return
 	}
 
-	bootParams := &swim.BootstrapOptions{
-		ParallelismFactor: 10,
-		JoinSize:          1,
-		MaxJoinDuration:   r.maxJoinDuration,
-		DiscoverProvider:  statichosts.New(bootstrapHostPorts...),
-	}
-
-	_, err := r.Ringpop.Bootstrap(bootParams)
-	if err != nil {
-		r.logger.Error("unable to bootstrap ringpop. falling back to single-node cluster", tag.Error(err))
-		r.startSingleNodeCluster(currentNodeHostPort)
-	}
+	r.bootstrap(initialBootstrapHostPorts, bootstrapHostPostRetriever, bootstrapRetryBackoffInterval, maxRetries)
 }
 
-func (r *RingPop) startSingleNodeCluster(currentNodeHostPort string) {
-	bootParams := &swim.BootstrapOptions{
-		MaxJoinDuration:  r.maxJoinDuration,
-		DiscoverProvider: statichosts.New(currentNodeHostPort),
-	}
+func (r *RingPop) bootstrap(
+	initialBootstrapHostPorts []string,
+	bootstrapHostPostRetriever func() ([]string, error),
+	bootstrapRetryBackoffInterval time.Duration,
+	maxRetries int,
+) {
+	attemptCount := 0
+	hostPorts := initialBootstrapHostPorts
+	var err error
 
-	_, err := r.Ringpop.Bootstrap(bootParams)
-	if err != nil {
-		r.logger.Fatal("unable to bootstrap ringpop", tag.Error(err))
+	for {
+		if attemptCount > 0 {
+			hostPorts, err = bootstrapHostPostRetriever()
+			if err != nil {
+				r.logger.Fatal("unable to bootstrap ringpop. unable to refresh hostport bootstrap list on retry", tag.Error(err))
+			}
+		}
+
+		bootParams := &swim.BootstrapOptions{
+			ParallelismFactor: 10,
+			JoinSize:          1,
+			MaxJoinDuration:   r.maxJoinDuration,
+			DiscoverProvider:  statichosts.New(hostPorts...),
+		}
+
+		_, err = r.Ringpop.Bootstrap(bootParams)
+		if err == nil {
+			return
+		}
+
+		if attemptCount == maxRetries {
+			r.logger.Fatal("unable to bootstrap ringpop. exhausted all retries", tag.Error(err))
+		}
+
+		r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
+		attemptCount = attemptCount + 1
+		time.Sleep(bootstrapRetryBackoffInterval)
 	}
 }
 
