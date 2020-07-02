@@ -309,7 +309,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 		if contextExpired(ctx) {
 			return nil, archiver.ErrContextTimeout
 		}
-		err = backoff.Retry(op, common.CreatePersistanceRetryPolicy(), common.IsPersistenceTransientError)
+		err = backoff.Retry(op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
 	}
 	return historyBlob, nil
 }

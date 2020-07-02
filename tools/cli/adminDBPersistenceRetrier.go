@@ -34,7 +34,7 @@ import (
 const maxDBRetries = 10
 
 var (
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 func retryListConcreteExecutions(

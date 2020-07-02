@@ -37,7 +37,7 @@ import (
 )
 
 var (
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 type (

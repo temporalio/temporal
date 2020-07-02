@@ -116,7 +116,7 @@ func newTaskProcessor(
 		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
 		workerNotificationChans: workerNotificationChans,
-		retryPolicy:             common.CreatePersistanceRetryPolicy(),
+		retryPolicy:             backoff.NewTwoPhaseRetryPolicy(),
 		numOfWorker:             options.workerCount,
 	}
 

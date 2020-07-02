@@ -127,8 +127,8 @@ func AddSecondsToBaseTime(baseTimeInNanoSec int64, durationInSeconds int64) int6
 	return time.Unix(0, baseTimeInNanoSec).Add(timeOut).UnixNano()
 }
 
-// CreatePersistanceRetryPolicy creates a retry policy for persistence layer operations
-func CreatePersistanceRetryPolicy() backoff.RetryPolicy {
+// CreatePersistenceRetryPolicy creates a retry policy for persistence layer operations
+func CreatePersistenceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
 	policy.SetMaximumInterval(retryPersistenceOperationMaxInterval)
 	policy.SetExpirationInterval(retryPersistenceOperationExpirationInterval)
