@@ -38,6 +38,11 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
+const (
+	// Number of times we retry refreshing the bootstrap list and try to join the Ringpop cluster before giving up
+	maxBootstrapRetries = 5
+)
+
 type (
 	// RingPop is a simple wrapper
 	RingPop struct {
@@ -67,7 +72,6 @@ func (r *RingPop) Start(
 	initialBootstrapHostPorts []string,
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
-	maxRetries int,
 ) {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
@@ -77,21 +81,20 @@ func (r *RingPop) Start(
 		return
 	}
 
-	r.bootstrap(initialBootstrapHostPorts, bootstrapHostPostRetriever, bootstrapRetryBackoffInterval, maxRetries)
+	r.bootstrap(initialBootstrapHostPorts, bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
 }
 
 func (r *RingPop) bootstrap(
 	initialBootstrapHostPorts []string,
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
-	maxRetries int,
 ) {
-	attemptCount := 0
+	retryCount := 0
 	hostPorts := initialBootstrapHostPorts
 	var err error
 
 	for {
-		if attemptCount > 0 {
+		if retryCount > 0 {
 			hostPorts, err = bootstrapHostPostRetriever()
 			if err != nil {
 				r.logger.Fatal("unable to bootstrap ringpop. unable to refresh hostport bootstrap list on retry", tag.Error(err))
@@ -110,12 +113,12 @@ func (r *RingPop) bootstrap(
 			return
 		}
 
-		if attemptCount == maxRetries {
+		if retryCount >= maxBootstrapRetries {
 			r.logger.Fatal("unable to bootstrap ringpop. exhausted all retries", tag.Error(err))
 		}
 
 		r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
-		attemptCount = attemptCount + 1
+		retryCount = retryCount + 1
 		time.Sleep(bootstrapRetryBackoffInterval)
 	}
 }

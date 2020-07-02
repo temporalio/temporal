@@ -50,10 +50,6 @@ const (
 
 	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
 	healthyHostLastHeartbeatCutoff = time.Second * 20
-
-	// Indicates how many times we are willing to refresh the bootstrap list and retry ringpop
-	// bootstrap before aborting attempt to join the ring
-	maxBootstrapRetries = 2
 )
 
 type ringpopMonitor struct {
@@ -123,8 +119,7 @@ func (rpo *ringpopMonitor) Start() {
 	rpo.rp.Start(
 		bootstrapHostPorts,
 		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager) },
-		healthyHostLastHeartbeatCutoff,
-		maxBootstrapRetries)
+		healthyHostLastHeartbeatCutoff/2)
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
