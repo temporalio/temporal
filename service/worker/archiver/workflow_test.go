@@ -25,6 +25,7 @@
 package archiver
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -98,8 +99,9 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
-	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
-	s.True(ok, "Called ContinueAsNew")
+	err := env.GetWorkflowError()
+	var continueAsNewErr *workflow.ContinueAsNewError
+	s.True(errors.As(err, &continueAsNewErr), "Called ContinueAsNew")
 	env.AssertExpectations(s.T())
 }
 
@@ -143,8 +145,9 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
-	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
-	s.True(ok, "Called ContinueAsNew")
+	err := env.GetWorkflowError()
+	var continueAsNew *workflow.ContinueAsNewError
+	s.True(errors.As(err, &continueAsNew), "Called ContinueAsNew")
 	env.AssertExpectations(s.T())
 }
 
