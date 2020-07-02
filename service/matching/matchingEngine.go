@@ -86,7 +86,7 @@ var (
 	emptyPollForDecisionTaskResponse = &m.PollForDecisionTaskResponse{}
 	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
 	emptyPollForActivityTaskResponse   = &workflow.PollForActivityTaskResponse{}
-	persistenceOperationRetryPolicy    = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy    = common.CreatePersistenceRetryPolicy()
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test

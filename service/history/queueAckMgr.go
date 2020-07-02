@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 func newQueueAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {

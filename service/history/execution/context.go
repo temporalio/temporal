@@ -160,7 +160,7 @@ type (
 var _ Context = (*contextImpl)(nil)
 
 var (
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 // NewContext creates a new workflow execution context

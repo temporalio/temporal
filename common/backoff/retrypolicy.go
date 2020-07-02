@@ -36,6 +36,8 @@ const (
 	defaultMaximumInterval    = 10 * time.Second
 	defaultExpirationInterval = time.Minute
 	defaultMaximumAttempts    = noMaximumAttempts
+
+	defaultFirstPhaseMaximumAttempts = 3
 )
 
 type (
@@ -65,6 +67,14 @@ type (
 		maximumAttempts    int
 	}
 
+	// TwoPhaseRetryPolicy implements a policy that first use one policy to get next delay,
+	// and once expired use the second policy for the following retry.
+	// It can achieve fast retries in first phase then slowly retires in second phase.
+	TwoPhaseRetryPolicy struct {
+		firstPolicy  RetryPolicy
+		secondPolicy RetryPolicy
+	}
+
 	systemClock struct{}
 
 	retrierImpl struct {
@@ -89,6 +99,26 @@ func NewExponentialRetryPolicy(initialInterval time.Duration) *ExponentialRetryP
 	}
 
 	return p
+}
+
+// NewTwoPhaseRetryPolicy creates TwoPhaseRetryPolicy
+func NewTwoPhaseRetryPolicy() *TwoPhaseRetryPolicy {
+	firstPolicy := &ExponentialRetryPolicy{
+		initialInterval:    50 * time.Millisecond,
+		backoffCoefficient: defaultBackoffCoefficient,
+		maximumAttempts:    defaultFirstPhaseMaximumAttempts,
+	}
+	secondPolicy := &ExponentialRetryPolicy{
+		initialInterval:    2 * time.Second,
+		backoffCoefficient: defaultBackoffCoefficient,
+		maximumInterval:    128 * time.Second,
+		expirationInterval: 5 * time.Minute,
+		maximumAttempts:    defaultMaximumAttempts,
+	}
+	return &TwoPhaseRetryPolicy{
+		firstPolicy:  firstPolicy,
+		secondPolicy: secondPolicy,
+	}
 }
 
 // NewRetrier is used for creating a new instance of Retrier
@@ -178,6 +208,14 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	nextInterval = nextInterval*0.8 + float64(rand.Intn(jitterPortion))
 
 	return time.Duration(nextInterval)
+}
+
+func (tp *TwoPhaseRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
+	nextInterval := tp.firstPolicy.ComputeNextDelay(elapsedTime, numAttempts)
+	if nextInterval == done {
+		nextInterval = tp.secondPolicy.ComputeNextDelay(elapsedTime, numAttempts-defaultFirstPhaseMaximumAttempts)
+	}
+	return nextInterval
 }
 
 // Now returns the current time using the system clock

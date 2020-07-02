@@ -45,7 +45,7 @@ var (
 
 	nonDefaultQueueBackoffDuration = 5 * time.Second
 
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 type (

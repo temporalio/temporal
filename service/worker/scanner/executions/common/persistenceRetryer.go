@@ -36,7 +36,7 @@ type (
 )
 
 var (
-	retryPolicy = common.CreatePersistanceRetryPolicy()
+	retryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 // NewPersistenceRetryer constructs a new PersistenceRetryer
