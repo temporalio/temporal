@@ -127,8 +127,17 @@ func NewTestRingpopCluster(
 		LastHeartbeat: time.Now().UTC(),
 	}
 
+	// Tests fallback to single node cluster
+	badSeedMember := &persistence.ClusterMember{
+		HostID:        uuid.NewUUID(),
+		RPCAddress:    seedAddress,
+		RPCPort:       seedPort + 1,
+		SessionStart:  time.Now().UTC(),
+		LastHeartbeat: time.Now().UTC(),
+	}
+
 	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).
-		Return(&persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}, nil).AnyTimes()
+		Return(&persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember, badSeedMember}}, nil).AnyTimes()
 
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {

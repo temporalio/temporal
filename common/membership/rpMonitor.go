@@ -49,7 +49,7 @@ const (
 	upsertMembershipRecordExpiryDefault = time.Hour * 48
 
 	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
-	healthyHostLastHeartbeatCutoff      = time.Second * 20
+	healthyHostLastHeartbeatCutoff = time.Second * 20
 )
 
 type ringpopMonitor struct {
@@ -116,7 +116,7 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.Start(bootstrapHostPorts)
+	rpo.rp.Start(broadcastAddress, bootstrapHostPorts)
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
@@ -278,7 +278,7 @@ func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertC
 			}
 
 			jitter := math.Round(rand.Float64() * 5)
-			time.Sleep(time.Second * time.Duration(10 + jitter))
+			time.Sleep(time.Second * time.Duration(10+jitter))
 		}
 	}
 

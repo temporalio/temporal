@@ -63,7 +63,7 @@ func NewRingPop(
 }
 
 // Start start ring pop
-func (r *RingPop) Start(bootstrapHostPorts []string) {
+func (r *RingPop) Start(currentNodeHostPort string, bootstrapHostPorts []string) {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
@@ -77,6 +77,19 @@ func (r *RingPop) Start(bootstrapHostPorts []string) {
 		JoinSize:          1,
 		MaxJoinDuration:   r.maxJoinDuration,
 		DiscoverProvider:  statichosts.New(bootstrapHostPorts...),
+	}
+
+	_, err := r.Ringpop.Bootstrap(bootParams)
+	if err != nil {
+		r.logger.Error("unable to bootstrap ringpop. falling back to single-node cluster", tag.Error(err))
+		r.startSingleNodeCluster(currentNodeHostPort)
+	}
+}
+
+func (r *RingPop) startSingleNodeCluster(currentNodeHostPort string) {
+	bootParams := &swim.BootstrapOptions{
+		MaxJoinDuration:  r.maxJoinDuration,
+		DiscoverProvider: statichosts.New(currentNodeHostPort),
 	}
 
 	_, err := r.Ringpop.Bootstrap(bootParams)
