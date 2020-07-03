@@ -69,7 +69,6 @@ func NewRingPop(
 
 // Start start ring pop
 func (r *RingPop) Start(
-	initialBootstrapHostPorts []string,
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
@@ -81,24 +80,19 @@ func (r *RingPop) Start(
 		return
 	}
 
-	r.bootstrap(initialBootstrapHostPorts, bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
+	r.bootstrap(bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
 }
 
 func (r *RingPop) bootstrap(
-	initialBootstrapHostPorts []string,
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
 	retryCount := 0
-	hostPorts := initialBootstrapHostPorts
-	var err error
 
 	for {
-		if retryCount > 0 {
-			hostPorts, err = bootstrapHostPostRetriever()
-			if err != nil {
-				r.logger.Fatal("unable to bootstrap ringpop. unable to refresh hostport bootstrap list on retry", tag.Error(err))
-			}
+		hostPorts, err := bootstrapHostPostRetriever()
+		if err != nil {
+			r.logger.Fatal("unable to bootstrap ringpop. unable to read hostport bootstrap list", tag.Error(err))
 		}
 
 		bootParams := &swim.BootstrapOptions{
