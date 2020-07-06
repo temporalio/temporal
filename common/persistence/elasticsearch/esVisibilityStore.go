@@ -884,10 +884,10 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		Memo:             p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
 		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
+		Status:           source.ExecutionStatus,
 	}
 	if source.CloseTime != 0 {
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.ExecutionStatus
 		record.HistoryLength = source.HistoryLength
 	}
 

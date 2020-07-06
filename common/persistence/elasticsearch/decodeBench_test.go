@@ -73,7 +73,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			TaskQueue:     source.TaskQueue,
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.ExecutionStatus
+		record.Status = source.ExecutionStatus
 		record.HistoryLength = source.HistoryLength
 	}
 }
@@ -103,7 +103,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		}
 		record.CloseTime = time.Unix(0, closeTime)
 		statusEnum := enumspb.WorkflowExecutionStatus(status)
-		record.Status = &statusEnum
+		record.Status = statusEnum
 		record.HistoryLength = historyLen
 	}
 }

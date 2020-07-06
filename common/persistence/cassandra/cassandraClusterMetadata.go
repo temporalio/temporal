@@ -219,8 +219,6 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		return nil, serviceerror.NewInternal("GetClusterMembers operation failed.  Not able to create query iterator.")
 	}
 
-	pagingToken := iter.PageState()
-
 	rowCount := iter.NumRows()
 	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
 
@@ -246,15 +244,19 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		clusterMembers = append(clusterMembers, &member)
 	}
 
+	pagingToken := iter.PageState()
+	var pagingTokenCopy []byte
+	// contract of this API expect nil as pagination token instead of empty byte array
+	if len(pagingToken) > 0 {
+		pagingTokenCopy = make([]byte, len(pagingToken))
+		copy(pagingTokenCopy, pagingToken)
+	}
+
 	if err := iter.Close(); err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
-	if len(clusterMembers) == 0 {
-		pagingToken = nil
-	}
-
-	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingTokenCopy}, nil
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
