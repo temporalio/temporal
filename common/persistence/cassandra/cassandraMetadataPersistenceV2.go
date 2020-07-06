@@ -285,20 +285,25 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 		return nil, serviceerror.NewInternal("ListNamespaces operation failed.  Not able to create query iterator.")
 	}
 
-	var name string
-	var detail []byte
-	var detailEncoding string
-	var notificationVersion int64
-	var isGlobal bool
 	response := &p.InternalListNamespacesResponse{}
-	for iter.Scan(
-		nil,
-		&name,
-		&detail,
-		&detailEncoding,
-		&notificationVersion,
-		&isGlobal,
-	) {
+	for {
+		var name string
+		var detail []byte
+		var detailEncoding string
+		var notificationVersion int64
+		var isGlobal bool
+		if !iter.Scan(
+			nil,
+			&name,
+			&detail,
+			&detailEncoding,
+			&notificationVersion,
+			&isGlobal,
+		) {
+			// done iterating over all namespaces in this page
+			break
+		}
+
 		// do not include the metadata record
 		if name != namespaceMetadataRecordName {
 			response.Namespaces = append(response.Namespaces, &p.InternalGetNamespaceResponse{
