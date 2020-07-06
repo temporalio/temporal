@@ -2479,10 +2479,14 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				Status:                        request.GetStatusFilter().GetStatus(),
-			})
+			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				err = errStatusFilterMustBeNotRunning
+			} else {
+				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+					ListWorkflowExecutionsRequest: baseReq,
+					Status:                        request.GetStatusFilter().GetStatus(),
+				})
+			}
 		}
 		wh.GetLogger().Info("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
@@ -2960,6 +2964,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.Query.GetQueryType() == "" {
 		return nil, wh.error(errQueryTypeNotSet, scope)
 	}
+
+	enums.SetDefaultQueryRejectCondition(&request.QueryRejectCondition)
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
