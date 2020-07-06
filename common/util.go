@@ -650,11 +650,11 @@ func IsJustOrderByClause(clause string) bool {
 func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logger) workflow.IndexedValueType {
 	switch t := fieldType.(type) {
 	case float64:
-		return workflow.IndexedValueType(fieldType.(float64))
+		return workflow.IndexedValueType(t)
 	case int:
-		return workflow.IndexedValueType(fieldType.(int))
+		return workflow.IndexedValueType(t)
 	case workflow.IndexedValueType:
-		return fieldType.(workflow.IndexedValueType)
+		return t
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))

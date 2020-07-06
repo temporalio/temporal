@@ -129,4 +129,3 @@ dynamicConfigClient:
 blobstore:
   filestore:
     outputDirectory: "/tmp/blobstore"
-

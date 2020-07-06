@@ -96,3 +96,11 @@ func TestCreateHistoryStartWorkflowRequest_ExpirationTimeWithoutCron(t *testing.
 	require.True(t, delta > 58 * time.Second)
 	require.True(t, delta < 62 * time.Second)
 }
+
+func TestConvertIndexedValueTypeToThriftType(t *testing.T) {
+	expected := workflow.IndexedValueType_Values()
+	for i := 0; i < len(expected); i++ {
+		require.Equal(t, expected[i], ConvertIndexedValueTypeToThriftType(i, nil))
+		require.Equal(t, expected[i], ConvertIndexedValueTypeToThriftType(float64(i), nil))
+	}
+}
