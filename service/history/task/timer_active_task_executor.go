@@ -500,7 +500,7 @@ func (t *timerActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
-	continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                        startAttributes.WorkflowType,
 		TaskList:                            startAttributes.TaskList,
 		Input:                               startAttributes.Input,
@@ -519,7 +519,7 @@ func (t *timerActiveTaskExecutor) executeWorkflowTimeoutTask(
 		mutableState,
 		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowDomain(),
-		continueAsnewAttributes,
+		continueAsNewAttributes,
 	)
 	if err != nil {
 		return err
