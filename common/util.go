@@ -413,12 +413,14 @@ func CreateHistoryStartWorkflowRequest(
 		DomainUUID:   StringPtr(domainID),
 		StartRequest: startRequest,
 	}
+	firstDecisionTaskBackoffSeconds := backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
-		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
-		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
+		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds() + firstDecisionTaskBackoffSeconds
+		// expirationTime calculates from first decision task schedule to the end of the workflow
+		deadline := now.Add(time.Duration(expirationInSeconds) * time.Second)
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now))
+	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(firstDecisionTaskBackoffSeconds)
 	return histRequest
 }
 

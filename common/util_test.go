@@ -28,7 +28,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+
+	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
 func TestIsServiceTransientError_ContextTimeout(t *testing.T) {
@@ -57,4 +60,39 @@ func TestConvertDynamicConfigMapPropertyToIntMap(t *testing.T) {
 	for i := 0; i != 4; i++ {
 		require.Equal(t, i, intMap[i])
 	}
+}
+
+func TestCreateHistoryStartWorkflowRequest_ExpirationTimeWithCron(t *testing.T) {
+	domainId := uuid.New()
+	request := &workflow.StartWorkflowExecutionRequest{
+		RetryPolicy:                         &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    Int32Ptr(60),
+			ExpirationIntervalInSeconds: Int32Ptr(60),
+		},
+		CronSchedule:                        StringPtr("@every 300s"),
+	}
+	now := time.Now()
+	startRequest := CreateHistoryStartWorkflowRequest(domainId, request)
+
+	expirationTime := startRequest.GetExpirationTimestamp()
+	require.NotNil(t, expirationTime)
+	require.True(t, time.Unix(0, expirationTime).Sub(now) > 60 * time.Second)
+}
+
+func TestCreateHistoryStartWorkflowRequest_ExpirationTimeWithoutCron(t *testing.T) {
+	domainId := uuid.New()
+	request := &workflow.StartWorkflowExecutionRequest{
+		RetryPolicy:                         &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    Int32Ptr(60),
+			ExpirationIntervalInSeconds: Int32Ptr(60),
+		},
+	}
+	now := time.Now()
+	startRequest := CreateHistoryStartWorkflowRequest(domainId, request)
+
+	expirationTime := startRequest.GetExpirationTimestamp()
+	require.NotNil(t, expirationTime)
+	delta := time.Unix(0, expirationTime).Sub(now)
+	require.True(t, delta > 58 * time.Second)
+	require.True(t, delta < 62 * time.Second)
 }
