@@ -27,7 +27,6 @@ require (
 	github.com/golang/mock v1.4.3
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
-	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hashicorp/go-version v1.2.0
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
 	github.com/jcmturner/gokrb5/v8 v8.3.0 // indirect
@@ -76,7 +75,6 @@ require (
 	google.golang.org/api v0.26.0
 	google.golang.org/grpc v1.30.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
-	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.3.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect

@@ -64,7 +64,7 @@ var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
 func (mdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(createNamespaceQuery, partitionId, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+	return mdb.conn.Exec(createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
@@ -89,9 +89,9 @@ func (mdb *db) selectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplug
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = mdb.conn.Get(&row, getNamespaceByIDQuery, partitionId, *filter.ID)
+		err = mdb.conn.Get(&row, getNamespaceByIDQuery, partitionID, *filter.ID)
 	case filter.Name != nil:
-		err = mdb.conn.Get(&row, getNamespaceByNameQuery, partitionId, *filter.Name)
+		err = mdb.conn.Get(&row, getNamespaceByNameQuery, partitionID, *filter.Name)
 	}
 	if err != nil {
 		return nil, err
@@ -104,9 +104,9 @@ func (mdb *db) selectAllFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlp
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = mdb.conn.Select(&rows, listNamespacesRangeQuery, partitionId, *filter.GreaterThanID, *filter.PageSize)
+		err = mdb.conn.Select(&rows, listNamespacesRangeQuery, partitionID, *filter.GreaterThanID, *filter.PageSize)
 	default:
-		err = mdb.conn.Select(&rows, listNamespacesQuery, partitionId, filter.PageSize)
+		err = mdb.conn.Select(&rows, listNamespacesQuery, partitionID, filter.PageSize)
 	}
 	return rows, err
 }
@@ -117,9 +117,9 @@ func (mdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Resul
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = mdb.conn.Exec(deleteNamespaceByIDQuery, partitionId, filter.ID)
+		result, err = mdb.conn.Exec(deleteNamespaceByIDQuery, partitionID, filter.ID)
 	default:
-		result, err = mdb.conn.Exec(deleteNamespaceByNameQuery, partitionId, filter.Name)
+		result, err = mdb.conn.Exec(deleteNamespaceByNameQuery, partitionID, filter.Name)
 	}
 	return result, err
 }
