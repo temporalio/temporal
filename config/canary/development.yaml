@@ -1,9 +1,0 @@
-canary:
-  namespaces: ["canary"]
-  excludes: ["workflow.searchAttributes", "workflow.batch", "workflow.visibility", "workflow.cancellation" ]
-  pprof:
-    port: 6060
-
-temporal:
-  service: "frontend"
-  host: "127.0.0.1:7233"

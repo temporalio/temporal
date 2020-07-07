@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
@@ -74,6 +73,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalR
 		StartTime:        time.Unix(0, request.StartTimestamp),
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
+		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), // Underlying value (1) is hardcoded in SQL queries.
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
 	})
@@ -91,7 +91,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
-		Status:           convert.Int32Ptr(int32(request.Status)),
+		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
@@ -126,6 +126,7 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(request *p.ListWorkflowE
 				MaxStartTime: &readLevel.Time,
 				RunID:        &readLevel.RunID,
 				PageSize:     &request.PageSize,
+				Status:       int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			})
 		})
 }
@@ -138,7 +139,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutions(request *p.ListWorkflo
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
 				PageSize:     &request.PageSize,
 			})
@@ -156,6 +156,7 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByType(request *p.ListWor
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
 				PageSize:         &request.PageSize,
+				Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			})
 		})
 }
@@ -168,7 +169,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByType(request *p.ListW
 				NamespaceID:      request.NamespaceID,
 				MinStartTime:     &minStartTime,
 				MaxStartTime:     &readLevel.Time,
-				Closed:           true,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
 				PageSize:         &request.PageSize,
@@ -187,6 +187,7 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *p.L
 				RunID:        &readLevel.RunID,
 				WorkflowID:   &request.WorkflowID,
 				PageSize:     &request.PageSize,
+				Status:       int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			})
 		})
 }
@@ -199,7 +200,6 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *p
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
 				WorkflowID:   &request.WorkflowID,
 				PageSize:     &request.PageSize,
@@ -215,9 +215,8 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 				NamespaceID:  request.NamespaceID,
 				MinStartTime: &minStartTime,
 				MaxStartTime: &readLevel.Time,
-				Closed:       true,
 				RunID:        &readLevel.RunID,
-				Status:       convert.Int32Ptr(int32(request.Status)),
+				Status:       int32(request.Status),
 				PageSize:     &request.PageSize,
 			})
 		})
@@ -227,7 +226,6 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	execution := request.Execution
 	rows, err := s.db.SelectFromVisibility(&sqlplugin.VisibilityFilter{
 		NamespaceID: request.NamespaceID,
-		Closed:      true,
 		RunID:       &execution.RunId,
 	})
 	if err != nil {
@@ -277,11 +275,13 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		StartTime:     row.StartTime,
 		ExecutionTime: row.ExecutionTime,
 		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
+		Status:        enumspb.WorkflowExecutionStatus(row.Status),
 	}
-	if row.Status != nil {
-		status := enumspb.WorkflowExecutionStatus(*row.Status)
-		info.Status = &status
+	if row.CloseTime != nil {
 		info.CloseTime = *row.CloseTime
+		info.HistoryLength = *row.HistoryLength
+	}
+	if row.HistoryLength != nil {
 		info.HistoryLength = *row.HistoryLength
 	}
 	return info

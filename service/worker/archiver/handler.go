@@ -105,13 +105,8 @@ func (h *handler) Finished() []uint64 {
 }
 
 func (h *handler) handleRequest(ctx workflow.Context, request *ArchiveRequest) {
-	// For backward compatibility
-	targets := request.Targets
-	if len(targets) == 0 {
-		targets = append(targets, ArchiveTargetHistory)
-	}
-	pendingRequests := []workflow.Channel{}
-	for _, target := range targets {
+	var pendingRequests []workflow.Channel
+	for _, target := range request.Targets {
 		doneCh := workflow.NewChannel(ctx)
 		pendingRequests = append(pendingRequests, doneCh)
 		switch target {

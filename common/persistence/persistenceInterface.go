@@ -565,7 +565,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *enumspb.WorkflowExecutionStatus
+		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		TaskQueue        string

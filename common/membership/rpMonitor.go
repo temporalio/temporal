@@ -49,7 +49,7 @@ const (
 	upsertMembershipRecordExpiryDefault = time.Hour * 48
 
 	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
-	healthyHostLastHeartbeatCutoff      = time.Second * 20
+	healthyHostLastHeartbeatCutoff = time.Second * 20
 )
 
 type ringpopMonitor struct {
@@ -111,12 +111,14 @@ func (rpo *ringpopMonitor) Start() {
 	// TODO - Note this presents a small race condition as we write our identity before we bootstrap ringpop.
 	// This is a current limitation of the current structure of the ringpop library as
 	// we must know our seed nodes before bootstrapping
-	bootstrapHostPorts, err := rpo.startHeartbeatAndFetchBootstrapHosts(broadcastAddress)
+	err = rpo.startHeartbeat(broadcastAddress)
 	if err != nil {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.Start(bootstrapHostPorts)
+	rpo.rp.Start(
+		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager) },
+		healthyHostLastHeartbeatCutoff/2)
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
@@ -178,7 +180,7 @@ func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 	return broadcastAddress, uint16(broadcastPort), nil
 }
 
-func (rpo *ringpopMonitor) startHeartbeatAndFetchBootstrapHosts(broadcastHostport string) ([]string, error) {
+func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	// Start by cleaning up expired records to avoid growth
 	err := rpo.metadataManager.PruneClusterMembership(&persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
 
@@ -187,13 +189,13 @@ func (rpo *ringpopMonitor) startHeartbeatAndFetchBootstrapHosts(broadcastHostpor
 	// Parse and validate broadcast hostport
 	broadcastAddress, broadcastPort, err := SplitHostPortTyped(broadcastHostport)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Parse and validate existing service name
 	role, err := ServiceNameToServiceTypeEnum(rpo.serviceName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	req := &persistence.UpsertClusterMembershipRequest{
@@ -211,25 +213,16 @@ func (rpo *ringpopMonitor) startHeartbeatAndFetchBootstrapHosts(broadcastHostpor
 	// For bootstrapping, we filter to a much shorter duration on the
 	// read side by filtering on the last time a heartbeat was seen.
 	err = rpo.upsertMyMembership(req)
-
 	if err == nil {
 		rpo.logger.Info("Membership heartbeat upserted successfully",
 			tag.Address(broadcastAddress.String()),
 			tag.Port(int(broadcastPort)),
 			tag.HostID(rpo.hostID.String()))
+
+		rpo.startHeartbeatUpsertLoop(req)
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
-	bootstrapHostPorts, err := fetchCurrentBootstrapHostports(rpo.metadataManager)
-	if err != nil {
-		return nil, err
-	}
-
-	rpo.startHeartbeatUpsertLoop(req)
-	return bootstrapHostPorts, err
+	return err
 }
 
 func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) ([]string, error) {
@@ -239,7 +232,6 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) 
 	var nextPageToken []byte
 
 	for {
-		// Get active hosts in last 5 minutes - Limit page size to 1000.
 		resp, err := manager.GetClusterMembers(
 			&persistence.GetClusterMembersRequest{
 				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,
@@ -278,7 +270,7 @@ func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertC
 			}
 
 			jitter := math.Round(rand.Float64() * 5)
-			time.Sleep(time.Second * time.Duration(10 + jitter))
+			time.Sleep(time.Second * time.Duration(10+jitter))
 		}
 	}
 
