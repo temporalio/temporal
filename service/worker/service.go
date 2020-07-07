@@ -124,6 +124,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
 			ReReplicationContextTimeout:        dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.WorkerReReplicationContextTimeout, 0*time.Second),
 			EnableRPCReplication:               dc.GetBoolProperty(dynamicconfig.WorkerEnableRPCReplication, false),
+			EnableKafkaReplication:             dc.GetBoolProperty(dynamicconfig.WorkerEnableKafkaReplication, false),
 		},
 		ArchiverConfig: &archiver.Config{
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
@@ -181,7 +182,7 @@ func (s *Service) Start() {
 		s.startIndexer()
 	}
 
-	if s.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+	if s.GetClusterMetadata().IsGlobalNamespaceEnabled() && s.config.ReplicationCfg.EnableKafkaReplication() {
 		s.startReplicator()
 	}
 	if s.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival() {
