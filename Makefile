@@ -81,7 +81,7 @@ PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
 PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
-ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^\.gen|^$(PROTO_OUT)")
+ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
@@ -277,11 +277,11 @@ cover_ndc_profile: clean-build-results
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
-	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|.gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|.gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|.gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|.gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|.gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP "$(PROTO_OUT)|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
