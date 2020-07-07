@@ -120,7 +120,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  "some invalid URI without scheme",
+		HistoryURI:           "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
@@ -148,7 +148,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
@@ -177,7 +177,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
@@ -206,7 +206,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.Equal(testArchiveErr.Error(), errors.Unwrap(err).Error())
@@ -234,7 +234,7 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
 	s.NoError(err)
@@ -263,7 +263,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		BranchToken:          testBranchToken,
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
+		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
 	s.Equal(errDeleteNonRetryable.Error(), errors.Unwrap(err).Error())

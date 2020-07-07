@@ -65,9 +65,9 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
-	URI, err := carchiver.NewURI(request.URI)
+	URI, err := carchiver.NewURI(request.HistoryURI)
 	if err != nil {
-		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archival uri"), tag.ArchivalURI(request.URI), tag.Error(err))
+		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archival uri"), tag.ArchivalURI(request.HistoryURI), tag.Error(err))
 		return errUploadNonRetryable
 	}
 	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(URI.Scheme(), common.WorkerServiceName)
@@ -161,7 +161,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
-		HistoryArchivalUri: request.URI,
+		HistoryArchivalUri: request.HistoryURI,
 	}, carchiver.GetNonRetryableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {
 		return nil

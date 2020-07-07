@@ -234,18 +234,6 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 			ParentClosePolicy:     v.ParentClosePolicy,
 		}
 
-		// Needed for backward compatibility reason.
-		// ChildWorkflowExecutionStartedEvent was only used by transfer queue processing of StartChildWorkflow.
-		// Updated the code to instead directly read WorkflowId and RunId from mutable state
-		// Existing mutable state won't have those values set so instead use started event to set StartedWorkflowID and
-		// StartedRunID on the mutable state before passing it to application
-		if startedEventAttr := startedEvent.GetChildWorkflowExecutionStartedEventAttributes(); startedEventAttr != nil {
-			if startedExecution := startedEventAttr.WorkflowExecution; startedExecution != nil {
-				c.StartedWorkflowID = startedExecution.GetWorkflowId()
-				c.StartedRunID = startedExecution.GetRunId()
-			}
-		}
-
 		newInfos[k] = c
 	}
 	return newInfos, nil
