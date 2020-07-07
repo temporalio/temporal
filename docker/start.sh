@@ -168,4 +168,4 @@ if [ "$ENABLE_ES" == "true" ]; then
     setup_es_template
 fi
 
-bash /start-temporal.sh
+exec bash /start-temporal.sh
