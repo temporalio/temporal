@@ -464,7 +464,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry")
 		} else if activityExecutedCount == 1 {
-			err = temporal.NewNonRetryableApplicationError("bad-bug", nil)
+			err = temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
 		}
 		activityExecutedCount++
 		return nil, false, err

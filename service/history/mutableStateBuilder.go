@@ -1004,11 +1004,6 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 		return nil, ErrMissingActivityInfo
 	}
 
-	// Needed for backward compatibility reason
-	if ai.ScheduledEvent != nil {
-		return ai.ScheduledEvent, nil
-	}
-
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -1069,11 +1064,6 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 	ci, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]
 	if !ok {
 		return nil, ErrMissingChildWorkflowInfo
-	}
-
-	// Needed for backward compatibility reason
-	if ci.InitiatedEvent != nil {
-		return ci.InitiatedEvent, nil
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -1159,16 +1149,6 @@ func (e *mutableStateBuilder) GetSignalInfo(
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, error) {
 	if e.executionInfo.State != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return nil, ErrMissingWorkflowCompletionEvent
-	}
-
-	// Needed for backward compatibility reason
-	if e.executionInfo.CompletionEvent != nil {
-		return e.executionInfo.CompletionEvent, nil
-	}
-
-	// Needed for backward compatibility reason
-	if e.executionInfo.CompletionEventBatchID == common.EmptyEventID {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 

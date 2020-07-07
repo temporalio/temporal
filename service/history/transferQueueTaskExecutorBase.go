@@ -324,7 +324,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 				Memo:               visibilityMemo,
 				SearchAttributes:   searchAttributes,
 				VisibilityURI:      namespaceEntry.GetConfig().VisibilityArchivalUri,
-				URI:                namespaceEntry.GetConfig().HistoryArchivalUri,
+				HistoryURI:         namespaceEntry.GetConfig().HistoryArchivalUri,
 				Targets:            []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 			},
 			CallerService:        common.HistoryServiceName,

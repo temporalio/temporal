@@ -832,7 +832,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	req := request.GetRequest()
-	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED {
+	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		status := mutableStateResp.GetWorkflowStatus()
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
