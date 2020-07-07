@@ -57,7 +57,7 @@ const (
 )
 
 const (
-	partitionId = 54321
+	partitionID = 54321
 )
 
 var errMissingArgs = errors.New("missing one or more args for API")
