@@ -62,7 +62,7 @@ task_type = :task_type
 		`FROM task_queues ` +
 		`WHERE shard_id = $1 AND namespace_id > $2 AND name > $3 AND task_type > $4 ORDER BY shard_id, namespace_id,name,task_type LIMIT $5`
 
-	getTaskQueueQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
+	getTaskQueueQry = `SELECT shard_id, namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_queues ` +
 		`WHERE shard_id = $1 AND namespace_id = $2 AND name = $3 AND task_type = $4`
 

@@ -59,7 +59,7 @@ task_type = :task_type
 		`FROM task_queues ` +
 		`WHERE shard_id = ? AND namespace_id > ? AND name > ? AND task_type > ? ORDER BY shard_id,namespace_id,name,task_type LIMIT ?`
 
-	getTaskQueueQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
+	getTaskQueueQry = `SELECT shard_id, namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_queues ` +
 		`WHERE shard_id = ? AND namespace_id = ? AND name = ? AND task_type = ?`
 
