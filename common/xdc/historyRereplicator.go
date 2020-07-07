@@ -33,9 +33,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -235,7 +235,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(namespaceID stri
 
 	var pendingRequest *historyservice.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
-	var replicationInfo map[string]*replicationgenpb.ReplicationInfo
+	var replicationInfo map[string]*replicationspb.ReplicationInfo
 
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
@@ -317,7 +317,7 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	namespaceID string, workflowID string, runID string,
 	historyBlob *commonpb.DataBlob,
-	replicationInfo map[string]*replicationgenpb.ReplicationInfo,
+	replicationInfo map[string]*replicationspb.ReplicationInfo,
 ) *historyservice.ReplicateRawEventsRequest {
 
 	request := &historyservice.ReplicateRawEventsRequest{
@@ -387,7 +387,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 }
 
 func (c *historyRereplicationContext) handleEmptyHistory(namespaceID string, workflowID string, runID string,
-	replicationInfo map[string]*replicationgenpb.ReplicationInfo) error {
+	replicationInfo map[string]*replicationspb.ReplicationInfo) error {
 
 	if c.seenEmptyEvents {
 		c.logger.Error("error, encounter empty history more than once", tag.WorkflowRunID(runID))

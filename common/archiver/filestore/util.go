@@ -38,7 +38,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/codec"
 )

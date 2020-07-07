@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/temporal/activity"
 	"golang.org/x/time/rate"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"

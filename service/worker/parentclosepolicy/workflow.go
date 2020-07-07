@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"

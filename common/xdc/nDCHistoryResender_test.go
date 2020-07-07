@@ -38,12 +38,12 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/adminservicemock/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -157,7 +157,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
-	versionHistoryItems := []*historygenpb.VersionHistoryItem{
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
 		{
 			EventId: 1,
 			Version: 1,
@@ -181,7 +181,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  token,
-		VersionHistory: &historygenpb.VersionHistory{
+		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
 	}, nil).Times(1)
@@ -203,7 +203,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  nil,
-		VersionHistory: &historygenpb.VersionHistory{
+		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
 	}, nil).Times(1)
@@ -240,7 +240,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("some random history blob"),
 	}
-	versionHistoryItems := []*historygenpb.VersionHistoryItem{
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
 		{
 			EventId: 1,
 			Version: 1,
@@ -266,7 +266,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	item := &historygenpb.VersionHistoryItem{
+	item := &historyspb.VersionHistoryItem{
 		EventId: 1,
 		Version: 1,
 	}
@@ -280,7 +280,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
-		VersionHistoryItems: []*historygenpb.VersionHistoryItem{item},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
 	}
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, nil).Times(1)
@@ -291,7 +291,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	item := &historygenpb.VersionHistoryItem{
+	item := &historyspb.VersionHistoryItem{
 		EventId: 1,
 		Version: 1,
 	}
@@ -305,7 +305,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte("some random history blob"),
 		},
-		VersionHistoryItems: []*historygenpb.VersionHistoryItem{item},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
 	}
 	retryErr := serviceerror.NewRetryTaskV2(
 		"",

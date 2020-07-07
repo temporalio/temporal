@@ -30,8 +30,8 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -84,31 +84,31 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		transferTask.TaskType != enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION {
+		transferTask.TaskType != enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION {
 		// guarantee the processing of workflow execution close
 		return nil
 	}
 
 	switch transferTask.TaskType {
-	case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
 		return t.processDecisionTask(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		return t.processCancelExecution(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return t.processSignalExecution(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
+	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		return t.processRecordWorkflowStarted(transferTask)
-	case enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask

@@ -26,4 +26,4 @@ test_eventsV2_xdc.log
 /tctl
 
 # protobuf generated files
-.gen/proto
+api

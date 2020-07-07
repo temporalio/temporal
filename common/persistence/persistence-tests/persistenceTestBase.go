@@ -40,9 +40,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
@@ -301,7 +301,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
@@ -370,7 +370,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
@@ -425,7 +425,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				WorkflowID:         workflowExecution.GetWorkflowId(),
 				RunID:              workflowExecution.GetRunId(),
 				TaskQueue:          taskQueue,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
@@ -465,7 +465,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
 
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
@@ -594,7 +594,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
-	req.UpdateWorkflowMutation.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	req.UpdateWorkflowMutation.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	req.UpdateWorkflowMutation.ExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
@@ -936,7 +936,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 }
 
 // ConflictResolveWorkflowExecution is  utility method to reset mutable state
-func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState enumsgenpb.WorkflowExecutionState,
+func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState enumsspb.WorkflowExecutionState,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {
@@ -1480,7 +1480,7 @@ func isMessageIDConflictError(err error) bool {
 func (s *TestBase) GetReplicationMessages(
 	lastMessageID int64,
 	maxCount int,
-) ([]*replicationgenpb.ReplicationTask, int64, error) {
+) ([]*replicationspb.ReplicationTask, int64, error) {
 
 	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
@@ -1524,7 +1524,7 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	return s.NamespaceReplicationQueue.GetMessagesFromDLQ(
 		firstMessageID,

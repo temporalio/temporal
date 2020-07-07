@@ -32,9 +32,9 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -44,7 +44,7 @@ import (
 
 type (
 	replicationTaskExecutor interface {
-		execute(sourceCluster string, replicationTask *replicationgenpb.ReplicationTask, forceApply bool) (int, error)
+		execute(sourceCluster string, replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	replicationTaskExecutorImpl struct {
@@ -83,26 +83,26 @@ func newReplicationTaskExecutor(
 
 func (e *replicationTaskExecutorImpl) execute(
 	sourceCluster string,
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
 
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
-	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		// Shard status will be sent as part of the Replication message without kafka
 		scope = metrics.SyncShardTaskScope
-	case enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		scope = metrics.SyncActivityTaskScope
 		err = e.handleActivityTask(replicationTask, forceApply)
-	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK:
 		scope = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(sourceCluster, replicationTask, forceApply)
-	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
-	case enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
 	default:
@@ -115,7 +115,7 @@ func (e *replicationTaskExecutorImpl) execute(
 }
 
 func (e *replicationTaskExecutorImpl) handleActivityTask(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -198,7 +198,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 // TODO: remove this part after 2DC deprecation
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -256,7 +256,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
-	task *replicationgenpb.ReplicationTask,
+	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
 

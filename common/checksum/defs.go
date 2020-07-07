@@ -27,8 +27,8 @@ package checksum
 import (
 	"errors"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	persistenceblobsgenpb "github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	persistenceblobsspb "github.com/temporalio/temporal/api/persistenceblobs/v1"
 )
 
 type (
@@ -65,7 +65,7 @@ func (f Flavor) IsValid() bool {
 }
 
 // FromProto returns a new checksum using the proto fields
-func FromProto(c *persistenceblobsgenpb.Checksum) *Checksum {
+func FromProto(c *persistenceblobsspb.Checksum) *Checksum {
 	return &Checksum{
 		Version: int(c.Version),
 		Flavor:  Flavor(c.Flavor),
@@ -74,10 +74,10 @@ func FromProto(c *persistenceblobsgenpb.Checksum) *Checksum {
 }
 
 // FromProto returns a new checksum using the proto fields
-func (c *Checksum) ToProto() *persistenceblobsgenpb.Checksum {
-	return &persistenceblobsgenpb.Checksum{
+func (c *Checksum) ToProto() *persistenceblobsspb.Checksum {
+	return &persistenceblobsspb.Checksum{
 		Version: int32(c.Version),
-		Flavor:  enumsgenpb.ChecksumFlavor(c.Flavor),
+		Flavor:  enumsspb.ChecksumFlavor(c.Flavor),
 		Value:   c.Value,
 	}
 }

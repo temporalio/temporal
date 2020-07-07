@@ -34,8 +34,8 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common"
@@ -67,8 +67,8 @@ type (
 		DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *historygenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVersionHistories(data *serialization.DataBlob) (*historygenpb.VersionHistories, error)
+		SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVersionHistories(data *serialization.DataBlob) (*historyspb.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -270,22 +270,22 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *historygenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
 	return t.serialize(histories, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*historygenpb.VersionHistories, error) {
+func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*historyspb.VersionHistories, error) {
 	if data == nil {
-		return &historygenpb.VersionHistories{}, nil
+		return &historyspb.VersionHistories{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &historygenpb.VersionHistories{}, nil
+		return &historyspb.VersionHistories{}, nil
 	}
 
-	memo := &historygenpb.VersionHistories{}
+	memo := &historyspb.VersionHistories{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:

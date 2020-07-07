@@ -30,7 +30,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 )
 
 // SetNextEventID sets the nextEventID
@@ -50,33 +50,33 @@ func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 
 // UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
 	switch e.State {
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_VOID:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
 		// no validation
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		switch state {
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
 				status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -84,22 +84,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		switch state {
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -107,43 +107,43 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		switch state {
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != e.Status {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 
 			}
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		switch state {
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -163,8 +163,8 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 
 // UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) createInvalidStateTransitionErr(
-	currentState enumsgenpb.WorkflowExecutionState,
-	targetState enumsgenpb.WorkflowExecutionState,
+	currentState enumsspb.WorkflowExecutionState,
+	targetState enumsspb.WorkflowExecutionState,
 	targetStatus enumspb.WorkflowExecutionStatus,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))

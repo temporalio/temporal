@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
