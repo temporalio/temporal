@@ -1,17 +1,17 @@
 ############################# Main targets #############################
-# Install all tools and builds binaries.
-install: update-tools proto bins
-
-# Run all possible checks and tests.
-all: proto check bins test
-
 # Rebuild binaries.
-bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool
+bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
+
+# Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
+all: update-tools clean proto bins check test
 
 # Delete all build artefacts.
-clean: clean-bins clean-proto clean-test-results
+clean: clean-bins clean-test-results
 
-# Update proto submodule from remote and rebuild proto files.
+# Recompile proto files.
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
+
+# Update proto submodule from remote and recompile proto files.
 update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
 
 # Build all docker images.
@@ -104,7 +104,7 @@ GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..
 PROTO_ROOT := proto
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
 PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
-PROTO_OUT := .gen/proto
+PROTO_OUT := api
 
 ##### Tools #####
 update-checkers:
@@ -146,7 +146,7 @@ protoc: $(PROTO_OUT)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
 fix-proto-path:
-	mv -f $(PROTO_OUT)/server/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/server
+	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/server
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
@@ -160,8 +160,6 @@ proto-mock: $(PROTO_OUT)
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	@go get -u go.temporal.io/temporal-proto
-
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
 
 ##### Binaries #####
 clean-bins:

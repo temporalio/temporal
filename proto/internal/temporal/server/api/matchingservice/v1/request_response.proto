@@ -20,16 +20,16 @@
 
 syntax = "proto3";
 
-package server.matchingservice.v1;
-option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice/v1;matchingservice";
+package temporal.server.api.matchingservice.v1;
+option go_package = "github.com/temporalio/temporal/api/matchingservice/v1;matchingservice";
 
 import "temporal/common/v1/message.proto";
 import "temporal/enums/v1/task_queue.proto";
 import "temporal/taskqueue/v1/message.proto";
 import "temporal/query/v1/message.proto";
 
-import "server/enums/v1/task.proto";
-import "server/history/v1/message.proto";
+import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/history/v1/message.proto";
 
 // TODO: remove this dependency
 import "temporal/workflowservice/v1/request_response.proto";
@@ -52,7 +52,7 @@ message PollForDecisionTaskResponse {
     int64 backlog_count_hint = 8;
     bool sticky_execution_enabled = 9;
     temporal.query.v1.WorkflowQuery query = 10;
-    server.history.v1.TransientDecisionInfo decision_info = 11;
+    temporal.server.api.history.v1.TransientDecisionInfo decision_info = 11;
     temporal.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     int32 event_store_version = 13;
     bytes branch_token = 14;
@@ -94,7 +94,7 @@ message AddDecisionTaskRequest {
     int64 schedule_id = 4;
     int32 schedule_to_start_timeout_seconds = 5;
     string forwarded_from = 6;
-    server.enums.v1.TaskSource source = 7;
+    temporal.server.api.enums.v1.TaskSource source = 7;
 }
 
 message AddDecisionTaskResponse {
@@ -108,7 +108,7 @@ message AddActivityTaskRequest {
     int64 schedule_id = 5;
     int32 schedule_to_start_timeout_seconds = 6;
     string forwarded_from = 7;
-    server.enums.v1.TaskSource source = 8;
+    temporal.server.api.enums.v1.TaskSource source = 8;
 }
 
 message AddActivityTaskResponse {

@@ -20,9 +20,9 @@
 
 syntax = "proto3";
 
-package server.cli.v1;
+package temporal.server.api.cli.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/cli/v1;cli";
+option go_package = "github.com/temporalio/temporal/api/cli/v1;cli";
 
 import "temporal/common/v1/message.proto";
 import "temporal/enums/v1/workflow.proto";

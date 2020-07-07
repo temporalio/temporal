@@ -20,13 +20,13 @@
 
 syntax = "proto3";
 
-package server.indexer.v1;
-option go_package = "github.com/temporalio/temporal/.gen/proto/indexer/v1;indexer";
+package temporal.server.api.indexer.v1;
+option go_package = "github.com/temporalio/temporal/api/indexer/v1;indexer";
 
-import "server/enums/v1/indexer.proto";
+import "temporal/server/api/enums/v1/indexer.proto";
 
 message Field {
-    server.enums.v1.FieldType type = 1;
+    temporal.server.api.enums.v1.FieldType type = 1;
     oneof data {
         string string_data = 2;
         int64 int_data = 3;
@@ -36,7 +36,7 @@ message Field {
 }
 
 message Message {
-    server.enums.v1.MessageType message_type = 1;
+    temporal.server.api.enums.v1.MessageType message_type = 1;
     string namespace_id = 2;
     string workflow_id = 3;
     string run_id = 4;

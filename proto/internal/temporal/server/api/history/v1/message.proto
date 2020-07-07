@@ -20,9 +20,9 @@
 
 syntax = "proto3";
 
-package server.history.v1;
+package temporal.server.api.history.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/history/v1;history";
+option go_package = "github.com/temporalio/temporal/api/history/v1;history";
 
 import "temporal/history/v1/message.proto";
 

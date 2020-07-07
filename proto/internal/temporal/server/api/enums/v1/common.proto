@@ -20,9 +20,9 @@
 
 syntax = "proto3";
 
-package server.enums.v1;
+package temporal.server.api.enums.v1;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/enums/v1;enums";
+option go_package = "github.com/temporalio/temporal/api/enums/v1;enums";
 
 enum DeadLetterQueueType {
     DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED = 0;
