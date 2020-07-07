@@ -81,6 +81,7 @@ type (
 		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
 		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 		EnableRPCReplication               dynamicconfig.BoolPropertyFn
+		EnableKafkaReplication             dynamicconfig.BoolPropertyFn
 	}
 )
 
