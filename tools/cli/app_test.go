@@ -543,7 +543,7 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	request := &adminservice.AddSearchAttributeRequest{
 		SearchAttribute: map[string]enumspb.IndexedValueType{
-			"testKey": enumspb.IndexedValueType(1),
+			"testKey": enumspb.IndexedValueType(2),
 		},
 	}
 	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
