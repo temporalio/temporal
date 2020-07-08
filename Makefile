@@ -372,6 +372,7 @@ start-cdc-other: temporal-server
 go-generate:
 	@printf $(COLOR) "Regenerate everything..."
 	@go generate ./...
+	@goimports -w $(ALL_SRC)
 
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."

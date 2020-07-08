@@ -48,7 +48,7 @@ tctl --ns samples-namespace wf list -q '(CustomKeywordField = "keyword1" and Cus
 tctl --ns samples-namespace wf list -q 'CustomKeywordField in ("keyword2", "keyword1") and CustomIntField >= 5 and CloseTime between "2018-06-07T16:16:36-08:00" and "2019-06-07T16:46:34-08:00" order by CustomDatetimeField desc' -psa
 ```
 
-(Search attributes can be updated inside workflow, see example [here](https://go.temporal.io/server-go-samples/tree/master/cmd/samples/recipes/searchattributes).
+(Search attributes can be updated inside workflow, see example [here](https://github.com/temporalio/temporal-go-samples/tree/master/cmd/samples/recipes/searchattributes).
 
 # Details
 ## Dependencies

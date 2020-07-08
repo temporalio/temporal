@@ -14,13 +14,13 @@ brew services start cassandra
 ```
 ### Install temporal schema
 ```
-cd $GOPATH/go.temporal.io/server
+cd $GOPATH/github.com/temporalio/temporal
 make install-schema
 ```
 
 ### Start temporal server
 ```
-cd $GOPATH/go.temporal.io/server
+cd $GOPATH/github.com/temporalio/temporal
 ./temporal-server start --services=frontend,matching,history,worker
 ```  
  
@@ -32,13 +32,13 @@ brew services start mysql
 ```
 ### Install temporal schema
 ```
-cd $GOPATH/go.temporal.io/server
+cd $GOPATH/github.com/temporalio/temporal
 make install-schema-mysql
 ```
 
 ### Start temporal server
 ```
-cd $GOPATH/go.temporal.io/server
+cd $GOPATH/github.com/temporalio/temporal
 cp config/development_mysql.yaml config/development.yaml
 ./temporal-server start --services=frontend,matching,history,worker
 ```
@@ -123,7 +123,7 @@ persistence:
 
 ## For Any Database
 Temporal can only work against a database that supports multi-row single shard transactions. The top level
-persistence API interface can be found [here](https://go.temporal.io/server/blob/master/common/persistence/dataInterfaces.go).
+persistence API interface can be found [here](https://github.com/temporalio/temporal/blob/master/common/persistence/dataInterfaces.go).
 Currently this is only implemented with Cassandra. 
 
 ## For SQL Database
@@ -131,9 +131,9 @@ As there are many shared concepts and functionalities in SQL database, we abstra
 
 This interface is tied to a specific schema i.e. the way data is laid out across tables and the table
 names themselves are fixed. However, you get the flexibility wrt how you store the data within a table (i.e. column names and
-types are not fixed). The API interface can be found [here](https://go.temporal.io/server/blob/master/common/persistence/sql/plugins/interfaces.go).
+types are not fixed). The API interface can be found [here](https://github.com/temporalio/temporal/blob/master/common/persistence/sql/plugins/interfaces.go).
 It's basically a CRUD API for every table in the schema. A sample schema definition for mysql that uses this interface
-can be found [here](https://go.temporal.io/server/blob/master/schema/mysql/v57/temporal/schema.sql)
+can be found [here](https://github.com/temporalio/temporal/blob/master/schema/mysql/v57/temporal/schema.sql)
 
 Any database that supports this interface can be plugged in with temporal server. 
 We have implemented Postgres within the repo, and also here is [**an example**](https://github.com/longquanzheng/cadence-extensions/tree/master/cadence-sqlite) to implement any database externally. 
