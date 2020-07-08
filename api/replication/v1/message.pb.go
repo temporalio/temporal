@@ -5,6 +5,12 @@ package repication
 
 import (
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	reflect "reflect"
+	strings "strings"
+
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	v1 "go.temporal.io/server/api/enums/v1"
@@ -14,11 +20,6 @@ import (
 	v13 "go.temporal.io/temporal-proto/history/v1"
 	v11 "go.temporal.io/temporal-proto/namespace/v1"
 	v12 "go.temporal.io/temporal-proto/replication/v1"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	reflect "reflect"
-	strings "strings"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

@@ -7,6 +7,12 @@ import (
 	bytes "bytes"
 	encoding_binary "encoding/binary"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	reflect "reflect"
+	strings "strings"
+
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	types "github.com/gogo/protobuf/types"
@@ -16,11 +22,6 @@ import (
 	v14 "go.temporal.io/temporal-proto/enums/v1"
 	v1 "go.temporal.io/temporal-proto/failure/v1"
 	v15 "go.temporal.io/temporal-proto/namespace/v1"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	reflect "reflect"
-	strings "strings"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

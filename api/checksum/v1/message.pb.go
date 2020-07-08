@@ -5,15 +5,16 @@ package checksum
 
 import (
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
-	v1 "go.temporal.io/server/api/enums/v1"
-	v12 "go.temporal.io/server/api/history/v1"
-	v11 "go.temporal.io/temporal-proto/enums/v1"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
+
+	proto "github.com/gogo/protobuf/proto"
+	v1 "go.temporal.io/server/api/enums/v1"
+	v12 "go.temporal.io/server/api/history/v1"
+	v11 "go.temporal.io/temporal-proto/enums/v1"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

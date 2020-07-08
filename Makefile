@@ -9,10 +9,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock goimports-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
+update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -160,6 +160,10 @@ proto-mock: $(PROTO_OUT)
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	@go get -u go.temporal.io/temporal-proto
+
+goimports-proto:
+	@printf $(COLOR) "Run goimports..."
+	@goimports -w $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:

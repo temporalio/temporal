@@ -6,13 +6,14 @@ package history
 import (
 	bytes "bytes"
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
-	v1 "go.temporal.io/temporal-proto/history/v1"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
+
+	proto "github.com/gogo/protobuf/proto"
+	v1 "go.temporal.io/temporal-proto/history/v1"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

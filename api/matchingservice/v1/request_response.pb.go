@@ -6,6 +6,12 @@ package matchingservice
 import (
 	bytes "bytes"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	reflect "reflect"
+	strings "strings"
+
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	v15 "go.temporal.io/server/api/enums/v1"
@@ -15,11 +21,6 @@ import (
 	v12 "go.temporal.io/temporal-proto/query/v1"
 	v14 "go.temporal.io/temporal-proto/taskqueue/v1"
 	v1 "go.temporal.io/temporal-proto/workflowservice/v1"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	reflect "reflect"
-	strings "strings"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

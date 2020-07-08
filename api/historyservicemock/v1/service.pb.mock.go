@@ -6,10 +6,11 @@ package historyservicemock
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	grpc "google.golang.org/grpc"
-	reflect "reflect"
 )
 
 // MockHistoryServiceClient is a mock of HistoryServiceClient interface.

@@ -5,16 +5,17 @@ package archiver
 
 import (
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
-	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-	v12 "go.temporal.io/temporal-proto/common/v1"
-	v11 "go.temporal.io/temporal-proto/enums/v1"
-	v1 "go.temporal.io/temporal-proto/history/v1"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
+
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	v12 "go.temporal.io/temporal-proto/common/v1"
+	v11 "go.temporal.io/temporal-proto/enums/v1"
+	v1 "go.temporal.io/temporal-proto/history/v1"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

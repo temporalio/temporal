@@ -6,10 +6,11 @@ package adminservicemock
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	grpc "google.golang.org/grpc"
-	reflect "reflect"
 )
 
 // MockAdminServiceClient is a mock of AdminServiceClient interface.
