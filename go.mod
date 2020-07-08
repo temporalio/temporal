@@ -81,6 +81,6 @@ require (
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
 
 replace (
-	go.temporal.io/api latest => ../temporal-proto-go
-	go.temporal.io/sdk latest => ../temporal-go-sdk
+	go.temporal.io/api v0.26.0 => ../temporal-proto-go
+	go.temporal.io/sdk v0.26.0 => ../temporal-go-sdk
 )

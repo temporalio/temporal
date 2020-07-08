@@ -23,9 +23,9 @@ syntax = "proto3";
 package temporal.server.api.adminservice.v1;
 option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
-import "temporal/enums/v1/common.proto";
-import "temporal/common/v1/message.proto";
-import "temporal/version/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/version/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -36,7 +36,7 @@ import "temporal/server/api/replication/v1/message.proto";
 
 message DescribeWorkflowExecutionRequest {
     string namespace = 1;
-    temporal.common.v1.WorkflowExecution execution = 2;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message DescribeWorkflowExecutionResponse {
@@ -51,7 +51,7 @@ message DescribeHistoryHostRequest {
     //ip:port
     string host_address = 1;
     int32 shard_id_for_host = 2;
-    temporal.common.v1.WorkflowExecution execution_for_host = 3;
+    temporal.api.common.v1.WorkflowExecution execution_for_host = 3;
 }
 
 message DescribeHistoryHostResponse {
@@ -82,7 +82,7 @@ message RemoveTaskResponse {
 
 message GetWorkflowExecutionRawHistoryRequest {
     string namespace = 1;
-    temporal.common.v1.WorkflowExecution execution = 2;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 first_event_id = 3;
     int64 next_event_id = 4;
     int32 maximum_page_size = 5;
@@ -91,7 +91,7 @@ message GetWorkflowExecutionRawHistoryRequest {
 
 message GetWorkflowExecutionRawHistoryResponse {
     bytes next_page_token = 1;
-    repeated temporal.common.v1.DataBlob history_batches = 2;
+    repeated temporal.api.common.v1.DataBlob history_batches = 2;
     map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 3;
     int32 event_store_version = 4;
 }
@@ -102,7 +102,7 @@ message GetWorkflowExecutionRawHistoryResponse {
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
     string namespace = 1;
-    temporal.common.v1.WorkflowExecution execution = 2;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 start_event_id = 3;
     int64 start_event_version = 4;
     int64 end_event_id = 5;
@@ -113,7 +113,7 @@ message GetWorkflowExecutionRawHistoryV2Request {
 
 message GetWorkflowExecutionRawHistoryV2Response {
     bytes next_page_token = 1;
-    repeated temporal.common.v1.DataBlob history_batches = 2;
+    repeated temporal.api.common.v1.DataBlob history_batches = 2;
     temporal.server.api.history.v1.VersionHistory version_history = 3;
 }
 
@@ -151,15 +151,15 @@ message GetDLQReplicationMessagesResponse {
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
     string namespace = 1;
-    temporal.common.v1.WorkflowExecution workflow_execution = 2;
-    temporal.common.v1.DataBlob events = 3;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.DataBlob events = 3;
 }
 
 message ReapplyEventsResponse {
 }
 
 message AddSearchAttributeRequest {
-    map<string, temporal.enums.v1.IndexedValueType> search_attribute = 1;
+    map<string, temporal.api.enums.v1.IndexedValueType> search_attribute = 1;
     string security_token = 2;
 }
 
@@ -170,7 +170,7 @@ message DescribeClusterRequest {
 }
 
 message DescribeClusterResponse {
-    temporal.version.v1.SupportedSDKVersions supported_client_versions = 1;
+    temporal.api.version.v1.SupportedSDKVersions supported_client_versions = 1;
     temporal.server.api.cluster.v1.MembershipInfo membership_info = 2;
 }
 
@@ -214,7 +214,7 @@ message MergeDLQMessagesResponse {
 
 message RefreshWorkflowTasksRequest {
     string namespace = 1;
-    temporal.common.v1.WorkflowExecution execution = 2;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message RefreshWorkflowTasksResponse {

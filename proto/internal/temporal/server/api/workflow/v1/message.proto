@@ -24,11 +24,11 @@ package temporal.server.api.workflow.v1;
 
 option go_package = "go.temporal.io/server/api/workflow/v1;workflow";
 
-import "temporal/common/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
 
 message ParentExecutionInfo {
     string namespace_id = 1;
     string namespace = 2;
-    temporal.common.v1.WorkflowExecution execution = 3;
+    temporal.api.common.v1.WorkflowExecution execution = 3;
     int64 initiated_id = 4;
 }

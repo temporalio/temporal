@@ -24,11 +24,11 @@ package temporal.server.api.history.v1;
 
 option go_package = "go.temporal.io/server/api/history/v1;history";
 
-import "temporal/history/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
 
 message TransientDecisionInfo {
-    temporal.history.v1.HistoryEvent scheduled_event = 1;
-    temporal.history.v1.HistoryEvent started_event = 2;
+    temporal.api.history.v1.HistoryEvent scheduled_event = 1;
+    temporal.api.history.v1.HistoryEvent started_event = 2;
 }
 
 // VersionHistoryItem contains signal eventId and the corresponding version.
