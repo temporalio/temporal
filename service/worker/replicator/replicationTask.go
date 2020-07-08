@@ -31,8 +31,8 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -102,7 +102,7 @@ const (
 )
 
 func newActivityReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -159,7 +159,7 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -216,7 +216,7 @@ func newHistoryReplicationTask(
 }
 
 func newHistoryMetadataReplicationTask(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -262,7 +262,7 @@ func newHistoryMetadataReplicationTask(
 }
 
 func newHistoryReplicationV2Task(
-	replicationTask *replicationgenpb.ReplicationTask,
+	replicationTask *replicationspb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,

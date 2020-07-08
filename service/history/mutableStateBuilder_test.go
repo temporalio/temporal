@@ -39,9 +39,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/checksum"
@@ -285,7 +285,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:               enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:          int64(8),
 		LastProcessedEvent:   int64(3),
@@ -338,7 +338,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		CurrentVersion:      int64(1),
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 
 	dbState := &persistence.WorkflowMutableState{
@@ -743,7 +743,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:               enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:          int64(101),
 		LastProcessedEvent:   int64(99),
@@ -825,7 +825,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		CurrentVersion:      failoverVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 
 	versionHistories := &persistence.VersionHistories{

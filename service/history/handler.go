@@ -37,11 +37,11 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	namespacespb "github.com/temporalio/temporal/api/namespace/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -680,7 +680,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	resp := &historyservice.DescribeHistoryHostResponse{
 		NumberOfShards: int32(h.controller.numShards()),
 		ShardIds:       h.controller.shardIDs(),
-		NamespaceCache: &namespacegenpb.NamespaceCacheInfo{
+		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			NumOfItemsInCacheById:   numOfItemsInCacheByID,
 			NumOfItemsInCacheByName: numOfItemsInCacheByName,
 		},
@@ -698,16 +698,16 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	}
 
 	switch request.GetCategory() {
-	case enumsgenpb.TASK_CATEGORY_TRANSFER:
+	case enumsspb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case enumsgenpb.TASK_CATEGORY_TIMER:
+	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
 			TaskID:              request.GetTaskId(),
 		})
-	case enumsgenpb.TASK_CATEGORY_REPLICATION:
+	case enumsspb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
@@ -1490,7 +1490,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	result := new(sync.Map)
 
 	for _, token := range request.Tokens {
-		go func(token *replicationgenpb.ReplicationToken) {
+		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
 			engine, err := h.controller.getEngineForShard(int(token.GetShardId()))
@@ -1514,10 +1514,10 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	wg.Wait()
 
-	messagesByShard := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messagesByShard := make(map[int32]*replicationspb.ReplicationMessages)
 	result.Range(func(key, value interface{}) bool {
 		shardID := key.(int32)
-		tasks := value.(*replicationgenpb.ReplicationMessages)
+		tasks := value.(*replicationspb.ReplicationMessages)
 		messagesByShard[shardID] = tasks
 		return true
 	})
@@ -1541,7 +1541,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		return nil, errShuttingDown
 	}
 
-	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationgenpb.ReplicationTaskInfo{}
+	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationspb.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		identity := definition.NewWorkflowIdentifier(
@@ -1550,15 +1550,15 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			taskInfo.GetRunId(),
 		)
 		if _, ok := taskInfoPerExecution[identity]; !ok {
-			taskInfoPerExecution[identity] = []*replicationgenpb.ReplicationTaskInfo{}
+			taskInfoPerExecution[identity] = []*replicationspb.ReplicationTaskInfo{}
 		}
 		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(taskInfoPerExecution))
-	tasksChan := make(chan *replicationgenpb.ReplicationTask, len(request.GetTaskInfos()))
-	handleTaskInfoPerExecution := func(taskInfos []*replicationgenpb.ReplicationTaskInfo) {
+	tasksChan := make(chan *replicationspb.ReplicationTask, len(request.GetTaskInfos()))
+	handleTaskInfoPerExecution := func(taskInfos []*replicationspb.ReplicationTaskInfo) {
 		defer wg.Done()
 		if len(taskInfos) == 0 {
 			return
@@ -1592,7 +1592,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*replicationgenpb.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*replicationspb.ReplicationTask, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}
@@ -1880,7 +1880,7 @@ func createShardOwnershipLostError(
 	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
 }
 
-func validateTaskToken(taskToken *tokengenpb.Task) error {
+func validateTaskToken(taskToken *tokenspb.Task) error {
 	if taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}

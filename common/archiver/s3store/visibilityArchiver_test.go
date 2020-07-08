@@ -39,7 +39,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
 	"github.com/temporalio/temporal/common/codec"

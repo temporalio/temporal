@@ -38,10 +38,10 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	workflowgenpb "github.com/temporalio/temporal/.gen/proto/workflow/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	workflowspb "github.com/temporalio/temporal/api/workflow/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -101,23 +101,23 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 
 	switch task.TaskType {
-	case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
 		return t.processDecisionTask(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		return t.processCancelExecution(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return t.processSignalExecution(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
+	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
 		return t.processRecordWorkflowStarted(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		return t.processResetWorkflow(task)
-	case enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
@@ -146,7 +146,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
@@ -183,7 +183,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -1213,7 +1213,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 		},
-		ParentExecutionInfo: &workflowgenpb.ParentExecutionInfo{
+		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 			NamespaceId: task.GetNamespaceId(),
 			Namespace:   namespace,
 			Execution: &commonpb.WorkflowExecution{

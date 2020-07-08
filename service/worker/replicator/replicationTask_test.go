@@ -37,10 +37,10 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -788,8 +788,8 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 	task.Nack()
 }
 
-func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicationgenpb.ReplicationTask {
-	replicationAttr := &replicationgenpb.SyncActivityTaskAttributes{
+func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicationspb.ReplicationTask {
+	replicationAttr := &replicationspb.SyncActivityTaskAttributes{
 		NamespaceId:        "some random namespace ID",
 		WorkflowId:         "some random workflow ID",
 		RunId:              "some random run ID",
@@ -804,15 +804,15 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		LastFailure:        failure.NewServerFailure("some random failure reason", false),
 		LastWorkerIdentity: "some random worker identity",
 	}
-	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationgenpb.ReplicationTask {
-	replicationAttr := &replicationgenpb.HistoryTaskAttributes{
+func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationspb.ReplicationTask {
+	replicationAttr := &replicationspb.HistoryTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -820,7 +820,7 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationge
 		Version:        1394,
 		FirstEventId:   728,
 		NextEventId:    1015,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			cluster.TestCurrentClusterName: {
 				Version:     0644,
 				LastEventId: 0755,
@@ -838,15 +838,15 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationge
 		},
 		ResetWorkflow: true,
 	}
-	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replicationgenpb.ReplicationTask {
-	replicationAttr := &replicationgenpb.HistoryMetadataTaskAttributes{
+func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replicationspb.ReplicationTask {
+	replicationAttr := &replicationspb.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -855,9 +855,9 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		NextEventId:    1015,
 		Version:        common.EmptyVersion,
 	}
-	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:   enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }

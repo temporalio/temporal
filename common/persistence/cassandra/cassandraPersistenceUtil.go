@@ -33,9 +33,9 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -711,18 +711,18 @@ func createTransferTasks(
 		recordVisibility := false
 
 		switch task.GetType() {
-		case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskQueue = task.(*p.ActivityTask).TaskQueue
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskQueue = task.(*p.DecisionTask).TaskQueue
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
@@ -730,7 +730,7 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
@@ -738,15 +738,15 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
-			enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
+			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// No explicit property needs to be set
 
 		default:
@@ -810,30 +810,30 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion //nolint:ineffassign
-		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
 		resetWorkflow := false
 
 		switch task.GetType() {
-		case enumsgenpb.TASK_TYPE_REPLICATION_HISTORY:
+		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 			histTask := task.(*p.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
 			for k, v := range histTask.LastReplicationInfo {
 				lastReplicationInfo[k] = v
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
-		case enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -890,7 +890,7 @@ func createTimerTasks(
 		var attempt int64
 
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
-		workflowBackoffType := enumsgenpb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
+		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
 
 		switch t := task.(type) {
 		case *p.DecisionTimeoutTask:
@@ -973,7 +973,7 @@ func createOrUpdateCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
@@ -1040,7 +1040,7 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			previousRunID,
 			previousLastWriteVersion,
-			enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		)
 	case p.CreateWorkflowModeBrandNew:
 		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
@@ -1564,7 +1564,7 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 	}
 
 	if info.LastReplicationInfo == nil {
-		info.LastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, 0)
+		info.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
 	}
 
 	return info
@@ -1697,9 +1697,9 @@ func createHistoryEventBatchBlob(
 
 func createReplicationInfo(
 	result map[string]interface{},
-) *replicationgenpb.ReplicationInfo {
+) *replicationspb.ReplicationInfo {
 
-	info := &replicationgenpb.ReplicationInfo{}
+	info := &replicationspb.ReplicationInfo{}
 	for k, v := range result {
 		switch k {
 		case "version":
@@ -1713,7 +1713,7 @@ func createReplicationInfo(
 }
 
 func createReplicationInfoMap(
-	info *replicationgenpb.ReplicationInfo,
+	info *replicationspb.ReplicationInfo,
 ) map[string]interface{} {
 
 	rInfoMap := make(map[string]interface{})

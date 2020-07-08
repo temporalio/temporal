@@ -34,7 +34,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -198,13 +198,13 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 	executionTimestamp := now.Add(decisionBackoffDuration)
 
-	var workflowBackoffType enumsgenpb.WorkflowBackoffType
+	var workflowBackoffType enumsspb.WorkflowBackoffType
 	switch startAttr.GetInitiator() {
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
-		workflowBackoffType = enumsgenpb.WORKFLOW_BACKOFF_TYPE_RETRY
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 		enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER:
-		workflowBackoffType = enumsgenpb.WORKFLOW_BACKOFF_TYPE_CRON
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
 	}

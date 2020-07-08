@@ -25,7 +25,7 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/persistence"
 )
 

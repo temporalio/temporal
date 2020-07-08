@@ -35,10 +35,10 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	m "github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	m "github.com/temporalio/temporal/api/matchingservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -102,7 +102,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
@@ -130,7 +130,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK {
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 

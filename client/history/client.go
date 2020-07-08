@@ -32,8 +32,8 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -916,7 +916,7 @@ func (c *clientImpl) GetReplicationMessages(
 	wg.Wait()
 	close(respChan)
 
-	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicationgenpb.ReplicationMessages)}
+	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
 		for shardID, tasks := range resp.MessagesByShard {
 			response.MessagesByShard[shardID] = tasks

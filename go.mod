@@ -56,10 +56,10 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/streadway/quantile v0.0.0-20150917103942-b0c588724d25 // indirect
 	github.com/stretchr/testify v1.6.1
+	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.17+incompatible
-	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.19.0
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1

@@ -44,8 +44,8 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -896,27 +896,27 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
-	msgType := enumsgenpb.MESSAGE_TYPE_INDEX
-	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskQueue}},
+	msgType := enumsspb.MESSAGE_TYPE_INDEX
+	fields := map[string]*indexerspb.Field{
+		es.WorkflowType:  {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:     {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.TaskQueue:     {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: string(encoding)}}
+		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: string(encoding)}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: data}}
+		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
-	msg := &indexergenpb.Message{
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -930,30 +930,30 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexerspb.Message {
 
-	msgType := enumsgenpb.MESSAGE_TYPE_INDEX
-	fields := map[string]*indexergenpb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: endTimeUnixNano}},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: int64(status)}},
-		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexergenpb.Field_IntData{IntData: historyLength}},
-		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: taskQueue}},
+	msgType := enumsspb.MESSAGE_TYPE_INDEX
+	fields := map[string]*indexerspb.Field{
+		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
+		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
+		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
+		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: endTimeUnixNano}},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
+		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: historyLength}},
+		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, Data: &indexergenpb.Field_StringData{StringData: string(encoding)}}
+		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
+		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: string(encoding)}}
 	}
 	for k, v := range searchAttributes {
 		// TODO: current implementation assumes that payload is JSON.
 		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
 		data := v.GetData() // content must always be JSON
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, Data: &indexergenpb.Field_BinaryData{BinaryData: data}}
+		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
 	}
 
-	msg := &indexergenpb.Message{
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -964,9 +964,9 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	return msg
 }
 
-func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexergenpb.Message {
-	msgType := enumsgenpb.MESSAGE_TYPE_DELETE
-	msg := &indexergenpb.Message{
+func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexerspb.Message {
+	msgType := enumsspb.MESSAGE_TYPE_DELETE
+	msg := &indexerspb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,

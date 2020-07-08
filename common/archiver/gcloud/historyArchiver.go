@@ -33,7 +33,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector"

@@ -31,7 +31,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
 	"github.com/temporalio/temporal/common"
 )
 

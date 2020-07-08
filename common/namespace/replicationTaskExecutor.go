@@ -31,9 +31,9 @@ import (
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -66,7 +66,7 @@ var (
 type (
 	// ReplicationTaskExecutor is the interface which is to execute namespace replication task
 	ReplicationTaskExecutor interface {
-		Execute(task *replicationgenpb.NamespaceTaskAttributes) error
+		Execute(task *replicationspb.NamespaceTaskAttributes) error
 	}
 
 	namespaceReplicationTaskExecutorImpl struct {
@@ -88,15 +88,15 @@ func NewReplicationTaskExecutor(
 }
 
 // Execute handles receiving of the namespace replication task
-func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationgenpb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationspb.NamespaceTaskAttributes) error {
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
 
 	switch task.GetNamespaceOperation() {
-	case enumsgenpb.NAMESPACE_OPERATION_CREATE:
+	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		return h.handleNamespaceCreationReplicationTask(task)
-	case enumsgenpb.NAMESPACE_OPERATION_UPDATE:
+	case enumsspb.NAMESPACE_OPERATION_UPDATE:
 		return h.handleNamespaceUpdateReplicationTask(task)
 	default:
 		return ErrInvalidNamespaceOperation
@@ -104,7 +104,7 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationgenpb.Na
 }
 
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.Status)
 	if err != nil {
@@ -189,7 +189,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.Status)
 	if err != nil {
@@ -261,7 +261,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	return h.metadataManagerV2.UpdateNamespace(request)
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyNamespaceReplicationTask
 	}

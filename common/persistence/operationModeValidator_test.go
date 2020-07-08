@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 )
 
 type (
@@ -61,11 +61,11 @@ func (s *validateOperationWorkflowModeStateSuite) TearDownTest() {
 
 func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent() {
 
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 
 	creatModes := []CreateWorkflowMode{
@@ -89,11 +89,11 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 
 func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_BypassCurrent() {
 
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 
 	for state, expectError := range stateToError {
@@ -110,11 +110,11 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_BypassCurrent()
 func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent() {
 
 	// only current workflow
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for state, expectError := range stateToError {
 		testCurrentMutation := s.newTestWorkflowMutation(state)
@@ -131,17 +131,17 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 	}
 
 	// current workflow & new workflow
-	currentStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	currentStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
-	newStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for currentState, currentExpectError := range currentStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -164,11 +164,11 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent() {
 
 	// only current workflow
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for state, expectError := range stateToError {
 		testMutation := s.newTestWorkflowMutation(state)
@@ -185,17 +185,17 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 	}
 
 	// current workflow & new workflow
-	currentStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	currentStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
-	newStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for currentState, currentExpectError := range currentStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -218,11 +218,11 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_UpdateCurrent() {
 
 	// only reset workflow
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for state, expectError := range stateToError {
 		testSnapshot := s.newTestWorkflowSnapshot(state)
@@ -240,17 +240,17 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 	}
 
 	// reset workflow & new workflow
-	resetStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	resetStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
-	newStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -271,17 +271,17 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 	}
 
 	// reset workflow & current workflow
-	resetStateToError = map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	resetStateToError = map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
-	currentStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	currentStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for currentState, currentExpectError := range currentStateToError {
@@ -302,23 +302,23 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 	}
 
 	// reset workflow & new workflow & current workflow
-	resetStateToError = map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	resetStateToError = map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
-	newStateToError = map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	newStateToError = map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
-	currentStateToError = map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	currentStateToError = map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -345,11 +345,11 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_BypassCurrent() {
 
 	// only reset workflow
-	stateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	stateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for state, expectError := range stateToError {
 		testSnapshot := s.newTestWorkflowSnapshot(state)
@@ -367,17 +367,17 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 	}
 
 	// reset workflow & new workflow
-	resetStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
+	resetStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
-	newStateToError := map[enumsgenpb.WorkflowExecutionState]bool{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
+	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for resetState, resetExpectError := range resetStateToError {
 		for newState, newExpectError := range newStateToError {
@@ -402,7 +402,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 }
 
 func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 ) InternalWorkflowSnapshot {
 	return InternalWorkflowSnapshot{
 		ExecutionInfo: &InternalWorkflowExecutionInfo{
@@ -412,7 +412,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 }
 
 func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowMutation(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 ) InternalWorkflowMutation {
 	return InternalWorkflowMutation{
 		ExecutionInfo: &InternalWorkflowExecutionInfo{

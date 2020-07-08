@@ -25,7 +25,7 @@
 package elasticsearch
 
 import (
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 )
 
 // All legal fields allowed in elastic search index
@@ -48,8 +48,8 @@ const (
 
 // Supported field types
 var (
-	FieldTypeString = enumsgenpb.FIELD_TYPE_STRING
-	FieldTypeInt    = enumsgenpb.FIELD_TYPE_INT
-	FieldTypeBool   = enumsgenpb.FIELD_TYPE_BOOL
-	FieldTypeBinary = enumsgenpb.FIELD_TYPE_BINARY
+	FieldTypeString = enumsspb.FIELD_TYPE_STRING
+	FieldTypeInt    = enumsspb.FIELD_TYPE_INT
+	FieldTypeBool   = enumsspb.FIELD_TYPE_BOOL
+	FieldTypeBinary = enumsspb.FIELD_TYPE_BINARY
 )

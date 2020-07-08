@@ -49,8 +49,8 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 	sdkmocks "go.temporal.io/temporal/mocks"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/adminservicemock/v1"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 )

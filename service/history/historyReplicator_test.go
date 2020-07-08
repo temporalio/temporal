@@ -41,10 +41,10 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -489,7 +489,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -562,7 +562,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
 				LastEventTaskID:    currentLastEventTaskID,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -706,7 +706,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -776,7 +776,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
 				RunID:              currentRunID,
 				NextEventID:        currentNextEventID,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
@@ -852,7 +852,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				DecisionVersion:    common.EmptyVersion,
 				DecisionScheduleID: common.EmptyEventID,
 				DecisionStartedID:  common.EmptyEventID,
-				State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -1371,7 +1371,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version:         incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 		History: &historypb.History{Events: []*historypb.HistoryEvent{
 			{Timestamp: time.Now().UnixNano()},
 		}},
@@ -1380,14 +1380,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
 				LastEventId: currentReplicationInfoLastEventID,
 			},
 		},
 	}).AnyTimes()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
@@ -1398,7 +1398,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1437,7 +1437,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1451,14 +1451,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
 				LastEventId: currentReplicationInfoLastEventID,
 			},
 		},
 	}).AnyTimes()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
@@ -1469,7 +1469,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1501,7 +1501,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1539,7 +1539,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1555,7 +1555,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	}).AnyTimes()
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(false).Times(1)
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:     startTimeStamp,
 		RunID:              runID,
@@ -1566,7 +1566,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1598,7 +1598,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1636,7 +1636,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1683,7 +1683,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1711,7 +1711,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:               startTimeStamp,
 		NamespaceID:                  namespaceID,
@@ -1743,7 +1743,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID + 2,
 	}).Times(1)
-	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
+	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).Times(1)
 	msBuilderIn.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1922,7 +1922,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2042,7 +2042,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2158,7 +2158,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2181,7 +2181,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 
 	currentVersion := version
 	currentRunID := runID
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2287,7 +2287,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,
 		HasRetryPolicy:           true,
@@ -2317,7 +2317,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2431,7 +2431,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2454,7 +2454,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2568,7 +2568,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2591,7 +2591,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	currentVersion := version - 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2705,7 +2705,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
@@ -2729,7 +2729,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -2869,7 +2869,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
@@ -2893,7 +2893,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3046,7 +3046,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
@@ -3070,7 +3070,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
@@ -3221,7 +3221,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -3245,7 +3245,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version
 	currentRunID := uuid.New()
 	currentNextEventID := int64(3456)
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3377,7 +3377,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -3401,7 +3401,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version
 	currentRunID := uuid.New()
 	currentNextEventID := int64(3456)
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3541,7 +3541,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
 		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,
 		HasRetryPolicy:           true,
@@ -3572,7 +3572,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentNextEventID := int64(2333)
 	currentVersion := version - 1
 	currentRunID := uuid.New()
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3650,7 +3650,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetRunning() {
 	runID := uuid.New()
 	lastWriteVersion := int64(1394)
-	state := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	state := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 
@@ -3689,7 +3689,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
@@ -3698,7 +3698,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	currentRunID := uuid.New()
 	currentLastWriteVersion := int64(1394)
-	currentState := enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -3734,7 +3734,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
@@ -3771,7 +3771,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: currentVersion,
 	}, nil)
@@ -3785,7 +3785,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	s.Nil(err)
 	s.Equal(currentRunID, prevRunID)
 	s.Equal(currentVersion, prevLastWriteVersion)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevState)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevState)
 }
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_NotLowerVersion() {
