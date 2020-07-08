@@ -33,7 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -83,10 +83,10 @@ type (
 		common.Daemon
 		Publish(message interface{}) error
 		PublishToDLQ(message interface{}) error
-		GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicationgenpb.ReplicationTask, int64, error)
+		GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicationspb.ReplicationTask, int64, error)
 		UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error
 		GetAckLevels() (map[string]int64, error)
-		GetMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
+		GetMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
 		UpdateDLQAckLevel(lastProcessedMessageID int64) error
 		GetDLQAckLevel() (int64, error)
 		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
@@ -109,7 +109,7 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
-	task, ok := message.(*replicationgenpb.ReplicationTask)
+	task, ok := message.(*replicationspb.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
 	}
@@ -122,7 +122,7 @@ func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error {
-	task, ok := message.(*replicationgenpb.ReplicationTask)
+	task, ok := message.(*replicationspb.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
 	}
@@ -148,16 +148,16 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error 
 func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int64,
 	maxCount int,
-) ([]*replicationgenpb.ReplicationTask, int64, error) {
+) ([]*replicationspb.ReplicationTask, int64, error) {
 
 	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
 	if err != nil {
 		return nil, lastMessageID, err
 	}
 
-	var replicationTasks []*replicationgenpb.ReplicationTask
+	var replicationTasks []*replicationspb.ReplicationTask
 	for _, message := range messages {
-		replicationTask := &replicationgenpb.ReplicationTask{}
+		replicationTask := &replicationspb.ReplicationTask{}
 		err := replicationTask.Unmarshal(message.Payload)
 		if err != nil {
 			return nil, lastMessageID, fmt.Errorf("failed to decode task: %v", err)
@@ -197,16 +197,16 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	messages, token, err := q.queue.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var replicationTasks []*replicationgenpb.ReplicationTask
+	var replicationTasks []*replicationspb.ReplicationTask
 	for _, message := range messages {
-		replicationTask := &replicationgenpb.ReplicationTask{}
+		replicationTask := &replicationspb.ReplicationTask{}
 		err := replicationTask.Unmarshal(message.Payload)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode dlq task: %v", err)

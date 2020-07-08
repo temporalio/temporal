@@ -44,11 +44,11 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -804,7 +804,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	msBuilder.GetExecutionInfo().State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	msBuilder.GetExecutionInfo().State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
 
@@ -849,7 +849,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 2,
@@ -896,7 +896,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -944,7 +944,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		Msg:              "random message",
 		StartRequestID:   requestID,
 		RunID:            runID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
@@ -980,7 +980,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		Msg:              "random message",
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
@@ -1031,7 +1031,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		Msg:              "random message",
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
@@ -1111,7 +1111,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			Msg:              "random message",
 			StartRequestID:   "oldRequestID",
 			RunID:            runIDs[i],
-			State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			Status:           status,
 			LastWriteVersion: lastWriteVersion,
 		}).Times(len(expecedErrs))
@@ -1320,7 +1320,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1372,14 +1372,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
 	}
@@ -1432,14 +1432,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   "new request ID",
 		RunID:            runID,
-		State:            enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
 	}

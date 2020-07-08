@@ -38,9 +38,9 @@ import (
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -57,9 +57,9 @@ import (
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/adminservicemock/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -88,7 +88,7 @@ type (
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminClient.Client
-		standByReplicationTasksChan chan *replicationgenpb.ReplicationTask
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		standByTaskID               int64
 	}
 )
@@ -130,7 +130,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
 	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 
-	s.standByReplicationTasksChan = make(chan *replicationgenpb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
 	s.mockAdminClient = make(map[string]adminClient.Client)
@@ -140,7 +140,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	mockOtherClient := adminservicemock.NewMockAdminServiceClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: make(map[int32]*replicationgenpb.ReplicationMessages),
+			MessagesByShard: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil).AnyTimes()
 	s.mockAdminClient["standby"] = mockStandbyClient
 	s.mockAdminClient["other"] = mockOtherClient
@@ -166,7 +166,7 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 	case task := <-s.standByReplicationTasksChan:
 		taskID := atomic.AddInt64(&s.standByTaskID, 1)
 		task.SourceTaskId = taskID
-		tasks := []*replicationgenpb.ReplicationTask{task}
+		tasks := []*replicationspb.ReplicationTask{task}
 		for len(s.standByReplicationTasksChan) > 0 {
 			task = <-s.standByReplicationTasksChan
 			taskID := atomic.AddInt64(&s.standByTaskID, 1)
@@ -174,18 +174,18 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 			tasks = append(tasks, task)
 		}
 
-		replicationMessage := &replicationgenpb.ReplicationMessages{
+		replicationMessage := &replicationspb.ReplicationMessages{
 			ReplicationTasks:       tasks,
 			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
 			HasMore:                true,
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: map[int32]*replicationgenpb.ReplicationMessages{0: replicationMessage},
+			MessagesByShard: map[int32]*replicationspb.ReplicationMessages{0: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: make(map[int32]*replicationgenpb.ReplicationMessages),
+			MessagesByShard: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil
 	}
 }
@@ -1774,11 +1774,11 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
-		taskType := enumsgenpb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-		replicationTask := &replicationgenpb.ReplicationTask{
+		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
+		replicationTask := &replicationspb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
+			Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
 				TaskId:              1,
 				NamespaceId:         s.namespaceID,
 				WorkflowId:          workflowID,
@@ -1821,7 +1821,7 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 
 func (s *nDCIntegrationTestSuite) toProtoVersionHistoryItems(
 	versionHistory *persistence.VersionHistory,
-) []*historygenpb.VersionHistoryItem {
+) []*historyspb.VersionHistoryItem {
 	if versionHistory == nil {
 		return nil
 	}

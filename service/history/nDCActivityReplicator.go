@@ -33,9 +33,9 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -196,7 +196,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
@@ -217,7 +217,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *historygenpb.VersionHistory,
+	incomingRawVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 
 	if mutableState.GetVersionHistories() != nil {
@@ -283,7 +283,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {

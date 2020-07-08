@@ -30,7 +30,7 @@ import (
 
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
@@ -169,7 +169,7 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
-		State            enumsgenpb.WorkflowExecutionState
+		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64

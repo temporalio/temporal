@@ -40,10 +40,10 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -705,14 +705,14 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &tokengenpb.QueryTask{
+		taskToken := &tokenspb.QueryTask{
 			NamespaceId: queryRequest.GetNamespaceId(),
 			TaskQueue:   queryRequest.TaskQueue.Name,
 			TaskId:      task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskToken := &tokengenpb.Task{
+		taskToken := &tokenspb.Task{
 			NamespaceId:     task.event.Data.GetNamespaceId(),
 			WorkflowId:      task.event.Data.GetWorkflowId(),
 			RunId:           task.event.Data.GetRunId(),
@@ -757,7 +757,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId:     task.event.Data.GetNamespaceId(),
 		WorkflowId:      task.event.Data.GetWorkflowId(),
 		RunId:           task.event.Data.GetRunId(),

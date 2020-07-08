@@ -36,10 +36,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"github.com/temporalio/temporal/api/matchingservicemock/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
@@ -76,7 +76,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, enumsgenpb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -95,7 +95,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enumsgenpb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskQueue.Parent(20), request.TaskQueue.GetName())
@@ -122,7 +122,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enumsgenpb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskQueue.Parent(20), request.TaskQueue.GetName())
@@ -143,7 +143,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enumsgenpb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}

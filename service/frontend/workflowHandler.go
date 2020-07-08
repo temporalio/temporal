@@ -39,10 +39,10 @@ import (
 	versionpb "go.temporal.io/temporal-proto/version/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
@@ -592,7 +592,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Execution
-	var continuationToken *tokengenpb.HistoryContinuation
+	var continuationToken *tokenspb.HistoryContinuation
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -627,7 +627,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
-		continuationToken = &tokengenpb.HistoryContinuation{}
+		continuationToken = &tokenspb.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
@@ -918,7 +918,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
 	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &tokengenpb.Task{
+		taskToken := &tokenspb.Task{
 			NamespaceId:     taskToken.GetNamespaceId(),
 			WorkflowId:      taskToken.GetWorkflowId(),
 			RunId:           taskToken.GetRunId(),
@@ -1261,7 +1261,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId: namespaceID,
 		RunId:       runID,
 		WorkflowId:  workflowID,
@@ -1465,7 +1465,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId: namespaceID,
 		RunId:       runID,
 		WorkflowId:  workflowID,
@@ -1662,7 +1662,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId: namespaceID,
 		RunId:       runID,
 		WorkflowId:  workflowID,
@@ -1857,7 +1857,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &tokengenpb.Task{
+	taskToken := &tokenspb.Task{
 		NamespaceId: namespaceID,
 		RunId:       runID,
 		WorkflowId:  workflowID,
@@ -3179,7 +3179,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historygenpb.TransientDecisionInfo,
+	transientDecision *historyspb.TransientDecisionInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
@@ -3252,7 +3252,7 @@ func (wh *WorkflowHandler) getHistory(
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historygenpb.TransientDecisionInfo,
+	transientDecision *historyspb.TransientDecisionInfo,
 	branchToken []byte,
 ) (*historypb.History, []byte, error) {
 
@@ -3313,7 +3313,7 @@ func (wh *WorkflowHandler) getHistory(
 
 func (wh *WorkflowHandler) validateTransientDecisionEvents(
 	expectedNextEventID int64,
-	decision *historygenpb.TransientDecisionInfo,
+	decision *historyspb.TransientDecisionInfo,
 ) error {
 
 	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
@@ -3478,7 +3478,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&tokengenpb.HistoryContinuation{
+			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
 				RunId:             matchingResp.WorkflowExecution.GetRunId(),
 				FirstEventId:      firstEventID,
 				NextEventId:       nextEventID,

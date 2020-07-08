@@ -38,12 +38,12 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	versionpb "go.temporal.io/temporal-proto/version/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster/v1"
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	clusterspb "github.com/temporalio/temporal/api/cluster/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
@@ -332,7 +332,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var continuationToken *tokengenpb.HistoryContinuation
+	var continuationToken *tokenspb.HistoryContinuation
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
@@ -378,7 +378,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		continuationToken = &tokengenpb.HistoryContinuation{
+		continuationToken = &tokenspb.HistoryContinuation{
 			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventId:     firstEventID,
@@ -474,7 +474,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
-	var pageToken *tokengenpb.RawHistoryContinuation
+	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -594,14 +594,14 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
 
-	membershipInfo := &clustergenpb.MembershipInfo{}
+	membershipInfo := &clusterspb.MembershipInfo{}
 	if monitor := adh.GetMembershipMonitor(); monitor != nil {
 		currentHost, err := monitor.WhoAmI()
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
 
-		membershipInfo.CurrentHost = &clustergenpb.HostInfo{
+		membershipInfo.CurrentHost = &clusterspb.HostInfo{
 			Identity: currentHost.Identity(),
 		}
 
@@ -612,21 +612,21 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 		membershipInfo.ReachableMembers = members
 
-		var rings []*clustergenpb.RingInfo
+		var rings []*clusterspb.RingInfo
 		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, adh.error(err, scope)
 			}
 
-			var servers []*clustergenpb.HostInfo
+			var servers []*clusterspb.HostInfo
 			for _, server := range resolver.Members() {
-				servers = append(servers, &clustergenpb.HostInfo{
+				servers = append(servers, &clusterspb.HostInfo{
 					Identity: server.Identity(),
 				})
 			}
 
-			rings = append(rings, &clustergenpb.RingInfo{
+			rings = append(rings, &clusterspb.RingInfo{
 				Role:        role,
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
@@ -709,7 +709,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	return &adminservice.GetNamespaceReplicationMessagesResponse{
-		Messages: &replicationgenpb.ReplicationMessages{
+		Messages: &replicationspb.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
@@ -795,11 +795,11 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var tasks []*replicationgenpb.ReplicationTask
+	var tasks []*replicationspb.ReplicationTask
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -818,7 +818,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -866,7 +866,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -879,7 +879,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -920,7 +920,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -936,7 +936,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
+	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 
 		op = func() error {
 			select {

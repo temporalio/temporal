@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/collection"
@@ -53,7 +53,7 @@ type (
 		previousStartedEventID int64
 		timestamp              time.Time
 		currentBranchToken     []byte
-		workflowState          enumsgenpb.WorkflowExecutionState
+		workflowState          enumsspb.WorkflowExecutionState
 		workflowStatus         enumspb.WorkflowExecutionStatus
 	}
 
@@ -86,7 +86,7 @@ func newHistoryEventNotification(
 	nextEventID int64,
 	previousStartedEventID int64,
 	currentBranchToken []byte,
-	workflowState enumsgenpb.WorkflowExecutionState,
+	workflowState enumsspb.WorkflowExecutionState,
 	workflowStatus enumspb.WorkflowExecutionStatus,
 ) *historyEventNotification {
 

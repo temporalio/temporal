@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/payloads"
@@ -129,17 +129,17 @@ func (r *nDCWorkflowImpl) happensAfter(
 func (r *nDCWorkflowImpl) revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
-	if state != enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
-	} else if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	} else if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// workflow already finished
 		return nil
 	}
 
 	// workflow is in zombie state, need to set the state correctly accordingly
-	state = enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED
+	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	if r.mutableState.HasProcessedOrPendingDecision() {
-		state = enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
@@ -273,7 +273,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 }

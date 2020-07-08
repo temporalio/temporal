@@ -49,15 +49,15 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
-	workflowgenpb "github.com/temporalio/temporal/.gen/proto/workflow/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"github.com/temporalio/temporal/api/matchingservicemock/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
+	workflowspb "github.com/temporalio/temporal/api/workflow/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -370,7 +370,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(1)
 	asycWorkflowUpdate := func(delay time.Duration) {
-		tt := &tokengenpb.Task{
+		tt := &tokenspb.Task{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 			ScheduleId: 2,
@@ -455,7 +455,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(4),
 			int64(1),
 			[]byte{1},
-			enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	}
 
@@ -882,7 +882,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -905,7 +905,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -933,7 +933,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	}
 	tq := "testTaskQueue"
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -973,7 +973,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 		RunId:      testRunID,
 	}
 	tq := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1011,7 +1011,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 		RunId:      testRunID,
 	}
 	tq := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1076,7 +1076,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tq, identity)
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: di2.ScheduleID,
@@ -1168,7 +1168,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1256,7 +1256,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.EventId,
 		activity2StartedEvent.EventId, activity2Result, identity)
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
@@ -1291,7 +1291,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -1336,7 +1336,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.EventId,
 		activity2StartedEvent.EventId, activity2Result, identity)
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
@@ -1371,7 +1371,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -1406,7 +1406,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
@@ -1504,7 +1504,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			RunId:      testRunID,
 		}
 		tl := "testTaskQueue"
-		tt := &tokengenpb.Task{
+		tt := &tokenspb.Task{
 			WorkflowId: "wId",
 			RunId:      we.GetRunId(),
 			ScheduleId: 2,
@@ -1557,7 +1557,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		if !iVar.expectDecisionFail {
 			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-			s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 			s.False(executionBuilder.HasPendingDecision())
 
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1567,7 +1567,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		} else {
 			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID, iVar)
 			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent, iVar)
-			s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State, iVar)
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State, iVar)
 			s.True(executionBuilder.HasPendingDecision(), iVar)
 		}
 		s.TearDownTest()
@@ -1582,7 +1582,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 2,
@@ -1634,7 +1634,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -1645,7 +1645,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 2,
@@ -1693,7 +1693,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1715,7 +1715,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1758,7 +1758,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1801,7 +1801,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1844,7 +1844,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1885,7 +1885,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -1896,7 +1896,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -1937,7 +1937,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -1948,7 +1948,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -2003,7 +2003,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -2066,7 +2066,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -2130,7 +2130,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 		RunId:      "invalid run id",
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.GetWorkflowId(),
 		RunId:      we.GetRunId(),
 		ScheduleId: 2,
@@ -2178,7 +2178,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -2246,7 +2246,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -2269,7 +2269,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -2291,7 +2291,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -2319,7 +2319,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
@@ -2348,7 +2348,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
@@ -2389,7 +2389,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2437,7 +2437,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2486,7 +2486,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2531,7 +2531,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2585,7 +2585,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(10))
@@ -2602,7 +2602,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2651,7 +2651,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2692,7 +2692,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -2715,7 +2715,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -2753,7 +2753,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -2782,7 +2782,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -2806,7 +2806,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -2829,7 +2829,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 		ScheduleId: 2,
@@ -2852,7 +2852,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
@@ -2887,7 +2887,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
@@ -2928,7 +2928,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -2974,7 +2974,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3022,7 +3022,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3065,7 +3065,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3124,7 +3124,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(10))
@@ -3141,7 +3141,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3188,7 +3188,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3229,7 +3229,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -3252,7 +3252,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 	failure := failure.NewServerFailure("failed", false)
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -3290,7 +3290,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -3307,7 +3307,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3354,7 +3354,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3396,7 +3396,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3411,7 +3411,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: common.EmptyEventID,
@@ -3455,7 +3455,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3499,7 +3499,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 5,
@@ -3541,7 +3541,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(9))
@@ -3562,7 +3562,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -3602,7 +3602,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(9))
@@ -3614,7 +3614,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -3636,7 +3636,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
@@ -3664,7 +3664,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
@@ -3698,7 +3698,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -3742,7 +3742,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -3753,7 +3753,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 6,
@@ -3802,7 +3802,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di2, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -3817,7 +3817,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 7,
@@ -3867,7 +3867,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3878,7 +3878,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 6,
@@ -3935,7 +3935,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3946,7 +3946,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 7,
@@ -3996,13 +3996,13 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &tokengenpb.Task{
+	att := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 5,
@@ -4038,7 +4038,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4049,7 +4049,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 7,
@@ -4099,13 +4099,13 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &tokengenpb.Task{
+	att := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 5,
@@ -4141,7 +4141,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4151,7 +4151,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 7,
@@ -4226,7 +4226,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 	s.Len(qr.getCompletedIDs(), 2)
 	completed1, err := qr.getTerminationState(id1)
@@ -4248,7 +4248,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &tokengenpb.Task{
+	att := &tokenspb.Task{
 		WorkflowId: "wId",
 		RunId:      we.GetRunId(),
 		ScheduleId: 5,
@@ -4284,7 +4284,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4299,7 +4299,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -4341,12 +4341,12 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 
 	// Try to add the same timer ID again.
 	di2 := addDecisionTaskScheduledEvent(executionBuilder)
 	addDecisionTaskStartedEvent(executionBuilder, di2.ScheduleID, tl, identity)
-	tt2 := &tokengenpb.Task{
+	tt2 := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
@@ -4379,7 +4379,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 	s.True(decisionFailedEvent)
 	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID)
 	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
@@ -4395,7 +4395,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 6,
@@ -4442,7 +4442,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -4453,7 +4453,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 2,
@@ -4496,7 +4496,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -4507,7 +4507,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 		RunId:      testRunID,
 	}
 	tl := "testTaskQueue"
-	tt := &tokengenpb.Task{
+	tt := &tokenspb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      we.RunId,
 		ScheduleId: 6,
@@ -4562,7 +4562,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 	s.False(executionBuilder.HasBufferedEvents())
 }
@@ -4681,7 +4681,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", taskqueue, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -4813,7 +4813,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		workflowExecution.GetRunId(),
 	)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	ms.ExecutionInfo.LastProcessedEvent = 1
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
@@ -4860,7 +4860,7 @@ func (s *engineSuite) printHistory(builder mutableState) string {
 
 func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32,
-	parentInfo *workflowgenpb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
+	parentInfo *workflowspb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:                      workflowExecution.WorkflowId,
@@ -5353,11 +5353,11 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 }
 
 func copyReplicationState(source *persistence.ReplicationState) *persistence.ReplicationState {
-	var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+	var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	if source.LastReplicationInfo != nil {
-		lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
+		lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 		for k, v := range source.LastReplicationInfo {
-			lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{
+			lastReplicationInfo[k] = &replicationspb.ReplicationInfo{
 				Version:     v.Version,
 				LastEventId: v.LastEventId,
 			}

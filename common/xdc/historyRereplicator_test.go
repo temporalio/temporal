@@ -38,12 +38,12 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/adminservicemock/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -142,7 +142,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	firstEventID := int64(123)
 	nextEventID := firstEventID + 100
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -207,7 +207,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	// beginingRunID -> midRunID1; not continue relationship; midRunID2 -> endingRunID
 
 	beginingRunID := "00001111-2222-3333-4444-555566661111"
-	beginingReplicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	beginingReplicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center 1": {
 			Version:     111,
 			LastEventId: 222,
@@ -215,7 +215,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID1 := "00001111-2222-3333-4444-555566662222"
-	midReplicationInfo1 := map[string]*replicationgenpb.ReplicationInfo{
+	midReplicationInfo1 := map[string]*replicationspb.ReplicationInfo{
 		"random data center 2": {
 			Version:     111,
 			LastEventId: 222,
@@ -223,7 +223,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID2 := "00001111-2222-3333-4444-555566663333"
-	midReplicationInfo2 := map[string]*replicationgenpb.ReplicationInfo{
+	midReplicationInfo2 := map[string]*replicationspb.ReplicationInfo{
 		"random data center 3": {
 			Version:     111,
 			LastEventId: 222,
@@ -231,7 +231,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	endingRunID := "00001111-2222-3333-4444-555566664444"
-	endingReplicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	endingReplicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center 4": {
 			Version:     777,
 			LastEventId: 888,
@@ -458,7 +458,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	runID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -574,13 +574,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	newRunID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
 		},
 	}
-	replicationInfoNew := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfoNew := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     222,
 			LastEventId: 111,
@@ -765,7 +765,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("some random history blob"),
 	}
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -794,7 +794,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 			WorkflowId: "some random workflow ID",
 			RunId:      uuid.New(),
 		},
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,
@@ -818,7 +818,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_MissingHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -896,7 +896,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -939,7 +939,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_SeenMoreThanOnce() {
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -957,7 +957,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -1010,7 +1010,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*replicationgenpb.ReplicationInfo{
+	replicationInfo := map[string]*replicationspb.ReplicationInfo{
 		"some randon cluster": {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -1074,7 +1074,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
-		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,

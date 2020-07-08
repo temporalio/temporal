@@ -42,13 +42,13 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	workflowgenpb "github.com/temporalio/temporal/.gen/proto/workflow/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"github.com/temporalio/temporal/api/matchingservicemock/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	workflowspb "github.com/temporalio/temporal/api/workflow/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -266,7 +266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -320,7 +320,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 		RunId:             execution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -369,7 +369,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -422,7 +422,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -481,7 +481,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   stickyTaskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -540,7 +540,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -589,7 +589,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -628,7 +628,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				WorkflowExecutionTimeoutSeconds: 2,
 				WorkflowTaskTimeoutSeconds:      1,
 			},
-			ParentExecutionInfo: &workflowgenpb.ParentExecutionInfo{
+			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId: parentNamespaceID,
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
@@ -653,7 +653,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -712,7 +712,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -844,7 +844,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -935,7 +935,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1025,7 +1025,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1085,7 +1085,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1147,7 +1147,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1209,7 +1209,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1273,7 +1273,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1348,7 +1348,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1414,7 +1414,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		TargetRunId:       targetExecution.GetRunId(),
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1476,7 +1476,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1565,7 +1565,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1646,7 +1646,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1730,7 +1730,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		TargetRunId:       "",
 		TaskId:            taskID,
 		TaskQueue:         taskQueueName,
-		TaskType:          enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1787,7 +1787,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1834,7 +1834,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 		RunId:       execution.GetRunId(),
 		TaskId:      taskID,
 		TaskQueue:   taskQueueName,
-		TaskType:    enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+		TaskType:    enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -2023,7 +2023,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			RequestId:             ci.CreateRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
-		ParentExecutionInfo: &workflowgenpb.ParentExecutionInfo{
+		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 			NamespaceId: task.GetNamespaceId(),
 			Namespace:   testNamespace,
 			Execution:   &execution,

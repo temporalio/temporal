@@ -33,9 +33,9 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/primitives"
@@ -74,7 +74,7 @@ func (s *transmissionTaskSuite) TearDownTest() {
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
-	taskType := enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	id := primitives.NewUUID().String()
 	name := "some random namespace test name"
 	status := enumspb.NAMESPACE_STATUS_REGISTERED
@@ -93,7 +93,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := enumsgenpb.NAMESPACE_OPERATION_CREATE
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
@@ -117,10 +117,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replicationgenpb.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replicationspb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 				NamespaceOperation: namespaceOperation,
 				Id:                 id,
 				Info: &namespacepb.NamespaceInfo{
@@ -171,7 +171,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := enumsgenpb.NAMESPACE_OPERATION_CREATE
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
@@ -200,7 +200,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
-	taskType := enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	id := primitives.NewUUID().String()
 	name := "some random namespace test name"
 	status := enumspb.NAMESPACE_STATUS_DEPRECATED
@@ -219,7 +219,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := enumsgenpb.NAMESPACE_OPERATION_UPDATE
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,
@@ -243,10 +243,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replicationgenpb.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replicationspb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 				NamespaceOperation: namespaceOperation,
 				Id:                 id,
 				Info: &namespacepb.NamespaceInfo{
@@ -296,7 +296,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
 
-	namespaceOperation := enumsgenpb.NAMESPACE_OPERATION_UPDATE
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          id,
 		Name:        name,

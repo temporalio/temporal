@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -91,9 +91,9 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
 		},
 	}
@@ -113,9 +113,9 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
 		},
 	}
@@ -189,15 +189,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	pageToken := []byte{}
 	messageID := int64(11)
 
-	namespaceAttribute := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},
@@ -220,15 +220,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	pageToken := []byte{}
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
-	namespaceAttribute := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: int64(messageID),
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},
@@ -272,24 +272,24 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID1 := int64(11)
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
-	namespaceAttribute1 := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	namespaceAttribute2 := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID1,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID2,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute2,
 			},
 		},
@@ -316,24 +316,24 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID1 := int64(11)
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
-	namespaceAttribute1 := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	namespaceAttribute2 := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID1,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID2,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute2,
 			},
 		},
@@ -358,15 +358,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	pageToken := []byte{}
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
-	namespaceAttribute := &replicationgenpb.NamespaceTaskAttributes{
+	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*replicationgenpb.ReplicationTask{
+	tasks := []*replicationspb.ReplicationTask{
 		{
-			TaskType:     enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: messageID,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},

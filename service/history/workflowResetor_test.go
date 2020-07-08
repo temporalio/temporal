@@ -45,10 +45,10 @@ import (
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -224,7 +224,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -248,7 +248,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -773,15 +773,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	compareCurrExeInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	compareCurrExeInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -793,15 +793,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// one activity task, one decision task and one record workflow started task
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -909,7 +909,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -933,7 +933,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
@@ -1496,7 +1496,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -1504,7 +1504,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -1529,7 +1529,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -2061,7 +2061,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	compareCurrExeInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	compareCurrExeInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
@@ -2069,8 +2069,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -2081,16 +2081,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -2099,16 +2099,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_REPLICATION_HISTORY, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_HISTORY, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_REPLICATION_HISTORY, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_HISTORY, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
 			LastEventId: 29,
 			Version:     beforeResetVersion,
@@ -2202,7 +2202,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2210,7 +2210,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -2235,7 +2235,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
@@ -2802,7 +2802,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2810,7 +2810,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -2832,7 +2832,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		TaskQueue:          taskQueueName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3375,16 +3375,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -3393,14 +3393,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_REPLICATION_HISTORY, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_HISTORY, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
 			LastEventId: 29,
 			Version:     beforeResetVersion,
@@ -3483,7 +3483,7 @@ func (s *resetorSuite) TestApplyReset() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -3491,7 +3491,7 @@ func (s *resetorSuite) TestApplyReset() {
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -3513,7 +3513,7 @@ func (s *resetorSuite) TestApplyReset() {
 		TaskQueue:          taskQueueName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -4065,15 +4065,15 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -4086,7 +4086,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
 			LastEventId: 29,
 			Version:     beforeResetVersion,

@@ -31,7 +31,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -43,7 +43,7 @@ const (
 type (
 	// HistoryIterator is used to get history batches
 	HistoryIterator interface {
-		Next() (*archivergenpb.HistoryBlob, error)
+		Next() (*archiverspb.HistoryBlob, error)
 		HasNext() bool
 		GetState() ([]byte, error)
 	}
@@ -112,7 +112,7 @@ func newHistoryIterator(
 	}
 }
 
-func (i *historyIterator) Next() (*archivergenpb.HistoryBlob, error) {
+func (i *historyIterator) Next() (*archiverspb.HistoryBlob, error) {
 	if !i.HasNext() {
 		return nil, errIteratorDepleted
 	}
@@ -130,7 +130,7 @@ func (i *historyIterator) Next() (*archivergenpb.HistoryBlob, error) {
 	for _, batch := range historyBatches {
 		eventCount += int64(len(batch.Events))
 	}
-	header := &archivergenpb.HistoryBlobHeader{
+	header := &archiverspb.HistoryBlobHeader{
 		Namespace:            i.request.Namespace,
 		NamespaceId:          i.request.NamespaceID,
 		WorkflowId:           i.request.WorkflowID,
@@ -143,7 +143,7 @@ func (i *historyIterator) Next() (*archivergenpb.HistoryBlob, error) {
 		EventCount:           eventCount,
 	}
 
-	return &archivergenpb.HistoryBlob{
+	return &archiverspb.HistoryBlob{
 		Header: header,
 		Body:   historyBatches,
 	}, nil

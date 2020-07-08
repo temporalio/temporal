@@ -38,9 +38,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -159,7 +159,7 @@ type (
 		Msg              string
 		StartRequestID   string
 		RunID            string
-		State            enumsgenpb.WorkflowExecutionState
+		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -215,7 +215,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              enumsgenpb.WorkflowExecutionState
+		State                              enumsspb.WorkflowExecutionState
 		Status                             enumspb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
@@ -270,7 +270,7 @@ type (
 		StartVersion        int64
 		LastWriteVersion    int64
 		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -280,7 +280,7 @@ type (
 
 	// Task is the generic interface for workflow tasks
 	Task interface {
-		GetType() enumsgenpb.TaskType
+		GetType() enumsspb.TaskType
 		GetVersion() int64
 		SetVersion(version int64)
 		GetTaskID() int64
@@ -438,7 +438,7 @@ type (
 		TaskID              int64
 		EventID             int64 // TODO this attribute is not used?
 		Version             int64
-		WorkflowBackoffType enumsgenpb.WorkflowBackoffType
+		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
 
 	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
@@ -453,7 +453,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -633,7 +633,7 @@ type (
 	GetCurrentExecutionResponse struct {
 		StartRequestID   string
 		RunID            string
-		State            enumsgenpb.WorkflowExecutionState
+		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -678,7 +678,7 @@ type (
 	CurrentWorkflowCAS struct {
 		PrevRunID            string
 		PrevLastWriteVersion int64
-		PrevState            enumsgenpb.WorkflowExecutionState
+		PrevState            enumsspb.WorkflowExecutionState
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
@@ -1511,8 +1511,8 @@ func IsTimeoutError(err error) bool {
 }
 
 // GetType returns the type of the activity task
-func (a *ActivityTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
+func (a *ActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
 }
 
 // GetVersion returns the version of the activity task
@@ -1546,8 +1546,8 @@ func (a *ActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the decision task
-func (d *DecisionTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK
+func (d *DecisionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK
 }
 
 // GetVersion returns the version of the decision task
@@ -1586,8 +1586,8 @@ func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED
+func (a *RecordWorkflowStartedTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED
 }
 
 // GetVersion returns the version of the record workflow started task
@@ -1621,8 +1621,8 @@ func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) 
 }
 
 // GetType returns the type of the ResetWorkflowTask
-func (a *ResetWorkflowTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
+func (a *ResetWorkflowTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
 }
 
 // GetVersion returns the version of the ResetWorkflowTask
@@ -1656,8 +1656,8 @@ func (a *ResetWorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the close execution task
-func (a *CloseExecutionTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
+func (a *CloseExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
 }
 
 // GetVersion returns the version of the close execution task
@@ -1691,8 +1691,8 @@ func (a *CloseExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the delete execution task
-func (a *DeleteHistoryEventTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT
+func (a *DeleteHistoryEventTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
 }
 
 // GetVersion returns the version of the delete execution task
@@ -1726,8 +1726,8 @@ func (a *DeleteHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (d *DecisionTimeoutTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_DECISION_TIMEOUT
+func (d *DecisionTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_DECISION_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
@@ -1761,8 +1761,8 @@ func (d *DecisionTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (a *ActivityTimeoutTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT
+func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
@@ -1796,8 +1796,8 @@ func (a *ActivityTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (u *UserTimerTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_USER_TIMER
+func (u *UserTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_USER_TIMER
 }
 
 // GetVersion returns the version of the timer task
@@ -1831,8 +1831,8 @@ func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *ActivityRetryTimerTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1866,8 +1866,8 @@ func (r *ActivityRetryTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *WorkflowBackoffTimerTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1901,8 +1901,8 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timeout task.
-func (u *WorkflowTimeoutTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
+func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
 }
 
 // GetVersion returns the version of the timeout task
@@ -1936,8 +1936,8 @@ func (u *WorkflowTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the cancel transfer task
-func (u *CancelExecutionTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
+func (u *CancelExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
 }
 
 // GetVersion returns the version of the cancel transfer task
@@ -1971,8 +1971,8 @@ func (u *CancelExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the signal transfer task
-func (u *SignalExecutionTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
+func (u *SignalExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
 }
 
 // GetVersion returns the version of the signal transfer task
@@ -2006,8 +2006,8 @@ func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
+func (u *UpsertWorkflowSearchAttributesTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task
@@ -2041,8 +2041,8 @@ func (u *UpsertWorkflowSearchAttributesTask) SetVisibilityTimestamp(timestamp ti
 }
 
 // GetType returns the type of the start child transfer task
-func (u *StartChildExecutionTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
+func (u *StartChildExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
 }
 
 // GetVersion returns the version of the start child transfer task
@@ -2076,8 +2076,8 @@ func (u *StartChildExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *HistoryReplicationTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_REPLICATION_HISTORY
+func (a *HistoryReplicationTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_HISTORY
 }
 
 // GetVersion returns the version of the history replication task
@@ -2111,8 +2111,8 @@ func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *SyncActivityTask) GetType() enumsgenpb.TaskType {
-	return enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
+func (a *SyncActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
 }
 
 // GetVersion returns the version of the history replication task

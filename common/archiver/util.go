@@ -29,7 +29,7 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
@@ -63,7 +63,7 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 }
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
-func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archivergenpb.ArchiveVisibilityRequest, URI string) log.Logger {
+func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.ArchiveVisibilityRequest, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
 		tag.ArchivalRequestNamespace(request.GetNamespace()),
@@ -111,7 +111,7 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 }
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
-func ValidateVisibilityArchivalRequest(request *archivergenpb.ArchiveVisibilityRequest) error {
+func ValidateVisibilityArchivalRequest(request *archiverspb.ArchiveVisibilityRequest) error {
 	if request.GetNamespaceId() == "" {
 		return errEmptyNamespaceID
 	}

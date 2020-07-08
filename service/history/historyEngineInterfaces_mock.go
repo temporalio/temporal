@@ -36,7 +36,7 @@ import (
 
 	task "github.com/temporalio/temporal/common/task"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 )
 
 // MockqueueTaskInfo is a mock of queueTaskInfo interface
@@ -91,10 +91,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTaskInfo) GetTaskType() enumsgenpb.TaskType {
+func (m *MockqueueTaskInfo) GetTaskType() enumsspb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(enumsgenpb.TaskType)
+	ret0, _ := ret[0].(enumsspb.TaskType)
 	return ret0
 }
 
@@ -318,10 +318,10 @@ func (mr *MockqueueTaskMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTask) GetTaskType() enumsgenpb.TaskType {
+func (m *MockqueueTask) GetTaskType() enumsspb.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(enumsgenpb.TaskType)
+	ret0, _ := ret[0].(enumsspb.TaskType)
 	return ret0
 }
 

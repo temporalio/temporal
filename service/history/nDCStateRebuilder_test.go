@@ -38,7 +38,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
