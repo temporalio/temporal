@@ -3,6 +3,8 @@ build:
     - proto/internal
     - proto/temporal-proto
 lint:
+  ignore:
+    - temporal/api # do not lint public api
   use:
     - DEFAULT
   except:
