@@ -30,16 +30,16 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 )
 
 var (
-	validWorkflowStates = map[enumsgenpb.WorkflowExecutionState]struct{}{
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:   {},
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:   {},
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
+	validWorkflowStates = map[enumsspb.WorkflowExecutionState]struct{}{
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   {},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   {},
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
+		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
 	}
 
 	validWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
@@ -55,7 +55,7 @@ var (
 
 // ValidateCreateWorkflowStateStatus validate workflow state and close status
 func ValidateCreateWorkflowStateStatus(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
@@ -67,7 +67,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -75,7 +75,7 @@ func ValidateCreateWorkflowStateStatus(
 
 // ValidateUpdateWorkflowStateStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateStatus(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
@@ -88,7 +88,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 	// validate workflow state & close status
 	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		if state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
@@ -98,7 +98,7 @@ func ValidateUpdateWorkflowStateStatus(
 		// enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 		// enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		// enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
-		if state != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	}
@@ -107,7 +107,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 // validateWorkflowState validate workflow state
 func validateWorkflowState(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {

@@ -29,8 +29,8 @@ package history
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -45,7 +45,7 @@ type (
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
-		) ([]*replicationgenpb.ReplicationTask, []byte, error)
+		) ([]*replicationspb.ReplicationTask, []byte, error)
 		purgeMessages(
 			sourceCluster string,
 			lastMessageID int64,
@@ -84,7 +84,7 @@ func (r *replicationDLQHandlerImpl) readMessages(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	tasks, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
@@ -102,7 +102,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, int64, []byte, error) {
+) ([]*replicationspb.ReplicationTask, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
@@ -119,9 +119,9 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-	taskInfo := make([]*replicationgenpb.ReplicationTaskInfo, len(resp.Tasks))
+	taskInfo := make([]*replicationspb.ReplicationTaskInfo, len(resp.Tasks))
 	for _, task := range resp.Tasks {
-		taskInfo = append(taskInfo, &replicationgenpb.ReplicationTaskInfo{
+		taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
 			NamespaceId:  task.GetNamespaceId(),
 			WorkflowId:   task.GetWorkflowId(),
 			RunId:        task.GetRunId(),

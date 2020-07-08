@@ -36,9 +36,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -787,7 +787,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if currentWorkflow.ExecutionInfo.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)

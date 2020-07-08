@@ -34,9 +34,9 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -567,7 +567,7 @@ func createOrUpdateCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
@@ -704,17 +704,17 @@ func createTransferTasks(
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
-		case enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 			info.TargetNamespaceId = task.(*p.ActivityTask).NamespaceID
 			info.TaskQueue = task.(*p.ActivityTask).TaskQueue
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK:
+		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
 			info.TargetNamespaceId = task.(*p.DecisionTask).NamespaceID
 			info.TaskQueue = task.(*p.DecisionTask).TaskQueue
 			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			info.TargetNamespaceId = task.(*p.CancelExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
@@ -723,7 +723,7 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 			info.TargetNamespaceId = task.(*p.SignalExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
@@ -732,15 +732,15 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 			info.TargetNamespaceId = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case enumsgenpb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsgenpb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsgenpb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
-			enumsgenpb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
+			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// No explicit property needs to be set
 
 		default:
@@ -802,13 +802,13 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
 
 		switch task.GetType() {
-		case enumsgenpb.TASK_TYPE_REPLICATION_HISTORY:
+		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 			historyReplicationTask, ok := task.(*p.HistoryReplicationTask)
 			if !ok {
 				return serviceerror.NewInternal(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
@@ -819,15 +819,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
+				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 			}
 
-		case enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
+			lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
@@ -995,7 +995,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	createRequestID string,
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1026,9 +1026,9 @@ func assertAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	previousLastWriteVersion int64,
-	previousState enumsgenpb.WorkflowExecutionState,
+	previousState enumsspb.WorkflowExecutionState,
 	createRequestID string,
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1103,7 +1103,7 @@ func updateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	createRequestID string,
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,

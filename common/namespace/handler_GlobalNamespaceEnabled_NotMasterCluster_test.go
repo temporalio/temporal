@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"

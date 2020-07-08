@@ -47,11 +47,11 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	workflowgenpb "github.com/temporalio/temporal/.gen/proto/workflow/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	workflowspb "github.com/temporalio/temporal/api/workflow/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -112,8 +112,8 @@ type (
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
-		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicationgenpb.ReplicationMessages, error)
-		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationgenpb.ReplicationTaskInfo) ([]*replicationgenpb.ReplicationTask, error)
+		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicationspb.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*historypb.HistoryEvent) error
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
@@ -529,7 +529,7 @@ func (e *historyEngineImpl) createMutableState(
 
 func (e *historyEngineImpl) generateFirstDecisionTask(
 	mutableState mutableState,
-	parentInfo *workflowgenpb.ParentExecutionInfo,
+	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
 ) error {
 
@@ -1094,9 +1094,9 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	replicationState := mutableState.GetReplicationState()
 	if replicationState != nil {
-		retResp.ReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
+		retResp.ReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
 		for k, v := range replicationState.LastReplicationInfo {
-			retResp.ReplicationInfo[k] = &replicationgenpb.ReplicationInfo{
+			retResp.ReplicationInfo[k] = &replicationspb.ReplicationInfo{
 				Version:     v.Version,
 				LastEventId: v.LastEventId,
 			}
@@ -1260,7 +1260,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
-	if executionInfo.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if executionInfo.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
@@ -1374,7 +1374,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			if !isRunning {
 				// Looks like ActivityTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 				return ErrActivityTaskNotFound
 			}
 
@@ -1395,7 +1395,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsgenpb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
 				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
 			}
 
@@ -2819,7 +2819,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
-	prevState enumsgenpb.WorkflowExecutionState,
+	prevState enumsspb.WorkflowExecutionState,
 	prevStatus enumspb.WorkflowExecutionStatus,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
@@ -2829,11 +2829,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
 	switch prevState {
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type
@@ -2870,7 +2870,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	lastReadMessageID int64,
-) (*replicationgenpb.ReplicationMessages, error) {
+) (*replicationspb.ReplicationMessages, error) {
 
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
@@ -2887,7 +2887,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 
 	// Set cluster status for sync shard info
-	replicationMessages.SyncShardStatus = &replicationgenpb.SyncShardStatus{
+	replicationMessages.SyncShardStatus = &replicationspb.SyncShardStatus{
 		Timestamp: e.timeSource.Now().UnixNano(),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
@@ -2896,14 +2896,14 @@ func (e *historyEngineImpl) GetReplicationMessages(
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
-	taskInfos []*replicationgenpb.ReplicationTaskInfo,
-) ([]*replicationgenpb.ReplicationTask, error) {
+	taskInfos []*replicationspb.ReplicationTaskInfo,
+) ([]*replicationspb.ReplicationTask, error) {
 
 	scope := metrics.HistoryGetDLQReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
 	defer sw.Stop()
 
-	tasks := make([]*replicationgenpb.ReplicationTask, len(taskInfos))
+	tasks := make([]*replicationspb.ReplicationTask, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
 		if err != nil {

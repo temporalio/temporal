@@ -29,7 +29,7 @@ package namespace
 import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -38,7 +38,7 @@ import (
 type (
 	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
+		Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
 		Purge(lastMessageID int64) error
 		Merge(lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error)
 	}
@@ -68,7 +68,7 @@ func (d *dlqMessageHandlerImpl) Read(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {

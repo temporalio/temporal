@@ -27,7 +27,7 @@ package frontend
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
 )
 
 var _ adminservice.AdminServiceServer = (*AdminNilCheckHandler)(nil)

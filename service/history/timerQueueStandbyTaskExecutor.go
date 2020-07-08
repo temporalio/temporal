@@ -32,8 +32,8 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -87,28 +87,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
-		timerTask.TaskType != enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT {
+		timerTask.TaskType != enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
+		timerTask.TaskType != enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT {
 		// guarantee the processing of workflow execution history deletion
 		return nil
 	}
 
 	switch timerTask.TaskType {
-	case enumsgenpb.TASK_TYPE_USER_TIMER:
+	case enumsspb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case enumsgenpb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask

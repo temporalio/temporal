@@ -29,9 +29,9 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/client/history"

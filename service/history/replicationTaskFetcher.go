@@ -30,8 +30,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
@@ -264,8 +264,8 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*replicationgenpb.ReplicationMessages, error) {
-	var tokens []*replicationgenpb.ReplicationToken
+) (map[int32]*replicationspb.ReplicationMessages, error) {
+	var tokens []*replicationspb.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}

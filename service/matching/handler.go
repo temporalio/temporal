@@ -33,7 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"

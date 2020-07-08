@@ -38,8 +38,8 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -847,5 +847,5 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 }
 
 func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	return execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED || execution.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }

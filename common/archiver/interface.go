@@ -30,7 +30,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -107,7 +107,7 @@ type (
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
-		Archive(context.Context, URI, *archivergenpb.ArchiveVisibilityRequest, ...ArchiveOption) error
+		Archive(context.Context, URI, *archiverspb.ArchiveVisibilityRequest, ...ArchiveOption) error
 		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
 		ValidateURI(URI) error
 	}

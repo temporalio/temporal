@@ -1,0 +1,70 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.cli.v1;
+
+option go_package = "github.com/temporalio/temporal/api/cli/v1;cli";
+
+import "temporal/common/v1/message.proto";
+import "temporal/enums/v1/workflow.proto";
+import "temporal/workflow/v1/message.proto";
+
+message DescribeWorkflowExecutionResponse {
+    temporal.workflow.v1.WorkflowExecutionConfig execution_config = 1;
+    WorkflowExecutionInfo workflow_execution_info = 2;
+    repeated PendingActivityInfo pending_activities = 3;
+    repeated temporal.workflow.v1.PendingChildExecutionInfo pending_children = 4;
+}
+
+message WorkflowExecutionInfo {
+    temporal.common.v1.WorkflowExecution execution = 1;
+    temporal.common.v1.WorkflowType type = 2;
+    string start_time = 3;
+    string close_time = 4;
+    temporal.enums.v1.WorkflowExecutionStatus status = 5;
+    int64 history_length = 6;
+    string parent_namespace_id = 7;
+    temporal.common.v1.WorkflowExecution parent_execution = 8;
+    int64 execution_time = 9;
+    temporal.common.v1.Memo memo = 10;
+    SearchAttributes search_attributes = 11;
+    temporal.workflow.v1.ResetPoints auto_reset_points = 12;
+}
+
+message PendingActivityInfo {
+    string activity_id = 1;
+    temporal.common.v1.ActivityType activity_type = 2;
+    temporal.enums.v1.PendingActivityState state = 3;
+    string heartbeat_details = 4;
+    string last_heartbeat_timestamp = 5;
+    string last_started_timestamp = 6;
+    int32 attempt = 7;
+    int32 maximum_attempts = 8;
+    string scheduled_timestamp = 9;
+    string expiration_timestamp = 10;
+    string last_failure = 11;
+    string last_worker_identity = 12;
+}
+
+message SearchAttributes {
+    map<string, string> indexed_fields = 1;
+}

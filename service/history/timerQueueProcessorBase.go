@@ -32,8 +32,8 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -445,64 +445,64 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 
 //nolint:unused
 func (t *timerQueueProcessorBase) getTimerTaskType(
-	taskType enumsgenpb.TaskType,
+	taskType enumsspb.TaskType,
 ) string {
 
 	switch taskType {
-	case enumsgenpb.TASK_TYPE_USER_TIMER:
+	case enumsspb.TASK_TYPE_USER_TIMER:
 		return "UserTimer"
-	case enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return "ActivityTimeout"
-	case enumsgenpb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
 		return "DecisionTimeout"
-	case enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
-	case enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
-	case enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimerTask"
-	case enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
 }
 
 func getTimerTaskMetricScope(
-	taskType enumsgenpb.TaskType,
+	taskType enumsspb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case enumsgenpb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskDecisionTimeoutScope
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope
-	case enumsgenpb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case enumsgenpb.TASK_TYPE_USER_TIMER:
+	case enumsspb.TASK_TYPE_USER_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case enumsgenpb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case enumsgenpb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		if isActive {
 			return metrics.TimerActiveTaskDeleteHistoryEventScope
 		}
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case enumsgenpb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskActivityRetryTimerScope
 		}
 		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case enumsgenpb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
 		}

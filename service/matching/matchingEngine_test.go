@@ -49,11 +49,11 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	tokengenpb "github.com/temporalio/temporal/.gen/proto/token/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	tokenspb "github.com/temporalio/temporal/api/token/v1"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -589,7 +589,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(true, validateTimeRange(time.Unix(0, result.StartedTimestamp), time.Minute))
 		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
-		taskToken := &tokengenpb.Task{
+		taskToken := &tokenspb.Task{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -738,7 +738,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		taskToken := &tokengenpb.Task{
+		taskToken := &tokenspb.Task{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -921,7 +921,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokengenpb.Task{
+				taskToken := &tokenspb.Task{
 					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
@@ -1042,7 +1042,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokengenpb.Task{
+				taskToken := &tokenspb.Task{
 					NamespaceId: namespaceID,
 					WorkflowId:  workflowID,
 					RunId:       runID,
@@ -1219,7 +1219,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityType, result.ActivityType)
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokengenpb.Task{
+				taskToken := &tokenspb.Task{
 					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
@@ -1356,7 +1356,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokengenpb.Task{
+				taskToken := &tokenspb.Task{
 					NamespaceId: namespaceID,
 					WorkflowId:  workflowID,
 					RunId:       runID,

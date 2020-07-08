@@ -39,8 +39,8 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/urfave/cli"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -153,7 +153,7 @@ func AdminIndex(c *cli.Context) {
 		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
 		var req elastic.BulkableRequest
 		switch message.GetMessageType() {
-		case enumsgenpb.MESSAGE_TYPE_INDEX:
+		case enumsspb.MESSAGE_TYPE_INDEX:
 			doc := generateESDoc(message)
 			req = elastic.NewBulkIndexRequest().
 				Index(indexName).
@@ -162,7 +162,7 @@ func AdminIndex(c *cli.Context) {
 				VersionType(versionTypeExternal).
 				Version(message.GetVersion()).
 				Doc(doc)
-		case enumsgenpb.MESSAGE_TYPE_DELETE:
+		case enumsspb.MESSAGE_TYPE_DELETE:
 			req = elastic.NewBulkDeleteRequest().
 				Index(indexName).
 				Type(esDocType).
@@ -239,7 +239,7 @@ func AdminDelete(c *cli.Context) {
 	}
 }
 
-func parseIndexerMessage(fileName string) (messages []*indexergenpb.Message, err error) {
+func parseIndexerMessage(fileName string) (messages []*indexerspb.Message, err error) {
 	// Executed from the CLI to parse existing elastiseach files
 	// #nosec
 	file, err := os.Open(fileName)
@@ -259,7 +259,7 @@ func parseIndexerMessage(fileName string) (messages []*indexergenpb.Message, err
 			continue
 		}
 
-		msg := &indexergenpb.Message{}
+		msg := &indexerspb.Message{}
 		err := encoder.Decode([]byte(line), msg)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to indexer message: %v.\n", idx, line)
@@ -274,7 +274,7 @@ func parseIndexerMessage(fileName string) (messages []*indexergenpb.Message, err
 	return messages, nil
 }
 
-func generateESDoc(msg *indexergenpb.Message) map[string]interface{} {
+func generateESDoc(msg *indexerspb.Message) map[string]interface{} {
 	doc := make(map[string]interface{})
 	doc[es.NamespaceID] = msg.GetNamespaceId()
 	doc[es.WorkflowID] = msg.GetWorkflowId()
@@ -282,13 +282,13 @@ func generateESDoc(msg *indexergenpb.Message) map[string]interface{} {
 
 	for k, v := range msg.Fields {
 		switch v.GetType() {
-		case enumsgenpb.FIELD_TYPE_STRING:
+		case enumsspb.FIELD_TYPE_STRING:
 			doc[k] = v.GetStringData()
-		case enumsgenpb.FIELD_TYPE_INT:
+		case enumsspb.FIELD_TYPE_INT:
 			doc[k] = v.GetIntData()
-		case enumsgenpb.FIELD_TYPE_BOOL:
+		case enumsspb.FIELD_TYPE_BOOL:
 			doc[k] = v.GetBoolData()
-		case enumsgenpb.FIELD_TYPE_BINARY:
+		case enumsspb.FIELD_TYPE_BINARY:
 			doc[k] = v.GetBinaryData()
 		default:
 			ErrorAndExit("Unknown field type", nil)

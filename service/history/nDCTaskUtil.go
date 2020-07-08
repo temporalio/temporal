@@ -31,8 +31,8 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -92,7 +92,7 @@ func loadMutableStateForTransferTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == enumsgenpb.TASK_TYPE_TRANSFER_DECISION_TASK &&
+	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK &&
 		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.DecisionAttempt > 0
 
@@ -137,7 +137,7 @@ func loadMutableStateForTimerTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := timerTask.TaskType == enumsgenpb.TASK_TYPE_DECISION_TIMEOUT &&
+	isDecisionRetry := timerTask.TaskType == enumsspb.TASK_TYPE_DECISION_TIMEOUT &&
 		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
 		executionInfo.DecisionAttempt > 0
 

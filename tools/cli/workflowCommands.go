@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/client"
 
-	cligenpb "github.com/temporalio/temporal/.gen/proto/cli/v1"
+	clispb "github.com/temporalio/temporal/api/cli/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
@@ -886,10 +886,10 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cligenpb.DescribeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
-	executionInfo := &cligenpb.WorkflowExecutionInfo{
+	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
 		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
@@ -903,10 +903,10 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
-	var pendingActs []*cligenpb.PendingActivityInfo
-	var tmpAct *cligenpb.PendingActivityInfo
+	var pendingActs []*clispb.PendingActivityInfo
+	var tmpAct *clispb.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
-		tmpAct = &cligenpb.PendingActivityInfo{
+		tmpAct = &clispb.PendingActivityInfo{
 			ActivityId:             pa.GetActivityId(),
 			ActivityType:           pa.GetActivityType(),
 			State:                  pa.GetState(),
@@ -928,7 +928,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		pendingActs = append(pendingActs, tmpAct)
 	}
 
-	return &cligenpb.DescribeWorkflowExecutionResponse{
+	return &clispb.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       resp.ExecutionConfig,
 		WorkflowExecutionInfo: executionInfo,
 		PendingActivities:     pendingActs,
@@ -937,13 +937,13 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 }
 
 func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cligenpb.SearchAttributes {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *clispb.SearchAttributes {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	result := &cligenpb.SearchAttributes{
+	result := &clispb.SearchAttributes{
 		IndexedFields: map[string]string{},
 	}
 	ctx, cancel := newContext(c)

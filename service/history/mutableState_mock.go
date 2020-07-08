@@ -33,9 +33,9 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enums "github.com/temporalio/temporal/api/enums/v1"
+	historyservice "github.com/temporalio/temporal/api/historyservice/v1"
+	persistenceblobs "github.com/temporalio/temporal/api/persistenceblobs/v1"
 	cache "github.com/temporalio/temporal/common/cache"
 	definition "github.com/temporalio/temporal/common/definition"
 	persistence "github.com/temporalio/temporal/common/persistence"

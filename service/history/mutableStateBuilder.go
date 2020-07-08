@@ -41,11 +41,11 @@ import (
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
-	workflowgenpb "github.com/temporalio/temporal/.gen/proto/workflow/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	workflowspb "github.com/temporalio/temporal/api/workflow/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -135,7 +135,7 @@ type (
 		hasBufferedEventsInDB bool
 		// indicates the workflow state in DB, can be used to calculate
 		// whether this workflow is pointed by current workflow record
-		stateInDB enumsgenpb.WorkflowExecutionState
+		stateInDB enumsspb.WorkflowExecutionState
 		// indicates the next event ID in DB, for conditional update
 		nextEventIDInDB int64
 		// namespace entry contains a snapshot of namespace
@@ -207,7 +207,7 @@ func newMutableStateBuilder(
 
 		currentVersion:        namespaceEntry.GetFailoverVersion(),
 		hasBufferedEventsInDB: false,
-		stateInDB:             enumsgenpb.WORKFLOW_EXECUTION_STATE_VOID,
+		stateInDB:             enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:       0,
 		namespaceEntry:        namespaceEntry,
 		appliedEvents:         make(map[string]struct{}),
@@ -230,7 +230,7 @@ func newMutableStateBuilder(
 		DecisionTimeout:    0,
 
 		NextEventID:        common.FirstEventID,
-		State:              enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastProcessedEvent: common.EmptyEventID,
 	}
@@ -253,7 +253,7 @@ func newMutableStateBuilderWithReplicationState(
 		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 	return s
 }
@@ -488,7 +488,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := e.GetWorkflowStateStatus(); state == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if state, _ := e.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// do not update current version only when workflow is completed
 		return nil
 	}
@@ -614,8 +614,8 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	if lastEventSourceCluster != currentCluster {
 		info, ok := e.replicationState.LastReplicationInfo[lastEventSourceCluster]
 		if !ok {
-			// replicationgenpb.ReplicationInfo doesn't exist for this cluster, create one
-			info = &replicationgenpb.ReplicationInfo{}
+			// replicationspb.ReplicationInfo doesn't exist for this cluster, create one
+			info = &replicationspb.ReplicationInfo{}
 			e.replicationState.LastReplicationInfo[lastEventSourceCluster] = info
 		}
 
@@ -867,17 +867,17 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	// 4. stateInDB cannot be void, void is only possible when mutable state is just initialized
 
 	switch e.stateInDB {
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_VOID:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
 		return false
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		return true
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return true
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return false
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		return false
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -1148,7 +1148,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, error) {
-	if e.executionInfo.State != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if e.executionInfo.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
@@ -1585,15 +1585,15 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	switch e.executionInfo.State {
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		return true
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return true
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return false
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		return false
-	case enumsgenpb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -1641,7 +1641,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 }
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
-	parentExecutionInfo *workflowgenpb.ParentExecutionInfo,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution commonpb.WorkflowExecution,
 	previousExecutionState mutableState,
 	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
@@ -1818,7 +1818,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	); err != nil {
 		return err
@@ -2579,7 +2579,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	); err != nil {
 		return err
@@ -2620,7 +2620,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	); err != nil {
 		return err
@@ -2660,7 +2660,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	); err != nil {
 		return err
@@ -2738,7 +2738,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 	); err != nil {
 		return err
@@ -3254,7 +3254,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 	); err != nil {
 		return err
@@ -3312,9 +3312,9 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 
 	// Extract ParentExecutionInfo from current run so it can be passed down to the next
-	var parentInfo *workflowgenpb.ParentExecutionInfo
+	var parentInfo *workflowspb.ParentExecutionInfo
 	if e.HasParentExecution() {
-		parentInfo = &workflowgenpb.ParentExecutionInfo{
+		parentInfo = &workflowspb.ParentExecutionInfo{
 			NamespaceId: e.executionInfo.ParentNamespaceID,
 			Namespace:   parentNamespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -3416,7 +3416,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 	); err != nil {
 		return err
@@ -3868,14 +3868,14 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 	return e.nextEventIDInDB
 }
 
-func (e *mutableStateBuilder) GetWorkflowStateStatus() (enumsgenpb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
+func (e *mutableStateBuilder) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 
 	executionInfo := e.executionInfo
 	return executionInfo.State, executionInfo.Status
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
-	state enumsgenpb.WorkflowExecutionState,
+	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
@@ -4341,7 +4341,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 
 	// only do check if workflow is finished
-	if e.GetExecutionInfo().State != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if e.GetExecutionInfo().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
 

@@ -32,7 +32,7 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
+	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
@@ -223,7 +223,7 @@ func (p *esProcessorImpl) getMsgWithInfo(key string) (wid string, rid string, na
 		return
 	}
 
-	var msg indexergenpb.Message
+	var msg indexerspb.Message
 	if err := p.msgEncoder.Decode(kafkaMsg.message.Value(), &msg); err != nil {
 		p.logger.Error("failed to deserialize kafka message.", tag.Error(err))
 		return

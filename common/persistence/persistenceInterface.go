@@ -33,8 +33,8 @@ import (
 	failurepb "go.temporal.io/temporal-proto/failure/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -221,7 +221,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              enumsgenpb.WorkflowExecutionState
+		State                              enumsspb.WorkflowExecutionState
 		Status                             enumspb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
