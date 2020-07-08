@@ -64,8 +64,6 @@ github.com/bmizerany/perks v0.0.0-20141205001514-d9a9656a3a4b h1:AP/Y7sqYicnjGDf
 github.com/bmizerany/perks v0.0.0-20141205001514-d9a9656a3a4b/go.mod h1:ac9efd0D1fsDb3EJvhqgXRbFx7bs2wqZ10HQPeU8U/Q=
 github.com/bsm/sarama-cluster v2.1.15+incompatible h1:RkV6WiNRnqEEbp81druK8zYhmnIgdOjqSVi0+9Cnl2A=
 github.com/bsm/sarama-cluster v2.1.15+incompatible/go.mod h1:r7ao+4tTNXvWm+VRpRJchr2kQhqxgmAp2iEX5W96gMM=
-github.com/cactus/go-statsd-client v3.1.0+incompatible h1:jtloShmaP/MkAW68aaWwQZrzlOUXVLudFmBQsskTs7A=
-github.com/cactus/go-statsd-client v3.1.0+incompatible/go.mod h1:cMRcwZDklk7hXp+Law83urTHUiHMzCev/r4JMYr/zU0=
 github.com/cactus/go-statsd-client/statsd v0.0.0-20191106001114-12b4e2b38748 h1:bXxS5/Z3/dfc8iFniQfgogNBomo0u+1//9eP+jl8GVo=
 github.com/cactus/go-statsd-client/statsd v0.0.0-20191106001114-12b4e2b38748/go.mod h1:l/bIBLeOl9eX+wxJAzxS4TveKRtAqlyDpHjhkfO0MEI=
 github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c h1:HIGF0r/56+7fuIZw2V4isE22MK6xpxWx7BbV8dJ290w=
@@ -119,8 +117,6 @@ github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200222043503-6f7a984d4dc4/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-sql-driver/mysql v1.5.0 h1:ozyZYNQW3x3HtqT1jira07DN2PArx2v7/mN66gGcHOs=
 github.com/go-sql-driver/mysql v1.5.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
-github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31 h1:kPjRO/S+4pjIgvub1+xsaQ6xudIgvVPoJYGGkJ7Qx8E=
-github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31/go.mod h1:GjP0ITc4WbMO5dEWwikPqq0ZWbloAO6CO6g0VAK7tTc=
 github.com/gocql/gocql v0.0.0-20200624222514-34081eda590e h1:SroDcndcOU9BVAduPf/PXihXoR2ZYTQYLXbupbqxAyQ=
 github.com/gocql/gocql v0.0.0-20200624222514-34081eda590e/go.mod h1:DL0ekTmBSTdlNF25Orwt/JMzqIq3EJ4MVa/J/uK64OY=
 github.com/gogo/googleapis v0.0.0-20180223154316-0cd9801be74a/go.mod h1:gf4bu3Q80BeJ6H1S1vYPm8/ELATdvryBaNFGgqEef3s=
@@ -325,8 +321,6 @@ github.com/stretchr/testify v1.5.1 h1:nOGnQDM7FYENwehXlg/kFVnos3rEvtKTjRvOWSzb6H
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/temporalio/ringpop-go v0.0.0-20200706180029-8936e3cea8e8 h1:pu3TqFGYSogjplEdUq1lI7kteZujCNSkTuvrJl+blUU=
-github.com/temporalio/ringpop-go v0.0.0-20200706180029-8936e3cea8e8/go.mod h1:6THFNVUdhnG5dRaorImAh0F/7dJLaInhLremkcVo/7U=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a h1:yyEBPFtXeNbtqFitJ+X3L7wpI9MrKrl8zSH3M29pREo=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a/go.mod h1:Ek9J8CAfI1IwVSqHpTOgj7FjzRSJ5SM/ud52eCmkhsw=
 github.com/uber-common/bark v1.0.0/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=

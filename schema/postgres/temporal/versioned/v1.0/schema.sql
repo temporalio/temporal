@@ -1,5 +1,5 @@
 CREATE TABLE namespaces(
-  shard_id INTEGER NOT NULL DEFAULT 54321,
+  partition_id INTEGER NOT NULL,
   id BYTEA NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   notification_version BIGINT NOT NULL,
@@ -7,14 +7,16 @@ CREATE TABLE namespaces(
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   is_global BOOLEAN NOT NULL,
-  PRIMARY KEY(shard_id, id)
+  PRIMARY KEY(partition_id, id)
 );
 
 CREATE TABLE namespace_metadata (
-  notification_version BIGINT NOT NULL
+  partition_id INTEGER NOT NULL,
+  notification_version BIGINT NOT NULL,
+  PRIMARY KEY(partition_id)
 );
 
-INSERT INTO namespace_metadata (notification_version) VALUES (1);
+INSERT INTO namespace_metadata (partition_id, notification_version) VALUES (54321, 1);
 
 CREATE TABLE shards (
   shard_id INTEGER NOT NULL,
