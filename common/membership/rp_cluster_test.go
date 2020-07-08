@@ -34,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/ringpop-go"
+	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
 	"github.com/temporalio/temporal/common/log/loggerimpl"
