@@ -28,10 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/ringpop-go/discovery/statichosts"
+	"github.com/temporalio/ringpop-go/discovery/statichosts"
 
-	"github.com/uber/ringpop-go"
-	"github.com/uber/ringpop-go/swim"
+	"github.com/temporalio/ringpop-go"
+	"github.com/temporalio/ringpop-go/swim"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"

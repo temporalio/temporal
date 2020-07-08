@@ -31,13 +31,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/ringpop-go"
+	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/ringpop-go/events"
-	"github.com/uber/ringpop-go/hashring"
-	"github.com/uber/ringpop-go/swim"
+	"github.com/temporalio/ringpop-go/events"
+	"github.com/temporalio/ringpop-go/hashring"
+	"github.com/temporalio/ringpop-go/swim"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"

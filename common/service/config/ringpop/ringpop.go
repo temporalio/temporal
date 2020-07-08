@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/ringpop-go"
+	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
 	"github.com/temporalio/temporal/common/log"
