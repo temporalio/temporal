@@ -30,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type RingpopSuite struct {

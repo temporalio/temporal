@@ -30,7 +30,7 @@ import (
 	"github.com/robfig/cron"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/convert"
+	"go.temporal.io/server/common/convert"
 )
 
 // NoBackoff is used to represent backoff when no cron backoff is needed

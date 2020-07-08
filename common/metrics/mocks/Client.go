@@ -28,7 +28,7 @@ import (
 	mock "github.com/stretchr/testify/mock"
 	tally "github.com/uber-go/tally"
 
-	metrics "github.com/temporalio/temporal/common/metrics"
+	metrics "go.temporal.io/server/common/metrics"
 
 	time "time"
 )

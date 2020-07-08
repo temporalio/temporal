@@ -29,9 +29,9 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 )
 
 // ClientImpl is used for reporting metrics by various Temporal services

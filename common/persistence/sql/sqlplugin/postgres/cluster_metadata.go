@@ -29,9 +29,9 @@ import (
 	"strconv"
 	"strings"
 
-	p "github.com/temporalio/temporal/common/persistence"
+	p "go.temporal.io/server/common/persistence"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const constMetadataPartition = 0

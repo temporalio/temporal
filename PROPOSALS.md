@@ -6,7 +6,7 @@ The design process for changes to Temporal is modeled on the [proposal process u
 
 ## Process
 
-- [Create an issue](https://github.com/temporalio/temporal/issues/new) describing the proposal.
+- [Create an issue](https://go.temporal.io/server/issues/new) describing the proposal.
 
 - Like any GitHub issue, a proposal issue is followed by an initial discussion about the suggestion. For Proposal issues:
 

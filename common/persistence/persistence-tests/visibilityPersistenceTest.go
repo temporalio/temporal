@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/payload"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/payload"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

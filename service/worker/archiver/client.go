@@ -35,14 +35,14 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	carchiver "github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

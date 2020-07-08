@@ -27,9 +27,9 @@ package history
 import (
 	"fmt"
 
-	checksumproto "github.com/temporalio/temporal/api/checksum/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
+	checksumproto "go.temporal.io/server/api/checksum/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
 )
 
 const (

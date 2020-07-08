@@ -29,7 +29,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/service/worker/batcher"
+	"go.temporal.io/server/service/worker/batcher"
 )
 
 func newBatchCommands() []cli.Command {

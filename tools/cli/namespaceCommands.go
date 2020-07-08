@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/namespace"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (

@@ -35,10 +35,10 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/metrics"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

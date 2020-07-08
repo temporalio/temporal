@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination clientBean_mock.go -self_package github.com/temporalio/temporal/client
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination clientBean_mock.go -self_package go.temporal.io/server/client
 
 package client
 
@@ -31,11 +31,11 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/cluster"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common/cluster"
 )
 
 type (

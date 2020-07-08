@@ -22,7 +22,7 @@ This doc is for contributors to Temporal server (hopefully that's you!)
 
 Clone the repo into the preffered location:
 ```bash
-$ git clone https://github.com/temporalio/temporal.git
+$ git clone https://go.temporal.io/server.git
 ```
 
 ## Building
@@ -70,7 +70,7 @@ $ go test -v <path> -run <TestSuite> -testify.m <TestSpecificTaskName>
 ```
 for example:
 ```bash
-$ go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
+$ go test -v go.temporal.io/server/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```
 
 When you are done, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:

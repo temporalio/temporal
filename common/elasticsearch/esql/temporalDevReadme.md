@@ -1,7 +1,7 @@
 # ESQL Temporal Usage
 
 ## Motivation
-Currently [Temporal](https://github.com/temporalio/temporal) is using [elasticsql](https://github.com/cch123/elasticsql) to translate sql query. However it only support up to ES V2.x while Temporal is using ES V6.x. Beyond that, Temporal has some specific requirements that not supported by elasticsql yet.
+Currently [Temporal](https://go.temporal.io/server) is using [elasticsql](https://github.com/cch123/elasticsql) to translate sql query. However it only support up to ES V2.x while Temporal is using ES V6.x. Beyond that, Temporal has some specific requirements that not supported by elasticsql yet.
 
 Current Temporal query request processing steps are listed below:
 - generate SQL from query
@@ -53,8 +53,8 @@ if err == nil {
 
 ## Testing
 To setup local testing environment:
-- start cassandra service locally. Please refer to [Temporal](https://github.com/temporalio/temporal) readme.
+- start cassandra service locally. Please refer to [Temporal](https://go.temporal.io/server) readme.
 - start zookeeper and kafka service locally. Here is a [referecne](https://kafka.apache.org/quickstart).
 - start elasticsearch and kibana service locally.
 - start a temporal worker by `./bin/helloworld -m worker` under temporal directory.
-- start temporal service locally. Please refer to [Temporal](https://github.com/temporalio/temporal) readme.
+- start temporal service locally. Please refer to [Temporal](https://go.temporal.io/server) readme.

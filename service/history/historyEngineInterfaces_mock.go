@@ -34,9 +34,9 @@ import (
 	"github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 
-	task "github.com/temporalio/temporal/common/task"
+	task "go.temporal.io/server/common/task"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // MockqueueTaskInfo is a mock of queueTaskInfo interface

@@ -38,12 +38,12 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.uber.org/zap"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/gcloud/connector/mocks"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (

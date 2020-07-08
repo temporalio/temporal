@@ -26,13 +26,13 @@ Using a pre-built image
 With every tagged release of the temporal server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
 contain a **docker.tar.gz** file (docker-compose startup scripts). 
-[Download](https://github.com/temporalio/temporal/releases/latest) the latest **docker.tar.gz**.
+[Download](https://go.temporal.io/server/releases/latest) the latest **docker.tar.gz**.
 
 Execute the following
 commands to start a pre-built image along with all dependencies (`cassandra`/`statsd`).
 
 ```bash
-$ curl -L https://github.com/temporalio/temporal/releases/latest/download/docker.tar.gz | tar -xz
+$ curl -L https://go.temporal.io/server/releases/latest/download/docker.tar.gz | tar -xz
 $ cd docker
 $ docker-compose up
 ```

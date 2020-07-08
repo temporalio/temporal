@@ -7,7 +7,7 @@ package matchingservicemock
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	matchingservice "github.com/temporalio/temporal/api/matchingservice/v1"
+	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	grpc "google.golang.org/grpc"
 	reflect "reflect"
 )

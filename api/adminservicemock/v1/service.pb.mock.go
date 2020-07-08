@@ -7,7 +7,7 @@ package adminservicemock
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	adminservice "github.com/temporalio/temporal/api/adminservice/v1"
+	adminservice "go.temporal.io/server/api/adminservice/v1"
 	grpc "google.golang.org/grpc"
 	reflect "reflect"
 )

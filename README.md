@@ -5,7 +5,7 @@
 
 Visit [docs.temporal.io](https://docs.temporal.io) to learn about Temporal.
 
-This repo contains the source code of the Temporal server. To implement workflows, activities and worker use [Go SDK](https://github.com/temporalio/temporal-go-client) or [Java SDK](https://github.com/temporalio/temporal-java-client).
+This repo contains the source code of the Temporal server. To implement workflows, activities and worker use [Go SDK](https://go.temporal.io/server-go-client) or [Java SDK](https://go.temporal.io/server-java-client).
 
 See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Temporal.
 
@@ -17,7 +17,7 @@ We highly recommend that you use [Temporal service docker](docker/README.md) to 
 
 ### Run the Samples
 
-Try out the sample recipes for [Go](https://github.com/temporalio/temporal-go-samples) or [Java](https://github.com/temporalio/temporal-java-samples) to get started.
+Try out the sample recipes for [Go](https://go.temporal.io/server-go-samples) or [Java](https://go.temporal.io/server-java-samples) to get started.
 
 ### Use CLI
 
@@ -25,7 +25,7 @@ Try out [Temporal command-line tool](tools/cli/README.md) to perform various tas
 
 ### Use Temporal Web
 
-Try out [Temporal Web UI](https://github.com/temporalio/temporal-web) to view your workflows on Temporal.  
+Try out [Temporal Web UI](https://go.temporal.io/server-web) to view your workflows on Temporal.  
 (This is already available at localhost:8088 if you run Temporal with docker compose)
 
 ## Contributing
@@ -36,4 +36,4 @@ If you'd like to propose a new feature, first join the Temporal [Slack channel](
 
 ## License
 
-MIT License, please see [LICENSE](https://github.com/temporalio/temporal/blob/master/LICENSE) for details.
+MIT License, please see [LICENSE](https://go.temporal.io/server/blob/master/LICENSE) for details.

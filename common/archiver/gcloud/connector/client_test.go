@@ -40,10 +40,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/api/iterator"
 
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/gcloud/connector"
+	"go.temporal.io/server/common/archiver/gcloud/connector/mocks"
+	"go.temporal.io/server/common/service/config"
 )
 
 func (s *clientSuite) SetupTest() {

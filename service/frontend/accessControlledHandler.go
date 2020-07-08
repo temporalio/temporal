@@ -30,9 +30,9 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/common/authorization"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
 )
 
 // TODO(vancexu): add metrics

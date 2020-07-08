@@ -165,7 +165,7 @@ ID:27		WorkflowCompleted     : completed by decision
 
 ### Missing decision
 
-[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1206):
+[Error message](https://go.temporal.io/server-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1206):
 
 ```go
 fmt.Errorf("nondeterministic workflow: missing replay decision for %s", util.HistoryEventToString(e))
@@ -179,7 +179,7 @@ and restart worker, then it will run into this error. Because in the history, th
 
 ### Extra decision 
 
-[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1210):
+[Error message](https://go.temporal.io/server-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1210):
 
 ```go
 fmt.Errorf("nondeterministic workflow: extra replay decision for %s", util.DecisionToString(d))
@@ -208,7 +208,7 @@ And restart worker, then it will run into this error. Because in the history, th
 
 ### Decision mismatch
 
-[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1214):
+[Error message](https://go.temporal.io/server-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1214):
 
 ```go
 fmt.Errorf("nondeterministic workflow: history event is %s, replay decision is %s",util.HistoryEventToString(e), util.DecisionToString(d))
@@ -228,7 +228,7 @@ And restart worker, then it will run into this error. Because in the history, th
 
 ### Decision State Machine Panic
 
-[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_decision_state_machine.go#L693):
+[Error message](https://go.temporal.io/server-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_decision_state_machine.go#L693):
 
 ```go
 fmt.Sprintf("unknown decision %v, possible causes are nondeterministic workflow definition code"+" or incompatible change in the workflow definition", id)
@@ -266,13 +266,13 @@ For those needs, see "How to address non-deterministic issues" in the next secti
 
 ## Find the Non-Deterministic Code
 
-Workflow logic can be complicated and changes to workflow code can be non-trivial and non-isolated. In case you are not able to pinpoint the exact code change that introduces the workflow logic and non-deterministic error, you can download the workflow history with non-deterministic error and [replay it locally](https://github.com/temporalio/temporal-go-sdk/blob/master/worker/worker.go#L96). This is [an example](https://github.com/temporalio/temporal-go-samples/blob/03293b934579e0353e08e75c2f46a84a5a7b2df0/cmd/samples/recipes/helloworld/replay_test.go#L39) of using this utility. 
+Workflow logic can be complicated and changes to workflow code can be non-trivial and non-isolated. In case you are not able to pinpoint the exact code change that introduces the workflow logic and non-deterministic error, you can download the workflow history with non-deterministic error and [replay it locally](https://go.temporal.io/server-go-sdk/blob/master/worker/worker.go#L96). This is [an example](https://go.temporal.io/server-go-samples/blob/03293b934579e0353e08e75c2f46a84a5a7b2df0/cmd/samples/recipes/helloworld/replay_test.go#L39) of using this utility. 
 
 You can do this with different versions of your workflow code to see the difference in behavior. 
 
 However, it could be hard if you have too many versions or your code is too complicated to debug. In this case, you can run replay in debug mode to help you to step into your workflow logic.
 
-To do this you first change [this code](https://github.com/temporalio/temporal-go-sdk/blob/cc25a04f6f74c54ea9ae330741f63ae6df15f4df/internal/internal_event_handlers.go#L429) into 
+To do this you first change [this code](https://go.temporal.io/server-go-sdk/blob/cc25a04f6f74c54ea9ae330741f63ae6df15f4df/internal/internal_event_handlers.go#L429) into 
 
 ```go
 func (wc *workflowEnvironmentImpl) GenerateSequence() int32 {
@@ -336,7 +336,7 @@ What if Non-deterministic code change has been deployed without GetVersions()?
 
 Sometimes we may forget to use GetVersions(), or misuse it. This could be a serious problem because after deployment, we probably cannot rollback: because some workflows has run with new code but some workflows has stuck. Rollback will save the stuck workflows but also stuck other workflows. 
 
-The best way is to use BinaryChecksum and Now() to let workflow diverge at the breaking changes. **workflow.GetInfo().****[BinaryChecksu**m](https://github.com/temporalio/temporal-go-sdk/issues/925) is the checksum of the binary that made that decision. **workflow.****[no**w](https://github.com/temporalio/temporal-go-sdk/issues/926)**()** is timestamp that the decision is made. For better experience, you should integrate with binaryChecksum is in a format of "**Your GIT_REF**" by **worker.SetBinaryChecksum()** API.
+The best way is to use BinaryChecksum and Now() to let workflow diverge at the breaking changes. **workflow.GetInfo().****[BinaryChecksu**m](https://go.temporal.io/server-go-sdk/issues/925) is the checksum of the binary that made that decision. **workflow.****[no**w](https://go.temporal.io/server-go-sdk/issues/926)**()** is timestamp that the decision is made. For better experience, you should integrate with binaryChecksum is in a format of "**Your GIT_REF**" by **worker.SetBinaryChecksum()** API.
 
 Use the "extra decision" as an example. After deploy the code change, then there are workflow W1 stuck because of extra decision, however workflow W2 has started the two in-parallel activities. If we rollback the code, W1 will be fixed but W2 will be stuck. We can fix it by changing the code to:
 

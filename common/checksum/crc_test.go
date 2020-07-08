@@ -36,7 +36,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 func TestCRC32OverThrift(t *testing.T) {

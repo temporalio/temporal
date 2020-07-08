@@ -27,7 +27,7 @@ package history
 import (
 	"context"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 )
 
 // Disable lint due to missing comments.

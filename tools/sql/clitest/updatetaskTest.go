@@ -28,10 +28,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/schema/mysql"
-	"github.com/temporalio/temporal/tools/common/schema/test"
-	"github.com/temporalio/temporal/tools/sql"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/schema/mysql"
+	"go.temporal.io/server/tools/common/schema/test"
+	"go.temporal.io/server/tools/sql"
 )
 
 // UpdateSchemaTestSuite defines a test suite

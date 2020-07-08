@@ -33,10 +33,10 @@ import (
 	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

@@ -34,10 +34,10 @@ import (
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/service/worker/scanner/executions"
-	"github.com/temporalio/temporal/service/worker/scanner/history"
-	"github.com/temporalio/temporal/service/worker/scanner/taskqueue"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/worker/scanner/executions"
+	"go.temporal.io/server/service/worker/scanner/history"
+	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 type (

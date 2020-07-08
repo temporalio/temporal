@@ -45,9 +45,9 @@ import (
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.uber.org/multierr"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/codec"
 )
 
 // encoding & decoding util

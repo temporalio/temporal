@@ -40,7 +40,7 @@ endif
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 export PATH := $(GOBIN):$(PATH)
 
-MODULE_ROOT := github.com/temporalio/temporal
+MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
 

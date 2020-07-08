@@ -34,11 +34,11 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 
-	"github.com/temporalio/temporal/common/headers"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

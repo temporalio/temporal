@@ -27,7 +27,7 @@ package history
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 // MockTimerQueueAckMgr is used as mock implementation for TimerQueueAckMgr

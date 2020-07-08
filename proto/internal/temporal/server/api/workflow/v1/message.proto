@@ -22,7 +22,7 @@ syntax = "proto3";
 
 package temporal.server.api.workflow.v1;
 
-option go_package = "github.com/temporalio/temporal/api/workflow/v1;workflow";
+option go_package = "go.temporal.io/server/api/workflow/v1;workflow";
 
 import "temporal/common/v1/message.proto";
 

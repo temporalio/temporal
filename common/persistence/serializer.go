@@ -34,12 +34,12 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	historyspb "github.com/temporalio/temporal/api/history/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 )
 
 type (

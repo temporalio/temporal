@@ -51,11 +51,11 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc"
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events

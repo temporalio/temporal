@@ -34,10 +34,10 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 )
 
 const (

@@ -30,7 +30,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal/encoded"
 
-	"github.com/temporalio/temporal/common/payload"
+	"go.temporal.io/server/common/payload"
 )
 
 var (

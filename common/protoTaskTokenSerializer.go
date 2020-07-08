@@ -25,7 +25,7 @@
 package common
 
 import (
-	tokenspb "github.com/temporalio/temporal/api/token/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
 type (

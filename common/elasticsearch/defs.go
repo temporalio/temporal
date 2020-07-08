@@ -25,7 +25,7 @@
 package elasticsearch
 
 import (
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // All legal fields allowed in elastic search index

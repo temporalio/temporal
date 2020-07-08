@@ -29,8 +29,8 @@ package frontend
 import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/resource"
 
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
