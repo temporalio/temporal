@@ -30,15 +30,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/common/cassandra"
+	"go.temporal.io/server/common/cassandra"
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/environment"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/environment"
 )
 
 const (

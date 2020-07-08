@@ -31,11 +31,11 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/log/tag"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives/timestamp"
-	"github.com/temporalio/temporal/service/worker/scanner/executor"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/log/tag"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/worker/scanner/executor"
 	// taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 )
 

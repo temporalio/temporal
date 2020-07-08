@@ -33,12 +33,12 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/metrics"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (

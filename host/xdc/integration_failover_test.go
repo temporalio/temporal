@@ -53,15 +53,15 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/failure"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/host"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/host"
 )
 
 type (

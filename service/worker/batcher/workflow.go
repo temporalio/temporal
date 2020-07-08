@@ -38,11 +38,11 @@ import (
 	"go.temporal.io/temporal/workflow"
 	"golang.org/x/time/rate"
 
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
@@ -120,7 +120,7 @@ type (
 		// SignalParams is params only for BatchTypeSignal
 		SignalParams SignalParams
 		// RPS of processing. Default to DefaultRPS
-		// TODO we will implement smarter way than this static rate limiter: https://github.com/temporalio/temporal/issues/2138
+		// TODO we will implement smarter way than this static rate limiter: https://go.temporal.io/server/issues/2138
 		RPS int
 		// Number of goroutines running in parallel to process
 		Concurrency int

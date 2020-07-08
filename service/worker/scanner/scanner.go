@@ -34,13 +34,13 @@ import (
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/scanner/executions"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/worker/scanner/executions"
 )
 
 const (

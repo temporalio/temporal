@@ -37,12 +37,12 @@ import (
 	"go.temporal.io/temporal-proto/workflowservicemock/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	tokenspb "github.com/temporalio/temporal/api/token/v1"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

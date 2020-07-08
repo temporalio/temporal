@@ -49,10 +49,10 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 	sdkmocks "go.temporal.io/temporal/mocks"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	"github.com/temporalio/temporal/api/adminservicemock/v1"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 )
 
 type cliAppSuite struct {

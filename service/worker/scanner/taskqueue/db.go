@@ -29,8 +29,8 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/backoff"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/backoff"
+	p "go.temporal.io/server/common/persistence"
 )
 
 var retryForeverPolicy = newRetryForeverPolicy()

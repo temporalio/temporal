@@ -36,10 +36,10 @@ import (
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (

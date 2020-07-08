@@ -36,13 +36,13 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/primitives/timestamp"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 func TestDeliverBufferTasks(t *testing.T) {

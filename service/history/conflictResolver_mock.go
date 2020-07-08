@@ -32,8 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "github.com/temporalio/temporal/api/enums/v1"
-	persistence "github.com/temporalio/temporal/common/persistence"
+	enums "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/common/persistence"
 )
 
 // MockconflictResolver is a mock of conflictResolver interface.

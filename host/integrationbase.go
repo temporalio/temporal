@@ -40,15 +40,15 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/rpc"
-	"github.com/temporalio/temporal/environment"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/environment"
 )
 
 type (

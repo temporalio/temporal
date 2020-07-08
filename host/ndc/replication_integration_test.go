@@ -32,8 +32,8 @@ import (
 	"github.com/pborman/uuid"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	"github.com/temporalio/temporal/common/persistence"
-	test "github.com/temporalio/temporal/common/testing"
+	"go.temporal.io/server/common/persistence"
+	test "go.temporal.io/server/common/testing"
 )
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {

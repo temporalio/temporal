@@ -27,7 +27,7 @@ package persistencetests
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 func TestGarbageCleanupInfo(t *testing.T) {

@@ -34,11 +34,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/workflowservicemock/v1"
 
-	"github.com/temporalio/temporal/common/authorization"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

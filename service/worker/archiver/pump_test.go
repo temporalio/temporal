@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
 )
 
 var (

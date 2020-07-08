@@ -31,7 +31,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // All logging tags are defined in this file.

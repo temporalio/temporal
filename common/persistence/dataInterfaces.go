@@ -38,13 +38,13 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (

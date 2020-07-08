@@ -31,7 +31,7 @@ import (
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute

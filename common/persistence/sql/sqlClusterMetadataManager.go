@@ -31,11 +31,11 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 type sqlClusterMetadataManager struct {

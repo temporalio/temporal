@@ -32,7 +32,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

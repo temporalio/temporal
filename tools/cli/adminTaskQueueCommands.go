@@ -35,7 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 // AdminDescribeTaskQueue displays poller and status information of task queue.

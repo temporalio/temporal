@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

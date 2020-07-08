@@ -38,11 +38,11 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
-	pt "github.com/temporalio/temporal/common/persistence/persistence-tests"
-	"github.com/temporalio/temporal/common/persistence/sql"
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/environment"
+	pt "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
 )
 
 const (

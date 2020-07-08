@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package temporal.server.api.historyservice.v1;
-option go_package = "github.com/temporalio/temporal/api/historyservice/v1;historyservice";
+option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
 import "temporal/common/v1/message.proto";
 import "temporal/history/v1/message.proto";

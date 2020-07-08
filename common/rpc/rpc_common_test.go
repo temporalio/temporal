@@ -34,7 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 // HelloServer is used to implement helloworld.GreeterServer.

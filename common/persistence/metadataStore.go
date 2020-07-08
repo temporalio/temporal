@@ -29,10 +29,10 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (

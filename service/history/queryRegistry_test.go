@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	querypb "go.temporal.io/temporal-proto/query/v1"
 
-	"github.com/temporalio/temporal/common/payloads"
+	"go.temporal.io/server/common/payloads"
 )
 
 type QueryRegistrySuite struct {

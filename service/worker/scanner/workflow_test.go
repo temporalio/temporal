@@ -38,9 +38,9 @@ import (
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
 
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 )
 
 type scannerWorkflowTestSuite struct {

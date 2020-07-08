@@ -27,13 +27,13 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/xdc"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/xdc"
 )
 
 const (

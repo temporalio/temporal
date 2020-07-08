@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	"github.com/temporalio/temporal/common/definition"
+	"go.temporal.io/server/common/definition"
 )
 
 // Interfaces for the Visibility Store.

@@ -34,7 +34,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/failure"
+	"go.temporal.io/server/common/failure"
 )
 
 const (

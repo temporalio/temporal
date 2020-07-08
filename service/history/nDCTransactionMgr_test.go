@@ -38,12 +38,12 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

@@ -37,10 +37,10 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

@@ -30,7 +30,7 @@ import (
 
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/temporal-proto/serviceerror"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"

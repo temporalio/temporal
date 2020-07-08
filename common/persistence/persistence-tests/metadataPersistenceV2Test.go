@@ -42,9 +42,9 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/cluster"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cluster"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

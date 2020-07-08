@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (

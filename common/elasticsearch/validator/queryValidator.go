@@ -33,9 +33,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // VisibilityQueryValidator for sql query validation

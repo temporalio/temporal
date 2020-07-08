@@ -32,12 +32,12 @@ import (
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

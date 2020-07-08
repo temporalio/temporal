@@ -39,16 +39,16 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
-	"github.com/temporalio/temporal/common/service/config"
-	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/service/config"
+	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

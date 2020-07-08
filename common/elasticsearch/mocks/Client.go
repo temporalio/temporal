@@ -29,7 +29,7 @@ import (
 	context "context"
 
 	elastic "github.com/olivere/elastic"
-	elasticsearch "github.com/temporalio/temporal/common/elasticsearch"
+	elasticsearch "go.temporal.io/server/common/elasticsearch"
 
 	mock "github.com/stretchr/testify/mock"
 )

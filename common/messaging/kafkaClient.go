@@ -31,7 +31,7 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/temporalio/temporal/common/auth"
+	"go.temporal.io/server/common/auth"
 
 	"github.com/Shopify/sarama"
 	uberKafkaClient "github.com/uber-go/kafka-client"
@@ -39,8 +39,8 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

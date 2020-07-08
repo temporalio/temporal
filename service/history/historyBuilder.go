@@ -34,9 +34,9 @@ import (
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

@@ -32,8 +32,8 @@ import (
 	_ "net/http/pprof"
 	"sync/atomic"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (

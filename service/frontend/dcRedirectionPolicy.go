@@ -30,9 +30,9 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

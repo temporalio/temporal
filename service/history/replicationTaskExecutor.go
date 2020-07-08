@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go -self_package github.com/temporalio/temporal/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go -self_package go.temporal.io/server/service/history
 
 package history
 
@@ -32,14 +32,14 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/xdc"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/xdc"
 )
 
 type (

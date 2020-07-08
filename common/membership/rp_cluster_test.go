@@ -30,15 +30,15 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 
 	"github.com/pborman/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // TestRingpopCluster is a type that represents a test ringpop cluster

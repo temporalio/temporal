@@ -28,9 +28,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (

@@ -43,9 +43,9 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.uber.org/atomic"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {

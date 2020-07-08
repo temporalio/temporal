@@ -31,8 +31,8 @@ import (
 	"github.com/pborman/uuid"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 )
 
 var _ Client = (*clientImpl)(nil)
