@@ -1,4 +1,7 @@
 ############################# Main targets #############################
+# Install all tools and builds binaries.
+install: update-tools bins
+
 # Rebuild binaries.
 bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 
