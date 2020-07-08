@@ -800,7 +800,7 @@ func newAdminClusterCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagSearchAttributesType,
-					Usage: "Search Attribute value type. [String, Keyword, Int, Double, Bool, Datetime]",
+					Usage: "Search Attribute value type. [string, keyword, int, double, bool, datetime]",
 				},
 				cli.StringFlag{
 					Name:  FlagSecurityTokenWithAlias,
