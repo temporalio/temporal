@@ -33,7 +33,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"

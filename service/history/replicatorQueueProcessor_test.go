@@ -36,9 +36,9 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -130,7 +130,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -173,7 +173,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -221,7 +221,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -271,7 +271,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -345,10 +345,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
@@ -381,7 +381,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    enumsgenpb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:      taskID,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -454,10 +454,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: enumsgenpb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,

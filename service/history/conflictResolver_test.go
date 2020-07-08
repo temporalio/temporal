@@ -39,10 +39,10 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -150,7 +150,7 @@ func (s *conflictResolverSuite) TestReset() {
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
-	prevState := enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING
+	prevState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 
 	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
@@ -212,7 +212,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
 		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastFirstEventID:         event1.GetEventId(),
 		NextEventID:              nextEventID,
@@ -257,7 +257,7 @@ func (s *conflictResolverSuite) TestReset() {
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
 					LastWriteEventID: event1.GetEventId(),
-					LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
+					LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),
 							LastEventId: event1.GetEventId(),
@@ -285,7 +285,7 @@ func (s *conflictResolverSuite) TestReset() {
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				State:  enumsgenpb.WORKFLOW_EXECUTION_STATE_CREATED,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			ExecutionStats: &persistence.ExecutionStats{},

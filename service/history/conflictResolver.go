@@ -31,7 +31,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/convert"
@@ -45,7 +45,7 @@ type (
 		reset(
 			prevRunID string,
 			prevLastWriteVersion int64,
-			prevState enumsgenpb.WorkflowExecutionState,
+			prevState enumsspb.WorkflowExecutionState,
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
@@ -77,7 +77,7 @@ func newConflictResolver(shard ShardContext, context workflowExecutionContext, h
 func (r *conflictResolverImpl) reset(
 	prevRunID string,
 	prevLastWriteVersion int64,
-	prevState enumsgenpb.WorkflowExecutionState,
+	prevState enumsspb.WorkflowExecutionState,
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
@@ -177,7 +177,7 @@ func (r *conflictResolverImpl) reset(
 		resetMutableStateBuilder.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
 	}
 
-	r.logger.Info("All events applied for workflowgenpb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
+	r.logger.Info("All events applied for workflowspb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	r.context.setHistorySize(totalSize)
 	if err := r.context.conflictResolveWorkflowExecution(
 		startTime,

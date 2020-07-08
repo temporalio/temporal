@@ -34,7 +34,7 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
@@ -355,7 +355,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archivergenpb.HistoryBlobHeader{
+	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -417,7 +417,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archivergenpb.HistoryBlobHeader{
+	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -468,7 +468,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next()
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &archivergenpb.HistoryBlobHeader{
+		expectedHeader := &archiverspb.HistoryBlobHeader{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
 			WorkflowId:           testWorkflowID,

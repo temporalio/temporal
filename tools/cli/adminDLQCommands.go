@@ -31,10 +31,10 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservice/v1"
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	"github.com/temporalio/temporal/api/adminservice/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
@@ -88,7 +88,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("fail to read dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		task := item.(*replicationgenpb.ReplicationTask)
+		task := item.(*replicationspb.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -163,16 +163,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	fmt.Println("Successfully merged all messages.")
 }
 
-func toQueueType(dlqType string) enumsgenpb.DeadLetterQueueType {
+func toQueueType(dlqType string) enumsspb.DeadLetterQueueType {
 	switch dlqType {
 	case "namespace":
-		return enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 	case "history":
-		return enumsgenpb.DEAD_LETTER_QUEUE_TYPE_REPLICATION
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return enumsgenpb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
+	return enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE
 }
 
 func confirmOrExit(message string) {

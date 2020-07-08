@@ -29,9 +29,9 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
 	replicationpb "go.temporal.io/temporal-proto/replication/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -42,7 +42,7 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation enumsgenpb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
+		HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
 			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
@@ -62,7 +62,7 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 }
 
 // HandleTransmissionTask handle transmission of the namespace replication task
-func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enumsgenpb.NamespaceOperation,
+func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enumsspb.NamespaceOperation,
 	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
@@ -71,9 +71,9 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 		return nil
 	}
 
-	taskType := enumsgenpb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
-	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	task := &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+		NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 			NamespaceOperation: namespaceOperation,
 			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
@@ -102,7 +102,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	}
 
 	return namespaceReplicator.replicationMessageSink.Publish(
-		&replicationgenpb.ReplicationTask{
+		&replicationspb.ReplicationTask{
 			TaskType:   taskType,
 			Attributes: task,
 		})

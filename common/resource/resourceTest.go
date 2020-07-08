@@ -35,9 +35,9 @@ import (
 	sdkmocks "go.temporal.io/temporal/mocks"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/proto/adminservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservicemock/v1"
+	"github.com/temporalio/temporal/api/adminservicemock/v1"
+	"github.com/temporalio/temporal/api/historyservicemock/v1"
+	"github.com/temporalio/temporal/api/matchingservicemock/v1"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"

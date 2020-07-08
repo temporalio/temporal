@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver/v1"
+	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/log"

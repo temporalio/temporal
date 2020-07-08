@@ -36,9 +36,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -728,7 +728,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	}
 
 	// current workflow is completed
-	if currentState == enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if currentState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// allow the application of workflow creation if currentLastWriteVersion > incomingVersion
 		// because this can be caused by the combination of missing replication events and failovers
 		// proceed to create workflow
@@ -821,7 +821,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	incomingVersion int64,
 	incomingTimestamp int64,
 	logger log.Logger,
-) (string, int64, enumsgenpb.WorkflowExecutionState, error) {
+) (string, int64, enumsspb.WorkflowExecutionState, error) {
 
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
@@ -886,7 +886,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 		return "", 0, 0, err
 	}
-	return currentRunID, currentLastWriteVetsion, enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
+	return currentRunID, currentLastWriteVetsion, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
 
 func (r *historyReplicator) getCurrentWorkflowMutableState(
@@ -1008,8 +1008,8 @@ func (r *historyReplicator) terminateWorkflow(
 }
 
 func (r *historyReplicator) getLatestCheckpoint(
-	replicationInfoRemote map[string]*replicationgenpb.ReplicationInfo,
-	replicationInfoLocal map[string]*replicationgenpb.ReplicationInfo,
+	replicationInfoRemote map[string]*replicationspb.ReplicationInfo,
+	replicationInfoLocal map[string]*replicationspb.ReplicationInfo,
 ) (int64, int64) {
 
 	// this only applies to 2 data center case

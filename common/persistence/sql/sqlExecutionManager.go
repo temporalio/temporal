@@ -36,9 +36,9 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/convert"
@@ -162,11 +162,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			if row.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, enumsgenpb.WORKFLOW_EXECUTION_STATE_COMPLETED),
+						workflowID, row.State, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED),
 				}
 			}
 			runIDStr := row.RunID.String()
@@ -254,7 +254,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
 
 		if state.ReplicationState.LastReplicationInfo == nil {
-			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, 0)
+			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, 0)
 		}
 	}
 
@@ -881,11 +881,11 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 			return nil, err
 		}
 
-		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
-		if info.GetTaskType() == enumsgenpb.TASK_TYPE_REPLICATION_HISTORY {
-			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
+		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
+		if info.GetTaskType() == enumsspb.TASK_TYPE_REPLICATION_HISTORY {
+			lastReplicationInfo = make(map[string]*replicationspb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
+				lastReplicationInfo[k] = &replicationspb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
 			}
 		}
 

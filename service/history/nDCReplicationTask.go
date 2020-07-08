@@ -33,8 +33,8 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	historygenpb "github.com/temporalio/temporal/.gen/proto/history/v1"
-	"github.com/temporalio/temporal/.gen/proto/historyservice/v1"
+	historyspb "github.com/temporalio/temporal/api/history/v1"
+	"github.com/temporalio/temporal/api/historyservice/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -115,7 +115,7 @@ func newNDCReplicationTask(
 
 	namespaceID := request.GetNamespaceId()
 	execution := request.WorkflowExecution
-	versionHistory := &historygenpb.VersionHistory{
+	versionHistory := &historyspb.VersionHistory{
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
 	}
@@ -257,9 +257,9 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}
 	}
 
-	newVersionHistory := persistence.NewVersionHistoryFromProto(&historygenpb.VersionHistory{
+	newVersionHistory := persistence.NewVersionHistoryFromProto(&historyspb.VersionHistory{
 		BranchToken: nil,
-		Items: []*historygenpb.VersionHistoryItem{{
+		Items: []*historyspb.VersionHistoryItem{{
 			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
 		}},

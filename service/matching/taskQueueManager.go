@@ -37,10 +37,10 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/matchingservice/v1"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -63,7 +63,7 @@ type (
 	addTaskParams struct {
 		execution     *commonpb.WorkflowExecution
 		taskInfo      *persistenceblobs.TaskInfo
-		source        enumsgenpb.TaskSource
+		source        enumsspb.TaskSource
 		forwardedFrom string
 	}
 

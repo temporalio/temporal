@@ -37,7 +37,7 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/persistence"
@@ -311,7 +311,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		WorkflowID:      s.workflowID,
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
-		State:           enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -358,6 +358,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
-	s.Equal(enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionInfo.State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionInfo.State)
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionInfo.Status)
 }

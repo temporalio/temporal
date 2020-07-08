@@ -29,9 +29,9 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs/v1"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	replicationspb "github.com/temporalio/temporal/api/replication/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
@@ -56,11 +56,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*replicationgenpb.ReplicationMessages, error)
+		) (*replicationspb.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *replicationgenpb.ReplicationTaskInfo,
-		) (*replicationgenpb.ReplicationTask, error)
+			taskInfo *replicationspb.ReplicationTaskInfo,
+		) (*replicationspb.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {
@@ -75,7 +75,7 @@ type (
 	queueTaskInfo interface {
 		GetVersion() int64
 		GetTaskId() int64
-		GetTaskType() enumsgenpb.TaskType
+		GetTaskType() enumsspb.TaskType
 		GetVisibilityTimestamp() *types.Timestamp
 		GetWorkflowId() string
 		GetRunId() string

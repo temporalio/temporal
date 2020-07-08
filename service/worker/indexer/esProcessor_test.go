@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer/v1"
+	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -332,7 +332,7 @@ func (s *esProcessorSuite) TestHashFn() {
 }
 
 func (s *esProcessorSuite) getEncodedMsg(wid string, rid string, namespaceID string) []byte {
-	indexMsg := &indexergenpb.Message{
+	indexMsg := &indexerspb.Message{
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
 		RunId:       rid,

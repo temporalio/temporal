@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsgenpb "github.com/temporalio/temporal/.gen/proto/enums/v1"
+	enumsspb "github.com/temporalio/temporal/api/enums/v1"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -135,9 +135,9 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.msb.GetWorkflowStateStatus()
-	if state != enumsgenpb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		if err := m.msb.UpdateWorkflowStateStatus(
-			enumsgenpb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		); err != nil {
 			return nil, err
