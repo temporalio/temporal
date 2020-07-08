@@ -548,7 +548,7 @@ func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	}
 	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
 
-	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "keyword"})
 	s.Nil(err)
 }
 
