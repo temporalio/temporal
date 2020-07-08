@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"

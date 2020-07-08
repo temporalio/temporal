@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"

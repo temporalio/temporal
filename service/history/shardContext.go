@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"

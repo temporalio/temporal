@@ -29,7 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 

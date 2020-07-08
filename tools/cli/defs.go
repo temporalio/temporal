@@ -30,7 +30,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (

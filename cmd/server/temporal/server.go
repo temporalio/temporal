@@ -28,7 +28,7 @@ import (
 	"log"
 	"time"
 
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"

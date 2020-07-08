@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"

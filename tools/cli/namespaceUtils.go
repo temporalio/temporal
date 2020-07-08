@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"

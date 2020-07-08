@@ -29,10 +29,10 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"

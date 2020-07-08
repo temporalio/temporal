@@ -28,7 +28,7 @@ import (
 	"context"
 	"strings"
 
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/matchingservice/v1"

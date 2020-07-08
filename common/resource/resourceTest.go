@@ -30,9 +30,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/workflowservicemock/v1"
-	sdkclient "go.temporal.io/temporal/client"
-	sdkmocks "go.temporal.io/temporal/mocks"
+	"go.temporal.io/api/workflowservicemock/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkmocks "go.temporal.io/sdk/mocks"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/api/adminservicemock/v1"

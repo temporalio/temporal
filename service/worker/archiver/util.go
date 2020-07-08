@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal/activity"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

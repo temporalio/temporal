@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 

@@ -29,12 +29,12 @@ package history
 import (
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	decisionpb "go.temporal.io/temporal-proto/decision/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	decisionpb "go.temporal.io/api/decision/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"

@@ -25,7 +25,7 @@
 package definition
 
 import (
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // valid indexed fields on ES

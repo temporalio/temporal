@@ -30,12 +30,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/temporal"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/client/frontend"

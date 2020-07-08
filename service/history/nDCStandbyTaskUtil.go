@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"

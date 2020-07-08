@@ -29,8 +29,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"

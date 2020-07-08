@@ -30,8 +30,8 @@ import (
 	"strings"
 
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"

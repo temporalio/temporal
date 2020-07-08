@@ -33,11 +33,11 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	replicationpb "go.temporal.io/temporal-proto/replication/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"

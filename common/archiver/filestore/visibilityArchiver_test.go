@@ -36,9 +36,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.uber.org/zap"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"

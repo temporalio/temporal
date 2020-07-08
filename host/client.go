@@ -27,7 +27,7 @@ package host
 import (
 	"google.golang.org/grpc"
 
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"

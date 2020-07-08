@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"

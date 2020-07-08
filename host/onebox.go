@@ -32,8 +32,8 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"

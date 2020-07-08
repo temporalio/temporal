@@ -27,7 +27,7 @@ package persistence
 import (
 	"sync"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"

@@ -32,11 +32,11 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	versionpb "go.temporal.io/temporal-proto/version/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	versionpb "go.temporal.io/api/version/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"

@@ -31,7 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"

@@ -34,9 +34,9 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"

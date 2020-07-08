@@ -28,11 +28,11 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"

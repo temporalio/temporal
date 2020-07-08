@@ -29,11 +29,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"

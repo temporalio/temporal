@@ -27,7 +27,7 @@ package archiver
 import (
 	"time"
 
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"

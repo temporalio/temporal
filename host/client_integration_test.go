@@ -38,12 +38,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/encoded"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/encoded"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"

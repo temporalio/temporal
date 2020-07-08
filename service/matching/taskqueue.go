@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (

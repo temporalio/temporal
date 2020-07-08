@@ -30,7 +30,7 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"

@@ -25,10 +25,10 @@
 package history
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	decisionpb "go.temporal.io/temporal-proto/decision/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	decisionpb "go.temporal.io/api/decision/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 )

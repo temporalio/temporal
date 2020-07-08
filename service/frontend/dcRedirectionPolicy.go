@@ -28,7 +28,7 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"

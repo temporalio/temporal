@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cluster"

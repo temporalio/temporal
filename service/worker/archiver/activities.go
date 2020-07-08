@@ -27,8 +27,8 @@ package archiver
 import (
 	"context"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"

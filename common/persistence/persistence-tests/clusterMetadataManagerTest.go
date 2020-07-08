@@ -33,7 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"

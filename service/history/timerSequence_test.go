@@ -32,7 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"

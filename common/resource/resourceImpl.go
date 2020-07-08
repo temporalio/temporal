@@ -33,7 +33,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"

@@ -27,7 +27,7 @@ package resource
 import (
 	"net"
 
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"

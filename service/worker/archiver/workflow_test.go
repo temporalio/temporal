@@ -30,10 +30,10 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log"

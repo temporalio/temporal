@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.uber.org/zap"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"

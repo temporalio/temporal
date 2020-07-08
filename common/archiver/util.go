@@ -27,7 +27,7 @@ package archiver
 import (
 	"errors"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/log"

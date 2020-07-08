@@ -25,8 +25,8 @@
 package persistence
 
 import (
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"

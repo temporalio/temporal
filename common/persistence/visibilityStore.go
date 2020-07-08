@@ -26,9 +26,9 @@ package persistence
 
 import (
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
