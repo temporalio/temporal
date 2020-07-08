@@ -46,8 +46,8 @@ import (
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc"
 )
 
 type (

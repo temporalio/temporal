@@ -38,9 +38,9 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (

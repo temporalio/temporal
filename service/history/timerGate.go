@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/temporalio/temporal/common/clock"
+	"go.temporal.io/server/common/clock"
 )
 
 type (

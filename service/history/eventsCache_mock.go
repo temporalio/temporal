@@ -29,9 +29,10 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/temporal-proto/history/v1"
-	reflect "reflect"
 )
 
 // MockeventsCache is a mock of eventsCache interface.

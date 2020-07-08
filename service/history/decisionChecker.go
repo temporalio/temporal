@@ -36,16 +36,16 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/elasticsearch/validator"
-	"github.com/temporalio/temporal/common/failure"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/elasticsearch/validator"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

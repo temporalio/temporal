@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 func TestDefaultLogger(t *testing.T) {

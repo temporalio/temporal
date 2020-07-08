@@ -36,8 +36,8 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payloads"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/payloads"
 )
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {

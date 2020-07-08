@@ -32,17 +32,17 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	historyspb "github.com/temporalio/temporal/api/history/v1"
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/rpc"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/adminservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

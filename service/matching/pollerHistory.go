@@ -29,7 +29,7 @@ import (
 
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/cache"
+	"go.temporal.io/server/common/cache"
 )
 
 const (

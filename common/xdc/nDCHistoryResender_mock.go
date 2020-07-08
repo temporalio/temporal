@@ -29,8 +29,9 @@
 package xdc
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockNDCHistoryResender is a mock of NDCHistoryResender interface.

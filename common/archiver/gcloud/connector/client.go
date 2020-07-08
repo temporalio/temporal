@@ -36,8 +36,8 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

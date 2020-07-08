@@ -32,9 +32,9 @@ import (
 
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	p "go.temporal.io/server/common/persistence"
 )
 
 var (

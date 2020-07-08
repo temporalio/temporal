@@ -56,13 +56,13 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"go.temporal.io/temporal/client"
 
-	clispb "github.com/temporalio/temporal/api/cli/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/service/history"
+	clispb "go.temporal.io/server/api/cli/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.

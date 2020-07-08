@@ -39,10 +39,10 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
-	"github.com/temporalio/temporal/common/codec"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/gcloud/connector"
+	"go.temporal.io/server/common/codec"
 )
 
 func encode(message proto.Message) ([]byte, error) {

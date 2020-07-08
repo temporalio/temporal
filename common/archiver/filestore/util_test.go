@@ -36,9 +36,9 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/codec"
 )
 
 const (

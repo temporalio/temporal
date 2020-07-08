@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package temporal.server.api.matchingservice.v1;
-option go_package = "github.com/temporalio/temporal/api/matchingservice/v1;matchingservice";
+option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
 import "temporal/common/v1/message.proto";
 import "temporal/enums/v1/task_queue.proto";

@@ -39,13 +39,13 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/urfave/cli"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/codec"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/elasticsearch/esql"
-	"github.com/temporalio/temporal/common/tokenbucket"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/codec"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/elasticsearch/esql"
+	"go.temporal.io/server/common/tokenbucket"
 )
 
 const (

@@ -28,7 +28,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 type (

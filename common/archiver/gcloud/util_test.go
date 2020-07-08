@@ -32,8 +32,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 )
 
 func (s *utilSuite) SetupTest() {

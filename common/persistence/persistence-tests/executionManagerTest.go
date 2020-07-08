@@ -46,16 +46,16 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/failure"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	p "github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

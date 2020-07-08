@@ -36,10 +36,10 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (

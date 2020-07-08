@@ -31,13 +31,13 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
 )
 
 const (

@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log/tag"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -307,7 +307,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		// It can be because stickyness has expired due to StickyTTL config
 		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
 		// In other cases, clearing stickyness shouldn't hurt anything.
-		// TODO: https://github.com/temporalio/temporal/issues/2357:
+		// TODO: https://go.temporal.io/server/issues/2357:
 		//  if we can use a new field(LastDecisionUpdateTimestamp), then we could get rid of it.
 		m.msb.ClearStickyness()
 	}

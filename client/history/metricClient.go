@@ -29,8 +29,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)

@@ -33,7 +33,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/temporalio/temporal/common/headers"
+	"go.temporal.io/server/common/headers"
 )
 
 const (

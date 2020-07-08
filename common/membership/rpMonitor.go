@@ -34,15 +34,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (

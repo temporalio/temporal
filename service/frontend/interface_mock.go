@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	resource "github.com/temporalio/temporal/common/resource"
+	resource "go.temporal.io/server/common/resource"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 )

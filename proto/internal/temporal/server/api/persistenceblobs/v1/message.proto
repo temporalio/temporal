@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package temporal.server.api.persistenceblobs.v1;
-option go_package = "github.com/temporalio/temporal/api/persistenceblobs/v1;persistenceblobs";
+option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";

@@ -35,10 +35,10 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	sdkclient "go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/service/worker/batcher"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/worker/batcher"
 )
 
 // TerminateBatchJob stops abatch job

@@ -29,10 +29,10 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 
-	archiverspb "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 )
 
 var (

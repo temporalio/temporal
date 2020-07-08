@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)

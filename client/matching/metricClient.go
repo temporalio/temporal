@@ -31,8 +31,8 @@ import (
 	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)

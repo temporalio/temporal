@@ -28,12 +28,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type RpoSuite struct {

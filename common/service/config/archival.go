@@ -27,7 +27,7 @@ package config
 import (
 	"errors"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 // Validate validates the archival config

@@ -49,15 +49,15 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/s3store/mocks"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (

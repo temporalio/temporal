@@ -29,8 +29,8 @@ import (
 
 	"go.uber.org/atomic"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // Used to convert out of order acks into ackLevel movement.

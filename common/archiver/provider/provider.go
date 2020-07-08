@@ -28,12 +28,12 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/temporalio/temporal/common/archiver/gcloud"
+	"go.temporal.io/server/common/archiver/gcloud"
 
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/filestore"
-	"github.com/temporalio/temporal/common/archiver/s3store"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/filestore"
+	"go.temporal.io/server/common/archiver/s3store"
+	"go.temporal.io/server/common/service/config"
 )
 
 var (

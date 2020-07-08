@@ -6,10 +6,11 @@ package matchingservicemock
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	matchingservice "github.com/temporalio/temporal/api/matchingservice/v1"
-	grpc "google.golang.org/grpc"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	grpc "google.golang.org/grpc"
 )
 
 // MockMatchingServiceClient is a mock of MatchingServiceClient interface.

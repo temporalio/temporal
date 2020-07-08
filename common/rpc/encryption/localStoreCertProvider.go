@@ -32,7 +32,7 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 var _ CertProvider = (*localStoreCertProvider)(nil)

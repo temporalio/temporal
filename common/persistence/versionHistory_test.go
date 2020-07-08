@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 type (

@@ -40,11 +40,11 @@ import (
 	historypb "go.temporal.io/temporal-proto/history/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/convert"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/convert"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -121,7 +121,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 
 // TestScanAllTrees test
 func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
-	// TODO https://github.com/temporalio/temporal/issues/2458
+	// TODO https://go.temporal.io/server/issues/2458
 	if s.HistoryV2Mgr.GetName() != "cassandra" {
 		return
 	}

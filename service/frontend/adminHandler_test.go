@@ -32,8 +32,8 @@ import (
 
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -43,20 +43,20 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common/v1"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/api/historyservicemock/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	esmock "github.com/temporalio/temporal/common/elasticsearch/mocks"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/elasticsearch"
+	esmock "go.temporal.io/server/common/elasticsearch/mocks"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock goimports-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
+update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -43,7 +43,7 @@ endif
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 export PATH := $(GOBIN):$(PATH)
 
-MODULE_ROOT := github.com/temporalio/temporal
+MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
 
@@ -163,6 +163,10 @@ proto-mock: $(PROTO_OUT)
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	@go get -u go.temporal.io/temporal-proto
+
+goimports-proto:
+	@printf $(COLOR) "Run goimports..."
+	@goimports -w $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:
@@ -371,6 +375,7 @@ start-cdc-other: temporal-server
 go-generate:
 	@printf $(COLOR) "Regenerate everything..."
 	@go generate ./...
+	@goimports -w $(ALL_SRC)
 
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."

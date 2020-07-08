@@ -34,7 +34,7 @@ import (
 
 	"github.com/xwb1989/sqlparser"
 
-	"github.com/temporalio/temporal/common/convert"
+	"go.temporal.io/server/common/convert"
 )
 
 type (

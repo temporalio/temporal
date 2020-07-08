@@ -22,7 +22,7 @@ syntax = "proto3";
 
 package temporal.server.api.namespace.v1;
 
-option go_package = "github.com/temporalio/temporal/api/namespace/v1;namespace";
+option go_package = "go.temporal.io/server/api/namespace/v1;namespace";
 
 message NamespaceCacheInfo {
     int64 num_of_items_in_cache_by_id = 1;

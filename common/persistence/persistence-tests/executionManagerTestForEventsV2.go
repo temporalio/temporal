@@ -35,17 +35,17 @@ import (
 	enumspb "go.temporal.io/temporal-proto/enums/v1"
 	historypb "go.temporal.io/temporal-proto/history/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common/checksum"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/checksum"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/temporalio/temporal/common"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

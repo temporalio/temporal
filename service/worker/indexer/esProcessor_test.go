@@ -36,17 +36,17 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	msgMocks "github.com/temporalio/temporal/common/messaging/mocks"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/indexer/mocks"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	es "go.temporal.io/server/common/elasticsearch"
+	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
+	"go.temporal.io/server/common/log/loggerimpl"
+	msgMocks "go.temporal.io/server/common/messaging/mocks"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/service/worker/indexer/mocks"
 )
 
 type esProcessorSuite struct {

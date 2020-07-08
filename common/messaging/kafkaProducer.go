@@ -31,11 +31,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (

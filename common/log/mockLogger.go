@@ -27,7 +27,7 @@ package log
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // MockLogger returns a mock for Logger interface

@@ -27,8 +27,8 @@ package persistence
 import (
 	"errors"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 )
 
 const (

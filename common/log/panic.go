@@ -30,7 +30,7 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/common/log/tag"
 )
 
 var errDefaultPanic = fmt.Errorf("panic object is not error")

@@ -27,8 +27,8 @@ package checksum
 import (
 	"errors"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	persistenceblobsspb "github.com/temporalio/temporal/api/persistenceblobs/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistenceblobsspb "go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 type (
