@@ -10,7 +10,6 @@ require (
 	github.com/benbjohnson/clock v1.0.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
-	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
@@ -61,8 +60,8 @@ require (
 	github.com/urfave/cli v1.22.4
 	github.com/valyala/fastjson v1.5.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/sdk v0.26.0
-	go.temporal.io/api v0.26.0
+	go.temporal.io/api v0.26.1-0.20200709011738-4980ceeb124f
+	go.temporal.io/sdk v0.26.1-0.20200709013507-d843b784901c
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.15.0
@@ -79,8 +78,3 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
-
-replace (
-	go.temporal.io/api v0.26.0 => ../temporal-proto-go
-	go.temporal.io/sdk v0.26.0 => ../temporal-go-sdk
-)
