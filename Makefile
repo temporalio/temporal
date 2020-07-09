@@ -80,9 +80,9 @@ override TEST_TAG := -tags $(TEST_TAG)
 endif
 
 PROTO_ROOT := proto
-PROTO_FILES = $(shell find $(PROTO_ROOT)/internal -name "*.proto")
+PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/api:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_IMPORTS := --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --proto-path $(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
@@ -147,7 +147,7 @@ install-proto-submodule:
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
 fix-proto-path:
 	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
@@ -225,9 +225,8 @@ errcheck:
 
 api-linter:
 	@printf $(COLOR) "Running api-linter..."
-#	@api-linter --set-exit-status --output-format summary --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
-#	@api-linter --set-exit-status --output-format summary --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --config $(PROTO_ROOT)/api-linter.yaml proto/internal/temporal/server/api/historyservice/v1/request_response.proto
-	@echo $(PROTO_FILES)
+#	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml proto/internal/temporal/server/api/enums/v1/*.proto
 
 buf:
 	@printf $(COLOR) "Running buf linter..."

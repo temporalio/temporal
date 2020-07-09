@@ -1,7 +1,10 @@
-#- included_paths:
-#    - '**/*.proto'
-#  disabled_rules:
-#    - 'core::0192::has-comments'
+- included_paths:
+    - '**/*.proto'
+  disabled_rules:
+    - 'core::0192::has-comments'
+    - 'core::0191::java-outer-classname'
+    - 'core::0191::java-multiple-files'
+    - 'core::0191::java-package'
 
 #- included_paths:
 #    - '**/message.proto'
