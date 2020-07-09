@@ -30,13 +30,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/temporalio/temporal/common/auth"
+	"go.temporal.io/server/common/auth"
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/temporalio/temporal/tools/cassandra"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/tools/cassandra"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 const cassandraPersistenceName = "cassandra"

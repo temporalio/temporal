@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-version"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 )
 
 const (

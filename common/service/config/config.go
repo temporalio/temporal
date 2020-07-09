@@ -31,10 +31,10 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

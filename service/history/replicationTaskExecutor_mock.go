@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	repication "github.com/temporalio/temporal/api/replication/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 )
 
 // MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface.

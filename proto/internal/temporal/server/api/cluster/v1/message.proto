@@ -22,7 +22,7 @@ syntax = "proto3";
 
 package temporal.server.api.cluster.v1;
 
-option go_package = "github.com/temporalio/temporal/api/cluster/v1;cluster";
+option go_package = "go.temporal.io/server/api/cluster/v1;cluster";
 
 message HostInfo {
     string identity = 1;

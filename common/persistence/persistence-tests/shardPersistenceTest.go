@@ -32,10 +32,10 @@ import (
 	"github.com/gogo/protobuf/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

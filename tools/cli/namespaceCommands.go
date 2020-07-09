@@ -35,13 +35,13 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	replicationpb "go.temporal.io/temporal-proto/replication/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"github.com/temporalio/temporal/common/namespace"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (

@@ -30,7 +30,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	historypb "go.temporal.io/temporal-proto/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 )
 
 type (

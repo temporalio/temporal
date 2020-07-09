@@ -34,10 +34,10 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 )
 
 type (

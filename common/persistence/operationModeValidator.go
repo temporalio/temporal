@@ -27,9 +27,9 @@ package persistence
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 // NOTE: when modifying this file, plz make each case clear,

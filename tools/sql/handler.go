@@ -32,10 +32,10 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/schema/mysql"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/schema/mysql"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 // VerifyCompatibleVersion ensures that the installed version of temporal and visibility

@@ -33,8 +33,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	historyservice "github.com/temporalio/temporal/api/historyservice/v1"
-	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
+	historyservice "go.temporal.io/server/api/historyservice/v1"
 )
 
 // MockworkflowResetor is a mock of workflowResetor interface.

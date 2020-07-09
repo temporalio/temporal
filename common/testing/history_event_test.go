@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	historypb "go.temporal.io/temporal-proto/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 )
 
 type (

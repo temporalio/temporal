@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 type StoreTestSuite struct {

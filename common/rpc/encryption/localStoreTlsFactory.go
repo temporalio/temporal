@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/service/config"
 )
 
 type localStoreTlsProvider struct {

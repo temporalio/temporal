@@ -32,14 +32,14 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/payload"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/payload"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

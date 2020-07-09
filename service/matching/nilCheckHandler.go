@@ -27,7 +27,7 @@ package matching
 import (
 	"context"
 
-	"github.com/temporalio/temporal/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 // Disable lint due to missing comments.

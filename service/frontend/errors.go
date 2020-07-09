@@ -24,7 +24,7 @@
 
 package frontend
 
-import "go.temporal.io/temporal-proto/serviceerror"
+import "go.temporal.io/api/serviceerror"
 
 var (
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace not set on request.")

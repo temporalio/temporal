@@ -32,10 +32,10 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 type (

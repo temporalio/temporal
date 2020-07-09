@@ -46,16 +46,16 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	sdkclient "go.temporal.io/temporal/client"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc"
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events

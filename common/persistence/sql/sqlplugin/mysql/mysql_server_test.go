@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	pt "github.com/temporalio/temporal/common/persistence/persistence-tests"
+	pt "go.temporal.io/server/common/persistence/persistence-tests"
 )
 
 func TestSQLHistoryV2PersistenceSuite(t *testing.T) {

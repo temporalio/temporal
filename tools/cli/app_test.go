@@ -36,23 +36,23 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	replicationpb "go.temporal.io/temporal-proto/replication/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	"go.temporal.io/temporal-proto/workflowservicemock/v1"
-	sdkclient "go.temporal.io/temporal/client"
-	sdkmocks "go.temporal.io/temporal/mocks"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservicemock/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkmocks "go.temporal.io/sdk/mocks"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	"github.com/temporalio/temporal/api/adminservicemock/v1"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 )
 
 type cliAppSuite struct {
@@ -543,12 +543,12 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	request := &adminservice.AddSearchAttributeRequest{
 		SearchAttribute: map[string]enumspb.IndexedValueType{
-			"testKey": enumspb.IndexedValueType(1),
+			"testKey": enumspb.IndexedValueType(2),
 		},
 	}
 	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
 
-	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "keyword"})
 	s.Nil(err)
 }
 

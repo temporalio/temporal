@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/temporalio/temporal/common/log"
+	"go.temporal.io/server/common/log"
 )
 
 func BenchmarkGetIntProperty(b *testing.B) {

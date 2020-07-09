@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -66,7 +66,7 @@ const (
 // the partitions follow the naming convention above. In addition, the task queues partitions
 // logically form a N-ary tree where N is configurable dynamically. The tree formation is an
 // optimization to allow for partitioned task queues to dispatch tasks with low latency when
-// throughput is low - See https://github.com/temporalio/temporal/issues/2098
+// throughput is low - See https://go.temporal.io/server/issues/2098
 //
 // Returns error if the given name is non-compliant with the required format
 // for task queue names

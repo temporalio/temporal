@@ -27,7 +27,7 @@ package postgres
 import (
 	"database/sql"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
