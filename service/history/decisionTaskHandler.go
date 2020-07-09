@@ -361,7 +361,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION)),
+			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -436,7 +436,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION)),
+			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -549,7 +549,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION)),
+			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -686,7 +686,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION)),
+			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
