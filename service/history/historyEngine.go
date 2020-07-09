@@ -36,6 +36,7 @@ import (
 	m "github.com/uber/cadence/.gen/go/matching"
 	r "github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/admin"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
@@ -287,11 +288,25 @@ func NewEngineWithShardContext(
 	replicationTaskExecutors := make(map[string]replication.TaskExecutor)
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		sourceCluster := replicationTaskFetcher.GetSourceCluster()
+		// Intentionally use the raw client to create its own retry policy
+		adminClient := shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+		adminRetryableClient := admin.NewRetryableClient(
+			adminClient,
+			common.CreateReplicationServiceBusyRetryPolicy(),
+			common.IsServiceBusyError,
+		)
+		// Intentionally use the raw client to create its own retry policy
+		historyClient := shard.GetService().GetClientBean().GetHistoryClient()
+		historyRetryableClient := hc.NewRetryableClient(
+			historyClient,
+			common.CreateReplicationServiceBusyRetryPolicy(),
+			common.IsServiceBusyError,
+		)
 		nDCHistoryResender := xdc.NewNDCHistoryResender(
 			shard.GetDomainCache(),
-			shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster),
+			adminRetryableClient,
 			func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-				return shard.GetService().GetHistoryClient().ReplicateEventsV2(ctx, request)
+				return historyRetryableClient.ReplicateEventsV2(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
 			nil,
@@ -300,9 +315,9 @@ func NewEngineWithShardContext(
 		historyRereplicator := xdc.NewHistoryRereplicator(
 			currentClusterName,
 			shard.GetDomainCache(),
-			shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster),
+			adminRetryableClient,
 			func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-				return shard.GetService().GetHistoryClient().ReplicateRawEvents(ctx, request)
+				return historyRetryableClient.ReplicateRawEvents(ctx, request)
 			},
 			shard.GetService().GetPayloadSerializer(),
 			replicationTimeout,

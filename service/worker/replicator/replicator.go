@@ -24,7 +24,10 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/yarpc/yarpcerrors"
+
 	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/client/history"
@@ -160,20 +163,33 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	adminClient := admin.NewRetryableClient(
 		r.clientBean.GetRemoteAdminClient(clusterName),
 		common.CreateAdminServiceRetryPolicy(),
-		common.IsServiceTransientError,
+		isRetryableError,
+	)
+	// Create retry policy for service busy error
+	adminRetryClient := admin.NewRetryableClient(
+		adminClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsServiceBusyError,
 	)
 	historyClient := history.NewRetryableClient(
 		r.historyClient,
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsServiceTransientError,
+		isRetryableError,
 	)
+	// Create retry policy for service busy error
+	historyRetryClient := history.NewRetryableClient(
+		historyClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsServiceBusyError,
+	)
+
 	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
 	historyRereplicator := xdc.NewHistoryRereplicator(
 		currentClusterName,
 		r.domainCache,
-		adminClient,
+		adminRetryClient,
 		func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-			return historyClient.ReplicateRawEvents(ctx, request)
+			return historyRetryClient.ReplicateRawEvents(ctx, request)
 		},
 		r.historySerializer,
 		r.config.ReplicationTaskContextTimeout(),
@@ -182,9 +198,9 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	)
 	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
 		r.domainCache,
-		adminClient,
+		adminRetryClient,
 		func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-			return historyClient.ReplicateEventsV2(ctx, request)
+			return historyRetryClient.ReplicateEventsV2(ctx, request)
 		},
 		r.historySerializer,
 		r.config.ReReplicationContextTimeout,
@@ -201,7 +217,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.domainReplicationTaskExecutor,
 		historyRereplicator,
 		nDCHistoryReplicator,
-		r.historyClient,
+		historyRetryClient,
 		r.domainCache,
 		task.NewSequentialTaskProcessor(
 			r.config.ReplicatorTaskConcurrency(),
@@ -228,4 +244,28 @@ func (r *Replicator) Stop() {
 
 func getConsumerName(currentCluster, remoteCluster string) string {
 	return fmt.Sprintf("%v_consumer_for_%v", currentCluster, remoteCluster)
+}
+
+func isRetryableError(
+	err error,
+) bool {
+
+	switch err.(type) {
+	case *workflow.InternalServiceError:
+		return true
+	case *workflow.LimitExceededError:
+		return true
+	case *h.ShardOwnershipLostError:
+		return true
+	case *yarpcerrors.Status:
+		// We only selectively retry the following yarpc errors client can safe retry with a backoff
+		if yarpcerrors.IsDeadlineExceeded(err) ||
+			yarpcerrors.IsUnavailable(err) ||
+			yarpcerrors.IsUnknown(err) ||
+			yarpcerrors.IsInternal(err) {
+			return true
+		}
+		return false
+	}
+	return false
 }

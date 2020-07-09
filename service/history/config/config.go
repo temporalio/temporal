@@ -222,6 +222,7 @@ type Config struct {
 	ReplicationTaskFetcherAggregationInterval        dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient     dynamicconfig.FloatPropertyFn
 	ReplicationTaskFetcherErrorRetryWait             dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherServiceBusyWait            dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFnWithShardIDFilter
 	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFnWithShardIDFilter
 	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFnWithShardIDFilter
@@ -430,6 +431,7 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
 		ReplicationTaskFetcherErrorRetryWait:             dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
+		ReplicationTaskFetcherServiceBusyWait:            dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherServiceBusyWait, 60*time.Second),
 		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, 50*time.Millisecond),
 		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 5),
 		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),

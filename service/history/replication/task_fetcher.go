@@ -28,6 +28,7 @@ import (
 	"time"
 
 	r "github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
@@ -220,10 +221,15 @@ func (f *taskFetcherImpl) fetchTasks() {
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
 			err := f.fetchAndDistributeTasks(requestByShard)
 			if err != nil {
-				timer.Reset(backoff.JitDuration(
-					f.config.ReplicationTaskFetcherErrorRetryWait(),
-					f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
-				))
+				if _, ok := err.(*shared.ServiceBusyError); ok {
+					// slow down replication when source cluster is busy
+					timer.Reset(f.config.ReplicationTaskFetcherErrorRetryWait())
+				} else {
+					timer.Reset(backoff.JitDuration(
+						f.config.ReplicationTaskFetcherErrorRetryWait(),
+						f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
+					))
+				}
 			} else {
 				timer.Reset(backoff.JitDuration(
 					f.config.ReplicationTaskFetcherAggregationInterval(),
@@ -246,8 +252,10 @@ func (f *taskFetcherImpl) fetchAndDistributeTasks(requestByShard map[int32]*requ
 
 	messagesByShard, err := f.getMessages(requestByShard)
 	if err != nil {
-		f.logger.Error("Failed to get replication tasks", tag.Error(err))
-		return err
+		if _, ok := err.(*shared.ServiceBusyError); !ok {
+			f.logger.Error("Failed to get replication tasks", tag.Error(err))
+			return err
+		}
 	}
 
 	f.logger.Debug("Successfully fetched replication tasks.", tag.Counter(len(messagesByShard)))
@@ -259,7 +267,7 @@ func (f *taskFetcherImpl) fetchAndDistributeTasks(requestByShard map[int32]*requ
 		delete(requestByShard, shardID)
 	}
 
-	return nil
+	return err
 }
 
 func (f *taskFetcherImpl) getMessages(
@@ -279,7 +287,9 @@ func (f *taskFetcherImpl) getMessages(
 	}
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {
-		return nil, err
+		if _, ok := err.(*shared.ServiceBusyError); !ok {
+			return nil, err
+		}
 	}
 
 	return response.GetMessagesByShard(), err

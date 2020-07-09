@@ -256,6 +256,7 @@ var keys = map[Key]string{
 	ReplicationTaskFetcherAggregationInterval:              "history.ReplicationTaskFetcherAggregationInterval",
 	ReplicationTaskFetcherTimerJitterCoefficient:           "history.ReplicationTaskFetcherTimerJitterCoefficient",
 	ReplicationTaskFetcherErrorRetryWait:                   "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskFetcherServiceBusyWait:                  "history.ReplicationTaskFetcherServiceBusyWait",
 	ReplicationTaskProcessorErrorRetryWait:                 "history.ReplicationTaskProcessorErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:          "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
@@ -825,6 +826,8 @@ const (
 	ReplicationTaskFetcherTimerJitterCoefficient
 	// ReplicationTaskFetcherErrorRetryWait is the wait time when fetcher encounters error
 	ReplicationTaskFetcherErrorRetryWait
+	// ReplicationTaskFetcherServiceBusyWait is the wait time when fetcher encounters service busy error
+	ReplicationTaskFetcherServiceBusyWait
 	// ReplicationTaskProcessorErrorRetryWait is the initial retry wait when we see errors in applying replication tasks
 	ReplicationTaskProcessorErrorRetryWait
 	// ReplicationTaskProcessorErrorRetryMaxAttempts is the max retry attempts for applying replication tasks

@@ -210,7 +210,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	return time.Duration(nextInterval)
 }
 
-// ComputeNextDelay returns the next delay interval.  This is used by Retrier to delay calling the operation again
+// ComputeNextDelay returns the next delay interval.
 func (tp *TwoPhaseRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
 	nextInterval := tp.firstPolicy.ComputeNextDelay(elapsedTime, numAttempts)
 	if nextInterval == done {
@@ -242,3 +242,5 @@ func (r *retrierImpl) NextBackOff() time.Duration {
 func (r *retrierImpl) getElapsedTime() time.Duration {
 	return r.clock.Now().Sub(r.startTime)
 }
+
+
