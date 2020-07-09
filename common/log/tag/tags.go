@@ -113,7 +113,7 @@ func WorkflowType(wfType string) Tag {
 
 // WorkflowState returns tag for WorkflowState
 func WorkflowState(s enumsspb.WorkflowExecutionState) Tag {
-	return newInt("wf-state", int(s))
+	return newStringTag("wf-state", s.String())
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
@@ -250,8 +250,8 @@ func WorkflowBranchID(branchID string) Tag {
 // workflow task
 
 // WorkflowDecisionType returns tag for WorkflowDecisionType
-func WorkflowDecisionType(decisionType int64) Tag {
-	return newInt64("wf-decision-type", decisionType)
+func WorkflowDecisionType(decisionType enumspb.DecisionType) Tag {
+	return newStringTag("wf-decision-type", decisionType.String())
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType
@@ -260,13 +260,13 @@ func WorkflowQueryType(qt string) Tag {
 }
 
 // WorkflowDecisionFailCause returns tag for WorkflowDecisionFailCause
-func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
-	return newInt64("wf-decision-fail-cause", decisionFailCause)
+func WorkflowDecisionFailCause(decisionFailCause enumspb.DecisionTaskFailedCause) Tag {
+	return newStringTag("wf-decision-fail-cause", decisionFailCause.String())
 }
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
 func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) Tag {
-	return newInt32("wf-task-queue-type", int32(taskQueueType))
+	return newStringTag("wf-task-queue-type", taskQueueType.String())
 }
 
 // WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
@@ -517,7 +517,7 @@ func TaskID(taskID int64) Tag {
 
 // TaskType returns tag for TaskType for queue processor
 func TaskType(taskType enumsspb.TaskType) Tag {
-	return newInt32("queue-task-type", int32(taskType))
+	return newStringTag("queue-task-type", taskType.String())
 }
 
 // TaskVersion returns tag for TaskVersion
