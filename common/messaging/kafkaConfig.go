@@ -27,7 +27,7 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common/auth"
+	"go.temporal.io/server/common/auth"
 )
 
 type (

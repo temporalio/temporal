@@ -33,8 +33,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

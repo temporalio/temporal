@@ -32,8 +32,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	p "github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	p "go.temporal.io/server/common/persistence"
 )
 
 type (

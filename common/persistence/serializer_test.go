@@ -32,18 +32,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	historyspb "github.com/temporalio/temporal/api/history/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/payloads"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 )
 
 type (

@@ -26,13 +26,13 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	"github.com/temporalio/temporal/common/rpc"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/rpc"
 )
 
 // ClientFactory is used to construct rpc clients

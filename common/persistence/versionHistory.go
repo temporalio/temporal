@@ -28,10 +28,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	historyspb "github.com/temporalio/temporal/api/history/v1"
-	"github.com/temporalio/temporal/common"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common"
 )
 
 // NewVersionHistoryItem create a new version history item

@@ -27,14 +27,14 @@ package client
 import (
 	"sync"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/persistence/sql"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

@@ -33,9 +33,9 @@ import (
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	statsdreporter "github.com/temporalio/temporal/common/metrics/tally/statsd"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.

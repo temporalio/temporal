@@ -25,11 +25,11 @@
 package matching
 
 import (
-	commonpb "go.temporal.io/temporal-proto/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 type (

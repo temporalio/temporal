@@ -36,15 +36,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.uber.org/zap"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

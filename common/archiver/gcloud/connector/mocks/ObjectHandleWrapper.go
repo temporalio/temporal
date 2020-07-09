@@ -29,7 +29,7 @@ package mocks
 import (
 	context "context"
 
-	connector "github.com/temporalio/temporal/common/archiver/gcloud/connector"
+	connector "go.temporal.io/server/common/archiver/gcloud/connector"
 
 	mock "github.com/stretchr/testify/mock"
 

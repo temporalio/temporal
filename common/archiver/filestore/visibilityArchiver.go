@@ -34,14 +34,14 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/types"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

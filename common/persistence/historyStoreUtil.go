@@ -27,9 +27,9 @@ package persistence
 import (
 	"fmt"
 
-	historypb "go.temporal.io/temporal-proto/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History

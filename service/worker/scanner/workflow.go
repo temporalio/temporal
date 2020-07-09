@@ -28,16 +28,16 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/workflow"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/service/worker/scanner/executions"
-	"github.com/temporalio/temporal/service/worker/scanner/history"
-	"github.com/temporalio/temporal/service/worker/scanner/taskqueue"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/worker/scanner/executions"
+	"go.temporal.io/server/service/worker/scanner/history"
+	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 type (

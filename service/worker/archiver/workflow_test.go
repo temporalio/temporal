@@ -30,17 +30,17 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/metrics/mocks"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (

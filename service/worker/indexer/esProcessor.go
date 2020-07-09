@@ -32,15 +32,15 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
-	indexerspb "github.com/temporalio/temporal/api/indexer/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/collection"
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
+	indexerspb "go.temporal.io/server/api/indexer/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/collection"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

@@ -30,16 +30,16 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 func applyWorkflowMutationBatch(

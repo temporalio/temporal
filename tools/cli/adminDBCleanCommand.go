@@ -35,10 +35,10 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/persistence"
-	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/persistence"
+	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (

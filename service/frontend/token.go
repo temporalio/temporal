@@ -25,9 +25,9 @@
 package frontend
 
 import (
-	"github.com/temporalio/temporal/api/adminservice/v1"
-	tokenspb "github.com/temporalio/temporal/api/token/v1"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/adminservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/persistence"
 )
 
 func generatePaginationToken(

@@ -29,15 +29,15 @@ package history
 import (
 	"time"
 
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

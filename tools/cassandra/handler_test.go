@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/environment"
-	"github.com/temporalio/temporal/tools/common/schema"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tools/common/schema"
 )
 
 type (

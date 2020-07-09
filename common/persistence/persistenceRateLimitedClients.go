@@ -25,10 +25,10 @@
 package persistence
 
 import (
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/quotas"
 )
 
 var (

@@ -31,13 +31,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	archiverproto "github.com/temporalio/temporal/api/archiver/v1"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/config"
+	archiverproto "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/config"
 )
 
 type (

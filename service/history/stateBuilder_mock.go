@@ -29,10 +29,11 @@
 package history
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common/v1"
-	history "go.temporal.io/temporal-proto/history/v1"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/api/common/v1"
+	history "go.temporal.io/api/history/v1"
 )
 
 // MockstateBuilder is a mock of stateBuilder interface.

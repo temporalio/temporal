@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (

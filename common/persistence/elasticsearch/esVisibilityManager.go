@@ -25,13 +25,13 @@
 package elasticsearch
 
 import (
-	es "github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/quotas"
-	"github.com/temporalio/temporal/common/service/config"
+	es "go.temporal.io/server/common/elasticsearch"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/config"
 )
 
 // NewESVisibilityManager create a visibility manager for ElasticSearch

@@ -28,10 +28,10 @@ import (
 	"math"
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 
-	"github.com/temporalio/temporal/common/backoff"
+	"go.temporal.io/server/common/backoff"
 )
 
 func getBackoffInterval(

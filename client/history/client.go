@@ -29,14 +29,14 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 var _ Client = (*clientImpl)(nil)

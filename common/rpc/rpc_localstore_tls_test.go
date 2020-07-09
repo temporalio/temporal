@@ -35,10 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/rpc/encryption"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/service/config"
 )
 
 type localStoreRPCSuite struct {

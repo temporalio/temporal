@@ -34,13 +34,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

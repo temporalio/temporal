@@ -33,22 +33,22 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	mmocks "go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

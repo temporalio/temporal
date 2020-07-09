@@ -25,8 +25,8 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/persistence"
 )
 
 type transactionPolicy int

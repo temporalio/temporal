@@ -22,7 +22,7 @@ syntax = "proto3";
 
 package temporal.server.api.enums.v1;
 
-option go_package = "github.com/temporalio/temporal/api/enums/v1;enums";
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
 enum ReplicationTaskType {
     REPLICATION_TASK_TYPE_UNSPECIFIED = 0;

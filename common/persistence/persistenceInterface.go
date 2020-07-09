@@ -28,17 +28,17 @@ import (
 	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives/timestamp"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/checksum"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (

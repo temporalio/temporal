@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock
+proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock goimports-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-proto-go proto-mock gomodtidy
+update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -43,7 +43,7 @@ endif
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 export PATH := $(GOBIN):$(PATH)
 
-MODULE_ROOT := github.com/temporalio/temporal
+MODULE_ROOT := go.temporal.io/server
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"
 
@@ -81,7 +81,7 @@ endif
 
 PROTO_ROOT := proto
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
-PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/api:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
@@ -137,11 +137,11 @@ clean-proto:
 
 update-proto-submodule:
 	@printf $(COLOR) "Update proto submodule from remote..."
-	git submodule update --force --remote $(PROTO_ROOT)/temporal-proto
+	git submodule update --force --remote $(PROTO_ROOT)/api
 
 install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
-	git submodule update --init $(PROTO_ROOT)/temporal-proto
+	git submodule update --init $(PROTO_ROOT)/api
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
@@ -160,9 +160,13 @@ proto-mock: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_OUT) && mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE))$(NEWLINE) )
 
-update-proto-go:
-	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
-	@go get -u go.temporal.io/temporal-proto
+update-go-api:
+	@printf $(COLOR) "Update go.temporal.io/api..."
+	@go get -u go.temporal.io/api
+
+goimports-proto:
+	@printf $(COLOR) "Run goimports..."
+	@goimports -w $(PROTO_OUT)
 
 ##### Binaries #####
 clean-bins:
@@ -371,6 +375,7 @@ start-cdc-other: temporal-server
 go-generate:
 	@printf $(COLOR) "Regenerate everything..."
 	@go generate ./...
+	@goimports -w $(ALL_SRC)
 
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."

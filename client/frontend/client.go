@@ -29,10 +29,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 const (

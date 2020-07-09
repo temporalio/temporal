@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/common/clock"
+	"go.temporal.io/server/common/clock"
 )
 
 type (

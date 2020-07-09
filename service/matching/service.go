@@ -29,18 +29,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // Service represents the matching service

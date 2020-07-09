@@ -34,15 +34,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/api/matchingservicemock/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/primitives/timestamp"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type ForwarderTestSuite struct {

@@ -27,15 +27,15 @@ package validator
 import (
 	"fmt"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // SearchAttributesValidator is used to validate search attributes

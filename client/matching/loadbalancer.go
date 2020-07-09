@@ -29,10 +29,10 @@ import (
 	"math/rand"
 	"strings"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

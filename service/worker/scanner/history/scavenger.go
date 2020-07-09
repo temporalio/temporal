@@ -28,18 +28,18 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/time/rate"
 
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

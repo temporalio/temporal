@@ -29,13 +29,13 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cassandra"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (

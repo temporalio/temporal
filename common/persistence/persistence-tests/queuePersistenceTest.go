@@ -33,8 +33,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	replicationspb "github.com/temporalio/temporal/api/replication/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 )
 
 type (

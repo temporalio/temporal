@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 )
 
 func TestTruncate(t *testing.T) {

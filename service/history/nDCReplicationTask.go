@@ -28,19 +28,19 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	historyspb "github.com/temporalio/temporal/api/history/v1"
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (

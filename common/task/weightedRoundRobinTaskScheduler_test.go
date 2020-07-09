@@ -36,10 +36,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

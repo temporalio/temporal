@@ -27,9 +27,9 @@ package main
 import (
 	"os"
 
-	"github.com/temporalio/temporal/cmd/server/temporal"
-	_ "github.com/temporalio/temporal/common/persistence/sql/sqlplugin/mysql"    // needed to load mysql plugin
-	_ "github.com/temporalio/temporal/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
+	"go.temporal.io/server/cmd/server/temporal"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"    // needed to load mysql plugin
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
 )
 
 // main entry point for the temporal server

@@ -29,19 +29,19 @@ package history
 import (
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	decisionpb "go.temporal.io/temporal-proto/decision/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	failurepb "go.temporal.io/temporal-proto/failure/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	decisionpb "go.temporal.io/api/decision/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/historyservice/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/persistence"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

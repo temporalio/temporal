@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (

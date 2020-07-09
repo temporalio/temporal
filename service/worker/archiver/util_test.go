@@ -29,10 +29,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	"github.com/temporalio/temporal/common/payload"
+	"go.temporal.io/server/common/payload"
 )
 
 type UtilSuite struct {

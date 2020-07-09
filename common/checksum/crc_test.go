@@ -33,10 +33,10 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 func TestCRC32OverThrift(t *testing.T) {

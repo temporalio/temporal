@@ -28,13 +28,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (

@@ -798,10 +798,9 @@ func newAdminClusterCommands() []cli.Command {
 					Name:  FlagSearchAttributesKey,
 					Usage: "Search Attribute key to be whitelisted",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  FlagSearchAttributesType,
-					Value: -1,
-					Usage: "Search Attribute value type. [0:String, 1:Keyword, 2:Int, 3:Double, 4:Bool, 5:Datetime]",
+					Usage: "Search Attribute value type. [string, keyword, int, double, bool, datetime]",
 				},
 				cli.StringFlag{
 					Name:  FlagSecurityTokenWithAlias,

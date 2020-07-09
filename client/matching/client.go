@@ -28,11 +28,11 @@ import (
 	"context"
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/api/matchingservice/v1"
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 )
 
 var _ Client = (*clientImpl)(nil)

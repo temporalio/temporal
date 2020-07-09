@@ -28,9 +28,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common"
+	"go.temporal.io/server/common"
 )
 
 type (

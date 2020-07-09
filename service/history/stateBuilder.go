@@ -30,15 +30,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

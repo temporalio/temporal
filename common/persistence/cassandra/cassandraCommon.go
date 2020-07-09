@@ -28,9 +28,9 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (

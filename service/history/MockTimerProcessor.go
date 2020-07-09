@@ -27,7 +27,7 @@ package history
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/server/common/persistence"
 )
 
 // MockTimerProcessor is used as mock implementation for timerProcessor

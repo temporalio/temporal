@@ -34,20 +34,20 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
-	enumsspb "github.com/temporalio/temporal/api/enums/v1"
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistenceblobs/v1"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/persistence"
-	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/persistence"
+	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (

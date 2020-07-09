@@ -33,11 +33,11 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	historyservice "github.com/temporalio/temporal/api/historyservice/v1"
-	repication "github.com/temporalio/temporal/api/replication/v1"
-	persistence "github.com/temporalio/temporal/common/persistence"
-	common "go.temporal.io/temporal-proto/common/v1"
-	history "go.temporal.io/temporal-proto/history/v1"
+	common "go.temporal.io/api/common/v1"
+	history "go.temporal.io/api/history/v1"
+	historyservice "go.temporal.io/server/api/historyservice/v1"
+	repication "go.temporal.io/server/api/replication/v1"
+	persistence "go.temporal.io/server/common/persistence"
 )
 
 // MockEngine is a mock of Engine interface.

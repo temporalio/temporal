@@ -29,8 +29,9 @@
 package gcloud
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockQueryParser is a mock of QueryParser interface.

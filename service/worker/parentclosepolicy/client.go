@@ -30,11 +30,11 @@ import (
 	"math/rand"
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	sdkclient "go.temporal.io/temporal/client"
+	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (

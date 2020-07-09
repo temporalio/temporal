@@ -32,14 +32,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
-	"github.com/temporalio/temporal/api/persistenceblobs/v1"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
