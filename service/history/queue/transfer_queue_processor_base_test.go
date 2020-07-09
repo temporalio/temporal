@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -74,6 +75,7 @@ func (s *transferQueueProcessorBaseSuite) SetupTest() {
 		},
 		config.NewForTest(),
 	)
+	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(constants.TestDomainName, nil).AnyTimes()
 	s.mockQueueSplitPolicy = NewMockProcessingQueueSplitPolicy(s.controller)
 	s.mockTaskProcessor = task.NewMockProcessor(s.controller)
 

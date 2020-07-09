@@ -93,8 +93,8 @@ func TestCreateHistoryStartWorkflowRequest_ExpirationTimeWithoutCron(t *testing.
 	expirationTime := startRequest.GetExpirationTimestamp()
 	require.NotNil(t, expirationTime)
 	delta := time.Unix(0, expirationTime).Sub(now)
-	require.True(t, delta > 58 * time.Second)
-	require.True(t, delta < 62 * time.Second)
+	require.True(t, delta > 58*time.Second)
+	require.True(t, delta < 62*time.Second)
 }
 
 func TestConvertIndexedValueTypeToThriftType(t *testing.T) {

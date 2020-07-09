@@ -74,6 +74,7 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	return cluster
 }
 
+// RegionHostFilter returns a gocql host filter for the given region name
 func RegionHostFilter(region string) gocql.HostFilter {
 	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
 		applicationRegion := region

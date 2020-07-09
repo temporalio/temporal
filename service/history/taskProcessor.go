@@ -241,7 +241,7 @@ FilterLoop:
 
 func (t *taskProcessor) processTaskOnce(
 	notificationChan <-chan struct{},
-	task *taskInfo,
+	taskInfo *taskInfo,
 ) (metrics.Scope, error) {
 
 	select {
@@ -252,23 +252,11 @@ func (t *taskProcessor) processTaskOnce(
 	var scopeIdx int
 	var err error
 
-	domainID := task.task.GetDomainID()
-
-	scopeIdx, err = task.processor.process(task)
-	scope, found := t.domainMetricsScopeCache.Get(domainID, scopeIdx)
-
-	if !found {
-		domainTag, err := t.getDomainTagByID(domainID)
-		scope = t.metricsClient.Scope(scopeIdx).Tagged(domainTag)
-		// do not cache DomainUnknownTag
-		if err == nil {
-			t.domainMetricsScopeCache.Put(domainID, scopeIdx, scope)
-		}
-	}
-
 	startTime := t.timeSource.Now()
+	scopeIdx, err = taskInfo.processor.process(taskInfo)
 
-	if task.shouldProcessTask {
+	scope := task.GetOrCreateDomainTaggedScope(t.shard, scopeIdx, taskInfo.task.GetDomainID(), t.logger)
+	if taskInfo.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
 	}
@@ -340,13 +328,4 @@ func (t *taskProcessor) ackTaskOnce(
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(task.task.GetVisibilityTimestamp()))
 	}
-}
-
-func (t *taskProcessor) getDomainTagByID(domainID string) (metrics.Tag, error) {
-	domainName, err := t.shard.GetDomainCache().GetDomainName(domainID)
-	if err != nil {
-		t.logger.Error("Unable to get domainName", tag.Error(err))
-		return metrics.DomainUnknownTag(), err
-	}
-	return metrics.DomainTag(domainName), nil
 }
