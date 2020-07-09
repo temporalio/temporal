@@ -170,7 +170,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowEventCount(historyCount))
 
 		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
-			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, false),
+			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, true),
 		}
 
 		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {

@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -450,11 +451,13 @@ Update_History_Loop:
 
 		if failDecision != nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
-			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
+			handler.logger.Info("Failing the decision.",
+				tag.WorkflowDecisionFailCause(failDecision.cause),
+				tag.Error(errors.New(failDecision.message)),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunID(token.GetRunId()),
 				tag.WorkflowNamespaceID(namespaceID))
-			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, failure.NewServerFailure(failDecision.message, false), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, failure.NewServerFailure(failDecision.message, true), request)
 			if err != nil {
 				return nil, err
 			}
