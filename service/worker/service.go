@@ -135,14 +135,14 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			TaskListScannerEnabled: dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
 			HistoryScannerEnabled:  dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionScannerConfig: &executions.ScannerWorkflowDynamicConfig{
-				Enabled:                 dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
+				Enabled:                 dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, true),
 				Concurrency:             dc.GetIntProperty(dynamicconfig.ExecutionsScannerConcurrency, 25),
 				ExecutionsPageSize:      dc.GetIntProperty(dynamicconfig.ExecutionsScannerPersistencePageSize, 1000),
 				BlobstoreFlushThreshold: dc.GetIntProperty(dynamicconfig.ExecutionsScannerBlobstoreFlushThreshold, 100),
-				ActivityBatchSize:       dc.GetIntProperty(dynamicconfig.ExecutionsScannerActivityBatchSize, 200),
+				ActivityBatchSize:       dc.GetIntProperty(dynamicconfig.ExecutionsScannerActivityBatchSize, 25),
 				DynamicConfigInvariantCollections: executions.DynamicConfigInvariantCollections{
-					InvariantCollectionMutableState: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionMutableState, false),
-					InvariantCollectionHistory:      dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionHistory, false),
+					InvariantCollectionMutableState: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionMutableState, true),
+					InvariantCollectionHistory:      dc.GetBoolProperty(dynamicconfig.ExecutionsScannerInvariantCollectionHistory, true),
 				},
 			},
 		},

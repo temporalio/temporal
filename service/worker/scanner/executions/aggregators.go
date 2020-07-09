@@ -33,21 +33,22 @@ type (
 		minShard int
 		maxShard int
 
-		reports     map[int]common.ShardFixReport
-		status      ShardStatusResult
-		aggregation AggregateFixReportResult
+		reports       map[int]common.ShardFixReport
+		status        ShardStatusResult
+		statusSummary ShardStatusSummaryResult
+		aggregation   AggregateFixReportResult
 	}
 
 	shardScanResultAggregator struct {
 		minShard int
 		maxShard int
 
-		reports                 map[int]common.ShardScanReport
-		status                  ShardStatusResult
-		aggregation             AggregateScanReportResult
-		corruptionKeys          map[int]common.Keys
-		controlFlowFailureCount int
-		successCount            int
+		reports        map[int]common.ShardScanReport
+		status         ShardStatusResult
+		statusSummary  ShardStatusSummaryResult
+		aggregation    AggregateScanReportResult
+		shardSizes     ShardSizeQueryResult
+		corruptionKeys map[int]common.Keys
 	}
 )
 
@@ -60,13 +61,19 @@ func newShardFixResultAggregator(
 	for _, s := range corruptKeys {
 		status[s.ShardID] = ShardStatusRunning
 	}
+	statusSummary := map[ShardStatus]int{
+		ShardStatusRunning:            len(corruptKeys),
+		ShardStatusSuccess:            0,
+		ShardStatusControlFlowFailure: 0,
+	}
 	return &shardFixResultAggregator{
 		minShard: minShard,
 		maxShard: maxShard,
 
-		reports:     make(map[int]common.ShardFixReport),
-		status:      status,
-		aggregation: AggregateFixReportResult{},
+		reports:       make(map[int]common.ShardFixReport),
+		status:        status,
+		statusSummary: statusSummary,
+		aggregation:   AggregateFixReportResult{},
 	}
 }
 
@@ -75,27 +82,17 @@ func (a *shardFixResultAggregator) getStatusResult(req PaginatedShardQueryReques
 }
 
 func (a *shardFixResultAggregator) addReport(report common.ShardFixReport) {
-	a.removeReport(report.ShardID)
 	a.reports[report.ShardID] = report
+	a.statusSummary[ShardStatusRunning]--
 	if report.Result.ControlFlowFailure != nil {
 		a.status[report.ShardID] = ShardStatusControlFlowFailure
+		a.statusSummary[ShardStatusControlFlowFailure]++
 	} else {
 		a.status[report.ShardID] = ShardStatusSuccess
+		a.statusSummary[ShardStatusSuccess]++
 	}
 	if report.Result.ShardFixKeys != nil {
 		a.adjustAggregation(report.Stats, func(a, b int64) int64 { return a + b })
-	}
-}
-
-func (a *shardFixResultAggregator) removeReport(shardID int) {
-	report, ok := a.reports[shardID]
-	if !ok {
-		return
-	}
-	delete(a.reports, shardID)
-	delete(a.status, shardID)
-	if report.Result.ShardFixKeys != nil {
-		a.adjustAggregation(report.Stats, func(a, b int64) int64 { return a - b })
 	}
 }
 
@@ -125,19 +122,34 @@ func newShardScanResultAggregator(
 	for _, s := range shards {
 		status[s] = ShardStatusRunning
 	}
+	statusSummary := map[ShardStatus]int{
+		ShardStatusSuccess:            0,
+		ShardStatusControlFlowFailure: 0,
+		ShardStatusRunning:            len(shards),
+	}
 	return &shardScanResultAggregator{
 		minShard: minShard,
 		maxShard: maxShard,
 
-		reports: make(map[int]common.ShardScanReport),
-		status:  status,
+		reports:       make(map[int]common.ShardScanReport),
+		status:        status,
+		statusSummary: statusSummary,
+		shardSizes:    nil,
 		aggregation: AggregateScanReportResult{
 			CorruptionByType: make(map[common.InvariantType]int64),
 		},
-		corruptionKeys:          make(map[int]common.Keys),
-		controlFlowFailureCount: 0,
-		successCount:            0,
+		corruptionKeys: make(map[int]common.Keys),
 	}
+}
+
+func (a *shardScanResultAggregator) getShardSizeQueryResult(req ShardSizeQueryRequest) (ShardSizeQueryResult, error) {
+	if req.StartIndex < 0 || req.StartIndex >= req.EndIndex || req.EndIndex > len(a.shardSizes) {
+		return nil, fmt.Errorf("index out of bounds exception (required startIndex >= 0 && startIndex < endIndex && endIndex <= %v)", len(a.shardSizes))
+	}
+	if req.EndIndex-req.StartIndex > maxShardQueryResult {
+		return nil, fmt.Errorf("too many shards requested, the limit is %v", maxShardQueryResult)
+	}
+	return a.shardSizes[req.StartIndex:req.EndIndex], nil
 }
 
 func (a *shardScanResultAggregator) getCorruptionKeys(req PaginatedShardQueryRequest) (*ShardCorruptKeysQueryResult, error) {
@@ -186,14 +198,17 @@ func (a *shardScanResultAggregator) getStatusResult(req PaginatedShardQueryReque
 }
 
 func (a *shardScanResultAggregator) addReport(report common.ShardScanReport) {
-	a.removeReport(report.ShardID)
+	if report.Result.ShardScanKeys != nil {
+		a.insertReportIntoSizes(report)
+	}
 	a.reports[report.ShardID] = report
+	a.statusSummary[ShardStatusRunning]--
 	if report.Result.ControlFlowFailure != nil {
 		a.status[report.ShardID] = ShardStatusControlFlowFailure
-		a.controlFlowFailureCount++
+		a.statusSummary[ShardStatusControlFlowFailure]++
 	} else {
 		a.status[report.ShardID] = ShardStatusSuccess
-		a.successCount++
+		a.statusSummary[ShardStatusSuccess]++
 	}
 	if report.Result.ShardScanKeys != nil {
 		a.adjustAggregation(report.Stats, func(a, b int64) int64 { return a + b })
@@ -203,19 +218,33 @@ func (a *shardScanResultAggregator) addReport(report common.ShardScanReport) {
 	}
 }
 
-func (a *shardScanResultAggregator) removeReport(shardID int) {
-	report, ok := a.reports[shardID]
-	if !ok {
-		return
+func (a *shardScanResultAggregator) insertReportIntoSizes(report common.ShardScanReport) {
+	tuple := ShardSizeTuple{
+		ShardID:         report.ShardID,
+		ExecutionsCount: report.Stats.ExecutionsCount,
 	}
-	delete(a.reports, shardID)
-	delete(a.status, shardID)
-	delete(a.corruptionKeys, shardID)
-	if report.Result.ShardScanKeys != nil {
-		a.adjustAggregation(report.Stats, func(a, b int64) int64 { return a - b })
-		a.successCount--
-	} else {
-		a.controlFlowFailureCount--
+	insertIndex := 0
+	for insertIndex < len(a.shardSizes) {
+		if a.shardSizes[insertIndex].ExecutionsCount < tuple.ExecutionsCount {
+			break
+		}
+		insertIndex++
+	}
+	newShardSizes := append([]ShardSizeTuple{}, a.shardSizes[0:insertIndex]...)
+	newShardSizes = append(newShardSizes, tuple)
+	newShardSizes = append(newShardSizes, a.shardSizes[insertIndex:]...)
+	a.shardSizes = newShardSizes
+}
+
+func (a *shardScanResultAggregator) getShardDistributionStats() ShardDistributionStats {
+	return ShardDistributionStats{
+		Max:    a.shardSizes[0].ExecutionsCount,
+		Median: a.shardSizes[int(float64(len(a.shardSizes))*.5)].ExecutionsCount,
+		Min:    a.shardSizes[len(a.shardSizes)-1].ExecutionsCount,
+		P90:    a.shardSizes[int(float64(len(a.shardSizes))*.1)].ExecutionsCount,
+		P75:    a.shardSizes[int(float64(len(a.shardSizes))*.25)].ExecutionsCount,
+		P25:    a.shardSizes[int(float64(len(a.shardSizes))*.75)].ExecutionsCount,
+		P10:    a.shardSizes[int(float64(len(a.shardSizes))*.9)].ExecutionsCount,
 	}
 }
 

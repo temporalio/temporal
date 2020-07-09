@@ -74,6 +74,19 @@ type (
 		ShardSuccessCount            int
 		ShardControlFlowFailureCount int
 		AggregateReportResult        AggregateScanReportResult
+		ShardDistributionStats       ShardDistributionStats
+	}
+
+	// ShardDistributionStats contains stats on the distribution of executions in shards.
+	// It is used by the ScannerEmitMetricsActivityParams.
+	ShardDistributionStats struct {
+		Max    int64
+		Median int64
+		Min    int64
+		P90    int64
+		P75    int64
+		P25    int64
+		P10    int64
 	}
 
 	// FixerCorruptedKeysActivityParams is the parameter for FixerCorruptedKeysActivity
@@ -133,6 +146,14 @@ func ScannerEmitMetricsActivity(
 	for k, v := range agg.CorruptionByType {
 		scope.Tagged(metrics.InvariantTypeTag(string(k))).UpdateGauge(metrics.ScannerCorruptionByTypeGauge, float64(v))
 	}
+	shardStats := params.ShardDistributionStats
+	scope.UpdateGauge(metrics.ScannerShardSizeMaxGauge, float64(shardStats.Max))
+	scope.UpdateGauge(metrics.ScannerShardSizeMedianGauge, float64(shardStats.Median))
+	scope.UpdateGauge(metrics.ScannerShardSizeMinGauge, float64(shardStats.Min))
+	scope.UpdateGauge(metrics.ScannerShardSizeNinetyGauge, float64(shardStats.P90))
+	scope.UpdateGauge(metrics.ScannerShardSizeSeventyFiveGauge, float64(shardStats.P75))
+	scope.UpdateGauge(metrics.ScannerShardSizeTwentyFiveGauge, float64(shardStats.P25))
+	scope.UpdateGauge(metrics.ScannerShardSizeTenGauge, float64(shardStats.P10))
 	return nil
 }
 

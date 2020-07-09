@@ -41,11 +41,15 @@ const (
 	// ShardReportQuery is the query name for the query used to get a single shard's report
 	ShardReportQuery = "shard_report"
 	// ShardStatusQuery is the query name for the query used to get the status of all shards
-	ShardStatusQuery = "shard_status_query"
+	ShardStatusQuery = "shard_status"
+	// ShardStatusSummaryQuery is the query name for the query used to get the shard status -> counts map
+	ShardStatusSummaryQuery = "shard_status_summary"
 	// AggregateReportQuery is the query name for the query used to get the aggregate result of all finished shards
 	AggregateReportQuery = "aggregate_report"
 	// ShardCorruptKeysQuery is the query name for the query used to get all completed shards with at least one corruption
 	ShardCorruptKeysQuery = "shard_corrupt_keys"
+	// ShardSizeQuery is the query name for the query used to get the number of executions per shard in sorted order
+	ShardSizeQuery = "shard_size"
 
 	// ShardStatusRunning indicates the shard has not completed yet
 	ShardStatusRunning ShardStatus = "running"
@@ -106,6 +110,9 @@ type (
 	// ShardStatusResult indicates the status for all shards
 	ShardStatusResult map[int]ShardStatus
 
+	// ShardStatusSummaryResult indicates the counts of shards in each status
+	ShardStatusSummaryResult map[ShardStatus]int
+
 	// AggregateScanReportResult indicates the result of summing together all
 	// shard reports which have finished scan.
 	AggregateScanReportResult common.ShardScanStats
@@ -132,6 +139,15 @@ type (
 	FixReportError struct {
 		Reports  []common.ShardFixReport
 		ErrorStr *string
+	}
+
+	// ShardSizeQueryRequest is the request used for ShardSizeQuery.
+	// The following must be true: 0 <= StartIndex < EndIndex <= len(shards successfully finished)
+	// The following must be true: EndIndex - StartIndex <= maxShardQueryResult.
+	// StartIndex is inclusive, EndIndex is exclusive.
+	ShardSizeQueryRequest struct {
+		StartIndex int
+		EndIndex   int
 	}
 
 	// PaginatedShardQueryRequest is the request used for queries which return results over all shards
@@ -164,6 +180,16 @@ type (
 		Result                    ShardCorruptKeysResult
 		ShardQueryPaginationToken ShardQueryPaginationToken
 	}
+
+	// ShardSizeQueryResult is the result from ShardSizeQuery.
+	// Contains sorted list of shards, sorted by the number of executions per shard.
+	ShardSizeQueryResult []ShardSizeTuple
+
+	// ShardSizeTuple indicates the size and sorted index of a single shard
+	ShardSizeTuple struct {
+		ShardID         int
+		ExecutionsCount int64
+	}
 )
 
 var (
@@ -190,6 +216,11 @@ func ScannerWorkflow(
 	}); err != nil {
 		return err
 	}
+	if err := workflow.SetQueryHandler(ctx, ShardStatusSummaryQuery, func() (ShardStatusSummaryResult, error) {
+		return aggregator.statusSummary, nil
+	}); err != nil {
+		return err
+	}
 	if err := workflow.SetQueryHandler(ctx, AggregateReportQuery, func() (AggregateScanReportResult, error) {
 		return aggregator.aggregation, nil
 	}); err != nil {
@@ -197,6 +228,11 @@ func ScannerWorkflow(
 	}
 	if err := workflow.SetQueryHandler(ctx, ShardCorruptKeysQuery, func(req PaginatedShardQueryRequest) (*ShardCorruptKeysQueryResult, error) {
 		return aggregator.getCorruptionKeys(req)
+	}); err != nil {
+		return err
+	}
+	if err := workflow.SetQueryHandler(ctx, ShardSizeQuery, func(req ShardSizeQueryRequest) (ShardSizeQueryResult, error) {
+		return aggregator.getShardSizeQueryResult(req)
 	}); err != nil {
 		return err
 	}
@@ -256,9 +292,10 @@ func ScannerWorkflow(
 
 	activityCtx = getShortActivityContext(ctx)
 	if err := workflow.ExecuteActivity(activityCtx, ScannerEmitMetricsActivityName, ScannerEmitMetricsActivityParams{
-		ShardSuccessCount:            aggregator.successCount,
-		ShardControlFlowFailureCount: aggregator.controlFlowFailureCount,
+		ShardSuccessCount:            aggregator.statusSummary[ShardStatusSuccess],
+		ShardControlFlowFailureCount: aggregator.statusSummary[ShardStatusControlFlowFailure],
 		AggregateReportResult:        aggregator.aggregation,
+		ShardDistributionStats:       aggregator.getShardDistributionStats(),
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
@@ -285,6 +322,14 @@ func FixerWorkflow(
 			return nil, errQueryNotReady
 		}
 		return aggregator.getStatusResult(req)
+	}); err != nil {
+		return err
+	}
+	if err := workflow.SetQueryHandler(ctx, ShardStatusSummaryQuery, func() (ShardStatusSummaryResult, error) {
+		if aggregator == nil {
+			return nil, errQueryNotReady
+		}
+		return aggregator.statusSummary, nil
 	}); err != nil {
 		return err
 	}

@@ -23,6 +23,8 @@
 package executions
 
 import (
+	"math/rand"
+
 	c "github.com/uber/cadence/common"
 	"github.com/uber/cadence/service/worker/scanner/executions/common"
 )
@@ -41,9 +43,13 @@ func (s *workflowsSuite) TestShardScanResultAggregator() {
 		aggregation: AggregateScanReportResult{
 			CorruptionByType: make(map[common.InvariantType]int64),
 		},
-		corruptionKeys:          make(map[int]common.Keys),
-		controlFlowFailureCount: 0,
-		successCount:            0,
+		corruptionKeys: make(map[int]common.Keys),
+		statusSummary: map[ShardStatus]int{
+			ShardStatusRunning:            3,
+			ShardStatusControlFlowFailure: 0,
+			ShardStatusSuccess:            0,
+		},
+		shardSizes: nil,
 	}
 	s.Equal(expected, agg)
 	report, err := agg.getReport(1)
@@ -74,7 +80,15 @@ func (s *workflowsSuite) TestShardScanResultAggregator() {
 	}
 	agg.addReport(firstReport)
 	expected.status[1] = ShardStatusSuccess
+	expected.statusSummary[ShardStatusRunning] = 2
+	expected.statusSummary[ShardStatusSuccess] = 1
 	expected.reports[1] = firstReport
+	expected.shardSizes = []ShardSizeTuple{
+		{
+			ShardID:         1,
+			ExecutionsCount: 10,
+		},
+	}
 	expected.aggregation.ExecutionsCount = 10
 	expected.aggregation.CorruptedCount = 3
 	expected.aggregation.CheckFailedCount = 1
@@ -88,9 +102,6 @@ func (s *workflowsSuite) TestShardScanResultAggregator() {
 			UUID: "test_uuid",
 		},
 	}
-	expected.successCount = 1
-	s.Equal(expected, agg)
-	agg.addReport(firstReport)
 	s.Equal(expected, agg)
 	report, err = agg.getReport(1)
 	s.NoError(err)
@@ -113,8 +124,15 @@ func (s *workflowsSuite) TestShardScanResultAggregator() {
 	}
 	agg.addReport(secondReport)
 	expected.status[2] = ShardStatusControlFlowFailure
+	expected.statusSummary[ShardStatusRunning] = 1
+	expected.statusSummary[ShardStatusControlFlowFailure] = 1
 	expected.reports[2] = secondReport
-	expected.controlFlowFailureCount = 1
+	expected.shardSizes = []ShardSizeTuple{
+		{
+			ShardID:         1,
+			ExecutionsCount: 10,
+		},
+	}
 	s.Equal(expected, agg)
 	shardStatus, err := agg.getStatusResult(PaginatedShardQueryRequest{
 		StartingShardID: c.IntPtr(1),
@@ -160,6 +178,11 @@ func (s *workflowsSuite) TestShardFixResultAggregator() {
 			2: ShardStatusRunning,
 			3: ShardStatusRunning,
 		},
+		statusSummary: map[ShardStatus]int{
+			ShardStatusRunning:            3,
+			ShardStatusControlFlowFailure: 0,
+			ShardStatusSuccess:            0,
+		},
 		aggregation: AggregateFixReportResult{},
 	}
 	s.Equal(expected, agg)
@@ -186,12 +209,12 @@ func (s *workflowsSuite) TestShardFixResultAggregator() {
 	}
 	agg.addReport(firstReport)
 	expected.status[1] = ShardStatusSuccess
+	expected.statusSummary[ShardStatusSuccess] = 1
+	expected.statusSummary[ShardStatusRunning] = 2
 	expected.reports[1] = firstReport
 	expected.aggregation.ExecutionCount = 10
 	expected.aggregation.FixedCount = 3
 	expected.aggregation.FailedCount = 1
-	s.Equal(expected, agg)
-	agg.addReport(firstReport)
 	s.Equal(expected, agg)
 	report, err = agg.getReport(1)
 	s.NoError(err)
@@ -209,6 +232,8 @@ func (s *workflowsSuite) TestShardFixResultAggregator() {
 	}
 	agg.addReport(secondReport)
 	expected.status[2] = ShardStatusControlFlowFailure
+	expected.statusSummary[ShardStatusControlFlowFailure] = 1
+	expected.statusSummary[ShardStatusRunning] = 1
 	expected.reports[2] = secondReport
 	s.Equal(expected, agg)
 	shardStatus, err := agg.getStatusResult(PaginatedShardQueryRequest{
@@ -363,5 +388,159 @@ func (s *workflowsSuite) TestGetStatusResult() {
 		} else {
 			s.NoError(err)
 		}
+	}
+}
+
+func (s *workflowsSuite) TestGetShardSizeQueryResult() {
+	testCases := []struct {
+		shardSizes       []ShardSizeTuple
+		req              ShardSizeQueryRequest
+		expectedErrorStr *string
+		expectedResult   ShardSizeQueryResult
+	}{
+		{
+			shardSizes: nil,
+			req: ShardSizeQueryRequest{
+				StartIndex: -1,
+			},
+			expectedErrorStr: c.StringPtr("index out of bounds exception (required startIndex >= 0 && startIndex < endIndex && endIndex <= 0)"),
+			expectedResult:   nil,
+		},
+		{
+			shardSizes: nil,
+			req: ShardSizeQueryRequest{
+				StartIndex: 1,
+				EndIndex:   1,
+			},
+			expectedErrorStr: c.StringPtr("index out of bounds exception (required startIndex >= 0 && startIndex < endIndex && endIndex <= 0)"),
+			expectedResult:   nil,
+		},
+		{
+			shardSizes: nil,
+			req: ShardSizeQueryRequest{
+				StartIndex: 0,
+				EndIndex:   1,
+			},
+			expectedErrorStr: c.StringPtr("index out of bounds exception (required startIndex >= 0 && startIndex < endIndex && endIndex <= 0)"),
+			expectedResult:   nil,
+		},
+		{
+			shardSizes: make([]ShardSizeTuple, 10, 10),
+			req: ShardSizeQueryRequest{
+				StartIndex: 0,
+				EndIndex:   11,
+			},
+			expectedErrorStr: c.StringPtr("index out of bounds exception (required startIndex >= 0 && startIndex < endIndex && endIndex <= 10)"),
+			expectedResult:   nil,
+		},
+		{
+			shardSizes: make([]ShardSizeTuple, 10000, 10000),
+			req: ShardSizeQueryRequest{
+				StartIndex: 0,
+				EndIndex:   maxShardQueryResult + 1,
+			},
+			expectedErrorStr: c.StringPtr("too many shards requested, the limit is 1000"),
+			expectedResult:   nil,
+		},
+		{
+			shardSizes: []ShardSizeTuple{
+				{
+					ShardID: 1,
+				},
+				{
+					ShardID: 2,
+				},
+				{
+					ShardID: 3,
+				},
+				{
+					ShardID: 4,
+				},
+				{
+					ShardID: 5,
+				},
+			},
+			req: ShardSizeQueryRequest{
+				StartIndex: 0,
+				EndIndex:   1,
+			},
+			expectedErrorStr: nil,
+			expectedResult: []ShardSizeTuple{
+				{
+					ShardID: 1,
+				},
+			},
+		},
+		{
+			shardSizes: []ShardSizeTuple{
+				{
+					ShardID: 1,
+				},
+				{
+					ShardID: 2,
+				},
+				{
+					ShardID: 3,
+				},
+				{
+					ShardID: 4,
+				},
+				{
+					ShardID: 5,
+				},
+			},
+			req: ShardSizeQueryRequest{
+				StartIndex: 0,
+				EndIndex:   5,
+			},
+			expectedErrorStr: nil,
+			expectedResult: []ShardSizeTuple{
+				{
+					ShardID: 1,
+				},
+				{
+					ShardID: 2,
+				},
+				{
+					ShardID: 3,
+				},
+				{
+					ShardID: 4,
+				},
+				{
+					ShardID: 5,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		agg := &shardScanResultAggregator{
+			shardSizes: tc.shardSizes,
+		}
+		result, err := agg.getShardSizeQueryResult(tc.req)
+		if tc.expectedErrorStr != nil {
+			s.Equal(*tc.expectedErrorStr, err.Error())
+		} else {
+			s.Equal(tc.expectedResult, result)
+		}
+	}
+}
+
+func (s *workflowsSuite) TestInsertReportIntoSizes() {
+	randomReport := func() common.ShardScanReport {
+		return common.ShardScanReport{
+			ShardID: 0,
+			Stats: common.ShardScanStats{
+				ExecutionsCount: int64(rand.Intn(10)),
+			},
+		}
+	}
+	agg := &shardScanResultAggregator{}
+	for i := 0; i < 1000; i++ {
+		agg.insertReportIntoSizes(randomReport())
+	}
+	for i := 0; i < 999; i++ {
+		s.GreaterOrEqual(agg.shardSizes[i].ExecutionsCount, agg.shardSizes[i+1].ExecutionsCount)
 	}
 }
