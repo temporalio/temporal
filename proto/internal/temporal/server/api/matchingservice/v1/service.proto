@@ -32,11 +32,15 @@ import "temporal/server/api/matchingservice/v1/request_response.proto";
 // with completion or failure.
 service MatchingService {
 
+    // (-- api-linter: core::0136::prepositions=disabled
+    //     aip.dev/not-precedent: TODO: Rename to PollWorkflowTaskQueue. --)
     // PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
     // DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
     rpc PollForDecisionTask (PollForDecisionTaskRequest) returns (PollForDecisionTaskResponse) {
     }
 
+    // (-- api-linter: core::0136::prepositions=disabled
+    //     aip.dev/not-precedent: TODO: Rename to PollActivityTaskQueue. --)
     // PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
     // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
     rpc PollForActivityTask (PollForActivityTaskRequest) returns (PollForActivityTaskResponse) {

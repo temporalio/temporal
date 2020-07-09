@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock goimports-proto
+proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -117,6 +117,8 @@ update-checkers:
 	GO111MODULE=off go get -u golang.org/x/lint/golint
 	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
+	GO111MODULE=off go get -u github.com/googleapis/api-linter/cmd/api-linter
+	GO111MODULE=off go get -u github.com/bufbuild/buf/cmd/buf
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -225,8 +227,7 @@ errcheck:
 
 api-linter:
 	@printf $(COLOR) "Running api-linter..."
-#	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
-	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml proto/internal/temporal/server/api/enums/v1/*.proto
+	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
 
 buf:
 	@printf $(COLOR) "Running buf linter..."
