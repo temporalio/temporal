@@ -82,7 +82,7 @@ endif
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS := --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --proto-path $(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
@@ -227,7 +227,7 @@ errcheck:
 
 api-linter:
 	@printf $(COLOR) "Running api-linter..."
-	@api-linter --set-exit-status --output-format summary $(PROTO_IMPORTS) --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+	@api-linter --set-exit-status --output-format=summary $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
 
 buf:
 	@printf $(COLOR) "Running buf linter..."

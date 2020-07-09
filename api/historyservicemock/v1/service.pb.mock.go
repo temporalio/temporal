@@ -716,24 +716,24 @@ func (mr *MockHistoryServiceClientMockRecorder) ReapplyEvents(ctx, in interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockHistoryServiceClient)(nil).ReapplyEvents), varargs...)
 }
 
-// ReadDLQMessages mocks base method.
-func (m *MockHistoryServiceClient) ReadDLQMessages(ctx context.Context, in *historyservice.ReadDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.ReadDLQMessagesResponse, error) {
+// GetDLQMessages mocks base method.
+func (m *MockHistoryServiceClient) GetDLQMessages(ctx context.Context, in *historyservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "ReadDLQMessages", varargs...)
-	ret0, _ := ret[0].(*historyservice.ReadDLQMessagesResponse)
+	ret := m.ctrl.Call(m, "GetDLQMessages", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadDLQMessages indicates an expected call of ReadDLQMessages.
-func (mr *MockHistoryServiceClientMockRecorder) ReadDLQMessages(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// GetDLQMessages indicates an expected call of GetDLQMessages.
+func (mr *MockHistoryServiceClientMockRecorder) GetDLQMessages(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).ReadDLQMessages), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetDLQMessages), varargs...)
 }
 
 // PurgeDLQMessages mocks base method.
@@ -1329,19 +1329,19 @@ func (mr *MockHistoryServiceServerMockRecorder) ReapplyEvents(arg0, arg1 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockHistoryServiceServer)(nil).ReapplyEvents), arg0, arg1)
 }
 
-// ReadDLQMessages mocks base method.
-func (m *MockHistoryServiceServer) ReadDLQMessages(arg0 context.Context, arg1 *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error) {
+// GetDLQMessages mocks base method.
+func (m *MockHistoryServiceServer) GetDLQMessages(arg0 context.Context, arg1 *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadDLQMessages", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.ReadDLQMessagesResponse)
+	ret := m.ctrl.Call(m, "GetDLQMessages", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadDLQMessages indicates an expected call of ReadDLQMessages.
-func (mr *MockHistoryServiceServerMockRecorder) ReadDLQMessages(arg0, arg1 interface{}) *gomock.Call {
+// GetDLQMessages indicates an expected call of GetDLQMessages.
+func (mr *MockHistoryServiceServerMockRecorder) GetDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).ReadDLQMessages), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetDLQMessages), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.

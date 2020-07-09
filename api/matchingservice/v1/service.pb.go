@@ -74,9 +74,13 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type MatchingServiceClient interface {
+	// (-- api-linter: core::0136::prepositions=disabled
+	//     aip.dev/not-precedent: TODO: Rename to PollWorkflowTaskQueue. --)
 	// PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
 	// DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
 	PollForDecisionTask(ctx context.Context, in *PollForDecisionTaskRequest, opts ...grpc.CallOption) (*PollForDecisionTaskResponse, error)
+	// (-- api-linter: core::0136::prepositions=disabled
+	//     aip.dev/not-precedent: TODO: Rename to PollActivityTaskQueue. --)
 	// PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
 	PollForActivityTask(ctx context.Context, in *PollForActivityTaskRequest, opts ...grpc.CallOption) (*PollForActivityTaskResponse, error)
@@ -196,9 +200,13 @@ func (c *matchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in 
 
 // MatchingServiceServer is the server API for MatchingService service.
 type MatchingServiceServer interface {
+	// (-- api-linter: core::0136::prepositions=disabled
+	//     aip.dev/not-precedent: TODO: Rename to PollWorkflowTaskQueue. --)
 	// PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
 	// DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
 	PollForDecisionTask(context.Context, *PollForDecisionTaskRequest) (*PollForDecisionTaskResponse, error)
+	// (-- api-linter: core::0136::prepositions=disabled
+	//     aip.dev/not-precedent: TODO: Rename to PollActivityTaskQueue. --)
 	// PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
 	PollForActivityTask(context.Context, *PollForActivityTaskRequest) (*PollForActivityTaskResponse, error)
