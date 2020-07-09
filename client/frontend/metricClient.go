@@ -27,7 +27,7 @@ package frontend
 import (
 	"context"
 
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"

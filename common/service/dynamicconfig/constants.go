@@ -25,7 +25,7 @@
 package dynamicconfig
 
 import (
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // Key represents a key/property stored in dynamic config

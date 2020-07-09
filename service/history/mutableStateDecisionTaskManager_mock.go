@@ -32,10 +32,10 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "go.temporal.io/temporal-proto/enums/v1"
-	failure "go.temporal.io/temporal-proto/failure/v1"
-	history "go.temporal.io/temporal-proto/history/v1"
-	workflowservice "go.temporal.io/temporal-proto/workflowservice/v1"
+	enums "go.temporal.io/api/enums/v1"
+	failure "go.temporal.io/api/failure/v1"
+	history "go.temporal.io/api/history/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 )
 
 // MockmutableStateDecisionTaskManager is a mock of mutableStateDecisionTaskManager interface.

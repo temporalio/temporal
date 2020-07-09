@@ -34,8 +34,8 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/api/common/v1"
 	persistence "go.temporal.io/server/common/persistence"
-	common "go.temporal.io/temporal-proto/common/v1"
 )
 
 // MockworkflowExecutionContext is a mock of workflowExecutionContext interface.

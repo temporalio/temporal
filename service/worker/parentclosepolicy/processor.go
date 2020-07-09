@@ -27,11 +27,11 @@ package parentclosepolicy
 import (
 	"context"
 
-	"go.temporal.io/temporal/activity"
-	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/temporal/worker"
+	"go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"

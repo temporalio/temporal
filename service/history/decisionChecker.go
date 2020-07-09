@@ -30,11 +30,11 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	decisionpb "go.temporal.io/temporal-proto/decision/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	decisionpb "go.temporal.io/api/decision/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"

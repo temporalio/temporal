@@ -45,8 +45,8 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/api/adminservice/v1"

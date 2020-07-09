@@ -29,9 +29,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"

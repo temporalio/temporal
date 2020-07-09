@@ -27,8 +27,8 @@ package payloads
 import (
 	"bytes"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal/encoded"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/sdk/encoded"
 
 	"go.temporal.io/server/common/payload"
 )

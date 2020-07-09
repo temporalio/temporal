@@ -27,7 +27,7 @@
 package frontend
 
 import (
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/resource"

@@ -31,8 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	querypb "go.temporal.io/temporal-proto/query/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	querypb "go.temporal.io/api/query/v1"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/loggerimpl"

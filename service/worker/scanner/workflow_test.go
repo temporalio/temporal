@@ -32,11 +32,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"

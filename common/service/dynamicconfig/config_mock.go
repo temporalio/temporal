@@ -27,7 +27,7 @@ package dynamicconfig
 import (
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // These mock functions are for tests to use config properties that are dynamic

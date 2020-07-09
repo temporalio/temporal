@@ -29,7 +29,7 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"go.temporal.io/temporal/workflow"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/metrics"
 )

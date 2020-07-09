@@ -31,7 +31,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"

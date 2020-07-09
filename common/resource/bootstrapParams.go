@@ -26,7 +26,7 @@ package resource
 
 import (
 	"github.com/uber-go/tally"
-	sdkclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"

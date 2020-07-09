@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/persistence"
 )

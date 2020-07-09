@@ -32,9 +32,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	"go.temporal.io/temporal-proto/workflowservicemock/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservicemock/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	tokenspb "go.temporal.io/server/api/token/v1"

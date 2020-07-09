@@ -29,8 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"

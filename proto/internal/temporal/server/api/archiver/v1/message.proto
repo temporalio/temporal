@@ -24,9 +24,9 @@ package temporal.server.api.archiver.v1;
 
 option go_package = "go.temporal.io/server/api/archiver/v1;archiver";
 
-import "temporal/common/v1/message.proto";
-import "temporal/history/v1/message.proto";
-import "temporal/enums/v1/workflow.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
 
 message HistoryBlobHeader {
     string namespace = 1;
@@ -43,7 +43,7 @@ message HistoryBlobHeader {
 
 message HistoryBlob  {
     HistoryBlobHeader header = 1;
-    repeated temporal.history.v1.History body = 2;
+    repeated temporal.api.history.v1.History body = 2;
 }
 
 // ArchiveVisibilityRequest is request to Archive single workflow visibility record
@@ -56,9 +56,9 @@ message ArchiveVisibilityRequest {
     int64 start_timestamp = 6;
     int64 execution_timestamp = 7;
     int64 close_timestamp = 8;
-    temporal.enums.v1.WorkflowExecutionStatus status = 9;
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 9;
     int64 history_length = 10;
-    temporal.common.v1.Memo memo = 11;
+    temporal.api.common.v1.Memo memo = 11;
     map<string, string> search_attributes = 12;
     string history_archival_uri = 13;
 }

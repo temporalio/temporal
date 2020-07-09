@@ -32,8 +32,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cluster"

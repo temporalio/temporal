@@ -28,7 +28,7 @@ import (
 	"database/sql"
 	"time"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/persistence"

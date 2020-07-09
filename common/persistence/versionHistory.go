@@ -28,7 +28,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"

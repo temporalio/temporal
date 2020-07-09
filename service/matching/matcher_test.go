@@ -33,8 +33,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	querypb "go.temporal.io/temporal-proto/query/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.uber.org/atomic"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"

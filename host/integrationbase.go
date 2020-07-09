@@ -32,11 +32,11 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	namespacepb "go.temporal.io/temporal-proto/namespace/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 

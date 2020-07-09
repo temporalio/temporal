@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
 )
 
 type (

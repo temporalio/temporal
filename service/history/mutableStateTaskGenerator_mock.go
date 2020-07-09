@@ -33,7 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	history "go.temporal.io/temporal-proto/history/v1"
+	history "go.temporal.io/api/history/v1"
 )
 
 // MockmutableStateTaskGenerator is a mock of mutableStateTaskGenerator interface.

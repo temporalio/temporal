@@ -45,8 +45,8 @@ import (
 	"path"
 	"strconv"
 
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"

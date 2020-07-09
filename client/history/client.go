@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/historyservice/v1"

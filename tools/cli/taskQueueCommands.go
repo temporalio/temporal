@@ -27,9 +27,9 @@ package cli
 import (
 	"os"
 
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"

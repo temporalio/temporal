@@ -28,9 +28,9 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/api/historyservice/v1"

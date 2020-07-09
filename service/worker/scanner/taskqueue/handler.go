@@ -36,7 +36,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/scanner/executor"
-	// taskqueuepb "go.temporal.io/temporal-proto/taskqueue/v1"
+	// taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
 
 type handlerStatus = executor.TaskStatus

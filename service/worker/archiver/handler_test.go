@@ -33,11 +33,11 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/workflow"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"

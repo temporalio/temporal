@@ -32,7 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/workflowservicemock/v1"
+	"go.temporal.io/api/workflowservicemock/v1"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"

@@ -33,6 +33,8 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -47,8 +49,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/cassandra"
-	commonpb "go.temporal.io/temporal-proto/common/v1"
-	historypb "go.temporal.io/temporal-proto/history/v1"
 )
 
 const maxEventID = 9999

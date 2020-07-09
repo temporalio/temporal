@@ -27,7 +27,7 @@ package history
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/gogo/protobuf/types"
 

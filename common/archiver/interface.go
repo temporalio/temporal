@@ -27,8 +27,8 @@ package archiver
 import (
 	"context"
 
-	historypb "go.temporal.io/temporal-proto/history/v1"
-	workflowpb "go.temporal.io/temporal-proto/workflow/v1"
+	historypb "go.temporal.io/api/history/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/cache"

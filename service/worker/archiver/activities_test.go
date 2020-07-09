@@ -31,11 +31,11 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/activity"
+	"go.temporal.io/sdk/activity"
 	"go.uber.org/zap"
 
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"

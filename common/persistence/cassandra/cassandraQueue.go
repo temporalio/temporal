@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cassandra"

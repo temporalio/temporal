@@ -31,7 +31,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/api/serviceerror"
 
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"

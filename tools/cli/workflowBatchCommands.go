@@ -31,9 +31,9 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	enumspb "go.temporal.io/temporal-proto/enums/v1"
-	"go.temporal.io/temporal-proto/workflowservice/v1"
-	sdkclient "go.temporal.io/temporal/client"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
