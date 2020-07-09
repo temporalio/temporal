@@ -80,7 +80,8 @@ override TEST_TAG := -tags $(TEST_TAG)
 endif
 
 PROTO_ROOT := proto
-PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
+PROTO_FILES = $(shell find $(PROTO_ROOT)/internal -name "*.proto")
+PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/api:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
@@ -221,6 +222,16 @@ staticcheck:
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
 	@errcheck ./... || true
+
+api-linter:
+	@printf $(COLOR) "Running api-linter..."
+#	@api-linter --set-exit-status --output-format summary --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --config $(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+#	@api-linter --set-exit-status --output-format summary --proto-path $(PROTO_ROOT)/internal --proto-path $(PROTO_ROOT)/api --config $(PROTO_ROOT)/api-linter.yaml proto/internal/temporal/server/api/historyservice/v1/request_response.proto
+	@echo $(PROTO_FILES)
+
+buf:
+	@printf $(COLOR) "Running buf linter..."
+	@(cd $(PROTO_ROOT) && buf check lint)
 
 check: copyright goimports-check lint vet staticcheck errcheck
 
