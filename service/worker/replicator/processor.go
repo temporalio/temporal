@@ -101,9 +101,6 @@ func newReplicationTaskProcessor(
 	sequentialTaskProcessor task.Processor,
 ) *replicationTaskProcessor {
 
-	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
-
 	return &replicationTaskProcessor{
 		currentCluster:                   currentCluster,
 		sourceCluster:                    sourceCluster,
@@ -115,7 +112,7 @@ func newReplicationTaskProcessor(
 		metricsClient:                    metricsClient,
 		namespacereplicationTaskExecutor: namespacereplicationTaskExecutor,
 		nDCHistoryResender:               nDCHistoryResender,
-		historyClient:                    retryableHistoryClient,
+		historyClient:                    historyClient,
 		timeSource:                       clock.NewRealTimeSource(),
 		namespaceCache:                   namespaceCache,
 		sequentialTaskProcessor:          sequentialTaskProcessor,

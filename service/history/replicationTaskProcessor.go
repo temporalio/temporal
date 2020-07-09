@@ -357,9 +357,21 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 }
 
 func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replicationspb.ReplicationTask) error {
-	err := backoff.Retry(func() error {
-		return p.processTaskOnce(replicationTask)
-	}, p.taskRetryPolicy, isTransientRetryableError)
+	retryTransientError := func() error {
+		return backoff.Retry(
+			func() error {
+				return p.processTaskOnce(replicationTask)
+			},
+			p.taskRetryPolicy,
+			isTransientRetryableError)
+	}
+
+	//Handle service busy error
+	err := backoff.Retry(
+		retryTransientError,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
 
 	if err != nil {
 		p.logger.Error(
@@ -478,6 +490,8 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 func isTransientRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.InvalidArgument:
+		return false
+	case *serviceerror.ResourceExhausted:
 		return false
 	default:
 		return true

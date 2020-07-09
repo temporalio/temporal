@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -293,11 +294,26 @@ func NewEngineWithShardContext(
 	replicationTaskExecutors := make(map[string]replicationTaskExecutor)
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		sourceCluster := replicationTaskFetcher.GetSourceCluster()
+		// Intentionally use the raw client to create its own retry policy
+		adminClient := shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+		adminRetryableClient := admin.NewRetryableClient(
+			adminClient,
+			common.CreateReplicationServiceBusyRetryPolicy(),
+			common.IsResourceExhausted,
+		)
+		// Intentionally use the raw client to create its own retry policy
+		historyClient := shard.GetService().GetClientBean().GetHistoryClient()
+		historyRetryableClient := history.NewRetryableClient(
+			historyClient,
+			common.CreateReplicationServiceBusyRetryPolicy(),
+			common.IsResourceExhausted,
+		)
 		nDCHistoryResender := xdc.NewNDCHistoryResender(
 			shard.GetNamespaceCache(),
-			shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
+			adminRetryableClient,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				return historyEngImpl.ReplicateEventsV2(ctx, request)
+				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+				return err
 			},
 			shard.GetService().GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
