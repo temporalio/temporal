@@ -176,7 +176,7 @@ func retryWorkflow(
 func timeoutWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 ) error {
 
 	if decision, ok := mutableState.GetInFlightDecision(); ok {
@@ -191,7 +191,7 @@ func timeoutWorkflow(
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
 		eventBatchFirstEventID,
-		retryStatus,
+		retryState,
 	)
 	return err
 }

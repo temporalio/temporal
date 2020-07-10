@@ -1583,13 +1583,13 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 			postActions := &updateWorkflowAction{}
 			failure := request.GetFailure()
-			retryStatus, err := mutableState.RetryActivity(ai, failure)
+			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
 			}
-			if retryStatus != enumspb.RETRY_STATUS_IN_PROGRESS {
+			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryStatus, request.GetIdentity()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryState, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
 				}

@@ -217,7 +217,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
+	if request.GetWorkflowExecutionRetentionPeriodDays() > common.MaxWorkflowRetentionPeriodInDays {
 		return nil, errInvalidRetention
 	}
 
@@ -589,7 +589,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			nil
 	}
 
-	isLongPoll := request.GetWaitForNewEvent()
+	isLongPoll := request.GetWaitNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Execution
 	var continuationToken *tokenspb.HistoryContinuation
@@ -1108,22 +1108,22 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 	}
 
 	return &workflowservice.PollForActivityTaskResponse{
-		TaskToken:                       matchingResponse.TaskToken,
-		WorkflowExecution:               matchingResponse.WorkflowExecution,
-		ActivityId:                      matchingResponse.ActivityId,
-		ActivityType:                    matchingResponse.ActivityType,
-		Input:                           matchingResponse.Input,
-		ScheduledTimestamp:              matchingResponse.ScheduledTimestamp,
-		ScheduleToCloseTimeoutSeconds:   matchingResponse.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:                matchingResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      matchingResponse.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         matchingResponse.HeartbeatTimeoutSeconds,
-		Attempt:                         matchingResponse.Attempt,
-		ScheduledTimestampOfThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
-		HeartbeatDetails:                matchingResponse.HeartbeatDetails,
-		WorkflowType:                    matchingResponse.WorkflowType,
-		WorkflowNamespace:               matchingResponse.WorkflowNamespace,
-		Header:                          matchingResponse.Header,
+		TaskToken:                     matchingResponse.TaskToken,
+		WorkflowExecution:             matchingResponse.WorkflowExecution,
+		ActivityId:                    matchingResponse.ActivityId,
+		ActivityType:                  matchingResponse.ActivityType,
+		Input:                         matchingResponse.Input,
+		ScheduledTimestamp:            matchingResponse.ScheduledTimestamp,
+		ScheduleToCloseTimeoutSeconds: matchingResponse.ScheduleToCloseTimeoutSeconds,
+		StartedTimestamp:              matchingResponse.StartedTimestamp,
+		StartToCloseTimeoutSeconds:    matchingResponse.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       matchingResponse.HeartbeatTimeoutSeconds,
+		Attempt:                       matchingResponse.Attempt,
+		ScheduledTimestampThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
+		HeartbeatDetails:              matchingResponse.HeartbeatDetails,
+		WorkflowType:                  matchingResponse.WorkflowType,
+		WorkflowNamespace:             matchingResponse.WorkflowNamespace,
+		Header:                        matchingResponse.Header,
 	}, nil
 }
 
@@ -2616,7 +2616,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != enumspb.ARCHIVAL_STATUS_ENABLED {
+	if entry.GetConfig().VisibilityArchivalState != enumspb.ARCHIVAL_STATE_ENABLED {
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 

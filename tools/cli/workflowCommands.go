@@ -1099,7 +1099,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryStatus())
+		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string

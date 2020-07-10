@@ -250,10 +250,10 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(11), ai4.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 11, activity2Failure, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, identity)
-	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, 11, activity2Failure, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, identity)
+	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 11, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, 11, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskFailedEvent(activity2FailedEvent, 12, 6, 11, activity2Failure, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, identity)
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, 12, 6, 11, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
 	s.Equal(int64(13), s.getNextEventID())
 	_, activity2Running3 := s.msBuilder.GetActivityInfo(6)
 	s.False(activity2Running3)
@@ -595,8 +595,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 12 (buffered) activity2 failed
 	activity2Failure := failure.NewServerFailure("flush-buffered-events-activity2-failed", false)
-	activity2FailedEvent := s.addActivityTaskFailedEvent(6, common.BufferedEventID, activity2Failure, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, identity)
-	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, common.BufferedEventID, activity2Failure, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED, identity)
+	activity2FailedEvent := s.addActivityTaskFailedEvent(6, common.BufferedEventID, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, common.BufferedEventID, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
 	s.Equal(int64(11), s.getNextEventID())
 	_, activity2Running2 := s.msBuilder.GetActivityInfo(6)
 	s.False(activity2Running2)
@@ -870,8 +870,8 @@ func (s *historyBuilderSuite) addActivityTaskCompletedEvent(scheduleID, startedI
 	return event
 }
 
-func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID int64, failure *failurepb.Failure, retryStatus enumspb.RetryStatus, identity string) *historypb.HistoryEvent {
-	event, err := s.msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, retryStatus, identity)
+func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
+	event, err := s.msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, retryState, identity)
 	s.Nil(err)
 	return event
 }
@@ -1031,7 +1031,7 @@ func (s *historyBuilderSuite) validateActivityTaskCompletedEvent(event *historyp
 }
 
 func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *historypb.HistoryEvent, eventID,
-	scheduleID, startedID int64, failure *failurepb.Failure, retryStatus enumspb.RetryStatus, identity string) {
+	scheduleID, startedID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) {
 	s.NotNil(event)
 	s.Equal(enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -1040,7 +1040,7 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *historypb.H
 	s.Equal(scheduleID, attributes.ScheduledEventId)
 	s.Equal(startedID, attributes.StartedEventId)
 	s.Equal(failure, attributes.Failure)
-	s.Equal(retryStatus, attributes.RetryStatus)
+	s.Equal(retryState, attributes.RetryState)
 	s.Equal(identity, attributes.Identity)
 }
 

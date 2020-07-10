@@ -138,15 +138,15 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	isGlobalNamespace := true
 
 	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            description,
-		OwnerEmail:                             email,
-		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             emitMetric,
-		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
-		Data:                                   data,
-		IsGlobalNamespace:                      isGlobalNamespace,
+		Name:                                 namespace,
+		Description:                          description,
+		OwnerEmail:                           email,
+		WorkflowExecutionRetentionPeriodDays: retention,
+		EmitMetric:                           emitMetric,
+		Clusters:                             clusters,
+		ActiveClusterName:                    activeClusterName,
+		Data:                                 data,
+		IsGlobalNamespace:                    isGlobalNamespace,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
@@ -169,15 +169,15 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	isGlobalNamespace := false
 
 	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            description,
-		OwnerEmail:                             email,
-		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             emitMetric,
-		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
-		Data:                                   data,
-		IsGlobalNamespace:                      isGlobalNamespace,
+		Name:                                 namespace,
+		Description:                          description,
+		OwnerEmail:                           email,
+		WorkflowExecutionRetentionPeriodDays: retention,
+		EmitMetric:                           emitMetric,
+		Clusters:                             clusters,
+		ActiveClusterName:                    activeClusterName,
+		Data:                                 data,
+		IsGlobalNamespace:                    isGlobalNamespace,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
@@ -195,8 +195,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 
 	retention := int32(1)
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		WorkflowExecutionRetentionPeriodInDays: retention,
+		Name:                                 namespace,
+		WorkflowExecutionRetentionPeriodDays: retention,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -210,7 +210,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	resp.NamespaceInfo.Id = ""
 	s.Equal(&namespacepb.NamespaceInfo{
 		Name:        namespace,
-		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Description: "",
 		OwnerEmail:  "",
 		Data:        map[string]string{},
@@ -219,9 +219,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: false},
-		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+		HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 		HistoryArchivalUri:                     "",
-		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+		VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalUri:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}, resp.Config)
@@ -256,15 +256,15 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	}
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            description,
-		OwnerEmail:                             email,
-		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             emitMetric,
-		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
-		Data:                                   data,
-		IsGlobalNamespace:                      isGlobalNamespace,
+		Name:                                 namespace,
+		Description:                          description,
+		OwnerEmail:                           email,
+		WorkflowExecutionRetentionPeriodDays: retention,
+		EmitMetric:                           emitMetric,
+		Clusters:                             clusters,
+		ActiveClusterName:                    activeClusterName,
+		Data:                                 data,
+		IsGlobalNamespace:                    isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -278,7 +278,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	resp.NamespaceInfo.Id = ""
 	s.Equal(&namespacepb.NamespaceInfo{
 		Name:        namespace,
-		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Description: description,
 		OwnerEmail:  email,
 		Data:        data,
@@ -287,9 +287,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: emitMetric},
-		HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+		HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 		HistoryArchivalUri:                     "",
-		VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+		VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalUri:                  "",
 		BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}, resp.Config)
@@ -316,14 +316,14 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	}
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            description,
-		OwnerEmail:                             email,
-		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             emitMetric,
-		Clusters:                               clusters,
-		ActiveClusterName:                      s.ClusterMetadata.GetCurrentClusterName(),
-		Data:                                   data,
+		Name:                                 namespace,
+		Description:                          description,
+		OwnerEmail:                           email,
+		WorkflowExecutionRetentionPeriodDays: retention,
+		EmitMetric:                           emitMetric,
+		Clusters:                             clusters,
+		ActiveClusterName:                    s.ClusterMetadata.GetCurrentClusterName(),
+		Data:                                 data,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -334,7 +334,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
 			Name:        namespace,
-			Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
@@ -343,9 +343,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
-			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
@@ -385,8 +385,8 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		WorkflowExecutionRetentionPeriodDays: 1,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -416,7 +416,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		info.Id = ""
 		s.Equal(&namespacepb.NamespaceInfo{
 			Name:        namespace,
-			Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
@@ -425,9 +425,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
-			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		}, config)
@@ -449,9 +449,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
-			VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:                  "",
 			BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		},

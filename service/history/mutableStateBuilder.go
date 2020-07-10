@@ -1098,11 +1098,11 @@ func (e *mutableStateBuilder) GetRequestCancelInfo(
 
 func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	failure *failurepb.Failure,
-) (time.Duration, enumspb.RetryStatus) {
+) (time.Duration, enumspb.RetryState) {
 
 	info := e.executionInfo
 	if !info.HasRetryPolicy {
-		return backoff.NoBackoff, enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET
+		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
 	return getBackoffInterval(
@@ -2332,7 +2332,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	failure *failurepb.Failure,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 	identity string,
 ) (*historypb.HistoryEvent, error) {
 
@@ -2354,7 +2354,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, retryStatus, identity)
+	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, failure, retryState, identity)
 	if err := e.ReplicateActivityTaskFailedEvent(event); err != nil {
 		return nil, err
 	}
@@ -2376,7 +2376,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	timeoutFailure *failurepb.Failure,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskTimedOut
@@ -2403,7 +2403,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutFailure, retryStatus)
+	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutFailure, retryState)
 	if err := e.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 		return nil, err
 	}
@@ -2592,7 +2592,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 
 func (e *mutableStateBuilder) AddFailWorkflowEvent(
 	decisionCompletedEventID int64,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
 ) (*historypb.HistoryEvent, error) {
 
@@ -2601,7 +2601,7 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, retryStatus, attributes)
+	event := e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, retryState, attributes)
 	if err := e.ReplicateWorkflowExecutionFailedEvent(decisionCompletedEventID, event); err != nil {
 		return nil, err
 	}
@@ -2633,7 +2633,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 
 func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 	firstEventID int64,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTimeout
@@ -2641,7 +2641,7 @@ func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddTimeoutWorkflowEvent(retryStatus)
+	event := e.hBuilder.AddTimeoutWorkflowEvent(retryState)
 	if err := e.ReplicateWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
 		return nil, err
 	}
@@ -3784,24 +3784,24 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
 func (e *mutableStateBuilder) RetryActivity(
 	ai *persistence.ActivityInfo,
 	failure *failurepb.Failure,
-) (enumspb.RetryStatus, error) {
+) (enumspb.RetryState, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := e.checkMutability(opTag); err != nil {
-		return enumspb.RETRY_STATUS_INTERNAL_SERVER_ERROR, err
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
 	if !ai.HasRetryPolicy {
-		return enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET, nil
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
 	}
 
 	if ai.CancelRequested {
-		return enumspb.RETRY_STATUS_CANCEL_REQUESTED, nil
+		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
 	now := e.timeSource.Now()
 
-	backoffInterval, retryStatus := getBackoffInterval(
+	backoffInterval, retryState := getBackoffInterval(
 		now,
 		ai.ExpirationTime,
 		ai.Attempt,
@@ -3812,8 +3812,8 @@ func (e *mutableStateBuilder) RetryActivity(
 		failure,
 		ai.NonRetryableErrorTypes,
 	)
-	if retryStatus != enumspb.RETRY_STATUS_IN_PROGRESS {
-		return retryStatus, nil
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return retryState, nil
 	}
 
 	// a retry is needed, update activity info for next retry
@@ -3830,12 +3830,12 @@ func (e *mutableStateBuilder) RetryActivity(
 	if err := e.taskGenerator.generateActivityRetryTasks(
 		ai.ScheduleID,
 	); err != nil {
-		return enumspb.RETRY_STATUS_INTERNAL_SERVER_ERROR, err
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
 	e.updateActivityInfos[ai] = struct{}{}
 	e.syncActivityTasks[ai.ScheduleID] = struct{}{}
-	return enumspb.RETRY_STATUS_IN_PROGRESS, nil
+	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
 // TODO mutable state should generate corresponding transfer / timer tasks according to

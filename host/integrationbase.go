@@ -97,13 +97,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.namespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 	s.Require().NoError(
-		s.registerNamespace(s.testRawHistoryNamespaceName, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.testRawHistoryNamespaceName, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, enumspb.ARCHIVAL_STATUS_DISABLED, "", enumspb.ARCHIVAL_STATUS_DISABLED, ""))
+		s.registerNamespace(s.foreignNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -157,21 +157,21 @@ func (s *IntegrationBase) tearDownSuite() {
 func (s *IntegrationBase) registerNamespace(
 	namespace string,
 	retentionDays int,
-	historyArchivalStatus enumspb.ArchivalStatus,
+	historyArchivalState enumspb.ArchivalState,
 	historyArchivalURI string,
-	visibilityArchivalStatus enumspb.ArchivalStatus,
+	visibilityArchivalState enumspb.ArchivalState,
 	visibilityArchivalURI string,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            namespace,
-		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
-		HistoryArchivalStatus:                  historyArchivalStatus,
-		HistoryArchivalUri:                     historyArchivalURI,
-		VisibilityArchivalStatus:               visibilityArchivalStatus,
-		VisibilityArchivalUri:                  visibilityArchivalURI,
+		Name:                                 namespace,
+		Description:                          namespace,
+		WorkflowExecutionRetentionPeriodDays: int32(retentionDays),
+		HistoryArchivalState:                 historyArchivalState,
+		HistoryArchivalUri:                   historyArchivalURI,
+		VisibilityArchivalState:              visibilityArchivalState,
+		VisibilityArchivalUri:                visibilityArchivalURI,
 	})
 
 	return err
@@ -220,17 +220,17 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:     uuid.New(),
-				Name:   s.archivalNamespace,
-				Status: enumspb.NAMESPACE_STATUS_REGISTERED,
+				Id:    uuid.New(),
+				Name:  s.archivalNamespace,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:            0,
-				HistoryArchivalStatus:    enumspb.ARCHIVAL_STATUS_ENABLED,
-				HistoryArchivalUri:       s.testCluster.archiverBase.historyURI,
-				VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-				VisibilityArchivalUri:    s.testCluster.archiverBase.visibilityURI,
-				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				RetentionDays:           0,
+				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
+				HistoryArchivalUri:      s.testCluster.archiverBase.historyURI,
+				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
+				VisibilityArchivalUri:   s.testCluster.archiverBase.visibilityURI,
+				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,

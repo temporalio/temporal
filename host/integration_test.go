@@ -722,7 +722,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 				{
 					DecisionType: enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION,
 					Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-						//Reason:  "retryable-error",
+						// Reason:  "retryable-error",
 						Failure: failure.NewServerFailure(errorReason, nonRetryable),
 					}},
 				}}, nil
@@ -859,7 +859,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                   identity,
-		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
+		CronSchedule:               cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                       memo,
 		SearchAttributes:           searchAttr,
 	}
@@ -1064,7 +1064,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		WorkflowRunTimeoutSeconds:  1, // set workflow timeout to 1s
 		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                   identity,
-		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		CronSchedule:               cronSchedule, // minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
 		Memo:                       memo,
 		SearchAttributes:           searchAttr,
 	}
@@ -1603,7 +1603,7 @@ func (s *integrationSuite) TestVisibility() {
 				WorkflowId: startRequest.WorkflowId,
 				RunId:      startResponse.RunId,
 			},
-			WaitForNewEvent:        true,
+			WaitNewEvent:           true,
 			HistoryEventFilterType: historyEventFilterType,
 			NextPageToken:          nextToken,
 		})
@@ -2045,7 +2045,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	sort.Slice(closedExecutions, func(i, j int) bool {
 		return closedExecutions[i].GetStartTime().GetValue() < closedExecutions[j].GetStartTime().GetValue()
 	})
-	//The first parent is not the cron workflow, only verify child workflow with cron schedule
+	// The first parent is not the cron workflow, only verify child workflow with cron schedule
 	lastExecution := closedExecutions[1]
 	for i := 2; i != 4; i++ {
 		executionInfo := closedExecutions[i]
@@ -2177,7 +2177,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	signalCount := 0
 	sendSignal := false
 	lastDecisionTimestamp := int64(0)
-	//var signalEvent *historypb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 		// Count signals
@@ -2490,7 +2490,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	workflowComplete := false
 	failDecision := true
 	signalCount := 0
-	//var signalEvent *historypb.HistoryEvent
+	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 		if failDecision {
@@ -3106,7 +3106,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		RequestId:         uuid.New(),
 	})
 
-	//Reset sticky taskqueue before sticky decision task starts
+	// Reset sticky taskqueue before sticky decision task starts
 	s.engine.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,

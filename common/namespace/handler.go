@@ -165,9 +165,9 @@ func (d *HandlerImpl) RegisterNamespace(
 	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
-			registerRequest.HistoryArchivalStatus,
+			registerRequest.HistoryArchivalState,
 			registerRequest.GetHistoryArchivalUri(),
-			clusterHistoryArchivalConfig.GetNamespaceDefaultStatus(),
+			clusterHistoryArchivalConfig.GetNamespaceDefaultState(),
 			clusterHistoryArchivalConfig.GetNamespaceDefaultURI(),
 		)
 		if err != nil {
@@ -185,9 +185,9 @@ func (d *HandlerImpl) RegisterNamespace(
 	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
-			registerRequest.VisibilityArchivalStatus,
+			registerRequest.VisibilityArchivalState,
 			registerRequest.GetVisibilityArchivalUri(),
-			clusterVisibilityArchivalConfig.GetNamespaceDefaultStatus(),
+			clusterVisibilityArchivalConfig.GetNamespaceDefaultState(),
 			clusterVisibilityArchivalConfig.GetNamespaceDefaultURI(),
 		)
 		if err != nil {
@@ -203,19 +203,19 @@ func (d *HandlerImpl) RegisterNamespace(
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          uuid.New(),
 		Name:        registerRequest.GetName(),
-		Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:            registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
-		EmitMetric:               registerRequest.GetEmitMetric(),
-		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
-		HistoryArchivalUri:       nextHistoryArchivalState.URI,
-		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
-		VisibilityArchivalUri:    nextVisibilityArchivalState.URI,
-		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+		RetentionDays:           registerRequest.GetWorkflowExecutionRetentionPeriodDays(),
+		EmitMetric:              registerRequest.GetEmitMetric(),
+		HistoryArchivalState:    nextHistoryArchivalState.State,
+		HistoryArchivalUri:      nextHistoryArchivalState.URI,
+		VisibilityArchivalState: nextVisibilityArchivalState.State,
+		VisibilityArchivalUri:   nextVisibilityArchivalState.URI,
+		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -380,15 +380,15 @@ func (d *HandlerImpl) UpdateNamespace(
 	isGlobalNamespace := getResponse.IsGlobalNamespace
 
 	currentHistoryArchivalState := &ArchivalState{
-		Status: config.HistoryArchivalStatus,
-		URI:    config.HistoryArchivalUri,
+		State: config.HistoryArchivalState,
+		URI:   config.HistoryArchivalUri,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
 	historyArchivalConfigChanged := false
 	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if updateRequest.Config != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfig()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalUri(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalState, cfg.GetHistoryArchivalUri(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -399,15 +399,15 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	currentVisibilityArchivalState := &ArchivalState{
-		Status: config.VisibilityArchivalStatus,
-		URI:    config.VisibilityArchivalUri,
+		State: config.VisibilityArchivalState,
+		URI:   config.VisibilityArchivalUri,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	visibilityArchivalConfigChanged := false
 	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if updateRequest.Config != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfig()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalUri(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalState, cfg.GetVisibilityArchivalUri(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -450,12 +450,12 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
-			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
+			config.HistoryArchivalState = nextHistoryArchivalState.State
 			config.HistoryArchivalUri = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
-			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
+			config.VisibilityArchivalState = nextVisibilityArchivalState.State
 			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
@@ -608,7 +608,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	}
 
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	getResponse.Namespace.Info.Status = enumspb.NAMESPACE_STATUS_DEPRECATED
+	getResponse.Namespace.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info:                        getResponse.Namespace.Info,
@@ -636,7 +636,7 @@ func (d *HandlerImpl) createResponse(
 
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
-		Status:      info.Status,
+		State:       info.State,
 		Description: info.Description,
 		OwnerEmail:  info.Owner,
 		Data:        info.Data,
@@ -646,9 +646,9 @@ func (d *HandlerImpl) createResponse(
 	configResult := &namespacepb.NamespaceConfig{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
+		HistoryArchivalState:                   config.HistoryArchivalState,
 		HistoryArchivalUri:                     config.HistoryArchivalUri,
-		VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
+		VisibilityArchivalState:                config.VisibilityArchivalState,
 		VisibilityArchivalUri:                  config.VisibilityArchivalUri,
 		BadBinaries:                            config.BadBinaries,
 	}
@@ -700,19 +700,19 @@ func (d *HandlerImpl) mergeNamespaceData(
 }
 
 func (d *HandlerImpl) toArchivalRegisterEvent(
-	status enumspb.ArchivalStatus,
+	state enumspb.ArchivalState,
 	URI string,
-	defaultStatus enumspb.ArchivalStatus,
+	defaultState enumspb.ArchivalState,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
 	event := &ArchivalEvent{
-		status:     status,
+		state:      state,
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == enumspb.ARCHIVAL_STATUS_UNSPECIFIED {
-		event.status = defaultStatus
+	if event.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED {
+		event.state = defaultState
 	}
 	if err := event.validate(); err != nil {
 		return nil, err
@@ -721,13 +721,13 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *HandlerImpl) toArchivalUpdateEvent(
-	status enumspb.ArchivalStatus,
+	state enumspb.ArchivalState,
 	URI string,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
 	event := &ArchivalEvent{
-		status:     status,
+		state:      state,
 		URI:        URI,
 		defaultURI: defaultURI,
 	}

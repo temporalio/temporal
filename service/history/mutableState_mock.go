@@ -117,7 +117,7 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskCompletedEvent(arg0, arg1
 }
 
 // AddActivityTaskFailedEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskFailedEvent(arg0, arg1 int64, arg2 *failure.Failure, arg3 enums.RetryStatus, arg4 string) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddActivityTaskFailedEvent(arg0, arg1 int64, arg2 *failure.Failure, arg3 enums.RetryState, arg4 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskFailedEvent", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -163,7 +163,7 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskStartedEvent(arg0, arg1, 
 }
 
 // AddActivityTaskTimedOutEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 *failure.Failure, arg3 enums.RetryStatus) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 *failure.Failure, arg3 enums.RetryState) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskTimedOutEvent", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -464,7 +464,7 @@ func (mr *MockmutableStateMockRecorder) AddExternalWorkflowExecutionSignaled(arg
 }
 
 // AddFailWorkflowEvent mocks base method.
-func (m *MockmutableState) AddFailWorkflowEvent(arg0 int64, arg1 enums.RetryStatus, arg2 *decision.FailWorkflowExecutionDecisionAttributes) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddFailWorkflowEvent(arg0 int64, arg1 enums.RetryState, arg2 *decision.FailWorkflowExecutionDecisionAttributes) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddFailWorkflowEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -599,7 +599,7 @@ func (mr *MockmutableStateMockRecorder) AddStartChildWorkflowExecutionInitiatedE
 }
 
 // AddTimeoutWorkflowEvent mocks base method.
-func (m *MockmutableState) AddTimeoutWorkflowEvent(arg0 int64, arg1 enums.RetryStatus) (*history.HistoryEvent, error) {
+func (m *MockmutableState) AddTimeoutWorkflowEvent(arg0 int64, arg1 enums.RetryState) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTimeoutWorkflowEvent", arg0, arg1)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -790,10 +790,10 @@ func (mr *MockmutableStateMockRecorder) CopyToPersistence() *gomock.Call {
 }
 
 // RetryActivity mocks base method.
-func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failure *failure.Failure) (enums.RetryStatus, error) {
+func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failure *failure.Failure) (enums.RetryState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetryActivity", ai, failure)
-	ret0, _ := ret[0].(enums.RetryStatus)
+	ret0, _ := ret[0].(enums.RetryState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1289,11 +1289,11 @@ func (mr *MockmutableStateMockRecorder) GetRequestCancelInfo(arg0 interface{}) *
 }
 
 // GetRetryBackoffDuration mocks base method.
-func (m *MockmutableState) GetRetryBackoffDuration(failure *failure.Failure) (time.Duration, enums.RetryStatus) {
+func (m *MockmutableState) GetRetryBackoffDuration(failure *failure.Failure) (time.Duration, enums.RetryState) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRetryBackoffDuration", failure)
 	ret0, _ := ret[0].(time.Duration)
-	ret1, _ := ret[1].(enums.RetryStatus)
+	ret1, _ := ret[1].(enums.RetryState)
 	return ret0, ret1
 }
 

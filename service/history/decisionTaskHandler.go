@@ -443,7 +443,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval, retryStatus := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	backoffInterval, retryState := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
@@ -458,7 +458,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
 		// no retry or cron
-		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, retryStatus, attr); err != nil {
+		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, retryState, attr); err != nil {
 			return err
 		}
 		return nil
@@ -672,7 +672,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		// TODO(maxim): is decisionTaskCompletedID the correct id?
 		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
 		handler.stopProcessing = true
-		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID, enumspb.RETRY_STATUS_TIMEOUT)
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID, enumspb.RETRY_STATE_TIMEOUT)
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",

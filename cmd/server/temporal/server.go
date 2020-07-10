@@ -238,9 +238,9 @@ func (s *server) startService() common.Daemon {
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,
-		s.cfg.Archival.History.Status,
+		s.cfg.Archival.History.State,
 		s.cfg.Archival.History.EnableRead,
-		s.cfg.Archival.Visibility.Status,
+		s.cfg.Archival.Visibility.State,
 		s.cfg.Archival.Visibility.EnableRead,
 		&s.cfg.NamespaceDefaults.Archival,
 	)

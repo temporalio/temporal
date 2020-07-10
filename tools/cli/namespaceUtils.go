@@ -89,7 +89,7 @@ var (
 			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
-			Name:  FlagHistoryArchivalStatusWithAlias,
+			Name:  FlagHistoryArchivalStateWithAlias,
 			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
@@ -97,7 +97,7 @@ var (
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
 		cli.StringFlag{
-			Name:  FlagVisibilityArchivalStatusWithAlias,
+			Name:  FlagVisibilityArchivalStateWithAlias,
 			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
@@ -139,7 +139,7 @@ var (
 			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
-			Name:  FlagHistoryArchivalStatusWithAlias,
+			Name:  FlagHistoryArchivalStateWithAlias,
 			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
@@ -147,7 +147,7 @@ var (
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
 		cli.StringFlag{
-			Name:  FlagVisibilityArchivalStatusWithAlias,
+			Name:  FlagVisibilityArchivalStateWithAlias,
 			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
@@ -332,9 +332,9 @@ func initializeArchivalMetadata(
 
 	return archiver.NewArchivalMetadata(
 		dynamicConfig,
-		serviceConfig.Archival.History.Status,
+		serviceConfig.Archival.History.State,
 		serviceConfig.Archival.History.EnableRead,
-		serviceConfig.Archival.Visibility.Status,
+		serviceConfig.Archival.Visibility.State,
 		serviceConfig.Archival.Visibility.EnableRead,
 		&serviceConfig.NamespaceDefaults.Archival,
 	)
