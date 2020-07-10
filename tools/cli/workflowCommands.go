@@ -921,12 +921,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		}
 
 		if pa.HeartbeatDetails != nil {
-			heartbeatDetails, err := payloads.ToPrettyString(pa.HeartbeatDetails)
-			if err != nil {
-				ErrorAndExit("Unable to decode heartbeat details.", err)
-			}
-
-			tmpAct.HeartbeatDetails = heartbeatDetails
+			tmpAct.HeartbeatDetails = payloads.ToString(pa.HeartbeatDetails)
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}

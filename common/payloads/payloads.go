@@ -26,11 +26,10 @@ package payloads
 
 import (
 	"bytes"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/encoded"
-
-	"go.temporal.io/server/common/payload"
 )
 
 var (
@@ -63,7 +62,15 @@ func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
 	return dataConverter.FromPayloads(ps, valuePtr...)
 }
 
-func ToPrettyString(ps *commonpb.Payloads) (string, error) {
+func ToString(ps *commonpb.Payloads) string {
+	str, err := toString(ps)
+	if err != nil {
+		return fmt.Sprintf("Unable to decode heartbeat details. %+v", err)
+	}
+	return str
+}
+
+func toString(ps *commonpb.Payloads) (string, error) {
 	var buf bytes.Buffer
 	details, err := dataConverter.ToStrings(ps)
 	if err != nil {
@@ -77,23 +84,9 @@ func ToPrettyString(ps *commonpb.Payloads) (string, error) {
 	}
 
 	if buf.Len() > 1 {
-		buf.Truncate(buf.Len() - 2) // cut the last comma
+		buf.Truncate(buf.Len() - 2) // cut the last comma and space
 	}
 
 	buf.WriteString("]")
 	return buf.String(), nil
-}
-
-func ToString(ps *commonpb.Payloads) string {
-	var buf bytes.Buffer
-	buf.WriteString("{")
-	for _, p := range ps.GetPayloads() {
-		buf.WriteString(payload.ToString(p))
-		buf.WriteString(",")
-	}
-	if buf.Len() > 1 {
-		buf.Truncate(buf.Len() - 1) // cut the last comma
-	}
-	buf.WriteString("}")
-	return buf.String()
 }
