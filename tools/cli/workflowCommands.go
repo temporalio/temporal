@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -925,8 +926,16 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			tmpAct.HeartbeatDetails = make([]string, len(pa.HeartbeatDetails.Payloads))
 
 			for i := range valuePtrs {
-				var untypedDetail interface{}
-				valuePtrs[i] = &untypedDetail
+				encoding := string(pa.HeartbeatDetails.Payloads[i].Metadata["encoding"])
+				if encoding == "json" {
+					var untypedDetail interface{}
+					valuePtrs[i] = &untypedDetail
+				} else if encoding == "raw" {
+					var byteSlice []byte
+					valuePtrs[i] = &byteSlice
+				} else {
+					ErrorAndExit("Unable to decode heartbeat details. Unknown encoding encountered.", nil)
+				}
 			}
 
 			err := payloads.Decode(pa.HeartbeatDetails, valuePtrs...)
@@ -935,8 +944,15 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			}
 
 			for i, valuePtr := range valuePtrs {
-				value := *(valuePtr.(*interface{}))
-				tmpAct.HeartbeatDetails[i] = fmt.Sprintf("%+v", value)
+				encoding := string(pa.HeartbeatDetails.Payloads[i].Metadata["encoding"])
+				if encoding == "json" {
+					value := *(valuePtr.(*interface{}))
+					tmpAct.HeartbeatDetails[i] = fmt.Sprintf("%+v", value)
+				} else if encoding == "raw" {
+					byteSlice := *(valuePtr.(*[]byte))
+					base64Bytes := base64.RawStdEncoding.EncodeToString(byteSlice)
+					tmpAct.HeartbeatDetails[i] = fmt.Sprintf("byte array (base 64): %+v", base64Bytes)
+				}
 			}
 		}
 		pendingActs = append(pendingActs, tmpAct)
