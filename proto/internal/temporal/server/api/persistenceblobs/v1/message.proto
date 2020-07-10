@@ -335,7 +335,7 @@ message NamespaceDetail {
 
 message NamespaceInfo {
     string id = 1;
-    temporal.api.enums.v1.NamespaceStatus status = 2;
+    temporal.api.enums.v1.NamespaceState state = 2;
     string name = 3;
     string description = 4;
     string owner = 5;
@@ -352,9 +352,9 @@ message NamespaceConfig {
     bool emit_metric = 2;
     string archival_bucket = 3;
     temporal.api.namespace.v1.BadBinaries bad_binaries = 16;
-    temporal.api.enums.v1.ArchivalStatus history_archival_status = 18;
+    temporal.api.enums.v1.ArchivalState history_archival_state = 18;
     string history_archival_uri = 19;
-    temporal.api.enums.v1.ArchivalStatus visibility_archival_status = 20;
+    temporal.api.enums.v1.ArchivalState visibility_archival_state = 20;
     string visibility_archival_uri = 21;
 }
 
