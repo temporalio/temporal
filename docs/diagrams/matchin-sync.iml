@@ -4,30 +4,30 @@
 !pragma teoz true
 
 
-participant ActivityWorker
+participant Worker
 participant Frontend
 participant History
 participant Matching
-database ActivityTaskList
+database TaskQueue
 
 == Synchronous Task Matching ==
 
-activate ActivityWorker
-   ActivityWorker -> Frontend: PollForActivityTask
-   Frontend -> Matching: PollForActivityTask
-     Matching -> ActivityTaskList: Load Task
-     ActivityTaskList --> Matching: No Task Available
+activate Worker
+   Worker -> Frontend: PollForTask
+   Frontend -> Matching: PollForTask
+     Matching -> TaskQueue: Load Task
+     TaskQueue --> Matching: No Task Available
      Matching -> Matching: Queue Poll
 activate History
     History->Matching: Add Task
     Matching -> Matching: Dequeue Poll
-    Matching -> History: StartActivityTask
+    Matching -> History: StartTask
     History --> Matching
     Matching --> Frontend
     Matching-->History: Add Task
-    Frontend --> ActivityWorker
+    Frontend --> Worker
 deactivate History
 
-deactivate ActivityWorker
+deactivate Worker
 
 @enduml
