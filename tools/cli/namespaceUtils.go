@@ -90,7 +90,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
-			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
+			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
@@ -98,7 +98,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalStateWithAlias,
-			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
@@ -140,7 +140,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
-			Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
+			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
@@ -148,7 +148,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalStateWithAlias,
-			Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
 		cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
