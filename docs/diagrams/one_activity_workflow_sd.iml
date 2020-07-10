@@ -1,0 +1,135 @@
+'Sequence Diagram of one activity workflow
+
+@startuml
+!pragma teoz true
+
+actor Client
+participant WorkflowWorker
+participant ActivityWorker
+control Temporal
+database History
+database WorkflowTaskList
+database ActivityTaskList
+
+== Start Workflow Execution ==
+
+Client->Temporal: StartWorkflowExecution
+activate Temporal
+
+  Temporal->History:Add WorkflowExecutionStartedEvent
+  History-->Temporal
+
+  Temporal -> WorkflowTaskList: Add DecisionTask
+  WorkflowTaskList --> Temporal
+
+  Temporal -> History: Add DecisionTaskScheduledEvent
+  History-->Temporal
+
+Temporal --> Client: StartWorkflowExecution
+deactivate Temporal
+
+== Process Decision Task ==
+
+WorkflowWorker -> Temporal: PollForDecisionTask
+activate Temporal
+
+  Temporal -> WorkflowTaskList: PollForDecisionTask
+  WorkflowTaskList --> Temporal: PollForDecisionTask
+
+  Temporal -> History: Add DecisionTaskStartedEvent
+  History-->Temporal
+
+{start} Temporal --> WorkflowWorker: PollForDecisionTask
+deactivate Temporal
+
+activate WorkflowWorker
+ref over WorkflowWorker: Perform Workflow Logic
+
+  WorkflowWorker->WorkflowWorker: ScheduleActivityTaskDecision
+
+{end}  WorkflowWorker->Temporal: RespondDecisionTaskCompleted
+  activate Temporal
+
+'  {start} <-> {end}  : DecisionTaskTimeout
+
+    Temporal->History: Add DecisionTaskCompletedEvent
+    History-->Temporal
+
+    Temporal->History: Add ActivityTaskScheduledEvent
+    History-->Temporal
+
+    Temporal->ActivityTaskList: Add ActivityTask
+    ActivityTaskList-->Temporal
+
+  Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
+  deactivate Temporal
+deactivate WorkflowWorker
+
+== Process Activity Task ==
+
+ActivityWorker->Temporal: PollForActivityTask
+activate Temporal
+
+  Temporal->ActivityTaskList: PollForActivityTask
+  ActivityTaskList-->Temporal: PollForActivityTask
+
+  Temporal->History: Add ActivityTaskStartedEvent
+  History-->Temporal
+
+  Temporal-->ActivityWorker:PollForActivityTask
+
+deactivate Temporal
+
+activate ActivityWorker
+ref over ActivityWorker: Perform Activity Logic
+
+  ActivityWorker->Temporal:RespondActivityTaskCompleted
+  activate Temporal
+
+    Temporal->History:Add ActivityTaskCompletedEvent
+    History-->Temporal
+
+    Temporal -> WorkflowTaskList: Add DecisionTask
+    WorkflowTaskList --> Temporal
+
+    Temporal -> History: Add DecisionTaskScheduledEvent
+    History-->Temporal
+
+  Temporal-->ActivityWorker
+  deactivate Temporal
+
+deactivate ActivityWorker
+
+== Process Decision Task ==
+
+WorkflowWorker -> Temporal: PollForDecisionTask
+activate Temporal
+
+  Temporal -> WorkflowTaskList: PollForDecisionTask
+  WorkflowTaskList --> Temporal: PollForDecisionTask
+
+  Temporal -> History: Add DecisionTaskStartedEvent
+  History-->Temporal
+
+Temporal --> WorkflowWorker: PollForDecisionTask
+deactivate Temporal
+
+activate WorkflowWorker
+ref over WorkflowWorker: Perform Workflow Logic
+
+  WorkflowWorker->WorkflowWorker: CompleteWorkflowExecutionDecision
+  WorkflowWorker->Temporal: RespondDecisionTaskCompleted
+  activate Temporal
+
+    Temporal->History: Add DecisionTaskCompletedEvent
+    History-->Temporal
+
+    Temporal->History: Add WorkflowExecutionCompletedEvent
+    History-->Temporal
+
+  Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
+  deactivate Temporal
+
+deactivate WorkflowWorker
+
+@enduml
