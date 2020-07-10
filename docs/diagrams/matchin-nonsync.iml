@@ -1,0 +1,35 @@
+''Sequence Diagram of Normal Match
+
+@startuml
+!pragma teoz true
+
+
+participant ActivityWorker
+participant Frontend
+participant History
+participant Matching
+database ActivityTaskList
+
+== Add Task ==
+
+activate History
+    History->Matching: Add Task
+    Matching -> ActivityTaskList: Add Task
+    ActivityTaskList-->Matching
+    Matching-->History
+deactivate History
+== Match Task ==
+
+activate ActivityWorker
+   ActivityWorker -> Frontend: PollForActivityTask
+   Frontend -> Matching: PollForActivityTask
+   Matching -> ActivityTaskList: Load Task
+   ActivityTaskList --> Matching
+   Matching -> History: StartActivityTask
+   History --> Matching
+   Matching --> Frontend
+   Frontend --> ActivityWorker
+
+deactivate ActivityWorker
+
+@enduml

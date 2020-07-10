@@ -1,0 +1,33 @@
+'Sequence Diagram of Sync Match
+
+@startuml
+!pragma teoz true
+
+
+participant ActivityWorker
+participant Frontend
+participant History
+participant Matching
+database ActivityTaskList
+
+== Synchronous Task Matching ==
+
+activate ActivityWorker
+   ActivityWorker -> Frontend: PollForActivityTask
+   Frontend -> Matching: PollForActivityTask
+     Matching -> ActivityTaskList: Load Task
+     ActivityTaskList --> Matching: No Task Available
+     Matching -> Matching: Queue Poll
+activate History
+    History->Matching: Add Task
+    Matching -> Matching: Dequeue Poll
+    Matching -> History: StartActivityTask
+    History --> Matching
+    Matching --> Frontend
+    Matching-->History: Add Task
+    Frontend --> ActivityWorker
+deactivate History
+
+deactivate ActivityWorker
+
+@enduml
