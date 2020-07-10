@@ -931,7 +931,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 
 			err := payloads.Decode(pa.HeartbeatDetails, valuePtrs...)
 			if err != nil {
-				ErrorAndExit("Unable to decode heartbeat details", err)
+				ErrorAndExit("Unable to decode heartbeat details.", err)
 			}
 
 			for i, valuePtr := range valuePtrs {
