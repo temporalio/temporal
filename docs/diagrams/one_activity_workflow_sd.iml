@@ -6,133 +6,134 @@
 actor Client
 participant WorkflowWorker
 participant ActivityWorker
-control Temporal
-database History
+box "HistoryService Service" #LightBlue
+control "History Service" as HistoryService
+database Events
 database WorkflowTaskQueue
 database ActivityTaskQueue
 
 == Start Workflow Execution ==
 
-Client->Temporal: StartWorkflowExecution
-activate Temporal
+Client->HistoryService: StartWorkflowExecution
+activate HistoryService
 
 group atomic
-  Temporal->History:Add WorkflowExecutionStartedEvent
-  History-->Temporal
+  HistoryService->Events:Add WorkflowExecutionStartedEvent
+  Events-->HistoryService
 
-  Temporal -> WorkflowTaskQueue: Add DecisionTask
-  WorkflowTaskQueue --> Temporal
+  HistoryService -> WorkflowTaskQueue: Add DecisionTask
+  WorkflowTaskQueue --> HistoryService
 
-  Temporal -> History: Add DecisionTaskScheduledEvent
-  History-->Temporal
+  HistoryService -> Events: Add DecisionTaskScheduledEvent
+  Events-->HistoryService
 end
-Temporal --> Client: StartWorkflowExecution
+HistoryService --> Client: StartWorkflowExecution
 
-deactivate Temporal
+deactivate HistoryService
 
 == Process Decision Task ==
 
-WorkflowWorker -> Temporal: PollForDecisionTask
-activate Temporal
+WorkflowWorker -> HistoryService: PollForDecisionTask
+activate HistoryService
 
-  Temporal -> WorkflowTaskQueue: PollForDecisionTask
-  WorkflowTaskQueue --> Temporal: PollForDecisionTask
+  HistoryService -> WorkflowTaskQueue: PollForDecisionTask
+  WorkflowTaskQueue --> HistoryService: PollForDecisionTask
 
-  Temporal -> History: Add DecisionTaskStartedEvent
-  History-->Temporal
+  HistoryService -> Events: Add DecisionTaskStartedEvent
+  Events-->HistoryService
 
-{start} Temporal --> WorkflowWorker: PollForDecisionTask
-deactivate Temporal
+{start} HistoryService --> WorkflowWorker: PollForDecisionTask
+deactivate HistoryService
 
 activate WorkflowWorker
 group Perform Workflow Logic
 
   WorkflowWorker->WorkflowWorker: ScheduleActivityTaskDecision
 end
-{end}  WorkflowWorker->Temporal: RespondDecisionTaskCompleted
-  activate Temporal
+{end}  WorkflowWorker->HistoryService: RespondDecisionTaskCompleted
+  activate HistoryService
 
 '  {start} <-> {end}  : DecisionTaskTimeout
 group atomic
-    Temporal->History: Add DecisionTaskCompletedEvent
-    History-->Temporal
+    HistoryService->Events: Add DecisionTaskCompletedEvent
+    Events-->HistoryService
 
-    Temporal->History: Add ActivityTaskScheduledEvent
-    History-->Temporal
+    HistoryService->Events: Add ActivityTaskScheduledEvent
+    Events-->HistoryService
 
-    Temporal->ActivityTaskQueue: Add ActivityTask
-    ActivityTaskQueue-->Temporal
+    HistoryService->ActivityTaskQueue: Add ActivityTask
+    ActivityTaskQueue-->HistoryService
 end
-  Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
-  deactivate Temporal
+  HistoryService-->WorkflowWorker: RespondDecisionTaskCompleted
+  deactivate HistoryService
 deactivate WorkflowWorker
 
 == Process Activity Task ==
 
-ActivityWorker->Temporal: PollForActivityTask
-activate Temporal
+ActivityWorker->HistoryService: PollForActivityTask
+activate HistoryService
 
-  Temporal->ActivityTaskQueue: PollForActivityTask
-  ActivityTaskQueue-->Temporal: PollForActivityTask
+  HistoryService->ActivityTaskQueue: PollForActivityTask
+  ActivityTaskQueue-->HistoryService: PollForActivityTask
 
-  Temporal->History: Add ActivityTaskStartedEvent
-  History-->Temporal
+  HistoryService->Events: Add ActivityTaskStartedEvent
+  Events-->HistoryService
 
-  Temporal-->ActivityWorker:PollForActivityTask
+  HistoryService-->ActivityWorker:PollForActivityTask
 
-deactivate Temporal
+deactivate HistoryService
 
 activate ActivityWorker
 
 ref over ActivityWorker: Perform Activity Logic
 
-  ActivityWorker->Temporal:RespondActivityTaskCompleted
-  activate Temporal
+  ActivityWorker->HistoryService:RespondActivityTaskCompleted
+  activate HistoryService
 group atomic
-    Temporal->History:Add ActivityTaskCompletedEvent
-    History-->Temporal
+    HistoryService->Events:Add ActivityTaskCompletedEvent
+    Events-->HistoryService
 
-    Temporal -> WorkflowTaskQueue: Add DecisionTask
-    WorkflowTaskQueue --> Temporal
+    HistoryService -> WorkflowTaskQueue: Add DecisionTask
+    WorkflowTaskQueue --> HistoryService
 
-    Temporal -> History: Add DecisionTaskScheduledEvent
-    History-->Temporal
+    HistoryService -> Events: Add DecisionTaskScheduledEvent
+    Events-->HistoryService
 end
-  Temporal-->ActivityWorker
-  deactivate Temporal
+  HistoryService-->ActivityWorker
+  deactivate HistoryService
 
 deactivate ActivityWorker
 
 == Process Decision Task ==
 
-WorkflowWorker -> Temporal: PollForDecisionTask
-activate Temporal
+WorkflowWorker -> HistoryService: PollForDecisionTask
+activate HistoryService
 
-  Temporal -> WorkflowTaskQueue: PollForDecisionTask
-  WorkflowTaskQueue --> Temporal: PollForDecisionTask
+  HistoryService -> WorkflowTaskQueue: PollForDecisionTask
+  WorkflowTaskQueue --> HistoryService: PollForDecisionTask
 
-  Temporal -> History: Add DecisionTaskStartedEvent
-  History-->Temporal
+  HistoryService -> Events: Add DecisionTaskStartedEvent
+  Events-->HistoryService
 
-Temporal --> WorkflowWorker: PollForDecisionTask
-deactivate Temporal
+HistoryService --> WorkflowWorker: PollForDecisionTask
+deactivate HistoryService
 
 activate WorkflowWorker
 group Perform Workflow Logic
 
   WorkflowWorker->WorkflowWorker: CompleteWorkflowExecutionDecision
 end
-  WorkflowWorker->Temporal: RespondDecisionTaskCompleted
-  activate Temporal
+  WorkflowWorker->HistoryService: RespondDecisionTaskCompleted
+  activate HistoryService
 group atomic
-    Temporal->History: Add DecisionTaskCompletedEvent
-    History-->Temporal
+    HistoryService->Events: Add DecisionTaskCompletedEvent
+    Events-->HistoryService
 
-    Temporal->History: Add WorkflowExecutionCompletedEvent
-    History-->Temporal
+    HistoryService->Events: Add WorkflowExecutionCompletedEvent
+    Events-->HistoryService
 end
-  Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
-  deactivate Temporal
+  HistoryService-->WorkflowWorker: RespondDecisionTaskCompleted
+  deactivate HistoryService
 
 deactivate WorkflowWorker
 
