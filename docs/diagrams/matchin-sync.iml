@@ -21,6 +21,7 @@ activate Worker
 activate History
     History->Matching: Add Task
     Matching -> Matching: Dequeue Poll
+        note over Matching: Poll was wating
     Matching -> History: StartTask
     History --> Matching
     Matching --> Frontend
