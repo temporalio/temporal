@@ -9,7 +9,7 @@
 *.test
 *.xml
 *.swp
-*.iml
+/*.iml
 *.cov
 *.html
 test
