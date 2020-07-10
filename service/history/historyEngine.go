@@ -769,7 +769,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
-	if expectedNextEventID >= response.GetNextEventId() && response.GetIsWorkflowRunning() {
+	if expectedNextEventID >= response.GetNextEventId() && response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		if err != nil {
 			return nil, err
@@ -784,7 +784,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
 			return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
 		}
-		if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
+		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return response, nil
 		}
 
@@ -799,14 +799,13 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			case event := <-channel:
 				response.LastFirstEventId = event.lastFirstEventID
 				response.NextEventId = event.nextEventID
-				response.IsWorkflowRunning = event.workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 				response.PreviousStartedEventId = event.previousStartedEventID
 				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
 					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
 				}
-				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
+				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
 				}
 			case <-timer.C:
@@ -832,7 +831,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	req := request.GetRequest()
-	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
+	if mutableStateResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		status := mutableStateResp.GetWorkflowStatus()
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -984,7 +983,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 				tag.Error(err))
 			return nil, err
 		}
-		if msResp.GetIsWorkflowRunning() {
+		if msResp.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			e.logger.Info("query direct through matching failed on sticky, clearing sticky before attempting on non-sticky",
 				tag.WorkflowNamespace(queryRequest.GetNamespace()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
@@ -1085,7 +1084,6 @@ func (e *historyEngineImpl) getMutableState(
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
-		IsWorkflowRunning:                     mutableState.IsWorkflowExecutionRunning(),
 		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
