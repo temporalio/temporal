@@ -8,24 +8,26 @@ participant WorkflowWorker
 participant ActivityWorker
 control Temporal
 database History
-database WorkflowTaskList
-database ActivityTaskList
+database WorkflowTaskQueue
+database ActivityTaskQueue
 
 == Start Workflow Execution ==
 
 Client->Temporal: StartWorkflowExecution
 activate Temporal
 
+alt atomic
   Temporal->History:Add WorkflowExecutionStartedEvent
   History-->Temporal
 
-  Temporal -> WorkflowTaskList: Add DecisionTask
-  WorkflowTaskList --> Temporal
+  Temporal -> WorkflowTaskQueue: Add DecisionTask
+  WorkflowTaskQueue --> Temporal
 
   Temporal -> History: Add DecisionTaskScheduledEvent
   History-->Temporal
-
+end
 Temporal --> Client: StartWorkflowExecution
+
 deactivate Temporal
 
 == Process Decision Task ==
@@ -33,8 +35,8 @@ deactivate Temporal
 WorkflowWorker -> Temporal: PollForDecisionTask
 activate Temporal
 
-  Temporal -> WorkflowTaskList: PollForDecisionTask
-  WorkflowTaskList --> Temporal: PollForDecisionTask
+  Temporal -> WorkflowTaskQueue: PollForDecisionTask
+  WorkflowTaskQueue --> Temporal: PollForDecisionTask
 
   Temporal -> History: Add DecisionTaskStartedEvent
   History-->Temporal
@@ -51,16 +53,16 @@ ref over WorkflowWorker: Perform Workflow Logic
   activate Temporal
 
 '  {start} <-> {end}  : DecisionTaskTimeout
-
+alt atomic
     Temporal->History: Add DecisionTaskCompletedEvent
     History-->Temporal
 
     Temporal->History: Add ActivityTaskScheduledEvent
     History-->Temporal
 
-    Temporal->ActivityTaskList: Add ActivityTask
-    ActivityTaskList-->Temporal
-
+    Temporal->ActivityTaskQueue: Add ActivityTask
+    ActivityTaskQueue-->Temporal
+end
   Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
   deactivate Temporal
 deactivate WorkflowWorker
@@ -70,8 +72,8 @@ deactivate WorkflowWorker
 ActivityWorker->Temporal: PollForActivityTask
 activate Temporal
 
-  Temporal->ActivityTaskList: PollForActivityTask
-  ActivityTaskList-->Temporal: PollForActivityTask
+  Temporal->ActivityTaskQueue: PollForActivityTask
+  ActivityTaskQueue-->Temporal: PollForActivityTask
 
   Temporal->History: Add ActivityTaskStartedEvent
   History-->Temporal
@@ -85,16 +87,16 @@ ref over ActivityWorker: Perform Activity Logic
 
   ActivityWorker->Temporal:RespondActivityTaskCompleted
   activate Temporal
-
+alt atomic
     Temporal->History:Add ActivityTaskCompletedEvent
     History-->Temporal
 
-    Temporal -> WorkflowTaskList: Add DecisionTask
-    WorkflowTaskList --> Temporal
+    Temporal -> WorkflowTaskQueue: Add DecisionTask
+    WorkflowTaskQueue --> Temporal
 
     Temporal -> History: Add DecisionTaskScheduledEvent
     History-->Temporal
-
+end
   Temporal-->ActivityWorker
   deactivate Temporal
 
@@ -105,8 +107,8 @@ deactivate ActivityWorker
 WorkflowWorker -> Temporal: PollForDecisionTask
 activate Temporal
 
-  Temporal -> WorkflowTaskList: PollForDecisionTask
-  WorkflowTaskList --> Temporal: PollForDecisionTask
+  Temporal -> WorkflowTaskQueue: PollForDecisionTask
+  WorkflowTaskQueue --> Temporal: PollForDecisionTask
 
   Temporal -> History: Add DecisionTaskStartedEvent
   History-->Temporal
@@ -120,13 +122,13 @@ ref over WorkflowWorker: Perform Workflow Logic
   WorkflowWorker->WorkflowWorker: CompleteWorkflowExecutionDecision
   WorkflowWorker->Temporal: RespondDecisionTaskCompleted
   activate Temporal
-
+alt atomic
     Temporal->History: Add DecisionTaskCompletedEvent
     History-->Temporal
 
     Temporal->History: Add WorkflowExecutionCompletedEvent
     History-->Temporal
-
+end
   Temporal-->WorkflowWorker: RespondDecisionTaskCompleted
   deactivate Temporal
 
