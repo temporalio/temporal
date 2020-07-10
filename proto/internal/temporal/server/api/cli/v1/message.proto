@@ -54,7 +54,7 @@ message PendingActivityInfo {
     string activity_id = 1;
     temporal.api.common.v1.ActivityType activity_type = 2;
     temporal.api.enums.v1.PendingActivityState state = 3;
-    string heartbeat_details = 4;
+    repeated string heartbeat_details = 4;
     string last_heartbeat_timestamp = 5;
     string last_started_timestamp = 6;
     int32 attempt = 7;

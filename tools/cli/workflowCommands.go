@@ -920,13 +920,23 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 
-		if pa.HeartbeatDetails != nil {
-			var untypedDetails interface{}
-			err := payloads.Decode(pa.HeartbeatDetails, &untypedDetails)
+		if pa.HeartbeatDetails != nil && len(pa.HeartbeatDetails.Payloads) > 0 {
+			valuePtrs := make([]interface{}, len(pa.HeartbeatDetails.Payloads))
+			tmpAct.HeartbeatDetails = make([]string, len(pa.HeartbeatDetails.Payloads))
+
+			for i := range valuePtrs {
+				var untypedDetail interface{}
+				valuePtrs[i] = &untypedDetail
+			}
+
+			err := payloads.Decode(pa.HeartbeatDetails, valuePtrs...)
 			if err != nil {
-				tmpAct.HeartbeatDetails = fmt.Sprintf("unable to decode heartbeat details %+v", err)
-			} else {
-				tmpAct.HeartbeatDetails = fmt.Sprintf("%+v", untypedDetails)
+				ErrorAndExit("Unable to decode heartbeat details", err)
+			}
+
+			for i, valuePtr := range valuePtrs {
+				value := *(valuePtr.(*interface{}))
+				tmpAct.HeartbeatDetails[i] = fmt.Sprintf("%+v", value)
 			}
 		}
 		pendingActs = append(pendingActs, tmpAct)
