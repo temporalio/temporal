@@ -72,7 +72,9 @@ type (
 		timeSource    clock.TimeSource
 		submitTime    time.Time
 		logger        log.Logger
-		scope         metrics.Scope
+		scopeIdx      int
+		emitDomainTag bool
+		scope         metrics.Scope // initialized when processing task to make the initialization parallel
 		taskExecutor  Executor
 		maxRetryCount dynamicconfig.IntPropertyFn
 
@@ -111,6 +113,7 @@ func NewTimerTask(
 	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
+	emitDomainTag bool,
 	ackMgr TimerQueueAckMgr,
 ) Task {
 	return &timerTask{
@@ -124,6 +127,7 @@ func NewTimerTask(
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
+			emitDomainTag,
 		),
 		ackMgr:       ackMgr,
 		redispatchFn: redispatchFn,
@@ -141,6 +145,7 @@ func NewTransferTask(
 	redispatchFn func(task Task),
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
+	emitDomainTag bool,
 	ackMgr QueueAckMgr,
 ) Task {
 	return &transferTask{
@@ -154,6 +159,7 @@ func NewTransferTask(
 			taskExecutor,
 			timeSource,
 			maxRetryCount,
+			emitDomainTag,
 		),
 		ackMgr:       ackMgr,
 		redispatchFn: redispatchFn,
@@ -170,13 +176,16 @@ func newQueueTaskBase(
 	taskExecutor Executor,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
+	emitDomainTag bool,
 ) *taskBase {
 	return &taskBase{
 		Info:          taskInfo,
 		shard:         shard,
 		state:         ctask.TaskStatePending,
 		queueType:     queueType,
-		scope:         GetOrCreateDomainTaggedScope(shard, scopeIdx, taskInfo.GetDomainID(), logger),
+		scopeIdx:      scopeIdx,
+		emitDomainTag: emitDomainTag,
+		scope:         nil,
 		logger:        logger,
 		attempt:       0,
 		submitTime:    timeSource.Now(),
@@ -229,6 +238,14 @@ func (t *taskBase) Execute() error {
 	// the task should be smart enough to tell if it should be
 	// processed as active or standby and use the corresponding
 	// task executor.
+	if t.scope == nil {
+		if t.emitDomainTag {
+			t.scope = GetOrCreateDomainTaggedScope(t.shard, t.scopeIdx, t.GetDomainID(), t.logger)
+		} else {
+			t.scope = t.shard.GetMetricsClient().Scope(t.scopeIdx)
+		}
+	}
+
 	var err error
 	t.shouldProcessTask, err = t.taskFilter(t.Info)
 	if err != nil {

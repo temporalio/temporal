@@ -167,6 +167,7 @@ var keys = map[Key]string{
 	TaskSchedulerShardQueueSize:                            "history.taskSchedulerShardQueueSize",
 	TaskSchedulerDispatcherCount:                           "history.taskSchedulerDispatcherCount",
 	TaskSchedulerRoundRobinWeights:                         "history.taskSchedulerRoundRobinWeight",
+	QueueProcessorEnableDomainTaggedMetrics:                "history.queueProcessorEnableDomainTaggedMetrics",
 	QueueProcessorEnableSplit:                              "history.queueProcessorEnableSplit",
 	QueueProcessorSplitMaxLevel:                            "history.queueProcessorSplitMaxLevel",
 	QueueProcessorEnableRandomSplitByDomainID:              "history.queueProcessorEnableRandomSplitByDomain",
@@ -560,6 +561,8 @@ const (
 	TaskSchedulerDispatcherCount
 	// TaskSchedulerRoundRobinWeights is the priority weight for weighted round robin task scheduler
 	TaskSchedulerRoundRobinWeights
+	// QueueProcessorEnableDomainTaggedMetrics indicates whether task processing metrics should include domain tag
+	QueueProcessorEnableDomainTaggedMetrics
 	// QueueProcessorEnableSplit indicates whether processing queue split policy should be enabled
 	QueueProcessorEnableSplit
 	// QueueProcessorSplitMaxLevel is the max processing queue level

@@ -416,6 +416,8 @@ func newTimerQueueActiveProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
+	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config
+	emitDomainTag := config.QueueProcessorEnableDomainTaggedMetrics()
 	taskInitializer := func(taskInfo task.Info) task.Task {
 		return task.NewTimerTask(
 			shard,
@@ -429,6 +431,7 @@ func newTimerQueueActiveProcessor(
 			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
+			emitDomainTag,
 			nil,
 		)
 	}
@@ -498,6 +501,8 @@ func newTimerQueueStandbyProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
+	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config
+	emitDomainTag := config.QueueProcessorEnableDomainTaggedMetrics()
 	taskInitializer := func(taskInfo task.Info) task.Task {
 		return task.NewTimerTask(
 			shard,
@@ -511,6 +516,7 @@ func newTimerQueueStandbyProcessor(
 			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
+			emitDomainTag,
 			nil,
 		)
 	}
@@ -602,6 +608,8 @@ func newTimerQueueFailoverProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
+	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config
+	emitDomainTag := config.QueueProcessorEnableDomainTaggedMetrics()
 	taskInitializer := func(taskInfo task.Info) task.Task {
 		return task.NewTimerTask(
 			shard,
@@ -615,6 +623,7 @@ func newTimerQueueFailoverProcessor(
 			},
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
+			emitDomainTag,
 			nil,
 		)
 	}

@@ -87,7 +87,8 @@ type Config struct {
 	TaskSchedulerDispatcherCount   dynamicconfig.IntPropertyFn
 	TaskSchedulerRoundRobinWeights dynamicconfig.MapPropertyFn
 
-	// QueueProcessor split policy settings
+	// QueueProcessor settings
+	QueueProcessorEnableDomainTaggedMetrics        dynamicconfig.BoolPropertyFn
 	QueueProcessorEnableSplit                      dynamicconfig.BoolPropertyFn
 	QueueProcessorSplitMaxLevel                    dynamicconfig.IntPropertyFn
 	QueueProcessorEnableRandomSplitByDomainID      dynamicconfig.BoolPropertyFnWithDomainIDFilter
@@ -323,6 +324,7 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		TaskSchedulerDispatcherCount:   dc.GetIntProperty(dynamicconfig.TaskSchedulerDispatcherCount, 10),
 		TaskSchedulerRoundRobinWeights: dc.GetMapProperty(dynamicconfig.TaskSchedulerRoundRobinWeights, common.ConvertIntMapToDynamicConfigMapProperty(DefaultTaskPriorityWeight)),
 
+		QueueProcessorEnableDomainTaggedMetrics:        dc.GetBoolProperty(dynamicconfig.QueueProcessorEnableDomainTaggedMetrics, false),
 		QueueProcessorEnableSplit:                      dc.GetBoolProperty(dynamicconfig.QueueProcessorEnableSplit, false),
 		QueueProcessorSplitMaxLevel:                    dc.GetIntProperty(dynamicconfig.QueueProcessorSplitMaxLevel, 2), // 3 levels, start from 0
 		QueueProcessorEnableRandomSplitByDomainID:      dc.GetBoolPropertyFilteredByDomainID(dynamicconfig.QueueProcessorEnableRandomSplitByDomainID, false),
