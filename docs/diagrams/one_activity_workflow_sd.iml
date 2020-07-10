@@ -16,7 +16,7 @@ database ActivityTaskQueue
 Client->Temporal: StartWorkflowExecution
 activate Temporal
 
-alt atomic
+group atomic
   Temporal->History:Add WorkflowExecutionStartedEvent
   History-->Temporal
 
@@ -53,7 +53,7 @@ ref over WorkflowWorker: Perform Workflow Logic
   activate Temporal
 
 '  {start} <-> {end}  : DecisionTaskTimeout
-alt atomic
+group atomic
     Temporal->History: Add DecisionTaskCompletedEvent
     History-->Temporal
 
@@ -87,7 +87,7 @@ ref over ActivityWorker: Perform Activity Logic
 
   ActivityWorker->Temporal:RespondActivityTaskCompleted
   activate Temporal
-alt atomic
+group atomic
     Temporal->History:Add ActivityTaskCompletedEvent
     History-->Temporal
 
@@ -122,7 +122,7 @@ ref over WorkflowWorker: Perform Workflow Logic
   WorkflowWorker->WorkflowWorker: CompleteWorkflowExecutionDecision
   WorkflowWorker->Temporal: RespondDecisionTaskCompleted
   activate Temporal
-alt atomic
+group atomic
     Temporal->History: Add DecisionTaskCompletedEvent
     History-->Temporal
 
