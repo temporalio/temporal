@@ -919,10 +919,14 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastFailure:            pa.GetLastFailure().String(),
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
+
 		if pa.HeartbeatDetails != nil {
-			err := payloads.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
+			var untypedDetails interface{}
+			err := payloads.Decode(pa.HeartbeatDetails, &untypedDetails)
 			if err != nil {
-				ErrorAndExit("Unable to decode heartbeat details.", err)
+				tmpAct.HeartbeatDetails = fmt.Sprintf("unable to decode heartbeat details %+v", err)
+			} else {
+				tmpAct.HeartbeatDetails = fmt.Sprintf("%+v", untypedDetails)
 			}
 		}
 		pendingActs = append(pendingActs, tmpAct)
