@@ -1535,7 +1535,7 @@ func (a *ActivityTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *ActivityTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1570,12 +1570,12 @@ func (d *DecisionTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTimestamp() *types.Timestamp {
+// GetVisibilityTime get the visibility timestamp
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
 	return &types.Timestamp{}
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (d *DecisionTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
@@ -1610,7 +1610,7 @@ func (a *RecordWorkflowStartedTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *RecordWorkflowStartedTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1645,7 +1645,7 @@ func (a *ResetWorkflowTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *ResetWorkflowTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1680,7 +1680,7 @@ func (a *CloseExecutionTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *CloseExecutionTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1715,7 +1715,7 @@ func (a *DeleteHistoryEventTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *DeleteHistoryEventTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1750,7 +1750,7 @@ func (d *DecisionTimeoutTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (d *DecisionTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
@@ -1785,7 +1785,7 @@ func (a *ActivityTimeoutTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (a *ActivityTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -1820,7 +1820,7 @@ func (u *UserTimerTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (u *UserTimerTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1855,7 +1855,7 @@ func (r *ActivityRetryTimerTask) SetTaskID(id int64) {
 	r.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (r *ActivityRetryTimerTask) GetVisibilityTimestamp() time.Time {
 	return r.VisibilityTimestamp
 }
@@ -1890,7 +1890,7 @@ func (r *WorkflowBackoffTimerTask) SetTaskID(id int64) {
 	r.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (r *WorkflowBackoffTimerTask) GetVisibilityTimestamp() time.Time {
 	return r.VisibilityTimestamp
 }
@@ -1925,7 +1925,7 @@ func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp gets the visibility time stamp
+// GetVisibilityTime gets the visibility time stamp
 func (u *WorkflowTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1960,7 +1960,7 @@ func (u *CancelExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *CancelExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -1995,7 +1995,7 @@ func (u *SignalExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *SignalExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2030,7 +2030,7 @@ func (u *UpsertWorkflowSearchAttributesTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *UpsertWorkflowSearchAttributesTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2065,7 +2065,7 @@ func (u *StartChildExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (u *StartChildExecutionTask) GetVisibilityTimestamp() time.Time {
 	return u.VisibilityTimestamp
 }
@@ -2100,7 +2100,7 @@ func (a *HistoryReplicationTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *HistoryReplicationTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }
@@ -2135,7 +2135,7 @@ func (a *SyncActivityTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
-// GetVisibilityTimestamp get the visibility timestamp
+// GetVisibilityTime get the visibility timestamp
 func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 	return a.VisibilityTimestamp
 }

@@ -63,6 +63,27 @@ func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
 	return dataConverter.FromPayloads(ps, valuePtr...)
 }
 
+func ToPrettyString(ps *commonpb.Payloads) (string, error) {
+	var buf bytes.Buffer
+	details, err := dataConverter.ToStrings(ps)
+	if err != nil {
+		return "", err
+	}
+
+	buf.WriteString("[")
+	for _, d := range details {
+		buf.WriteString(d)
+		buf.WriteString(", ")
+	}
+
+	if buf.Len() > 1 {
+		buf.Truncate(buf.Len() - 2) // cut the last comma
+	}
+
+	buf.WriteString("]")
+	return buf.String(), nil
+}
+
 func ToString(ps *commonpb.Payloads) string {
 	var buf bytes.Buffer
 	buf.WriteString("{")

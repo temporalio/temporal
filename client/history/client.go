@@ -971,17 +971,17 @@ func (c *clientImpl) ReapplyEvents(
 
 }
 
-func (c *clientImpl) ReadDLQMessages(
+func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
 	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
-	return client.ReadDLQMessages(ctx, request, opts...)
+	return client.GetDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(

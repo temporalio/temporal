@@ -215,15 +215,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -271,15 +271,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	now := types.TimestampNow()
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -327,15 +327,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	event = addActivityTaskStartedEvent(mutableState, event.GetEventId(), "")
@@ -377,15 +377,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
-		ScheduleId:          di.ScheduleID,
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		ScheduleId:     di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
@@ -426,15 +426,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 	now := types.TimestampNow()
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
-		ScheduleId:          di.ScheduleID,
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		ScheduleId:     di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
@@ -475,15 +475,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
-		ScheduleId:          di.ScheduleID,
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		ScheduleId:     di.ScheduleID,
 	}
 
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
@@ -531,15 +531,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
-		ScheduleId:          di.ScheduleID,
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		ScheduleId:     di.ScheduleID,
 	}
 
 	event = addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
@@ -587,15 +587,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -648,18 +648,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testTargetNamespaceID,
-		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         targetExecution.GetRunId(),
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testTargetNamespaceID,
+		TargetWorkflowId:  targetExecution.GetWorkflowId(),
+		TargetRunId:       targetExecution.GetRunId(),
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -722,18 +722,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testTargetNamespaceID,
-		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         targetExecution.GetRunId(),
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testTargetNamespaceID,
+		TargetWorkflowId:  targetExecution.GetWorkflowId(),
+		TargetRunId:       targetExecution.GetRunId(),
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addCancelRequestedEvent(mutableState, event.GetEventId(), testTargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -788,18 +788,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testTargetNamespaceID,
-		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         targetExecution.GetRunId(),
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testTargetNamespaceID,
+		TargetWorkflowId:  targetExecution.GetWorkflowId(),
+		TargetRunId:       targetExecution.GetRunId(),
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -864,18 +864,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testTargetNamespaceID,
-		TargetWorkflowId:    targetExecution.GetWorkflowId(),
-		TargetRunId:         targetExecution.GetRunId(),
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testTargetNamespaceID,
+		TargetWorkflowId:  targetExecution.GetWorkflowId(),
+		TargetRunId:       targetExecution.GetRunId(),
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addSignaledEvent(mutableState, event.GetEventId(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), "")
@@ -928,18 +928,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testChildNamespaceID,
-		TargetWorkflowId:    childWorkflowID,
-		TargetRunId:         "",
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testChildNamespaceID,
+		TargetWorkflowId:  childWorkflowID,
+		TargetRunId:       "",
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1003,18 +1003,18 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TargetNamespaceId:   testChildNamespaceID,
-		TargetWorkflowId:    childWorkflowID,
-		TargetRunId:         "",
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
-		ScheduleId:          event.GetEventId(),
+		Version:           s.version,
+		NamespaceId:       s.namespaceID,
+		WorkflowId:        execution.GetWorkflowId(),
+		RunId:             execution.GetRunId(),
+		VisibilityTime:    now,
+		TargetNamespaceId: testChildNamespaceID,
+		TargetWorkflowId:  childWorkflowID,
+		TargetRunId:       "",
+		TaskId:            taskID,
+		TaskQueue:         taskQueueName,
+		TaskType:          enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+		ScheduleId:        event.GetEventId(),
 	}
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespace, childWorkflowID, uuid.New(), childWorkflowType)
@@ -1058,15 +1058,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
@@ -1121,15 +1121,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
-		Version:             s.version,
-		NamespaceId:         s.namespaceID,
-		WorkflowId:          execution.GetWorkflowId(),
-		RunId:               execution.GetRunId(),
-		VisibilityTimestamp: now,
-		TaskId:              taskID,
-		TaskQueue:           taskQueueName,
-		TaskType:            enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-		ScheduleId:          event.GetEventId(),
+		Version:        s.version,
+		NamespaceId:    s.namespaceID,
+		WorkflowId:     execution.GetWorkflowId(),
+		RunId:          execution.GetRunId(),
+		VisibilityTime: now,
+		TaskId:         taskID,
+		TaskQueue:      taskQueueName,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+		ScheduleId:     event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)

@@ -139,11 +139,11 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 7,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 7,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -225,11 +225,11 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	namespace := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -529,11 +529,11 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	namespace := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -704,11 +704,11 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	namespace := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -841,11 +841,11 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	namespace := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1026,11 +1026,11 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	namespace := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1164,11 +1164,11 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	namespace := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1345,11 +1345,11 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	namespace := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1517,11 +1517,11 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1726,11 +1726,11 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	namespace := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1847,11 +1847,11 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	namespace := "test-cron-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -1947,11 +1947,11 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	namespace := "test-workflow-retry-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		IsGlobalNamespace:                      true,
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      clusterName[0],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		IsGlobalNamespace:                    true,
+		Clusters:                             clusterReplicationConfig,
+		ActiveClusterName:                    clusterName[0],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)

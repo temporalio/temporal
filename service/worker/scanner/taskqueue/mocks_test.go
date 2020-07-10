@@ -61,14 +61,14 @@ func newMockTaskTable() *mockTaskTable {
 func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 	tq := p.PersistedTaskQueueInfo{
 		Data: &persistenceblobs.TaskQueueInfo{
-			NamespaceId: uuid.New(),
-			Name:        name,
-			LastUpdated: types.TimestampNow(),
+			NamespaceId:    uuid.New(),
+			Name:           name,
+			LastUpdateTime: types.TimestampNow(),
 		},
 		RangeID: 22,
 	}
 	if idle {
-		tq.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
+		tq.Data.LastUpdateTime, _ = types.TimestampProto(time.Unix(1000, 1000))
 	}
 	tbl.info = append(tbl.info, &tq)
 }
@@ -124,12 +124,12 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 				WorkflowId:  tbl.workflowID,
 				RunId:       tbl.runID,
 				ScheduleId:  3,
-				Expiry:      exp,
+				ExpiryTime:  exp,
 			},
 			TaskId: tbl.nextTaskID,
 		}
 		if expired {
-			ti.Data.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
+			ti.Data.ExpiryTime, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++

@@ -104,18 +104,18 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskType", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskType))
 }
 
-// GetVisibilityTimestamp mocks base method
-func (m *MockqueueTaskInfo) GetVisibilityTimestamp() *types.Timestamp {
+// GetVisibilityTime mocks base method
+func (m *MockqueueTaskInfo) GetVisibilityTime() *types.Timestamp {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTimestamp")
+	ret := m.ctrl.Call(m, "GetVisibilityTime")
 	ret0, _ := ret[0].(*types.Timestamp)
 	return ret0
 }
 
-// GetVisibilityTimestamp indicates an expected call of GetVisibilityTimestamp
+// GetVisibilityTime indicates an expected call of GetVisibilityTime
 func (mr *MockqueueTaskInfoMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTimestamp))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTime))
 }
 
 // GetWorkflowId mocks base method
@@ -331,18 +331,18 @@ func (mr *MockqueueTaskMockRecorder) GetTaskType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskType", reflect.TypeOf((*MockqueueTask)(nil).GetTaskType))
 }
 
-// GetVisibilityTimestamp mocks base method
-func (m *MockqueueTask) GetVisibilityTimestamp() *types.Timestamp {
+// GetVisibilityTime mocks base method
+func (m *MockqueueTask) GetVisibilityTime() *types.Timestamp {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTimestamp")
+	ret := m.ctrl.Call(m, "GetVisibilityTime")
 	ret0, _ := ret[0].(*types.Timestamp)
 	return ret0
 }
 
-// GetVisibilityTimestamp indicates an expected call of GetVisibilityTimestamp
+// GetVisibilityTime indicates an expected call of GetVisibilityTime
 func (mr *MockqueueTaskMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTask)(nil).GetVisibilityTimestamp))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockqueueTask)(nil).GetVisibilityTime))
 }
 
 // GetWorkflowId mocks base method

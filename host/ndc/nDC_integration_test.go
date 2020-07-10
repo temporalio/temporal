@@ -262,7 +262,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 			},
 			MaximumPageSize:        1000,
 			NextPageToken:          nil,
-			WaitForNewEvent:        false,
+			WaitNewEvent:           false,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 		},
 	)
@@ -568,7 +568,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-					RetryStatus: enumspb.RETRY_STATUS_TIMEOUT,
+					RetryState: enumspb.RETRY_STATE_TIMEOUT,
 				}},
 			},
 		}},
@@ -1452,7 +1452,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-					RetryStatus: enumspb.RETRY_STATUS_TIMEOUT,
+					RetryState: enumspb.RETRY_STATE_TIMEOUT,
 				}},
 			},
 		}},
@@ -1612,8 +1612,8 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 		IsGlobalNamespace: true,
 		Clusters:          clusterReplicationConfig,
 		// make the active cluster `standby` and replicate to `active` cluster
-		ActiveClusterName:                      clusterName[1],
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		ActiveClusterName:                    clusterName[1],
+		WorkflowExecutionRetentionPeriodDays: 1,
 	})
 	s.Require().NoError(err)
 

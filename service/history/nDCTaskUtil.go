@@ -166,12 +166,12 @@ func initializeLoggerForTask(
 	logger log.Logger,
 ) log.Logger {
 
-	t, _ := types.TimestampFromProto(task.GetVisibilityTimestamp())
+	t, _ := types.TimestampFromProto(task.GetVisibilityTime())
 	taskLogger := logger.WithTags(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
 		tag.TaskVisibilityTimestamp(t.UnixNano()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().GetSeconds()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().GetSeconds()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
 		tag.WorkflowNamespaceID(task.GetNamespaceId()),

@@ -21,13 +21,13 @@ Enabling archival is done by using the configuration below. `credentialsPath` is
 ```
 archival:
   history:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       gstorage:
         credentialsPath: "/tmp/keyfile.json"
   visibility:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       gstorage:
@@ -36,10 +36,10 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      status: "enabled"
+      state: "enabled"
       URI: "gs://my-bucket-cad/temporal_archival/development"
     visibility:
-      status: "enabled"
+      state: "enabled"
       URI: "gs://my-bucket-cad/temporal_archival/visibility"
 ```
 

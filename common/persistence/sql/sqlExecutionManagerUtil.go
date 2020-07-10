@@ -755,7 +755,7 @@ func createTransferTasks(
 			return err
 		}
 
-		info.VisibilityTimestamp = t
+		info.VisibilityTime = t
 
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
@@ -935,7 +935,7 @@ func createTimerTasks(
 				return err
 			}
 
-			info.VisibilityTimestamp = protoVisTs
+			info.VisibilityTime = protoVisTs
 			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
@@ -1202,7 +1202,7 @@ func (m *sqlExecutionManager) createExecution(
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTimestamp = time.Now()
-	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
+	executionInfo.LastUpdateTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
 		executionInfo,
@@ -1260,7 +1260,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Now()
+	executionInfo.LastUpdateTimestamp = time.Now()
 
 	row, err := buildExecutionRow(
 		executionInfo,

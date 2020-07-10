@@ -129,19 +129,19 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 	}
 
 	request := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            description,
-		OwnerEmail:                             ownerEmail,
-		Data:                                   namespaceData,
-		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
-		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
-		SecurityToken:                          securityToken,
-		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
-		HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
-		VisibilityArchivalUri:                  c.String(FlagVisibilityArchivalURI),
-		IsGlobalNamespace:                      isGlobalNamespace,
+		Name:                                 namespace,
+		Description:                          description,
+		OwnerEmail:                           ownerEmail,
+		Data:                                 namespaceData,
+		WorkflowExecutionRetentionPeriodDays: int32(retentionDays),
+		Clusters:                             clusters,
+		ActiveClusterName:                    activeClusterName,
+		SecurityToken:                        securityToken,
+		HistoryArchivalState:                 archivalState(c, FlagHistoryArchivalState),
+		HistoryArchivalUri:                   c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalState:              archivalState(c, FlagVisibilityArchivalState),
+		VisibilityArchivalUri:                c.String(FlagVisibilityArchivalURI),
+		IsGlobalNamespace:                    isGlobalNamespace,
 	}
 
 	ctx, cancel := newContext(c)
@@ -255,9 +255,9 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		updateConfig := &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
-			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
+			HistoryArchivalState:                   archivalState(c, FlagHistoryArchivalState),
 			HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
-			VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
+			VisibilityArchivalState:                archivalState(c, FlagVisibilityArchivalState),
 			VisibilityArchivalUri:                  c.String(FlagVisibilityArchivalURI),
 			BadBinaries:                            binBinaries,
 		}
@@ -312,27 +312,27 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 }
 
 func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
-	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
-		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
+	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nState: %v\nRetentionInDays: %v\n" +
+		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalState: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),
 		resp.NamespaceInfo.GetId(),
 		resp.NamespaceInfo.GetDescription(),
 		resp.NamespaceInfo.GetOwnerEmail(),
 		resp.NamespaceInfo.Data,
-		resp.NamespaceInfo.GetStatus(),
+		resp.NamespaceInfo.GetState(),
 		resp.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 		resp.Config.GetEmitMetric().GetValue(),
 		resp.ReplicationConfig.GetActiveClusterName(),
 		clustersToString(resp.ReplicationConfig.Clusters),
-		resp.Config.GetHistoryArchivalStatus().String(),
+		resp.Config.GetHistoryArchivalState().String(),
 	}
 	if resp.Config.GetHistoryArchivalUri() != "" {
 		formatStr = formatStr + "HistoryArchivalURI: %v\n"
 		descValues = append(descValues, resp.Config.GetHistoryArchivalUri())
 	}
-	formatStr = formatStr + "VisibilityArchivalStatus: %v\n"
-	descValues = append(descValues, resp.Config.GetVisibilityArchivalStatus().String())
+	formatStr = formatStr + "VisibilityArchivalState: %v\n"
+	descValues = append(descValues, resp.Config.GetVisibilityArchivalState().String())
 	if resp.Config.GetVisibilityArchivalUri() != "" {
 		formatStr = formatStr + "VisibilityArchivalURI: %v\n"
 		descValues = append(descValues, resp.Config.GetVisibilityArchivalUri())
@@ -449,16 +449,16 @@ func clustersToString(clusters []*replicationpb.ClusterReplicationConfig) string
 	return res
 }
 
-func archivalStatus(c *cli.Context, statusFlagName string) enumspb.ArchivalStatus {
-	if c.IsSet(statusFlagName) {
-		switch c.String(statusFlagName) {
+func archivalState(c *cli.Context, stateFlagName string) enumspb.ArchivalState {
+	if c.IsSet(stateFlagName) {
+		switch c.String(stateFlagName) {
 		case "disabled":
-			return enumspb.ARCHIVAL_STATUS_DISABLED
+			return enumspb.ARCHIVAL_STATE_DISABLED
 		case "enabled":
-			return enumspb.ARCHIVAL_STATUS_ENABLED
+			return enumspb.ARCHIVAL_STATE_ENABLED
 		default:
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", stateFlagName), errors.New("invalid state, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
-	return enumspb.ARCHIVAL_STATUS_UNSPECIFIED
+	return enumspb.ARCHIVAL_STATE_UNSPECIFIED
 }

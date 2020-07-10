@@ -28,7 +28,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -921,39 +920,13 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 
-		if pa.HeartbeatDetails != nil && len(pa.HeartbeatDetails.Payloads) > 0 {
-			valuePtrs := make([]interface{}, len(pa.HeartbeatDetails.Payloads))
-			tmpAct.HeartbeatDetails = make([]string, len(pa.HeartbeatDetails.Payloads))
-
-			for i := range valuePtrs {
-				encoding := string(pa.HeartbeatDetails.Payloads[i].Metadata["encoding"])
-				if encoding == "json" {
-					var untypedDetail interface{}
-					valuePtrs[i] = &untypedDetail
-				} else if encoding == "raw" {
-					var byteSlice []byte
-					valuePtrs[i] = &byteSlice
-				} else {
-					ErrorAndExit("Unable to decode heartbeat details. Unknown encoding encountered.", nil)
-				}
-			}
-
-			err := payloads.Decode(pa.HeartbeatDetails, valuePtrs...)
+		if pa.HeartbeatDetails != nil {
+			heartbeatDetails, err := payloads.ToPrettyString(pa.HeartbeatDetails)
 			if err != nil {
 				ErrorAndExit("Unable to decode heartbeat details.", err)
 			}
 
-			for i, valuePtr := range valuePtrs {
-				encoding := string(pa.HeartbeatDetails.Payloads[i].Metadata["encoding"])
-				if encoding == "json" {
-					value := *(valuePtr.(*interface{}))
-					tmpAct.HeartbeatDetails[i] = fmt.Sprintf("%+v", value)
-				} else if encoding == "raw" {
-					byteSlice := *(valuePtr.(*[]byte))
-					base64Bytes := base64.RawStdEncoding.EncodeToString(byteSlice)
-					tmpAct.HeartbeatDetails[i] = fmt.Sprintf("byte array (base 64): %+v", base64Bytes)
-				}
-			}
+			tmpAct.HeartbeatDetails = heartbeatDetails
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
@@ -1129,7 +1102,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryStatus())
+		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string

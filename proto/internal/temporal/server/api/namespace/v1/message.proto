@@ -25,6 +25,10 @@ package temporal.server.api.namespace.v1;
 option go_package = "go.temporal.io/server/api/namespace/v1;namespace";
 
 message NamespaceCacheInfo {
-    int64 num_of_items_in_cache_by_id = 1;
-    int64 num_of_items_in_cache_by_name = 2;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "in" and "by" are needed here. --)
+    int64 items_in_cache_by_id_count = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "in" and "by" are needed here. --)
+    int64 items_in_cache_by_name_count = 2;
 }

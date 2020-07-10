@@ -446,7 +446,7 @@ func createExecution(
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
-	executionInfo.LastUpdatedTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {
@@ -558,7 +558,7 @@ func updateExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {
@@ -773,7 +773,7 @@ func createTransferTasks(
 			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
-			VisibilityTimestamp:     taskVisTs,
+			VisibilityTime:          taskVisTs,
 			RecordVisibility:        recordVisibility,
 		}
 
@@ -809,7 +809,7 @@ func createReplicationTasks(
 		// Replication task specific information
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion //nolint:ineffassign
+		version := common.EmptyVersion // nolint:ineffassign
 		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
@@ -944,7 +944,7 @@ func createTimerTasks(
 			ScheduleAttempt:     attempt,
 			EventId:             eventID,
 			TaskId:              task.GetTaskID(),
-			VisibilityTimestamp: protoTs,
+			VisibilityTime:      protoTs,
 		})
 
 		if err != nil {

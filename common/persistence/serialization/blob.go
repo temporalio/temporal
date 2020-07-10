@@ -95,7 +95,7 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 
 	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
 		shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
-			clusterName: shardInfo.GetTimerAckLevel(),
+			clusterName: shardInfo.GetTimerAckLevelTime(),
 		}
 	}
 

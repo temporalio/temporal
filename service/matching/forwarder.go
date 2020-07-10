@@ -136,7 +136,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo, err := types.TimestampFromProto(task.event.Data.Expiry)
+	expiryGo, err := types.TimestampFromProto(task.event.Data.ExpiryTime)
 	if err != nil {
 		return err
 	}

@@ -226,18 +226,18 @@ func (c *clientImpl) ReapplyEvents(
 	return client.ReapplyEvents(ctx, request, opts...)
 }
 
-func (c *clientImpl) ReadDLQMessages(
+func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.ReadDLQMessagesRequest,
+	request *adminservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ReadDLQMessagesResponse, error) {
+) (*adminservice.GetDLQMessagesResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ReadDLQMessages(ctx, request, opts...)
+	return client.GetDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(

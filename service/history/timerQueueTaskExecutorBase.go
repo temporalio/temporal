@@ -101,7 +101,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalStatus == enumspb.ARCHIVAL_STATUS_ENABLED
+	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete

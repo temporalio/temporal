@@ -121,6 +121,8 @@ service HistoryService {
     rpc SignalWorkflowExecution (SignalWorkflowExecutionRequest) returns (SignalWorkflowExecutionResponse) {
     }
 
+    // (-- api-linter: core::0136::prepositions=disabled
+    //     aip.dev/not-precedent: "With" is needed here. --)
     // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
     // If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
     // and a decision task being created for the execution.
@@ -218,19 +220,19 @@ service HistoryService {
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 
-    // ReadDLQMessages returns messages from DLQ
-    rpc ReadDLQMessages(ReadDLQMessagesRequest) returns (ReadDLQMessagesResponse) {
+    // GetDLQMessages returns messages from DLQ.
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }
 
-    // PurgeDLQMessages purges messages from DLQ
+    // PurgeDLQMessages purges messages from DLQ.
     rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
     }
 
-    // MergeDLQMessages merges messages from DLQ
+    // MergeDLQMessages merges messages from DLQ.
     rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
     }
 
-    // RefreshWorkflowTasks refreshes all tasks of a workflow
+    // RefreshWorkflowTasks refreshes all tasks of a workflow.
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 }

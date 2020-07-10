@@ -276,24 +276,24 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeCluster(ctx, in interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeCluster), varargs...)
 }
 
-// ReadDLQMessages mocks base method.
-func (m *MockAdminServiceClient) ReadDLQMessages(ctx context.Context, in *adminservice.ReadDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.ReadDLQMessagesResponse, error) {
+// GetDLQMessages mocks base method.
+func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "ReadDLQMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.ReadDLQMessagesResponse)
+	ret := m.ctrl.Call(m, "GetDLQMessages", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadDLQMessages indicates an expected call of ReadDLQMessages.
-func (mr *MockAdminServiceClientMockRecorder) ReadDLQMessages(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// GetDLQMessages indicates an expected call of GetDLQMessages.
+func (mr *MockAdminServiceClientMockRecorder) GetDLQMessages(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).ReadDLQMessages), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetDLQMessages), varargs...)
 }
 
 // PurgeDLQMessages mocks base method.
@@ -579,19 +579,19 @@ func (mr *MockAdminServiceServerMockRecorder) DescribeCluster(arg0, arg1 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeCluster), arg0, arg1)
 }
 
-// ReadDLQMessages mocks base method.
-func (m *MockAdminServiceServer) ReadDLQMessages(arg0 context.Context, arg1 *adminservice.ReadDLQMessagesRequest) (*adminservice.ReadDLQMessagesResponse, error) {
+// GetDLQMessages mocks base method.
+func (m *MockAdminServiceServer) GetDLQMessages(arg0 context.Context, arg1 *adminservice.GetDLQMessagesRequest) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadDLQMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ReadDLQMessagesResponse)
+	ret := m.ctrl.Call(m, "GetDLQMessages", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadDLQMessages indicates an expected call of ReadDLQMessages.
-func (mr *MockAdminServiceServerMockRecorder) ReadDLQMessages(arg0, arg1 interface{}) *gomock.Call {
+// GetDLQMessages indicates an expected call of GetDLQMessages.
+func (mr *MockAdminServiceServerMockRecorder) GetDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).ReadDLQMessages), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetDLQMessages), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.

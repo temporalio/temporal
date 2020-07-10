@@ -138,7 +138,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
 			MaximumPageSize: 100,
-			WaitForNewEvent: isLongPoll,
+			WaitNewEvent:    isLongPoll,
 			NextPageToken:   token,
 		})
 		s.NoError(err)
@@ -305,7 +305,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
 			MaximumPageSize:        100,
-			WaitForNewEvent:        isLongPoll,
+			WaitNewEvent:           isLongPoll,
 			NextPageToken:          token,
 			HistoryEventFilterType: closeEventOnly,
 		})
@@ -466,7 +466,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
 			MaximumPageSize: 100,
-			WaitForNewEvent: isLongPoll,
+			WaitNewEvent:    isLongPoll,
 			NextPageToken:   token,
 		})
 		s.Nil(err)

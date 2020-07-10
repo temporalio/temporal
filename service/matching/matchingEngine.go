@@ -254,8 +254,8 @@ func (e *matchingEngineImpl) AddDecisionTask(
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		Expiry:      expiry,
-		CreatedTime: now,
+		ExpiryTime:  expiry,
+		CreateTime:  now,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
@@ -301,8 +301,8 @@ func (e *matchingEngineImpl) AddActivityTask(
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		CreatedTime: now,
-		Expiry:      expiry,
+		CreateTime:  now,
+		ExpiryTime:  expiry,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
@@ -365,7 +365,7 @@ pollLoop:
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) //nolint:errcheck
+				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) // nolint:errcheck
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
@@ -721,7 +721,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
-			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
+			ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
 			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 		}
 	}
@@ -753,7 +753,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
-		ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
+		ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
 		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 

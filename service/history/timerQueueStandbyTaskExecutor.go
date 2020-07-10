@@ -132,7 +132,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			t, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
+			t, _ := types.TimestampFromProto(timerTask.VisibilityTime)
 			if isExpired := timerSequence.isExpired(
 				t,
 				timerSequenceID,
@@ -191,7 +191,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			t, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
+			t, _ := types.TimestampFromProto(timerTask.VisibilityTime)
 			if isExpired := timerSequence.isExpired(
 				t,
 				timerSequenceID,
@@ -219,7 +219,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
-		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
+		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTime)
 		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {

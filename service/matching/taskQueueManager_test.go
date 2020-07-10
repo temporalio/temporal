@@ -108,15 +108,15 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	tasks := []*persistenceblobs.AllocatedTaskInfo{
 		{
 			Data: &persistenceblobs.TaskInfo{
-				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
 			TaskId: 11,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
-				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
 			TaskId: 12,
 		},
@@ -130,15 +130,15 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.AllocatedTaskInfo{
 		{
 			Data: &persistenceblobs.TaskInfo{
-				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
 			TaskId: 13,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
-				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
-				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+				ExpiryTime: timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreateTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
 			TaskId: 14,
 		},

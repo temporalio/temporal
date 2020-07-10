@@ -39,7 +39,7 @@ import (
 type (
 	// replicationDLQHandler is the interface handles replication DLQ messages
 	replicationDLQHandler interface {
-		readMessages(
+		getMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
@@ -78,7 +78,7 @@ func newReplicationDLQHandler(
 	}
 }
 
-func (r *replicationDLQHandlerImpl) readMessages(
+func (r *replicationDLQHandlerImpl) getMessages(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,

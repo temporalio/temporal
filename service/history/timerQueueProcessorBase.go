@@ -289,7 +289,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
+					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTime)
 					if err != nil {
 						return err
 					}
@@ -313,7 +313,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
+					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTime)
 					if err != nil {
 						return err
 					}
