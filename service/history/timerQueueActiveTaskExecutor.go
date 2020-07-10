@@ -191,7 +191,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
-	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
+	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTime)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {

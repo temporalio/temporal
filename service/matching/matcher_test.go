@@ -486,8 +486,8 @@ func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 			WorkflowId:  uuid.New(),
 			RunId:       uuid.New(),
 			ScheduleId:  rand.Int63(),
-			CreatedTime: timestamp.TimestampFromTime(&rt1).ToProto(),
-			Expiry:      timestamp.TimestampFromTime(&rt2).ToProto(),
+			CreateTime:  timestamp.TimestampFromTime(&rt1).ToProto(),
+			ExpiryTime:  timestamp.TimestampFromTime(&rt2).ToProto(),
 		},
 		TaskId: rand.Int63(),
 	}

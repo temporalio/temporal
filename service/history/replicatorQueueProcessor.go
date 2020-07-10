@@ -651,7 +651,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			if activityInfo.StartedID != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime.UnixNano()
 			}
-			// LastHeartBeatUpdatedTime must be valid when getting the sync activity replication task
+			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
 			heartbeatTime = activityInfo.LastHeartBeatUpdatedTime.UnixNano()
 
 			// Version history uses when replicate the sync activity task

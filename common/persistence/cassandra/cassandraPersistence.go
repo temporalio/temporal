@@ -782,7 +782,7 @@ func (d *cassandraPersistence) GetShardID() int {
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdatedAt = types.TimestampNow()
+	shardInfo.UpdateTime = types.TimestampNow()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -849,7 +849,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdatedAt = types.TimestampNow()
+	shardInfo.UpdateTime = types.TimestampNow()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -1385,7 +1385,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	return nil
 }
 
-//TODO: update query with version histories
+// TODO: update query with version histories
 func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWorkflowExecutionRequest) error {
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -1484,7 +1484,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		return err
 	}
 
-	//Verifies that the RangeID has not changed
+	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
 		d.shardID,
@@ -2246,13 +2246,13 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		if err == gocql.ErrNotFound { // First time task queue is used
 			tl = &p.PersistedTaskQueueInfo{
 				Data: &persistenceblobs.TaskQueueInfo{
-					NamespaceId: request.NamespaceID,
-					Name:        request.TaskQueue,
-					TaskType:    request.TaskType,
-					Kind:        request.TaskQueueKind,
-					AckLevel:    0,
-					Expiry:      nil,
-					LastUpdated: now,
+					NamespaceId:    request.NamespaceID,
+					Name:           request.TaskQueue,
+					TaskType:       request.TaskType,
+					Kind:           request.TaskQueueKind,
+					AckLevel:       0,
+					ExpiryTime:     nil,
+					LastUpdateTime: now,
 				},
 				RangeID: initialRangeID,
 			}
@@ -2293,7 +2293,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 
-		tli.LastUpdated = now
+		tli.LastUpdateTime = now
 		tl = &p.PersistedTaskQueueInfo{
 			Data:    tli,
 			RangeID: rangeID + 1,
@@ -2338,7 +2338,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 // From TaskManager interface
 func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
 	tli := *request.TaskQueueInfo
-	tli.LastUpdated = types.TimestampNow()
+	tli.LastUpdateTime = types.TimestampNow()
 	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskQueueTTL)
@@ -2367,7 +2367,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 		return &p.UpdateTaskQueueResponse{}, nil
 	}
 
-	tli.LastUpdated = types.TimestampNow()
+	tli.LastUpdateTime = types.TimestampNow()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
 		return nil, convertCommonErrors("UpdateTaskQueue", err)
@@ -2480,7 +2480,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	}
 
 	tl := *request.TaskQueueInfo.Data
-	tl.LastUpdated = types.TimestampNow()
+	tl.LastUpdateTime = types.TimestampNow()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
 
 	if err != nil {
@@ -2521,10 +2521,10 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 
 func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 	var ttl int64 = 0
-	if task.Expiry != nil {
+	if task.ExpiryTime != nil {
 		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
 		// and we'd have checked this upstream
-		expiryGo, _ := types.TimestampFromProto(task.Expiry)
+		expiryGo, _ := types.TimestampFromProto(task.ExpiryTime)
 		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
 		ttl = expiryTtl
 	}

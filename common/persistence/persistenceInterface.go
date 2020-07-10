@@ -228,7 +228,7 @@ type (
 		NextEventID                        int64
 		LastProcessedEvent                 int64
 		StartTimestamp                     time.Time
-		LastUpdatedTimestamp               time.Time
+		LastUpdateTimestamp                time.Time
 		CreateRequestID                    string
 		SignalCount                        int32
 		DecisionVersion                    int64
@@ -285,25 +285,25 @@ type (
 
 	// InternalActivityInfo details  for Persistence Interface
 	InternalActivityInfo struct {
-		Version                  int64
-		ScheduleID               int64
-		ScheduledEventBatchID    int64
-		ScheduledEvent           *serialization.DataBlob
-		ScheduledTime            time.Time
-		StartedID                int64
-		StartedEvent             *serialization.DataBlob
-		StartedTime              time.Time
-		ActivityID               string
-		RequestID                string
-		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int32
-		ScheduleToCloseTimeout   int32
-		StartToCloseTimeout      int32
-		HeartbeatTimeout         int32
-		CancelRequested          bool
-		CancelRequestID          int64
-		LastHeartBeatUpdatedTime time.Time
-		TimerTaskStatus          int32
+		Version                 int64
+		ScheduleID              int64
+		ScheduledEventBatchID   int64
+		ScheduledEvent          *serialization.DataBlob
+		ScheduledTime           time.Time
+		StartedID               int64
+		StartedEvent            *serialization.DataBlob
+		StartedTime             time.Time
+		ActivityID              string
+		RequestID               string
+		Details                 *commonpb.Payloads
+		ScheduleToStartTimeout  int32
+		ScheduleToCloseTimeout  int32
+		StartToCloseTimeout     int32
+		HeartbeatTimeout        int32
+		CancelRequested         bool
+		CancelRequestID         int64
+		LastHeartbeatUpdateTime time.Time
+		TimerTaskStatus         int32
 		// For retry
 		Attempt                int32
 		NamespaceID            string
@@ -750,7 +750,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		LastEventTaskId:                         executionInfo.LastEventTaskID,
 		LastProcessedEvent:                      executionInfo.LastProcessedEvent,
 		StartTimeNanos:                          executionInfo.StartTimestamp.UnixNano(),
-		LastUpdatedTimeNanos:                    executionInfo.LastUpdatedTimestamp.UnixNano(),
+		LastUpdateTimeNanos:                     executionInfo.LastUpdateTimestamp.UnixNano(),
 		DecisionVersion:                         executionInfo.DecisionVersion,
 		DecisionScheduleId:                      executionInfo.DecisionScheduleID,
 		DecisionStartedId:                       executionInfo.DecisionStartedID,
@@ -839,7 +839,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
 		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),
-		LastUpdatedTimestamp:               time.Unix(0, info.GetLastUpdatedTimeNanos()),
+		LastUpdateTimestamp:                time.Unix(0, info.GetLastUpdateTimeNanos()),
 		CreateRequestID:                    state.GetCreateRequestId(),
 		DecisionVersion:                    info.GetDecisionVersion(),
 		DecisionScheduleID:                 info.GetDecisionScheduleId(),
@@ -906,36 +906,36 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 
 func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityInfo) *InternalActivityInfo {
 	info := &InternalActivityInfo{
-		NamespaceID:              decoded.GetNamespaceId(),
-		ScheduleID:               decoded.GetScheduleId(),
-		Details:                  decoded.LastHeartbeatDetails,
-		LastHeartBeatUpdatedTime: *timestamp.TimestampFromProto(decoded.LastHeartbeatUpdatedTime).ToTime(),
-		Version:                  decoded.GetVersion(),
-		ScheduledEventBatchID:    decoded.GetScheduledEventBatchId(),
-		ScheduledEvent:           NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
-		ScheduledTime:            time.Unix(0, decoded.GetScheduledTimeNanos()),
-		StartedID:                decoded.GetStartedId(),
-		StartedTime:              time.Unix(0, decoded.GetStartedTimeNanos()),
-		ActivityID:               decoded.GetActivityId(),
-		RequestID:                decoded.GetRequestId(),
-		ScheduleToStartTimeout:   decoded.GetScheduleToStartTimeoutSeconds(),
-		ScheduleToCloseTimeout:   decoded.GetScheduleToCloseTimeoutSeconds(),
-		StartToCloseTimeout:      decoded.GetStartToCloseTimeoutSeconds(),
-		HeartbeatTimeout:         decoded.GetHeartbeatTimeoutSeconds(),
-		CancelRequested:          decoded.GetCancelRequested(),
-		CancelRequestID:          decoded.GetCancelRequestId(),
-		TimerTaskStatus:          decoded.GetTimerTaskStatus(),
-		Attempt:                  decoded.GetAttempt(),
-		StartedIdentity:          decoded.GetStartedIdentity(),
-		TaskQueue:                decoded.GetTaskQueue(),
-		HasRetryPolicy:           decoded.GetHasRetryPolicy(),
-		InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
-		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
-		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
-		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
-		NonRetryableErrorTypes:   decoded.GetRetryNonRetryableErrorTypes(),
-		LastFailure:              decoded.GetRetryLastFailure(),
-		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
+		NamespaceID:             decoded.GetNamespaceId(),
+		ScheduleID:              decoded.GetScheduleId(),
+		Details:                 decoded.LastHeartbeatDetails,
+		LastHeartbeatUpdateTime: *timestamp.TimestampFromProto(decoded.GetLastHeartbeatUpdateTime()).ToTime(),
+		Version:                 decoded.GetVersion(),
+		ScheduledEventBatchID:   decoded.GetScheduledEventBatchId(),
+		ScheduledEvent:          NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
+		ScheduledTime:           time.Unix(0, decoded.GetScheduledTimeNanos()),
+		StartedID:               decoded.GetStartedId(),
+		StartedTime:             time.Unix(0, decoded.GetStartedTimeNanos()),
+		ActivityID:              decoded.GetActivityId(),
+		RequestID:               decoded.GetRequestId(),
+		ScheduleToStartTimeout:  decoded.GetScheduleToStartTimeoutSeconds(),
+		ScheduleToCloseTimeout:  decoded.GetScheduleToCloseTimeoutSeconds(),
+		StartToCloseTimeout:     decoded.GetStartToCloseTimeoutSeconds(),
+		HeartbeatTimeout:        decoded.GetHeartbeatTimeoutSeconds(),
+		CancelRequested:         decoded.GetCancelRequested(),
+		CancelRequestID:         decoded.GetCancelRequestId(),
+		TimerTaskStatus:         decoded.GetTimerTaskStatus(),
+		Attempt:                 decoded.GetAttempt(),
+		StartedIdentity:         decoded.GetStartedIdentity(),
+		TaskQueue:               decoded.GetTaskQueue(),
+		HasRetryPolicy:          decoded.GetHasRetryPolicy(),
+		InitialInterval:         decoded.GetRetryInitialIntervalSeconds(),
+		BackoffCoefficient:      decoded.GetRetryBackoffCoefficient(),
+		MaximumInterval:         decoded.GetRetryMaximumIntervalSeconds(),
+		MaximumAttempts:         decoded.GetRetryMaximumAttempts(),
+		NonRetryableErrorTypes:  decoded.GetRetryNonRetryableErrorTypes(),
+		LastFailure:             decoded.GetRetryLastFailure(),
+		LastWorkerIdentity:      decoded.GetRetryLastWorkerIdentity(),
 	}
 	if decoded.GetRetryExpirationTimeNanos() != 0 {
 		info.ExpirationTime = time.Unix(0, decoded.GetRetryExpirationTimeNanos())
@@ -954,7 +954,7 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		NamespaceId:                   v.NamespaceID,
 		ScheduleId:                    v.ScheduleID,
 		LastHeartbeatDetails:          v.Details,
-		LastHeartbeatUpdatedTime:      timestamp.TimestampFromTime(&v.LastHeartBeatUpdatedTime).ToProto(),
+		LastHeartbeatUpdateTime:       timestamp.TimestampFromTime(&v.LastHeartbeatUpdateTime).ToProto(),
 		Version:                       v.Version,
 		ScheduledEventBatchId:         v.ScheduledEventBatchID,
 		ScheduledEvent:                scheduledEvent,

@@ -116,7 +116,7 @@ type (
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*historypb.HistoryEvent) error
-		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
+		GetDLQMessages(ctx context.Context, messagesRequest *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonpb.WorkflowExecution) error
@@ -3052,12 +3052,12 @@ func (e *historyEngineImpl) ReapplyEvents(
 		})
 }
 
-func (e *historyEngineImpl) ReadDLQMessages(
+func (e *historyEngineImpl) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+	request *historyservice.GetDLQMessagesRequest,
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	tasks, token, err := e.replicationDLQHandler.readMessages(
+	tasks, token, err := e.replicationDLQHandler.getMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -3067,7 +3067,7 @@ func (e *historyEngineImpl) ReadDLQMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.ReadDLQMessagesResponse{
+	return &historyservice.GetDLQMessagesResponse{
 		Type:             request.GetType(),
 		ReplicationTasks: tasks,
 		NextPageToken:    token,

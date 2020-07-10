@@ -2307,7 +2307,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		t, err := types.TimestampFromProto(txTasks[index].VisibilityTimestamp)
+		t, err := types.TimestampFromProto(txTasks[index].VisibilityTime)
 		s.NoError(err)
 		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
 	}
@@ -2404,7 +2404,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		t, err := types.TimestampFromProto(txTasks[index].VisibilityTimestamp)
+		t, err := types.TimestampFromProto(txTasks[index].VisibilityTime)
 		s.NoError(err)
 		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
 	}
@@ -2483,9 +2483,9 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	s.Equal(int64(14), timerTasks[3].Version)
 	s.Equal(int64(15), timerTasks[4].Version)
 
-	visTimer0, err := types.TimestampFromProto(timerTasks[0].VisibilityTimestamp)
+	visTimer0, err := types.TimestampFromProto(timerTasks[0].VisibilityTime)
 	s.NoError(err)
-	visTimer4, err := types.TimestampFromProto(timerTasks[4].VisibilityTimestamp)
+	visTimer4, err := types.TimestampFromProto(timerTasks[4].VisibilityTime)
 	s.NoError(err)
 	visTimer4 = visTimer4.Add(1 * time.Second)
 	err2 = s.RangeCompleteTimerTask(visTimer0, visTimer4)
@@ -2545,19 +2545,19 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[0].VisibilityTimestamp, timerTasks[0].GetTaskId())
+	err2 = s.CompleteTimerTaskProto(timerTasks[0].VisibilityTime, timerTasks[0].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[1].VisibilityTimestamp, timerTasks[1].GetTaskId())
+	err2 = s.CompleteTimerTaskProto(timerTasks[1].VisibilityTime, timerTasks[1].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[2].VisibilityTimestamp, timerTasks[2].GetTaskId())
+	err2 = s.CompleteTimerTaskProto(timerTasks[2].VisibilityTime, timerTasks[2].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[3].VisibilityTimestamp, timerTasks[3].GetTaskId())
+	err2 = s.CompleteTimerTaskProto(timerTasks[3].VisibilityTime, timerTasks[3].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[4].VisibilityTimestamp, timerTasks[4].GetTaskId())
+	err2 = s.CompleteTimerTaskProto(timerTasks[4].VisibilityTime, timerTasks[4].GetTaskId())
 	s.NoError(err2)
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
@@ -5117,10 +5117,10 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		Owner:                   "some random owner",
 		RangeId:                 rangeID,
 		StolenSinceRenew:        12,
-		UpdatedAt:               timestampConvertor(time.Now()),
+		UpdateTime:              timestampConvertor(time.Now()),
 		ReplicationAckLevel:     currentReplicationAck,
 		TransferAckLevel:        currentClusterTransferAck,
-		TimerAckLevel:           currentClusterTimerAck,
+		TimerAckLevelTime:       currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
 		ReplicationDlqAckLevel:  map[string]int64{},
 	}
@@ -5137,13 +5137,13 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	}
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
-	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
-	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
-	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
+	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
+	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 }
@@ -5165,10 +5165,10 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		Owner:               "some random owner",
 		RangeId:             rangeID,
 		StolenSinceRenew:    12,
-		UpdatedAt:           timestampConvertor(time.Now()),
+		UpdateTime:          timestampConvertor(time.Now()),
 		ReplicationAckLevel: currentReplicationAck,
 		TransferAckLevel:    currentClusterTransferAck,
-		TimerAckLevel:       currentClusterTimerAck,
+		TimerAckLevelTime:   currentClusterTimerAck,
 		ClusterTransferAckLevel: map[string]int64{
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -5187,13 +5187,13 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.Nil(s.ShardMgr.CreateShard(createRequest))
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
-	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
-	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
-	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
+	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
+	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 
@@ -5209,10 +5209,10 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		Owner:               "some random owner",
 		RangeId:             int64(28),
 		StolenSinceRenew:    4,
-		UpdatedAt:           timestampConvertor(time.Now()),
+		UpdateTime:          timestampConvertor(time.Now()),
 		ReplicationAckLevel: currentReplicationAck,
 		TransferAckLevel:    currentClusterTransferAck,
-		TimerAckLevel:       currentClusterTimerAck,
+		TimerAckLevelTime:   currentClusterTimerAck,
 		ClusterTransferAckLevel: map[string]int64{
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -5233,13 +5233,13 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 
 	resp, err = s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
-	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
-	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
-	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
+	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
+	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
+	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 }

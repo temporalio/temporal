@@ -320,7 +320,7 @@ func (s *shardContextImpl) GetTimerAckLevel() time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
-	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
 	return goTime
 }
 
@@ -333,7 +333,7 @@ func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
 		return err
 	}
 
-	s.shardInfo.TimerAckLevel = pTime
+	s.shardInfo.TimerAckLevelTime = pTime
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -351,7 +351,7 @@ func (s *shardContextImpl) GetTimerClusterAckLevel(cluster string) time.Time {
 	}
 	// otherwise, default to existing ack level, which belongs to local cluster
 	// this can happen if you add more cluster
-	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
 	return goTime
 }
 
@@ -1035,7 +1035,7 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 
 	replicationLag := s.transferMaxReadLevel - s.shardInfo.ReplicationAckLevel
 	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
-	timerAckLevel, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	timerAckLevel, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
 	timerLag := time.Since(timerAckLevel)
 
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
@@ -1148,7 +1148,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 		task.SetTaskID(seqNum)
 		visibilityTs := task.GetVisibilityTimestamp()
 		s.logger.Debug("Assigning new timer",
-			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevel))
+			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
 	}
 	return nil
 }
@@ -1242,7 +1242,7 @@ func acquireShard(
 			continue
 		}
 
-		currentReadTime, _ := types.TimestampFromProto(shardInfo.TimerAckLevel)
+		currentReadTime, _ := types.TimestampFromProto(shardInfo.TimerAckLevelTime)
 		if clusterName != shardItem.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
 				currentReadTime, _ = types.TimestampFromProto(currentTime)
@@ -1315,12 +1315,12 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
 			ReplicationAckLevel:          shardInfo.ReplicationAckLevel,
 			TransferAckLevel:             shardInfo.TransferAckLevel,
-			TimerAckLevel:                shardInfo.TimerAckLevel,
+			TimerAckLevelTime:            shardInfo.TimerAckLevelTime,
 			ClusterTransferAckLevel:      clusterTransferAckLevel,
 			ClusterTimerAckLevel:         clusterTimerAckLevel,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
 			ClusterReplicationLevel:      clusterReplicationLevel,
-			UpdatedAt:                    shardInfo.UpdatedAt,
+			UpdateTime:                   shardInfo.UpdateTime,
 		},
 		TransferFailoverLevels: transferFailoverLevels,
 		TimerFailoverLevels:    timerFailoverLevels,

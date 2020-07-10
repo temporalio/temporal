@@ -155,7 +155,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{}, nil)
-	tasks, token, err := s.replicationMessageHandler.readMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	tasks, token, err := s.replicationMessageHandler.getMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 	s.Nil(tasks)

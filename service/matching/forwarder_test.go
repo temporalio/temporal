@@ -106,7 +106,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
 	schedToStart := request.GetScheduleToStartTimeoutSeconds()
-	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())
+	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds())
 	t.Equal(schedToStart, rewritten)
 	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
 }
@@ -132,7 +132,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
-	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
+	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds()),
 		request.GetScheduleToStartTimeoutSeconds())
 	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
 }

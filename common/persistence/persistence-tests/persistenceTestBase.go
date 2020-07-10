@@ -232,7 +232,7 @@ func (s *TestBase) Setup() {
 		RangeId:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
-		TimerAckLevel:           &types.Timestamp{},
+		TimerAckLevelTime:       &types.Timestamp{},
 		ClusterTimerAckLevel:    map[string]*types.Timestamp{},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
@@ -1259,7 +1259,7 @@ func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution comm
 				WorkflowId:  workflowExecution.WorkflowId,
 				RunId:       workflowExecution.RunId,
 				ScheduleId:  decisionScheduleID,
-				CreatedTime: types.TimestampNow(),
+				CreateTime:  types.TimestampNow(),
 			},
 		},
 	}
@@ -1303,8 +1303,8 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 					WorkflowId:  workflowExecution.WorkflowId,
 					RunId:       workflowExecution.RunId,
 					ScheduleId:  activityScheduleID,
-					Expiry:      timestamp.TimestampNowAddSeconds(defaultScheduleToStartTimeout).ToProto(),
-					CreatedTime: types.TimestampNow(),
+					ExpiryTime:  timestamp.TimestampNowAddSeconds(defaultScheduleToStartTimeout).ToProto(),
+					CreateTime:  types.TimestampNow(),
 				},
 				TaskId: taskID,
 			},
