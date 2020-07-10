@@ -128,7 +128,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 						RangeId:             5,
 						ReplicationAckLevel: replicationAck,
 						TransferAckLevel:    currentClusterTransferAck,
-						TimerAckLevel:       currentClusterTimerAck,
+						TimerAckLevelTime:   currentClusterTimerAck,
 						ClusterTransferAckLevel: map[string]int64{
 							cluster.TestCurrentClusterName:     currentClusterTransferAck,
 							cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -148,7 +148,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 					StolenSinceRenew:    1,
 					ReplicationAckLevel: replicationAck,
 					TransferAckLevel:    currentClusterTransferAck,
-					TimerAckLevel:       currentClusterTimerAck,
+					TimerAckLevelTime:   currentClusterTimerAck,
 					ClusterTransferAckLevel: map[string]int64{
 						cluster.TestCurrentClusterName:     currentClusterTransferAck,
 						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -208,7 +208,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 						RangeId:             5,
 						ReplicationAckLevel: replicationAck,
 						TransferAckLevel:    currentClusterTransferAck,
-						TimerAckLevel:       currentClusterTimerAck,
+						TimerAckLevelTime:   currentClusterTimerAck,
 						ClusterTransferAckLevel: map[string]int64{
 							cluster.TestCurrentClusterName:     currentClusterTransferAck,
 							cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -228,7 +228,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 					StolenSinceRenew:    1,
 					ReplicationAckLevel: replicationAck,
 					TransferAckLevel:    currentClusterTransferAck,
-					TimerAckLevel:       currentClusterTimerAck,
+					TimerAckLevelTime:   currentClusterTimerAck,
 					ClusterTransferAckLevel: map[string]int64{
 						cluster.TestCurrentClusterName:     currentClusterTransferAck,
 						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -295,7 +295,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 					RangeId:             5,
 					ReplicationAckLevel: replicationAck,
 					TransferAckLevel:    currentClusterTransferAck,
-					TimerAckLevel:       currentClusterTimerAck,
+					TimerAckLevelTime:   currentClusterTimerAck,
 					ClusterTransferAckLevel: map[string]int64{
 						cluster.TestCurrentClusterName:     currentClusterTransferAck,
 						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -315,7 +315,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 				StolenSinceRenew:    1,
 				ReplicationAckLevel: replicationAck,
 				TransferAckLevel:    currentClusterTransferAck,
-				TimerAckLevel:       currentClusterTimerAck,
+				TimerAckLevelTime:   currentClusterTimerAck,
 				ClusterTransferAckLevel: map[string]int64{
 					cluster.TestCurrentClusterName:     currentClusterTransferAck,
 					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -367,7 +367,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 					RangeId:             5,
 					ReplicationAckLevel: replicationAck,
 					TransferAckLevel:    currentClusterTransferAck,
-					TimerAckLevel:       currentClusterTimerAck,
+					TimerAckLevelTime:   currentClusterTimerAck,
 					ClusterTransferAckLevel: map[string]int64{
 						cluster.TestCurrentClusterName:     currentClusterTransferAck,
 						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -387,7 +387,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 				StolenSinceRenew:    1,
 				ReplicationAckLevel: replicationAck,
 				TransferAckLevel:    currentClusterTransferAck,
-				TimerAckLevel:       currentClusterTimerAck,
+				TimerAckLevelTime:   currentClusterTimerAck,
 				ClusterTransferAckLevel: map[string]int64{
 					cluster.TestCurrentClusterName:     currentClusterTransferAck,
 					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -574,7 +574,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 				RangeId:             currentRangeID,
 				ReplicationAckLevel: replicationAck,
 				TransferAckLevel:    currentClusterTransferAck,
-				TimerAckLevel:       currentClusterTimerAck,
+				TimerAckLevelTime:   currentClusterTimerAck,
 				ClusterTransferAckLevel: map[string]int64{
 					cluster.TestCurrentClusterName:     currentClusterTransferAck,
 					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
@@ -594,7 +594,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 			StolenSinceRenew:    1,
 			ReplicationAckLevel: replicationAck,
 			TransferAckLevel:    currentClusterTransferAck,
-			TimerAckLevel:       currentClusterTimerAck,
+			TimerAckLevelTime:   currentClusterTimerAck,
 			ClusterTransferAckLevel: map[string]int64{
 				cluster.TestCurrentClusterName:     currentClusterTransferAck,
 				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,

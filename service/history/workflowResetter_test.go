@@ -292,7 +292,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		activity1.ScheduleID,
 		activity1.StartedID,
 		failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
-		enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE,
+		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 

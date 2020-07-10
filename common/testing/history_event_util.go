@@ -363,7 +363,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT
 		historyEvent.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-			RetryStatus: enumspb.RETRY_STATUS_TIMEOUT,
+			RetryState: enumspb.RETRY_STATE_TIMEOUT,
 		}}
 		return historyEvent
 	})
@@ -754,7 +754,7 @@ func InitializeHistoryEventGenerator(
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
 			StartedEventId: lastEvent.EventId,
-			RetryStatus:    enumspb.RETRY_STATUS_TIMEOUT,
+			RetryState:     enumspb.RETRY_STATE_TIMEOUT,
 		}}
 		return historyEvent
 	})

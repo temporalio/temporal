@@ -156,11 +156,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Clusters:                               clusterReplicationConfigES,
-		ActiveClusterName:                      clusterNameES[0],
-		IsGlobalNamespace:                      true,
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		Clusters:                             clusterReplicationConfigES,
+		ActiveClusterName:                    clusterNameES[0],
+		IsGlobalNamespace:                    true,
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)

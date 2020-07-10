@@ -128,8 +128,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
-		TaskId:              12345,
-		VisibilityTimestamp: types.TimestampNow(),
+		TaskId:         12345,
+		VisibilityTime: types.TimestampNow(),
 	}
 	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),

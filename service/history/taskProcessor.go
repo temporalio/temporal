@@ -329,7 +329,7 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
-		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTimestamp())
+		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTime())
 		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))

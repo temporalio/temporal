@@ -591,16 +591,16 @@ func (c *retryableClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *retryableClient) ReadDLQMessages(
+func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	var resp *historyservice.ReadDLQMessagesResponse
+	var resp *historyservice.GetDLQMessagesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ReadDLQMessages(ctx, request, opts...)
+		resp, err = c.client.GetDLQMessages(ctx, request, opts...)
 		return err
 	}
 

@@ -76,7 +76,7 @@ type (
 		GetVersion() int64
 		GetTaskId() int64
 		GetTaskType() enumsspb.TaskType
-		GetVisibilityTimestamp() *types.Timestamp
+		GetVisibilityTime() *types.Timestamp
 		GetWorkflowId() string
 		GetRunId() string
 		GetNamespaceId() string

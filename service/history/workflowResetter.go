@@ -392,7 +392,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				failure.NewResetWorkflowFailure(terminateReason, ai.Details),
-				enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE,
+				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
 			); err != nil {
 				return err

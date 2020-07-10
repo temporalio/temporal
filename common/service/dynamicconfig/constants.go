@@ -66,9 +66,9 @@ var keys = map[Key]string{
 	EnableReadFromClosedExecutionV2:        "system.enableReadFromClosedExecutionV2",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
-	HistoryArchivalStatus:                  "system.historyArchivalStatus",
+	HistoryArchivalState:                   "system.historyArchivalState",
 	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
-	VisibilityArchivalStatus:               "system.visibilityArchivalStatus",
+	VisibilityArchivalState:                "system.visibilityArchivalState",
 	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
@@ -328,12 +328,12 @@ const (
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
-	// HistoryArchivalStatus is key for the status of history archival
-	HistoryArchivalStatus
+	// HistoryArchivalState is key for the state of history archival
+	HistoryArchivalState
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
 	EnableReadFromHistoryArchival
-	// VisibilityArchivalStatus is key for the status of visibility archival
-	VisibilityArchivalStatus
+	// VisibilityArchivalState is key for the state of visibility archival
+	VisibilityArchivalState
 	// EnableReadFromVisibilityArchival is key for enabling reading visibility from archival store
 	EnableReadFromVisibilityArchival
 	// EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster

@@ -593,19 +593,19 @@ func (c *metricClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *metricClient) ReadDLQMessages(
+func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientLatency)
-	resp, err := c.client.ReadDLQMessages(ctx, request, opts...)
+	c.metricsClient.IncCounter(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetDLQMessages(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientReadDLQMessagesScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientGetDLQMessagesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

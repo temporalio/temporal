@@ -12,10 +12,10 @@ all: update-tools clean proto bins check test
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule protoc fix-proto-path proto-mock goimports-proto
+proto: clean-proto install-proto-submodule buf api-linter protoc fix-proto-path proto-mock goimports-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto-path update-go-api proto-mock goimports-proto gomodtidy
 
 # Build all docker images.
 docker-images:
@@ -80,8 +80,9 @@ override TEST_TAG := -tags $(TEST_TAG)
 endif
 
 PROTO_ROOT := proto
-PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT)/internal -name "*.proto")))
-PROTO_IMPORT := $(PROTO_ROOT)/internal:$(PROTO_ROOT)/api:$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
+PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
+PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
@@ -116,6 +117,8 @@ update-checkers:
 	GO111MODULE=off go get -u golang.org/x/lint/golint
 	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
+	GO111MODULE=off go get -u github.com/googleapis/api-linter/cmd/api-linter
+	GO111MODULE=off go get -u github.com/bufbuild/buf/cmd/buf
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -146,7 +149,7 @@ install-proto-submodule:
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc $(PROTO_IMPORTS) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) $(PROTO_DIR)*.proto$(NEWLINE))
 
 fix-proto-path:
 	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
@@ -221,6 +224,14 @@ staticcheck:
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
 	@errcheck ./... || true
+
+api-linter:
+	@printf $(COLOR) "Running api-linter..."
+	@api-linter --set-exit-status --output-format=summary $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+
+buf:
+	@printf $(COLOR) "Running buf linter..."
+	@(cd $(PROTO_ROOT) && buf check lint)
 
 check: copyright goimports-check lint vet staticcheck errcheck
 

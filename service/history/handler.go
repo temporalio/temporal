@@ -666,7 +666,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	numOfItemsInCacheByID, numOfItemsInCacheByName := h.GetNamespaceCache().GetCacheSize()
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceCache().GetCacheSize()
 	status := ""
 	switch atomic.LoadInt32(&h.controller.status) {
 	case common.DaemonStatusInitialized:
@@ -681,8 +681,8 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 		NumberOfShards: int32(h.controller.numShards()),
 		ShardIds:       h.controller.shardIDs(),
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
-			NumOfItemsInCacheById:   numOfItemsInCacheByID,
-			NumOfItemsInCacheByName: numOfItemsInCacheByName,
+			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
+			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
 		ShardControllerStatus: status,
 		Address:               h.GetHostInfo().GetAddress(),
@@ -1643,7 +1643,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	return &historyservice.ReapplyEventsResponse{}, nil
 }
 
-func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (_ *historyservice.ReadDLQMessagesResponse, retError error) {
+func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (_ *historyservice.GetDLQMessagesResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 
 	h.startWG.Wait()
@@ -1663,7 +1663,7 @@ func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.R
 		return nil, err
 	}
 
-	resp, err := engine.ReadDLQMessages(ctx, request)
+	resp, err := engine.GetDLQMessages(ctx, request)
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err

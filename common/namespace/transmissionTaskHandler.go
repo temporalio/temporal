@@ -78,7 +78,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
 				Name:        info.Name,
-				Status:      info.Status,
+				State:       info.State,
 				Description: info.Description,
 				OwnerEmail:  info.Owner,
 				Data:        info.Data,
@@ -86,9 +86,9 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
+				HistoryArchivalState:                   config.HistoryArchivalState,
 				HistoryArchivalUri:                     config.HistoryArchivalUri,
-				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
+				VisibilityArchivalState:                config.VisibilityArchivalState,
 				VisibilityArchivalUri:                  config.VisibilityArchivalUri,
 				BadBinaries:                            config.BadBinaries,
 			},

@@ -191,7 +191,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
-	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
+	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTime)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
@@ -220,21 +220,21 @@ Loop:
 		}
 
 		timeoutFailure := failure.NewTimeoutFailure(timerSequenceID.timerType)
-		var retryStatus enumspb.RetryStatus
-		if retryStatus, err = mutableState.RetryActivity(
+		var retryState enumspb.RetryState
+		if retryState, err = mutableState.RetryActivity(
 			activityInfo,
 			timeoutFailure,
 		); err != nil {
 			return err
-		} else if retryStatus == enumspb.RETRY_STATUS_IN_PROGRESS {
+		} else if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 			updateMutableState = true
 			continue Loop
 		}
 
 		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
-		// If retryStatus is Timeout then it means that expirationTime is expired.
+		// If retryState is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
-		if retryStatus == enumspb.RETRY_STATUS_TIMEOUT {
+		if retryState == enumspb.RETRY_STATE_TIMEOUT {
 			timeoutFailure.GetTimeoutFailureInfo().TimeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 		}
 
@@ -247,7 +247,7 @@ Loop:
 			activityInfo.ScheduleID,
 			activityInfo.StartedID,
 			timeoutFailure,
-			retryStatus,
+			retryState,
 		); err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
 	timeoutFailure := failure.NewTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-	backoffInterval, retryStatus := mutableState.GetRetryBackoffDuration(timeoutFailure)
+	backoffInterval, retryState := mutableState.GetRetryBackoffDuration(timeoutFailure)
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
@@ -497,7 +497,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
 	if backoffInterval == backoff.NoBackoff {
-		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryStatus); err != nil {
+		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryState); err != nil {
 			return err
 		}
 

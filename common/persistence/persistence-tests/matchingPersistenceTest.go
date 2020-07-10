@@ -112,9 +112,9 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.GetWorkflowId())
 		s.EqualValues(workflowExecution.RunId, resp.Tasks[0].Data.GetRunId())
 		s.Equal(sid, resp.Tasks[0].Data.GetScheduleId())
-		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreatedTime)
+		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreateTime)
 		s.NoError(err)
-		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.Expiry)
+		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.ExpiryTime)
 		s.NoError(err)
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
@@ -313,7 +313,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	tli := response.TaskQueueInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu, err := types.TimestampFromProto(tli.Data.LastUpdated)
+	lu, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
@@ -328,7 +328,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu2, err := types.TimestampFromProto(tli.Data.LastUpdated)
+	lu2, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
@@ -452,7 +452,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
-		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
+		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 
@@ -469,7 +469,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		resp, err = s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
-		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
+		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}

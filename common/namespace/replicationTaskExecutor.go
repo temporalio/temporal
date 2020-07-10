@@ -55,8 +55,8 @@ var (
 	ErrInvalidNamespaceConfigVersion = serviceerror.NewInvalidArgument("invalid namespace config version attribute")
 	// ErrInvalidNamespaceFailoverVersion is the error to indicate empty failover version attribute
 	ErrInvalidNamespaceFailoverVersion = serviceerror.NewInvalidArgument("invalid namespace failover version attribute")
-	// ErrInvalidNamespaceStatus is the error to indicate invalid namespace status
-	ErrInvalidNamespaceStatus = serviceerror.NewInvalidArgument("invalid namespace status attribute")
+	// ErrInvalidNamespaceState is the error to indicate invalid namespace state
+	ErrInvalidNamespaceState = serviceerror.NewInvalidArgument("invalid namespace state attribute")
 	// ErrNameUUIDCollision is the error to indicate namespace name / UUID collision
 	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("namespace replication encounter name / UUID collision")
 )
@@ -106,7 +106,7 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationspb.Name
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task
 func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	// task already validated
-	err := h.validateNamespaceStatus(task.Info.Status)
+	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
 		return err
 	}
@@ -116,18 +116,18 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:          task.GetId(),
 				Name:        task.Info.GetName(),
-				Status:      task.Info.Status,
+				State:       task.Info.GetState(),
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
 				Data:        task.Info.Data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-				EmitMetric:               task.Config.GetEmitMetric().GetValue(),
-				HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-				HistoryArchivalUri:       task.Config.GetHistoryArchivalUri(),
-				VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-				VisibilityArchivalUri:    task.Config.GetVisibilityArchivalUri(),
+				RetentionDays:           task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+				EmitMetric:              task.Config.GetEmitMetric().GetValue(),
+				HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
+				HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
+				VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
+				VisibilityArchivalUri:   task.Config.GetVisibilityArchivalUri(),
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
@@ -191,7 +191,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
 func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	// task already validated
-	err := h.validateNamespaceStatus(task.Info.Status)
+	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
 		return err
 	}
@@ -228,18 +228,18 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		request.Namespace.Info = &persistenceblobs.NamespaceInfo{
 			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
-			Status:      task.Info.Status,
+			State:       task.Info.GetState(),
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
 			Data:        task.Info.Data,
 		}
 		request.Namespace.Config = &persistenceblobs.NamespaceConfig{
-			RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
-			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
-			HistoryArchivalUri:       task.Config.GetHistoryArchivalUri(),
-			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
-			VisibilityArchivalUri:    task.Config.GetVisibilityArchivalUri(),
+			RetentionDays:           task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+			EmitMetric:              task.Config.GetEmitMetric().GetValue(),
+			HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
+			HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
+			VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:   task.Config.GetVisibilityArchivalUri(),
 		}
 		if task.Config.GetBadBinaries() != nil {
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
@@ -288,11 +288,11 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceStatus) error {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
 	switch input {
-	case enumspb.NAMESPACE_STATUS_REGISTERED, enumspb.NAMESPACE_STATUS_DEPRECATED:
+	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED:
 		return nil
 	default:
-		return ErrInvalidNamespaceStatus
+		return ErrInvalidNamespaceState
 	}
 }

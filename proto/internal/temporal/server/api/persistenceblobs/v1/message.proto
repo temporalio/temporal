@@ -56,8 +56,14 @@ message ActivityInfo {
     int64 started_time_nanos = 9;
     string activity_id = 10;
     string request_id = 11;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     int32 schedule_to_start_timeout_seconds = 12;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     int32 schedule_to_close_timeout_seconds = 13;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     int32 start_to_close_timeout_seconds = 14;
     int32 heartbeat_timeout_seconds = 15;
     bool cancel_requested = 16;
@@ -78,7 +84,7 @@ message ActivityInfo {
     string namespace_id = 31;
     int64 schedule_id = 32;
     temporal.api.common.v1.Payloads last_heartbeat_details = 33;
-    google.protobuf.Timestamp last_heartbeat_updated_time = 34;
+    google.protobuf.Timestamp last_heartbeat_update_time = 34;
 }
 
 message ShardInfo {
@@ -87,9 +93,11 @@ message ShardInfo {
     string owner = 3;
     int64 replication_ack_level = 4;
     int64 transfer_ack_level = 5;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
-    google.protobuf.Timestamp updated_at = 7;
-    google.protobuf.Timestamp timer_ack_level = 8;
+    google.protobuf.Timestamp update_time = 7;
+    google.protobuf.Timestamp timer_ack_level_time = 8;
     int64 namespace_notification_version = 9;
     map<string, int64> cluster_transfer_ack_level = 10;
     map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11;
@@ -127,7 +135,7 @@ message TimerTaskInfo {
     int64 schedule_attempt = 8;
     int64 event_id = 9;
     int64 task_id = 10;
-    google.protobuf.Timestamp visibility_timestamp = 11;
+    google.protobuf.Timestamp visibility_time = 11;
 }
 
 message TransferTaskInfo {
@@ -143,7 +151,7 @@ message TransferTaskInfo {
     int64 schedule_id = 10;
     int64 version = 11;
     int64 task_id = 12;
-    google.protobuf.Timestamp visibility_timestamp = 13;
+    google.protobuf.Timestamp visibility_time = 13;
     bool record_visibility = 14;
 }
 
@@ -186,8 +194,8 @@ message TaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     int64 schedule_id = 4;
-    google.protobuf.Timestamp created_time = 5;
-    google.protobuf.Timestamp expiry = 6;
+    google.protobuf.Timestamp create_time = 5;
+    google.protobuf.Timestamp expiry_time = 6;
 }
 
 message AllocatedTaskInfo {
@@ -201,8 +209,8 @@ message TaskQueueInfo {
     temporal.api.enums.v1.TaskQueueType task_type = 3;
     temporal.api.enums.v1.TaskQueueKind kind = 5;
     int64 ack_level = 6;
-    google.protobuf.Timestamp expiry = 7;
-    google.protobuf.Timestamp last_updated = 8;
+    google.protobuf.Timestamp expiry_time = 7;
+    google.protobuf.Timestamp last_update_time = 8;
 }
 
 message SignalInfo {
@@ -251,7 +259,7 @@ message WorkflowExecutionInfo {
     int64 last_first_event_id = 20;
     int64 last_processed_event = 21;
     int64 start_time_nanos = 22;
-    int64 last_updated_time_nanos = 23;
+    int64 last_update_time_nanos = 23;
     int64 decision_version = 24;
     int64 decision_schedule_id = 25;
     int64 decision_started_id = 26;
@@ -264,6 +272,8 @@ message WorkflowExecutionInfo {
     string decision_request_id = 34;
     string cancel_request_id = 35;
     string sticky_task_queue = 36;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     int64 sticky_schedule_to_start_timeout = 37;
     int64 retry_attempt = 38;
     int32 retry_initial_interval_seconds = 39;
@@ -325,7 +335,7 @@ message NamespaceDetail {
 
 message NamespaceInfo {
     string id = 1;
-    temporal.api.enums.v1.NamespaceStatus status = 2;
+    temporal.api.enums.v1.NamespaceState state = 2;
     string name = 3;
     string description = 4;
     string owner = 5;
@@ -342,9 +352,9 @@ message NamespaceConfig {
     bool emit_metric = 2;
     string archival_bucket = 3;
     temporal.api.namespace.v1.BadBinaries bad_binaries = 16;
-    temporal.api.enums.v1.ArchivalStatus history_archival_status = 18;
+    temporal.api.enums.v1.ArchivalState history_archival_state = 18;
     string history_archival_uri = 19;
-    temporal.api.enums.v1.ArchivalStatus visibility_archival_status = 20;
+    temporal.api.enums.v1.ArchivalState visibility_archival_state = 20;
     string visibility_archival_uri = 21;
 }
 

@@ -128,9 +128,9 @@ var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
 	&persistenceblobs.NamespaceConfig{
-		RetentionDays:            1,
-		VisibilityArchivalStatus: enumspb.ARCHIVAL_STATUS_ENABLED,
-		VisibilityArchivalUri:    "test:///visibility/archival",
+		RetentionDays:           1,
+		VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
+		VisibilityArchivalUri:   "test:///visibility/archival",
 	},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -559,7 +559,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskqueue, identity)
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
-	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", true), enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE)
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", true), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE)
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -2995,7 +2995,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, identity)
+	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -4993,8 +4993,8 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	return event
 }
 
-func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, retryStatus enumspb.RetryStatus, identity string) *historypb.HistoryEvent {
-	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, retryStatus, identity)
+func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
+	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, failure, retryState, identity)
 	return event
 }
 
@@ -5105,11 +5105,11 @@ func addFailWorkflowEvent(
 	builder mutableState,
 	decisionCompletedEventID int64,
 	failure *failurepb.Failure,
-	retryStatus enumspb.RetryStatus,
+	retryState enumspb.RetryState,
 ) *historypb.HistoryEvent {
 	event, _ := builder.AddFailWorkflowEvent(
 		decisionCompletedEventID,
-		retryStatus,
+		retryState,
 		&decisionpb.FailWorkflowExecutionDecisionAttributes{
 			Failure: failure,
 		},

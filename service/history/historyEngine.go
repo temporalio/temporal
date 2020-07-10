@@ -116,7 +116,7 @@ type (
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*historypb.HistoryEvent) error
-		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
+		GetDLQMessages(ctx context.Context, messagesRequest *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonpb.WorkflowExecution) error
@@ -1581,13 +1581,13 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 			postActions := &updateWorkflowAction{}
 			failure := request.GetFailure()
-			retryStatus, err := mutableState.RetryActivity(ai, failure)
+			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
 			}
-			if retryStatus != enumspb.RETRY_STATUS_IN_PROGRESS {
+			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryStatus, request.GetIdentity()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, failure, retryState, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
 				}
@@ -3050,12 +3050,12 @@ func (e *historyEngineImpl) ReapplyEvents(
 		})
 }
 
-func (e *historyEngineImpl) ReadDLQMessages(
+func (e *historyEngineImpl) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+	request *historyservice.GetDLQMessagesRequest,
+) (*historyservice.GetDLQMessagesResponse, error) {
 
-	tasks, token, err := e.replicationDLQHandler.readMessages(
+	tasks, token, err := e.replicationDLQHandler.getMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -3065,7 +3065,7 @@ func (e *historyEngineImpl) ReadDLQMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.ReadDLQMessagesResponse{
+	return &historyservice.GetDLQMessagesResponse{
 		Type:             request.GetType(),
 		ReplicationTasks: tasks,
 		NextPageToken:    token,

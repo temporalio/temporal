@@ -325,10 +325,10 @@ func (h *NilCheckHandler) ReapplyEvents(ctx context.Context, request *historyser
 	return resp, err
 }
 
-func (h *NilCheckHandler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error) {
-	resp, err := h.parentHandler.ReadDLQMessages(ctx, request)
+func (h *NilCheckHandler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error) {
+	resp, err := h.parentHandler.GetDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		resp = &historyservice.ReadDLQMessagesResponse{}
+		resp = &historyservice.GetDLQMessagesResponse{}
 	}
 	return resp, err
 }

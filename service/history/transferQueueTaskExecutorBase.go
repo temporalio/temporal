@@ -278,7 +278,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == enumspb.ARCHIVAL_STATUS_ENABLED
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
