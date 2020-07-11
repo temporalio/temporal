@@ -166,15 +166,50 @@ func (tdc *testDataConverter) FromPayload(payload *commonpb.Payload, valuePtr in
 	}
 
 	e := string(encoding)
-	if e == "gob" {
-		dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
-		if err := dec.Decode(valuePtr); err != nil {
-			return err
-		}
-	} else {
+	if e != "gob" {
 		return ErrEncodingIsNotSupported
 	}
-	return nil
+
+	return decodeGob(payload, valuePtr)
+}
+
+func (tdc *testDataConverter) ToStrings(payloads *commonpb.Payloads) ([]string, error) {
+	var result []string
+	for _, p := range payloads.GetPayloads() {
+		str, err := toString(p)
+		if err != nil {
+			return result, err
+		}
+
+		result = append(result, str)
+	}
+
+	return result, nil
+}
+
+func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
+	dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
+	return dec.Decode(valuePtr)
+}
+
+func toString(payload *commonpb.Payload) (string, error) {
+	encoding, ok := payload.GetMetadata()["encoding"]
+	if !ok {
+		return "", ErrEncodingIsNotSet
+	}
+
+	e := string(encoding)
+	if e != "gob" {
+		return "", ErrEncodingIsNotSupported
+	}
+
+	var value interface{}
+	err := decodeGob(payload, &value)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%+v", value), nil
 }
 
 func newTestDataConverter() encoded.DataConverter {
