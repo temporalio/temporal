@@ -90,7 +90,7 @@ func newTaskInfo(
 	return &taskInfo{
 		processor:         processor,
 		task:              task,
-		attempt:           0,
+		attempt:           1,
 		startTime:         time.Now(), // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
@@ -210,7 +210,7 @@ FilterLoop:
 		err := t.handleTaskError(scope, task, notificationChan, err)
 		if err != nil {
 			task.attempt++
-			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
+			if task.attempt > t.config.TimerTaskMaxRetryCount() {
 				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 				task.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))

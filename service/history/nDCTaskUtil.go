@@ -94,7 +94,7 @@ func loadMutableStateForTransferTask(
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK &&
 		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
-		executionInfo.DecisionAttempt > 0
+		executionInfo.DecisionAttempt > 1
 
 	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
@@ -139,7 +139,7 @@ func loadMutableStateForTimerTask(
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := timerTask.TaskType == enumsspb.TASK_TYPE_DECISION_TIMEOUT &&
 		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
-		executionInfo.DecisionAttempt > 0
+		executionInfo.DecisionAttempt > 1
 
 	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)

@@ -122,6 +122,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 		&taskInfo{
 			processor: s.mockProcessor,
 			task:      &persistenceblobs.TimerTaskInfo{},
+			attempt:   1,
 		},
 	)
 }

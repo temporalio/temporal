@@ -1308,6 +1308,8 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				if ai.LastWorkerIdentity != "" {
 					p.LastWorkerIdentity = ai.LastWorkerIdentity
 				}
+			} else {
+				p.Attempt = 1
 			}
 			result.PendingActivities = append(result.PendingActivities, p)
 		}
@@ -1913,14 +1915,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	var prevMutableState mutableState
-	attempt := 0
+	attempt := 1
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 
 	if err0 == nil {
 		defer func() { release(retError) }()
 	Just_Signal_Loop:
-		for ; attempt < conditionalRetryCount; attempt++ {
+		for ; attempt <= conditionalRetryCount; attempt++ {
 			// workflow not exist, will create workflow then signal
 			mutableState, err1 := context.loadWorkflowExecution()
 			if err1 != nil {
@@ -1970,7 +1972,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 			return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.getExecution().RunId}, nil
 		} // end for Just_Signal_Loop
-		if attempt == conditionalRetryCount {
+		if attempt == conditionalRetryCount+1 {
 			return nil, ErrMaxAttemptsExceeded
 		}
 	} else {
@@ -2448,7 +2450,7 @@ func (e *historyEngineImpl) updateWorkflowHelper(
 ) (retError error) {
 
 UpdateHistoryLoop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		weContext := workflowContext.getContext()
 		mutableState := workflowContext.getMutableState()
 
@@ -2459,7 +2461,7 @@ UpdateHistoryLoop:
 				// Handler detected that cached workflow mutable could potentially be stale
 				// Reload workflow execution history
 				workflowContext.getContext().clear()
-				if attempt != conditionalRetryCount-1 {
+				if attempt != conditionalRetryCount {
 					_, err = workflowContext.reloadMutableState()
 					if err != nil {
 						return err
@@ -2487,7 +2489,7 @@ UpdateHistoryLoop:
 
 		err = workflowContext.getContext().updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
 		if err == ErrConflict {
-			if attempt != conditionalRetryCount-1 {
+			if attempt != conditionalRetryCount {
 				_, err = workflowContext.reloadMutableState()
 				if err != nil {
 					return err
@@ -3190,7 +3192,7 @@ func (e *historyEngineImpl) loadWorkflow(
 		return e.loadWorkflowOnce(ctx, namespaceID, workflowID, runID)
 	}
 
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 
 		workflowContext, err := e.loadWorkflowOnce(ctx, namespaceID, workflowID, "")
 		if err != nil {

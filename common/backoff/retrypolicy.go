@@ -185,7 +185,7 @@ func (t systemClock) Now() time.Time {
 // Reset will set the Retrier into initial state
 func (r *retrierImpl) Reset() {
 	r.startTime = r.clock.Now()
-	r.currentAttempt = 0
+	r.currentAttempt = 1
 }
 
 // NextBackOff returns the next delay interval.  This is used by Retry to delay calling the operation again

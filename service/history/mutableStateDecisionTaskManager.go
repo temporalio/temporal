@@ -162,7 +162,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error) {
-	if m.HasPendingDecision() || m.msb.GetExecutionInfo().DecisionAttempt == 0 {
+	if m.HasPendingDecision() || m.msb.GetExecutionInfo().DecisionAttempt == 1 {
 		return nil, nil
 	}
 
@@ -172,7 +172,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 	// this is OK
 	// 1. if a failover happen just after this transient decision,
 	// AddDecisionTaskStartedEvent will handle the correction of schedule ID
-	// and set the attempt to 0
+	// and set the attempt to 1
 	// 2. if no failover happen during the life time of this transient decision
 	// then ReplicateDecisionTaskScheduledEvent will overwrite everything
 	// including the decision schedule ID
@@ -208,15 +208,15 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find decision: %v", scheduleID))
 		}
-		// setting decision attempt to 0 for decision task replication
+		// setting decision attempt to 1 for decision task replication
 		// this mainly handles transient decision completion
 		// for transient decision, active side will write 2 batch in a "transaction"
 		// 1. decision task scheduled & decision task started
 		// 2. decision task completed & other events
 		// since we need to treat each individual event batch as one transaction
-		// certain "magic" needs to be done, i.e. setting attempt to 0 so
+		// certain "magic" needs to be done, i.e. setting attempt to 1 so
 		// if first batch is replicated, but not the second one, decision can be correctly timed out
-		decision.Attempt = 0
+		decision.Attempt = 1
 	}
 
 	// Update mutable decision state
@@ -318,7 +318,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 	if m.msb.HasBufferedEvents() {
 		// if creating a decision and in the mean time events are flushed from buffered events
 		// than this decision cannot be a transient decision
-		m.msb.executionInfo.DecisionAttempt = 0
+		m.msb.executionInfo.DecisionAttempt = 1
 		if err := m.msb.FlushBufferedEvents(); err != nil {
 			return nil, err
 		}
@@ -328,7 +328,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 	scheduleID := m.msb.GetNextEventID() // we will generate the schedule event later for repeatedly failing decisions
 	// Avoid creating new history events when decisions are continuously failing
 	scheduleTime := m.msb.timeSource.Now().UnixNano()
-	if m.msb.executionInfo.DecisionAttempt == 0 {
+	if m.msb.executionInfo.DecisionAttempt == 1 {
 		newDecisionEvent = m.msb.hBuilder.AddDecisionTaskScheduledEvent(taskQueue, taskTimeout,
 			m.msb.executionInfo.DecisionAttempt)
 		scheduleID = newDecisionEvent.GetEventId()
@@ -426,15 +426,15 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 	taskqueue := request.TaskQueue.GetName()
 	startTime := m.msb.timeSource.Now().UnixNano()
 	// First check to see if new events came since transient decision was scheduled
-	if decision.Attempt > 0 && decision.ScheduleID != m.msb.GetNextEventID() {
+	if decision.Attempt > 1 && decision.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new DecisionTaskScheduledEvent since new events came in when it was scheduled
 		scheduleEvent := m.msb.hBuilder.AddDecisionTaskScheduledEvent(taskqueue, decision.DecisionTimeout, 0)
 		scheduleID = scheduleEvent.GetEventId()
-		decision.Attempt = 0
+		decision.Attempt = 1
 	}
 
 	// Avoid creating new history events when decisions are continuously failing
-	if decision.Attempt == 0 {
+	if decision.Attempt == 1 {
 		// Now create DecisionTaskStartedEvent
 		event = m.msb.hBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, request.GetIdentity())
 		startedID = event.GetEventId()
@@ -471,7 +471,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 	}
 
 	m.beforeAddDecisionTaskCompletedEvent()
-	if decision.Attempt > 0 {
+	if decision.Attempt > 1 {
 		// Create corresponding DecisionTaskSchedule and DecisionTaskStarted events for decisions we have been retrying
 		scheduledEvent := m.msb.hBuilder.AddTransientDecisionTaskScheduledEvent(m.msb.executionInfo.TaskQueue, decision.DecisionTimeout,
 			decision.Attempt, decision.ScheduledTimestamp)
@@ -525,7 +525,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 
 	var event *historypb.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
-	if dt.Attempt == 0 {
+	if dt.Attempt == 1 {
 		event = m.msb.hBuilder.AddDecisionTaskFailedEvent(attr)
 	}
 
@@ -536,7 +536,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	// always clear decision attempt for reset
 	if cause == enumspb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW ||
 		cause == enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION {
-		m.msb.executionInfo.DecisionAttempt = 0
+		m.msb.executionInfo.DecisionAttempt = 1
 	}
 	return event, nil
 }
@@ -558,7 +558,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 
 	var event *historypb.HistoryEvent
 	// Avoid creating new history events when decisions are continuously timing out
-	if dt.Attempt == 0 {
+	if dt.Attempt == 1 {
 		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	}
 

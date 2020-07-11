@@ -2631,8 +2631,8 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	s.NoError(err)
 
 	// second decision, which will complete the workflow
-	// this expect the decision to have attempt == 0
-	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 0)
+	// this expect the decision to have attempt == 1
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 1)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 

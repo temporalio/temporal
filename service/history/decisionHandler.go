@@ -306,7 +306,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	defer func() { release(retError) }()
 
 Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		msBuilder, err := weContext.loadWorkflowExecution()
 		if err != nil {
 			return nil, err
@@ -610,7 +610,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	response.ScheduledTimestamp = decision.ScheduledTimestamp
 	response.StartedTimestamp = decision.StartedTimestamp
 
-	if decision.Attempt > 0 {
+	if decision.Attempt > 1 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)

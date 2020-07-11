@@ -982,9 +982,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 
-	// always enforce the attempt to zero so that we can always schedule a new decision(skip trasientDecision logic)
+	// always enforce the attempt to 1 so that we can always schedule a new decision(skip trasientDecision logic)
 	decision, _ := newMsBuilder.GetInFlightDecision()
-	decision.Attempt = 0
+	decision.Attempt = 1
 	newMsBuilder.UpdateDecision(decision)
 
 	// before this, the mutable state is in replay mode

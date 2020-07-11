@@ -318,7 +318,7 @@ func (t *activityReplicationTask) Execute() error {
 func (t *activityReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorActivityBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorActivityBufferRetryCount() {
 		return err
 	}
 
@@ -387,7 +387,7 @@ func (t *historyReplicationTask) Execute() error {
 func (t *historyReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
@@ -479,7 +479,7 @@ func (t *historyReplicationV2Task) Execute() error {
 }
 
 func (t *historyReplicationV2Task) HandleErr(err error) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 

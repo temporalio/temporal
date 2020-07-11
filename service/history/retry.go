@@ -53,13 +53,13 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
+	if maxAttempts > 0 && currAttempt >= maxAttempts {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
+	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt-1)))
 	if nextInterval <= 0 {
 		// math.Pow() could overflow
 		if maxInterval > 0 {

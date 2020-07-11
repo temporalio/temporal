@@ -1228,6 +1228,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			now,
 		),
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+		Attempt:                1,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
