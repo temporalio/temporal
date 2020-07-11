@@ -323,7 +323,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 		// we can do the checking of task version vs workflow started version
 		// however, workflow started version is immutable
 
-		// active cluster will add first decision task after backoff timeout.
+		// active cluster will add first workflow task after backoff timeout.
 		// standby cluster should just call ack manager to retry this task
 		// since we are stilling waiting for the first DecisionScheduledEvent to be replicated from active side.
 

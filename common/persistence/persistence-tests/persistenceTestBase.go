@@ -313,7 +313,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
-				&p.DecisionTask{
+				&p.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           taskQueue,
@@ -344,7 +344,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 	var replicationTasks []p.Task
 	for _, task := range txTasks {
 		switch t := task.(type) {
-		case *p.DecisionTask, *p.ActivityTask, *p.CloseExecutionTask, *p.CancelExecutionTask, *p.StartChildExecutionTask, *p.SignalExecutionTask, *p.RecordWorkflowStartedTask:
+		case *p.WorkflowTask, *p.ActivityTask, *p.CloseExecutionTask, *p.CancelExecutionTask, *p.StartChildExecutionTask, *p.SignalExecutionTask, *p.RecordWorkflowStartedTask:
 			transferTasks = append(transferTasks, t)
 		case *p.HistoryReplicationTask:
 			replicationTasks = append(replicationTasks, t)
@@ -353,7 +353,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 		}
 	}
 
-	transferTasks = append(transferTasks, &p.DecisionTask{
+	transferTasks = append(transferTasks, &p.WorkflowTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
@@ -399,7 +399,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	transferTasks := []p.Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks,
-			&p.DecisionTask{
+			&p.WorkflowTask{
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
@@ -476,7 +476,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
-				&p.DecisionTask{
+				&p.WorkflowTask{
 					TaskID:      s.GetNextSequenceNumber(),
 					NamespaceID: namespaceID,
 					TaskQueue:   taskQueue,
@@ -545,7 +545,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, condition int64,
 	newExecution commonpb.WorkflowExecution, nextEventID, decisionScheduleID int64,
 	prevResetPoints *workflowpb.ResetPoints, beforeState *p.ReplicationState, afterState *p.ReplicationState) error {
-	newdecisionTask := &p.DecisionTask{
+	newworkflowTask := &p.WorkflowTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceID,
 		TaskQueue:   updatedInfo.TaskQueue,
@@ -556,7 +556,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
 			ExecutionStats:      updatedStats,
-			TransferTasks:       []p.Task{newdecisionTask},
+			TransferTasks:       []p.Task{newworkflowTask},
 			TimerTasks:          nil,
 			Condition:           condition,
 			UpsertActivityInfos: nil,
@@ -740,7 +740,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 	var replicationTasks []p.Task
 	for _, task := range txTasks {
 		switch t := task.(type) {
-		case *p.DecisionTask, *p.ActivityTask, *p.CloseExecutionTask, *p.CancelExecutionTask, *p.StartChildExecutionTask, *p.SignalExecutionTask, *p.RecordWorkflowStartedTask:
+		case *p.WorkflowTask, *p.ActivityTask, *p.CloseExecutionTask, *p.CancelExecutionTask, *p.StartChildExecutionTask, *p.SignalExecutionTask, *p.RecordWorkflowStartedTask:
 			transferTasks = append(transferTasks, t)
 		case *p.HistoryReplicationTask, *p.SyncActivityTask:
 			replicationTasks = append(replicationTasks, t)
@@ -749,7 +749,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 		}
 	}
 	for _, decisionScheduleID := range decisionScheduleIDs {
-		transferTasks = append(transferTasks, &p.DecisionTask{
+		transferTasks = append(transferTasks, &p.WorkflowTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceID,
 			TaskQueue:   updatedInfo.TaskQueue,
@@ -1238,13 +1238,13 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 	})
 }
 
-// CreateDecisionTask is a utility method to create a task
-func (s *TestBase) CreateDecisionTask(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue string,
+// CreateWorkflowTask is a utility method to create a task
+func (s *TestBase) CreateWorkflowTask(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue string,
 	decisionScheduleID int64) (int64, error) {
 	leaseResponse, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
-		TaskType:    enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
 	if err != nil {
 		return 0, err

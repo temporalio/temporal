@@ -80,7 +80,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	namespaceID := primitives.MustValidateUUID("11adbd1b-f164-4ea7-b2f3-2e857a5048f1")
 	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "create-task-test",
 		RunId: "c949447a-691a-4132-8b2a-a5b38106793c"}
-	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, "a5b38106793c", 5)
+	task0, err0 := s.CreateWorkflowTask(namespaceID, workflowExecution, "a5b38106793c", 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -125,20 +125,20 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	}
 }
 
-// TestGetDecisionTasks test
-func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
+// TestGetWorkflowTasks test
+func (s *MatchingPersistenceSuite) TestGetWorkflowTasks() {
 	namespaceID := primitives.MustValidateUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "get-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "get-workflow-task-test",
 		RunId: "db20f7e2-1a1e-40d9-9278-d8b886738e05"}
 	taskQueue := "d8b886738e05"
-	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, taskQueue, 5)
+	task0, err0 := s.CreateWorkflowTask(namespaceID, workflowExecution, taskQueue, 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_DECISION, 1)
+	tasks1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
-	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
+	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 workflow task.")
 	s.Equal(int64(5), tasks1Response.Tasks[0].Data.GetScheduleId())
 }
 
@@ -148,7 +148,7 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 		s.T().Skip("this test is not applicable for cassandra persistence")
 	}
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-workflow-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskQueue := "48b07ec1915d"
 	_, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
@@ -191,10 +191,10 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	}
 }
 
-// TestCompleteDecisionTask test
-func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
+// TestCompleteWorkflowTask test
+func (s *MatchingPersistenceSuite) TestCompleteWorkflowTask() {
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-workflow-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskQueue := "48b07ec1915d"
 	tasks0, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
@@ -370,7 +370,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID:   namespaceID,
 		TaskQueue:     taskQueue,
-		TaskType:      enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskType:      enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		TaskQueueKind: enumspb.TASK_QUEUE_KIND_STICKY,
 	})
 	s.NoError(err)
@@ -382,7 +382,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
 		NamespaceId: namespaceID,
 		Name:        taskQueue,
-		TaskType:    enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		AckLevel:    0,
 		Kind:        enumspb.TASK_QUEUE_KIND_STICKY,
 	}

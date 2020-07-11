@@ -203,10 +203,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
@@ -258,10 +258,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
@@ -315,10 +315,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
@@ -348,7 +348,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -373,7 +373,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
@@ -384,7 +384,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 		VisibilityTime: now,
 		TaskId:         taskID,
 		TaskQueue:      taskQueueName,
-		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:     di.ScheduleID,
 	}
 
@@ -396,7 +396,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 	s.Equal(ErrTaskRetry, err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_PushToMatching() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_PushToMatching() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -421,7 +421,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
@@ -433,20 +433,20 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 		VisibilityTime: now,
 		TaskId:         taskID,
 		TaskQueue:      taskQueueName,
-		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:     di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_FirstDecision() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_FirstDecision() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -471,7 +471,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
@@ -482,11 +482,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 		VisibilityTime: now,
 		TaskId:         taskID,
 		TaskQueue:      taskQueueName,
-		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:     di.ScheduleID,
 	}
 
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -497,7 +497,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_NonFirstDecision() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_NonFirstDecision() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -521,13 +521,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
-	di = addDecisionTaskScheduledEvent(mutableState)
+	di = addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
@@ -538,11 +538,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 		VisibilityTime: now,
 		TaskId:         taskID,
 		TaskQueue:      taskQueueName,
-		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 		ScheduleId:     di.ScheduleID,
 	}
 
-	event = addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	event = addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -577,10 +577,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
@@ -637,10 +637,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -712,10 +712,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), testTargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -776,10 +776,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -853,10 +853,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -916,10 +916,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -992,10 +992,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskID := int64(59)
 	event, childInfo := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1054,7 +1054,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 
 	taskID := int64(59)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
@@ -1117,7 +1117,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 
 	taskID := int64(59)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{

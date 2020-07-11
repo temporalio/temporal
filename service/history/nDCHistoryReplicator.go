@@ -625,10 +625,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		)
 	}
 
-	decisionTaskFailedEvent := task.getFirstEvent()
-	attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
+	workflowTaskFailedEvent := task.getFirstEvent()
+	attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	baseRunID := attr.GetBaseRunId()
-	baseEventID := decisionTaskFailedEvent.GetEventId() - 1
+	baseEventID := workflowTaskFailedEvent.GetEventId() - 1
 	baseEventVersion := attr.GetForkEventVersion()
 	newRunID := attr.GetNewRunId()
 

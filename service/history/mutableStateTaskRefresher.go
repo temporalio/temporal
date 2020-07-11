@@ -184,8 +184,8 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstDecisionTaskBackoffSeconds() > 0 {
-		if err := taskGenerator.generateDelayedDecisionTasks(
+	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+		if err := taskGenerator.generateDelayedWorkflowTasks(
 			now,
 			startEvent,
 		); err != nil {
@@ -243,7 +243,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
 ) error {
 
 	if !mutableState.HasPendingDecision() {
-		// no decision task at all
+		// no workflow task at all
 		return nil
 	}
 

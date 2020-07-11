@@ -245,30 +245,30 @@ func (c *retryableClient) GetSearchAttributes(
 	return resp, err
 }
 
-func (c *retryableClient) PollForActivityTask(
+func (c *retryableClient) PollActivityTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForActivityTaskRequest,
+	request *workflowservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollForActivityTaskResponse, error) {
-	var resp *workflowservice.PollForActivityTaskResponse
+) (*workflowservice.PollActivityTaskQueueResponse, error) {
+	var resp *workflowservice.PollActivityTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.PollForActivityTask(ctx, request, opts...)
+		resp, err = c.client.PollActivityTaskQueue(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) PollForDecisionTask(
+func (c *retryableClient) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForDecisionTaskRequest,
+	request *workflowservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollForDecisionTaskResponse, error) {
-	var resp *workflowservice.PollForDecisionTaskResponse
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+	var resp *workflowservice.PollWorkflowTaskQueueResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.PollForDecisionTask(ctx, request, opts...)
+		resp, err = c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -470,30 +470,30 @@ func (c *retryableClient) RespondActivityTaskFailedById(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondDecisionTaskCompleted(
+func (c *retryableClient) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskCompletedRequest,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
-	var resp *workflowservice.RespondDecisionTaskCompletedResponse
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	var resp *workflowservice.RespondWorkflowTaskCompletedResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondDecisionTaskCompleted(ctx, request, opts...)
+		resp, err = c.client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) RespondDecisionTaskFailed(
+func (c *retryableClient) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskFailedRequest,
+	request *workflowservice.RespondWorkflowTaskFailedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
-	var resp *workflowservice.RespondDecisionTaskFailedResponse
+) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
+	var resp *workflowservice.RespondWorkflowTaskFailedResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		resp, err = c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
 		return err
 	}
 

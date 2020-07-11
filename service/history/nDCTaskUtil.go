@@ -92,7 +92,7 @@ func loadMutableStateForTransferTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK &&
+	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
 		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.DecisionAttempt > 0
 

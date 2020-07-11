@@ -304,7 +304,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 			metrics.TimerActiveTaskDecisionTimeoutScope,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
-		if _, err := mutableState.AddDecisionTaskTimedOutEvent(
+		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
 			decision.ScheduleID,
 			decision.StartedID,
 		); err != nil {
@@ -323,7 +323,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 			metrics.TimerActiveTaskDecisionTimeoutScope,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
-		_, err := mutableState.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduleID)
 		if err != nil {
 			return err
 		}
@@ -360,11 +360,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if mutableState.HasProcessedOrPendingDecision() {
-		// already has decision task
+		// already has workflow task
 		return nil
 	}
 
-	// schedule first decision task
+	// schedule first workflow task
 	return t.updateWorkflowExecution(weContext, mutableState, true)
 }
 

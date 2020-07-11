@@ -68,7 +68,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
+					Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},

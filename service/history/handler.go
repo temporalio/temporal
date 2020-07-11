@@ -323,18 +323,18 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	return response, nil
 }
 
-// RecordDecisionTaskStarted - Record Decision Task started.
-func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (_ *historyservice.RecordDecisionTaskStartedResponse, retError error) {
+// RecordWorkflowTaskStarted - Record Workflow Task started.
+func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-	h.GetLogger().Debug("RecordDecisionTaskStarted",
+	h.GetLogger().Debug("RecordWorkflowTaskStarted",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
 		tag.WorkflowScheduleID(request.GetScheduleId()))
 
-	scope := metrics.HistoryRecordDecisionTaskStartedScope
+	scope := metrics.HistoryRecordWorkflowTaskStartedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -356,7 +356,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		h.GetLogger().Error("RecordDecisionTaskStarted failed.",
+		h.GetLogger().Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err1),
 			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
@@ -365,7 +365,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	response, err2 := engine.RecordDecisionTaskStarted(ctx, request)
+	response, err2 := engine.RecordWorkflowTaskStarted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
@@ -506,12 +506,12 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-// RespondDecisionTaskCompleted - records completion of a decision task
-func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *historyservice.RespondDecisionTaskCompletedRequest) (_ *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
+// RespondWorkflowTaskCompleted - records completion of a workflow task
+func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondDecisionTaskCompletedScope
+	scope := metrics.HistoryRespondWorkflowTaskCompletedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -534,7 +534,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
-	h.GetLogger().Debug("RespondDecisionTaskCompleted",
+	h.GetLogger().Debug("RespondWorkflowTaskCompleted",
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
@@ -551,7 +551,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	response, err2 := engine.RespondDecisionTaskCompleted(ctx, request)
+	response, err2 := engine.RespondWorkflowTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
@@ -559,13 +559,13 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	return response, nil
 }
 
-// RespondDecisionTaskFailed - failed response to decision task
-func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *historyservice.RespondDecisionTaskFailedRequest) (_ *historyservice.RespondDecisionTaskFailedResponse, retError error) {
+// RespondWorkflowTaskFailed - failed response to workflow task
+func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRespondDecisionTaskFailedScope
+	scope := metrics.HistoryRespondWorkflowTaskFailedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -585,13 +585,13 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
-	h.GetLogger().Debug("RespondDecisionTaskFailed",
+	h.GetLogger().Debug("RespondWorkflowTaskFailed",
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest.GetCause() == enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
+	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
@@ -615,12 +615,12 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	err2 := engine.RespondDecisionTaskFailed(ctx, request)
+	err2 := engine.RespondWorkflowTaskFailed(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
-	return &historyservice.RespondDecisionTaskFailedResponse{}, nil
+	return &historyservice.RespondWorkflowTaskFailedResponse{}, nil
 }
 
 // StartWorkflowExecution - creates a new workflow execution
@@ -898,7 +898,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -938,9 +938,9 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 // If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-// and a decision task being created for the execution.
+// and a workflow task being created for the execution.
 // If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
-// event recorded in history, and a decision task being created for the execution
+// event recorded in history, and a workflow task being created for the execution
 func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -1132,15 +1132,15 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	return resp, nil
 }
 
-// ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
 // used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
-// child execution without creating the decision task and then calls this API after updating the mutable state of
+// child execution without creating the workflow task and then calls this API after updating the mutable state of
 // parent execution.
-func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyservice.ScheduleDecisionTaskRequest) (_ *historyservice.ScheduleDecisionTaskResponse, retError error) {
+func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryScheduleDecisionTaskScope
+	scope := metrics.HistoryScheduleWorkflowTaskScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
@@ -1169,12 +1169,12 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyserv
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
-	err2 := engine.ScheduleDecisionTask(ctx, request)
+	err2 := engine.ScheduleWorkflowTask(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
-	return &historyservice.ScheduleDecisionTaskResponse{}, nil
+	return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 }
 
 // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.

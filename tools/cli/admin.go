@@ -737,7 +737,7 @@ func newAdminTaskQueueCommands() []cli.Command {
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe pollers and status information of taskqueue",
+			Usage:   "Describe pollers and status information of task queue",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagTaskQueueWithAlias,
@@ -745,8 +745,8 @@ func newAdminTaskQueueCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueueTypeWithAlias,
-					Value: "decision",
-					Usage: "Optional TaskQueue type [decision|activity]",
+					Value: "workflow",
+					Usage: "Optional TaskQueue type [workflow|activity]",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -755,7 +755,7 @@ func newAdminTaskQueueCommands() []cli.Command {
 		},
 		{
 			Name:  "list_tasks",
-			Usage: "List tasks of a taskqueue",
+			Usage: "List tasks of a task queue",
 			Flags: append(append(append(getDBFlags(), flagsForExecution...),
 				flagsForPagination...),
 				cli.StringFlag{
@@ -765,7 +765,7 @@ func newAdminTaskQueueCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "activity",
-					Usage: "Taskqueue type: activity, decision",
+					Usage: "Taskqueue type: activity, workflow",
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueue,

@@ -317,7 +317,7 @@ func getFlagsForStart() []cli.Flag {
 		cli.IntFlag{
 			Name:  FlagDecisionTimeoutWithAlias,
 			Value: defaultDecisionTimeoutInSeconds,
-			Usage: "Decision task start to close timeout in seconds",
+			Usage: "Workflow task start to close timeout in seconds",
 		},
 		cli.StringFlag{
 			Name: FlagCronSchedule,

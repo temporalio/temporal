@@ -31,7 +31,7 @@ func newTaskQueueCommands() []cli.Command {
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe pollers info of taskqueue",
+			Usage:   "Describe pollers info of task queue",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagTaskQueueWithAlias,
@@ -39,8 +39,8 @@ func newTaskQueueCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueueTypeWithAlias,
-					Value: "decision",
-					Usage: "Optional TaskQueue type [decision|activity]",
+					Value: "workflow",
+					Usage: "Optional TaskQueue type [workflow|activity]",
 				},
 			},
 			Action: func(c *cli.Context) {

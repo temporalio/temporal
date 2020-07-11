@@ -203,9 +203,9 @@ type Config struct {
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	// TODO https://go.temporal.io/server/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// DefaultWorkflowTaskTimeout the default decision task timeout
+	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
+	// DecisionHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any decisions
 	// So that decision will be scheduled to another worker(by clear stickyness)
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The execution timeout a workflow execution defaults to if not specified
@@ -216,7 +216,7 @@ type Config struct {
 	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// Maximum workflow run timeout permitted by the service
 	MaxWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// MaxWorkflowTaskTimeout is the maximum allowed value for a decision task timeout
+	// MaxWorkflowTaskTimeout is the maximum allowed value for a workflow task timeout
 	MaxWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack

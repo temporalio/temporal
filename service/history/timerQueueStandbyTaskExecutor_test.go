@@ -209,10 +209,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
@@ -284,10 +284,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
@@ -347,10 +347,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	timerID1 := "timer-1"
 	timerTimeout1 := 2 * time.Second
@@ -414,10 +414,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	taskqueue := "taskqueue"
 	activityID := "activity"
@@ -492,10 +492,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -559,10 +559,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -627,10 +627,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -741,8 +741,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	startedEvent := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	startedEvent := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	nextEventID := startedEvent.GetEventId() + 1
 
 	protoTime, err := types.TimestampProto(s.now)
@@ -832,10 +832,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 
 	protoTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
@@ -941,7 +941,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
+	di := addWorkflowTaskScheduledEvent(mutableState)
 
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
@@ -987,10 +987,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	startEvent := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	startEvent := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = startEvent.GetEventId()
-	completionEvent := addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	completionEvent := addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	nextEventID := completionEvent.GetEventId() + 1
 
 	protoTaskTime, err := types.TimestampProto(s.now)
@@ -1051,10 +1051,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	)
 	s.Nil(err)
 
-	di := addDecisionTaskScheduledEvent(mutableState)
-	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
-	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 
 	protoTaskTime, err := types.TimestampProto(s.now)

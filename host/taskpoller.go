@@ -49,12 +49,12 @@ import (
 )
 
 type (
-	decisionTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	workflowTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error)
 	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
 
-	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error)
+	queryHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
@@ -64,7 +64,7 @@ type (
 		StickyTaskQueue                     *taskqueuepb.TaskQueue
 		StickyScheduleToStartTimeoutSeconds int32
 		Identity                            string
-		DecisionHandler                     decisionTaskHandler
+		DecisionHandler                     workflowTaskHandler
 		ActivityHandler                     activityTaskHandler
 		QueryHandler                        queryHandler
 		Logger                              log.Logger
@@ -72,23 +72,23 @@ type (
 	}
 )
 
-// PollAndProcessDecisionTask for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, false, false, int64(0))
+// PollAndProcessWorkflowTask for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, int64(0))
 }
 
-// PollAndProcessDecisionTaskWithSticky for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, true, true, int64(0))
+// PollAndProcessWorkflowTaskWithSticky for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, int64(0))
 }
 
-// PollAndProcessDecisionTaskWithoutRetry for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(0), 1)
+// PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
+	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(0), 1)
 }
 
-// PollAndProcessDecisionTaskWithAttempt for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
+// PollAndProcessWorkflowTaskWithAttempt for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttempt(
 	dumpHistory bool,
 	dropTask bool,
 	pollStickyTaskQueue bool,
@@ -96,7 +96,7 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
 	decisionAttempt int64,
 ) (isQueryTask bool, err error) {
 
-	return p.PollAndProcessDecisionTaskWithAttemptAndRetry(
+	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(
 		dumpHistory,
 		dropTask,
 		pollStickyTaskQueue,
@@ -105,8 +105,8 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
 		5)
 }
 
-// PollAndProcessDecisionTaskWithAttemptAndRetry for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
+// PollAndProcessWorkflowTaskWithAttemptAndRetry for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetry(
 	dumpHistory bool,
 	dropTask bool,
 	pollStickyTaskQueue bool,
@@ -115,7 +115,7 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
 	retryCount int,
 ) (isQueryTask bool, err error) {
 
-	isQueryTask, _, err = p.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	isQueryTask, _, err = p.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
 		dumpHistory,
 		dropTask,
 		pollStickyTaskQueue,
@@ -127,8 +127,8 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
 	return isQueryTask, err
 }
 
-// PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+// PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
 	dumpHistory bool,
 	dropTask bool,
 	pollStickyTaskQueue bool,
@@ -137,7 +137,7 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDec
 	retryCount int,
 	forceCreateNewDecision bool,
 	queryResult *querypb.WorkflowQueryResult,
-) (isQueryTask bool, newTask *workflowservice.RespondDecisionTaskCompletedResponse, err error) {
+) (isQueryTask bool, newTask *workflowservice.RespondWorkflowTaskCompletedResponse, err error) {
 Loop:
 	for attempt := 0; attempt < retryCount; attempt++ {
 
@@ -145,14 +145,14 @@ Loop:
 		if pollStickyTaskQueue {
 			taskQueue = p.StickyTaskQueue
 		}
-		response, err1 := p.Engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
+		response, err1 := p.Engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: taskQueue,
 			Identity:  p.Identity,
 		})
 
 		if err1 == history.ErrDuplicate {
-			p.Logger.Info("Duplicate Decision task: Polling again")
+			p.Logger.Info("Duplicate Workflow task: Polling again")
 			continue Loop
 		}
 
@@ -161,7 +161,7 @@ Loop:
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
-			p.Logger.Info("Empty Decision task: Polling again")
+			p.Logger.Info("Empty Workflow task: Polling again")
 			continue Loop
 		}
 
@@ -206,7 +206,7 @@ Loop:
 		}
 
 		if dropTask {
-			p.Logger.Info("Dropping Decision task: ")
+			p.Logger.Info("Dropping Workflow task: ")
 			return false, nil, nil
 		}
 
@@ -233,23 +233,23 @@ Loop:
 			return true, nil, err
 		}
 
-		// handle normal decision task / non query task response
+		// handle normal workflow task / non query task response
 		var lastDecisionScheduleEvent *historypb.HistoryEvent
 		for _, e := range events {
-			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
 				lastDecisionScheduleEvent = e
 			}
 		}
 		if lastDecisionScheduleEvent != nil && decisionAttempt > 0 {
-			require.Equal(p.T, decisionAttempt, lastDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetAttempt())
+			require.Equal(p.T, decisionAttempt, lastDecisionScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
 		decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
-			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
+			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Cause:     enumspb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
@@ -259,20 +259,20 @@ Loop:
 		p.Logger.Info("Completing Decision.  Decisions", tag.Value(decisions))
 		if !respondStickyTaskQueue {
 			// non sticky taskqueue
-			newTask, err := p.Engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
+			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
 				Decisions:                  decisions,
-				ReturnNewDecisionTask:      forceCreateNewDecision,
-				ForceCreateNewDecisionTask: forceCreateNewDecision,
+				ReturnNewWorkflowTask:      forceCreateNewDecision,
+				ForceCreateNewWorkflowTask: forceCreateNewDecision,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			})
 			return false, newTask, err
 		}
 		// sticky taskqueue
-		newTask, err := p.Engine.RespondDecisionTaskCompleted(
+		newTask, err := p.Engine.RespondWorkflowTaskCompleted(
 			NewContext(),
-			&workflowservice.RespondDecisionTaskCompletedRequest{
+			&workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
 				Decisions: decisions,
@@ -280,8 +280,8 @@ Loop:
 					WorkerTaskQueue:               p.StickyTaskQueue,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 				},
-				ReturnNewDecisionTask:      forceCreateNewDecision,
-				ForceCreateNewDecisionTask: forceCreateNewDecision,
+				ReturnNewWorkflowTask:      forceCreateNewDecision,
+				ForceCreateNewWorkflowTask: forceCreateNewDecision,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},
 		)
@@ -292,11 +292,11 @@ Loop:
 	return false, nil, matching.ErrNoTasks
 }
 
-// HandlePartialDecision for decision task
-func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDecisionTaskResponse) (
-	*workflowservice.RespondDecisionTaskCompletedResponse, error) {
+// HandlePartialDecision for workflow task
+func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollWorkflowTaskQueueResponse) (
+	*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	if response == nil || len(response.TaskToken) == 0 {
-		p.Logger.Info("Empty Decision task: Polling again")
+		p.Logger.Info("Empty Workflow task: Polling again")
 		return nil, nil
 	}
 
@@ -315,9 +315,9 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
-		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
+		_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 			TaskToken: response.TaskToken,
-			Cause:     enumspb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(err, false, nil),
 			Identity:  p.Identity,
 		})
@@ -327,9 +327,9 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 	p.Logger.Info("Completing Decision", tag.Value(decisions))
 
 	// sticky taskqueue
-	newTask, err := p.Engine.RespondDecisionTaskCompleted(
+	newTask, err := p.Engine.RespondWorkflowTaskCompleted(
 		NewContext(),
-		&workflowservice.RespondDecisionTaskCompletedRequest{
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Decisions: decisions,
@@ -337,8 +337,8 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 				WorkerTaskQueue:               p.StickyTaskQueue,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 			},
-			ReturnNewDecisionTask:      true,
-			ForceCreateNewDecisionTask: true,
+			ReturnNewWorkflowTask:      true,
+			ForceCreateNewWorkflowTask: true,
 		},
 	)
 
@@ -349,7 +349,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:
 	for attempt := 0; attempt < 5; attempt++ {
-		response, err := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
+		response, err := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
@@ -411,7 +411,7 @@ retry:
 func (p *TaskPoller) PollAndProcessActivityTaskWithID(dropTask bool) error {
 retry:
 	for attempt := 0; attempt < 5; attempt++ {
-		response, err1 := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
+		response, err1 := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,

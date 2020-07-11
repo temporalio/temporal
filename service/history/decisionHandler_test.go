@@ -89,14 +89,14 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_HeartbeatDecision() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NewDecisionTask() {
+func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
 	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, true, testGlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 5, 5, 0, 0)
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NoNewDecisionTask() {
+func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NoNewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
 	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)

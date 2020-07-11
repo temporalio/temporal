@@ -153,13 +153,13 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -243,7 +243,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
@@ -312,7 +312,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 	}
 	endingBlob := s.serializeEvents(endingEventBatch)
@@ -476,13 +476,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
@@ -492,7 +492,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
@@ -598,13 +598,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob1 := s.serializeEvents(eventBatch1)
@@ -614,7 +614,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 			EventId:   4,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
@@ -1117,7 +1117,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 				EventId:   2,
 				Version:   223,
 				Timestamp: time.Now().UnixNano(),
-				EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			},
 		}
 		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeProto3)
@@ -1185,7 +1185,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 			EventId:   233,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   234,
@@ -1214,7 +1214,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 			EventId:   233,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:    234,
@@ -1248,8 +1248,8 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 			EventId:    2,
 			Version:    223,
 			Timestamp:  time.Now().UnixNano(),
-			EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-			Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 		},
 	}
 

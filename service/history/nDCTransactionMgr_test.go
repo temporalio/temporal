@@ -182,11 +182,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
-	lastDecisionTaskStartedEventID := int64(9999)
-	nextEventID := lastDecisionTaskStartedEventID * 2
-	lastDecisionTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
+	lastWorkflowTaskStartedEventID := int64(9999)
+	nextEventID := lastWorkflowTaskStartedEventID * 2
+	lastWorkflowTaskStartedVersion := s.namespaceEntry.GetFailoverVersion()
 	versionHistory := persistence.NewVersionHistory([]byte("branch token"), []*persistence.VersionHistoryItem{
-		{EventID: lastDecisionTaskStartedEventID, Version: lastDecisionTaskStartedVersion},
+		{EventID: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
 	})
 	histories := persistence.NewVersionHistories(versionHistory)
 
@@ -215,7 +215,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		RunID:       runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastDecisionTaskStartedEventID).Times(1)
+	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID).Times(1)
 	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().resetWorkflow(
@@ -224,8 +224,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		workflowID,
 		runID,
 		versionHistory.GetBranchToken(),
-		lastDecisionTaskStartedEventID,
-		lastDecisionTaskStartedVersion,
+		lastWorkflowTaskStartedEventID,
+		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
 		gomock.Any(),
