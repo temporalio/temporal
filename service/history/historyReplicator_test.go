@@ -348,7 +348,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentNextEventID := int64(2333)
 	currentDecisionTimeout := int32(100)
 	currentDecisionStickyTimeout := int32(10)
-	currentDecisionTaskqueue := "some random decision taskqueue"
+	currentWorkflowTaskqueue := "some random workflow taskqueue"
 	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	req := &historyservice.ReplicateEventsRequest{
@@ -394,7 +394,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		NamespaceID:                  namespaceID,
 		RunID:                        currentRunID,
 		NextEventID:                  currentNextEventID,
-		TaskQueue:                    currentDecisionTaskqueue,
+		TaskQueue:                    currentWorkflowTaskqueue,
 		StickyTaskQueue:              currentDecisionStickyTaskqueue,
 		DecisionTimeout:              currentDecisionTimeout,
 		StickyScheduleToStartTimeout: currentDecisionStickyTimeout,
@@ -423,7 +423,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		TaskQueue:  currentDecisionStickyTaskqueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1130,7 +1130,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1267,7 +1267,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
-	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1672,7 +1672,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	incomingReplicationInfoLastEventID := currentLastEventID
 	decisionTimeout := int32(100)
 	decisionStickyTimeout := int32(10)
-	decisionTaskqueue := "some random decision taskqueue"
+	workflowTaskqueue := "some random workflow taskqueue"
 	decisionStickyTaskqueue := "some random decision sticky taskqueue"
 
 	updateCondition := int64(1394)
@@ -1707,8 +1707,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(true).Times(1)
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
+	msBuilderIn.EXPECT().AddWorkflowTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
@@ -1716,7 +1716,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		StartTimestamp:               startTimeStamp,
 		NamespaceID:                  namespaceID,
 		RunID:                        runID,
-		TaskQueue:                    decisionTaskqueue,
+		TaskQueue:                    workflowTaskqueue,
 		StickyTaskQueue:              decisionStickyTaskqueue,
 		DecisionTimeout:              decisionTimeout,
 		StickyScheduleToStartTimeout: decisionStickyTimeout,
@@ -1734,7 +1734,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		TaskQueue:  decisionStickyTaskqueue,
 		Attempt:    0,
 	}
-	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
 
 	weContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -3140,7 +3140,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TaskQueue:  currentDecisionStickyTaskqueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
 
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 

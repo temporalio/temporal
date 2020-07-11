@@ -328,48 +328,48 @@ func (s *dcRedirectionHandlerSuite) TestCountWorkflowExecutions() {
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestPollForActivityTask() {
-	apiName := "PollForActivityTask"
+func (s *dcRedirectionHandlerSuite) TestPollActivityTaskQueue() {
+	apiName := "PollActivityTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
-	req := &workflowservice.PollForActivityTaskRequest{
+	req := &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.namespace,
 	}
-	resp, err := s.handler.PollForActivityTask(context.Background(), req)
+	resp, err := s.handler.PollActivityTaskQueue(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().PollForActivityTask(gomock.Any(), req).Return(&workflowservice.PollForActivityTaskResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().PollActivityTaskQueue(gomock.Any(), req).Return(&workflowservice.PollActivityTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().PollForActivityTask(gomock.Any(), req).Return(&workflowservice.PollForActivityTaskResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().PollActivityTaskQueue(gomock.Any(), req).Return(&workflowservice.PollActivityTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestPollForDecisionTask() {
-	apiName := "PollForDecisionTask"
+func (s *dcRedirectionHandlerSuite) TestPollWorkflowTaskQueue() {
+	apiName := "PollWorkflowTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
-	req := &workflowservice.PollForDecisionTaskRequest{
+	req := &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 	}
-	resp, err := s.handler.PollForDecisionTask(context.Background(), req)
+	resp, err := s.handler.PollWorkflowTaskQueue(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().PollForDecisionTask(gomock.Any(), req).Return(&workflowservice.PollForDecisionTaskResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().PollWorkflowTaskQueue(gomock.Any(), req).Return(&workflowservice.PollWorkflowTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().PollForDecisionTask(gomock.Any(), req).Return(&workflowservice.PollForDecisionTaskResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), req).Return(&workflowservice.PollWorkflowTaskQueueResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }
@@ -660,8 +660,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailedById() {
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
-	apiName := "RespondDecisionTaskCompleted"
+func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
+	apiName := "RespondWorkflowTaskCompleted"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
@@ -670,25 +670,25 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
 		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
-	req := &workflowservice.RespondDecisionTaskCompletedRequest{
+	req := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: taskToken,
 	}
-	resp, err := s.handler.RespondDecisionTaskCompleted(context.Background(), req)
+	resp, err := s.handler.RespondWorkflowTaskCompleted(context.Background(), req)
 	s.Nil(err)
 	// the resp is initialized to nil, since inner function is not called
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().RespondDecisionTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondDecisionTaskCompletedResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().RespondWorkflowTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskCompletedResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().RespondDecisionTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondDecisionTaskCompletedResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().RespondWorkflowTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskCompletedResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
-	apiName := "RespondDecisionTaskFailed"
+func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
+	apiName := "RespondWorkflowTaskFailed"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
@@ -697,18 +697,18 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
 		NamespaceId: s.namespaceID,
 	})
 	s.Nil(err)
-	req := &workflowservice.RespondDecisionTaskFailedRequest{
+	req := &workflowservice.RespondWorkflowTaskFailedRequest{
 		TaskToken: token,
 	}
-	resp, err := s.handler.RespondDecisionTaskFailed(context.Background(), req)
+	resp, err := s.handler.RespondWorkflowTaskFailed(context.Background(), req)
 	s.Nil(err)
 	s.Nil(resp)
 
 	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
-	s.mockFrontendHandler.EXPECT().RespondDecisionTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondDecisionTaskFailedResponse{}, nil).Times(1)
+	s.mockFrontendHandler.EXPECT().RespondWorkflowTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskFailedResponse{}, nil).Times(1)
 	err = callFn(s.currentClusterName)
 	s.Nil(err)
-	s.mockRemoteFrontendClient.EXPECT().RespondDecisionTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondDecisionTaskFailedResponse{}, nil).Times(1)
+	s.mockRemoteFrontendClient.EXPECT().RespondWorkflowTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskFailedResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
 }

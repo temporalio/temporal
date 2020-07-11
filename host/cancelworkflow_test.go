@@ -119,8 +119,8 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -146,8 +146,8 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.NotNil(err)
 	s.IsType(&serviceerror.CancellationAlreadyRequested{}, err)
 
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	executionCancelled := false
@@ -316,12 +316,12 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
+	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
@@ -329,8 +329,8 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	s.NoError(err)
 
 	// Cancel the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	cancellationSent := false
@@ -366,8 +366,8 @@ CheckHistoryLoopForCancelSent:
 	s.True(cancellationSent)
 
 	// Accept cancellation.
-	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
+	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	executionCancelled := false
@@ -493,13 +493,13 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Cancel the foreign workflow with this decision request.
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	cancellationSentFailed := false

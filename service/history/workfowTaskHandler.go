@@ -48,9 +48,9 @@ import (
 type (
 	decisionAttrValidationFn func() error
 
-	decisionTaskHandlerImpl struct {
+	workflowTaskHandlerImpl struct {
 		identity                string
-		decisionTaskCompletedID int64
+		workflowTaskCompletedID int64
 		namespaceEntry          *cache.NamespaceCacheEntry
 
 		// internal state
@@ -72,14 +72,14 @@ type (
 	}
 
 	failDecisionInfo struct {
-		cause   enumspb.DecisionTaskFailedCause
+		cause   enumspb.WorkflowTaskFailedCause
 		message string
 	}
 )
 
-func newDecisionTaskHandler(
+func newWorkflowTaskHandler(
 	identity string,
-	decisionTaskCompletedID int64,
+	workflowTaskCompletedID int64,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	mutableState mutableState,
 	attrValidator *decisionAttrValidator,
@@ -88,11 +88,11 @@ func newDecisionTaskHandler(
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	config *Config,
-) *decisionTaskHandlerImpl {
+) *workflowTaskHandlerImpl {
 
-	return &decisionTaskHandlerImpl{
+	return &workflowTaskHandlerImpl{
 		identity:                identity,
-		decisionTaskCompletedID: decisionTaskCompletedID,
+		workflowTaskCompletedID: workflowTaskCompletedID,
 		namespaceEntry:          namespaceEntry,
 
 		// internal state
@@ -114,7 +114,7 @@ func newDecisionTaskHandler(
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisions(
+func (handler *workflowTaskHandlerImpl) handleDecisions(
 	decisions []*decisionpb.Decision,
 ) error {
 
@@ -135,7 +135,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisions(
 	return nil
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecision(decision *decisionpb.Decision) error {
+func (handler *workflowTaskHandlerImpl) handleDecision(decision *decisionpb.Decision) error {
 	switch decision.GetDecisionType() {
 	case enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleDecisionScheduleActivity(decision.GetScheduleActivityTaskDecisionAttributes())
@@ -181,12 +181,12 @@ func (handler *decisionTaskHandlerImpl) handleDecision(decision *decisionpb.Deci
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
+func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 	attr *decisionpb.ScheduleActivityTaskDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeScheduleActivityCounter,
 	)
 
@@ -210,7 +210,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 				executionInfo.WorkflowRunTimeout,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -225,25 +225,25 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		return err
 	}
 
-	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.decisionTaskCompletedID, attr)
+	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.workflowTaskCompletedID, attr)
 	switch err.(type) {
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
-			enumspb.DECISION_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, "",
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, "",
 		)
 	default:
 		return err
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
+func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
 	attr *decisionpb.RequestCancelActivityTaskDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeCancelActivityCounter,
 	)
 
@@ -251,14 +251,14 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		func() error {
 			return handler.attrValidator.validateActivityCancelAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
 
 	scheduleID := attr.GetScheduledEventId()
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
-		handler.decisionTaskCompletedID,
+		handler.workflowTaskCompletedID,
 		scheduleID,
 		handler.identity,
 	)
@@ -266,7 +266,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 	case nil:
 		if ai.StartedID == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
-			// schedule a decision task to ensure the workflow makes progress.
+			// schedule a workflow task to ensure the workflow makes progress.
 			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
 				ai.ScheduleID,
 				ai.StartedID,
@@ -282,7 +282,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		return nil
 	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
-			enumspb.DECISION_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, "",
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, "",
 		)
 
 	default:
@@ -290,12 +290,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
+func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
 	attr *decisionpb.StartTimerDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeStartTimerCounter,
 	)
 
@@ -303,42 +303,42 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 		func() error {
 			return handler.attrValidator.validateTimerScheduleAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_START_TIMER_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_TIMER_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
 
-	_, _, err := handler.mutableState.AddTimerStartedEvent(handler.decisionTaskCompletedID, attr)
+	_, _, err := handler.mutableState.AddTimerStartedEvent(handler.workflowTaskCompletedID, attr)
 	switch err.(type) {
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
-			enumspb.DECISION_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, "",
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, "",
 		)
 	default:
 		return err
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	attr *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeCompleteWorkflowCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -356,7 +356,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondDecisionTaskCompletedScope,
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionDecisionsCounter,
 		)
 		handler.logger.Warn(
@@ -375,7 +375,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	}
 	if cronBackoff == backoff.NoBackoff {
 		// not cron, so complete this workflow execution
-		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
+		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr); err != nil {
 			return serviceerror.NewInternal("Unable to add complete workflow event.")
 		}
 		return nil
@@ -396,24 +396,24 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	)
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 	attr *decisionpb.FailWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeFailWorkflowCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateFailWorkflowExecutionAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -431,7 +431,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondDecisionTaskCompletedScope,
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionDecisionsCounter,
 		)
 		handler.logger.Warn(
@@ -458,7 +458,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
 		// no retry or cron
-		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, retryState, attr); err != nil {
+		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.workflowTaskCompletedID, retryState, attr); err != nil {
 			return err
 		}
 		return nil
@@ -479,12 +479,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	)
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
+func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
 	attr *decisionpb.CancelTimerDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeCancelTimerCounter,
 	)
 
@@ -492,13 +492,13 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		func() error {
 			return handler.attrValidator.validateTimerCancelAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
 
 	_, err := handler.mutableState.AddTimerCanceledEvent(
-		handler.decisionTaskCompletedID,
+		handler.workflowTaskCompletedID,
 		attr,
 		handler.identity)
 	switch err.(type) {
@@ -511,7 +511,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		return nil
 	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddCancelTimerFailedEvent(
-			handler.decisionTaskCompletedID,
+			handler.workflowTaskCompletedID,
 			attr,
 			handler.identity,
 		)
@@ -521,22 +521,22 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
 	attr *decisionpb.CancelWorkflowExecutionDecisionAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
+	handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeCancelWorkflowCounter)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -544,7 +544,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondDecisionTaskCompletedScope,
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionDecisionsCounter,
 		)
 		handler.logger.Warn(
@@ -555,16 +555,16 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 		return nil
 	}
 
-	_, err := handler.mutableState.AddWorkflowExecutionCanceledEvent(handler.decisionTaskCompletedID, attr)
+	_, err := handler.mutableState.AddWorkflowExecutionCanceledEvent(handler.workflowTaskCompletedID, attr)
 	return err
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkflow(
 	attr *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeCancelExternalWorkflowCounter,
 	)
 
@@ -587,24 +587,24 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 				attr,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
 
 	cancelRequestID := uuid.New()
 	_, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
-		handler.decisionTaskCompletedID, cancelRequestID, attr,
+		handler.workflowTaskCompletedID, cancelRequestID, attr,
 	)
 	return err
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
+func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
 	attr *decisionpb.RecordMarkerDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeRecordMarkerCounter,
 	)
 
@@ -612,7 +612,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 		func() error {
 			return handler.attrValidator.validateRecordMarkerAttributes(attr)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -627,21 +627,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 		return err
 	}
 
-	_, err = handler.mutableState.AddRecordMarkerEvent(handler.decisionTaskCompletedID, attr)
+	_, err = handler.mutableState.AddRecordMarkerEvent(handler.workflowTaskCompletedID, attr)
 	return err
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	attr *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeContinueAsNewCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.DECISION_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -653,7 +653,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 				executionInfo,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -669,10 +669,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	}
 
 	if attr.WorkflowRunTimeoutSeconds <= 0 {
-		// TODO(maxim): is decisionTaskCompletedID the correct id?
+		// TODO(maxim): is workflowTaskCompletedID the correct id?
 		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
 		handler.stopProcessing = true
-		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID, enumspb.RETRY_STATE_TIMEOUT)
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.workflowTaskCompletedID, enumspb.RETRY_STATE_TIMEOUT)
 		return err
 	}
 	handler.logger.Debug("!!!! Continued as new without timeout",
@@ -681,7 +681,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondDecisionTaskCompletedScope,
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionDecisionsCounter,
 		)
 		handler.logger.Warn(
@@ -704,8 +704,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
-		handler.decisionTaskCompletedID,
-		handler.decisionTaskCompletedID,
+		handler.workflowTaskCompletedID,
+		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
 	)
@@ -717,12 +717,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	return nil
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	attr *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeChildWorkflowCounter,
 	)
 
@@ -746,7 +746,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 				executionInfo,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -772,17 +772,17 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 
 	requestID := uuid.New()
 	_, _, err = handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.decisionTaskCompletedID, requestID, attr,
+		handler.workflowTaskCompletedID, requestID, attr,
 	)
 	return err
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
+func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	attr *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeSignalExternalWorkflowCounter,
 	)
 
@@ -805,7 +805,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 				attr,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -822,17 +822,17 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 
 	signalRequestID := uuid.New() // for deduplicate
 	_, _, err = handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
-		handler.decisionTaskCompletedID, signalRequestID, attr,
+		handler.workflowTaskCompletedID, signalRequestID, attr,
 	)
 	return err
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttributes(
+func (handler *workflowTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttributes(
 	attr *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.DecisionTypeUpsertWorkflowSearchAttributesCounter,
 	)
 
@@ -853,7 +853,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 				attr,
 			)
 		},
-		enumspb.DECISION_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -870,7 +870,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
-		handler.decisionTaskCompletedID, attr,
+		handler.workflowTaskCompletedID, attr,
 	)
 	return err
 }
@@ -885,7 +885,7 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 	return result
 }
 
-func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
+func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
 	attr *historypb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
 	continueAsNewInitiator enumspb.ContinueAsNewInitiator,
@@ -911,8 +911,8 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
-		handler.decisionTaskCompletedID,
-		handler.decisionTaskCompletedID,
+		handler.workflowTaskCompletedID,
+		handler.workflowTaskCompletedID,
 		attr.GetParentWorkflowNamespace(),
 		continueAsNewAttributes,
 	)
@@ -924,9 +924,9 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	return nil
 }
 
-func (handler *decisionTaskHandlerImpl) validateDecisionAttr(
+func (handler *workflowTaskHandlerImpl) validateDecisionAttr(
 	validationFn decisionAttrValidationFn,
-	failedCause enumspb.DecisionTaskFailedCause,
+	failedCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
 	if err := validationFn(); err != nil {
@@ -939,8 +939,8 @@ func (handler *decisionTaskHandlerImpl) validateDecisionAttr(
 	return nil
 }
 
-func (handler *decisionTaskHandlerImpl) handlerFailDecision(
-	failedCause enumspb.DecisionTaskFailedCause,
+func (handler *workflowTaskHandlerImpl) handlerFailDecision(
+	failedCause enumspb.WorkflowTaskFailedCause,
 	failMessage string,
 ) error {
 	handler.failDecisionInfo = &failDecisionInfo{

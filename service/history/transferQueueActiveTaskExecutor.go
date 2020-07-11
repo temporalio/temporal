@@ -103,8 +103,8 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	switch task.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(task)
-	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-		return t.processDecisionTask(task)
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+		return t.processWorkflowTask(task)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(task)
 	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
@@ -161,7 +161,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	return t.pushActivity(task, timeout)
 }
 
-func (t *transferQueueActiveTaskExecutor) processDecisionTask(
+func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
@@ -183,7 +183,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
@@ -198,7 +198,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky decision, if so convert the decision to a sticky decision.
 	// that logic has a bug which timer task for that sticky decision is not generated
-	// the correct logic should check whether the decision task is a sticky decision
+	// the correct logic should check whether the workflow task is a sticky decision
 	// task or not.
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
@@ -579,13 +579,13 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 
-	// ChildExecution already started, just create DecisionTask and complete transfer task
+	// ChildExecution already started, just create WorkflowTask and complete transfer task
 	if childInfo.StartedID != common.EmptyEventID {
 		childExecution := &commonpb.WorkflowExecution{
 			WorkflowId: childInfo.StartedWorkflowID,
 			RunId:      childInfo.StartedRunID,
 		}
-		return t.createFirstDecisionTask(task.GetTargetNamespaceId(), childExecution)
+		return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), childExecution)
 	}
 
 	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -617,8 +617,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
-	// Finally create first decision task for Child execution so it is really started
-	return t.createFirstDecisionTask(task.GetTargetNamespaceId(), &commonpb.WorkflowExecution{
+	// Finally create first workflow task for Child execution so it is really started
+	return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), &commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      childRunID,
 	})
@@ -894,16 +894,16 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 		})
 }
 
-// createFirstDecisionTask is used by StartChildExecution transfer task to create the first decision task for
+// createFirstWorkflowTask is used by StartChildExecution transfer task to create the first workflow task for
 // child execution.
-func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
+func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
-	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
+	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: execution,
 		IsFirstDecision:   true,
@@ -1078,7 +1078,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 
 func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	context workflowExecutionContext,
-	createDecisionTask bool,
+	createWorkflowTask bool,
 	action func(builder mutableState) error,
 ) error {
 
@@ -1091,8 +1091,8 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		return err
 	}
 
-	if createDecisionTask {
-		// Create a transfer task to schedule a decision task
+	if createWorkflowTask {
+		// Create a transfer task to schedule a workflow task
 		err := scheduleDecision(mutableState)
 		if err != nil {
 			return err
@@ -1222,7 +1222,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			},
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstDecisionTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(
+		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(
 			attributes.GetCronSchedule(),
 			now,
 			now,

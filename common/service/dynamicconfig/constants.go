@@ -667,7 +667,7 @@ const (
 	MaxWorkflowExecutionTimeout
 	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
 	MaxWorkflowRunTimeout
-	// DefaultWorkflowTaskTimeout for a decision task
+	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout
 
 	// EnableDropStuckTaskByNamespaceID is whether stuck timer/transfer task should be dropped for a namespace

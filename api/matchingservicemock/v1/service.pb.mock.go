@@ -36,64 +36,64 @@ func (m *MockMatchingServiceClient) EXPECT() *MockMatchingServiceClientMockRecor
 	return m.recorder
 }
 
-// PollForDecisionTask mocks base method.
-func (m *MockMatchingServiceClient) PollForDecisionTask(ctx context.Context, in *matchingservice.PollForDecisionTaskRequest, opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
+// PollWorkflowTaskQueue mocks base method.
+func (m *MockMatchingServiceClient) PollWorkflowTaskQueue(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "PollForDecisionTask", varargs...)
-	ret0, _ := ret[0].(*matchingservice.PollForDecisionTaskResponse)
+	ret := m.ctrl.Call(m, "PollWorkflowTaskQueue", varargs...)
+	ret0, _ := ret[0].(*matchingservice.PollWorkflowTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForDecisionTask indicates an expected call of PollForDecisionTask.
-func (mr *MockMatchingServiceClientMockRecorder) PollForDecisionTask(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// PollWorkflowTaskQueue indicates an expected call of PollWorkflowTaskQueue.
+func (mr *MockMatchingServiceClientMockRecorder) PollWorkflowTaskQueue(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForDecisionTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).PollForDecisionTask), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).PollWorkflowTaskQueue), varargs...)
 }
 
-// PollForActivityTask mocks base method.
-func (m *MockMatchingServiceClient) PollForActivityTask(ctx context.Context, in *matchingservice.PollForActivityTaskRequest, opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
+// PollActivityTaskQueue mocks base method.
+func (m *MockMatchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *matchingservice.PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "PollForActivityTask", varargs...)
-	ret0, _ := ret[0].(*matchingservice.PollForActivityTaskResponse)
+	ret := m.ctrl.Call(m, "PollActivityTaskQueue", varargs...)
+	ret0, _ := ret[0].(*matchingservice.PollActivityTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForActivityTask indicates an expected call of PollForActivityTask.
-func (mr *MockMatchingServiceClientMockRecorder) PollForActivityTask(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// PollActivityTaskQueue indicates an expected call of PollActivityTaskQueue.
+func (mr *MockMatchingServiceClientMockRecorder) PollActivityTaskQueue(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForActivityTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).PollForActivityTask), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).PollActivityTaskQueue), varargs...)
 }
 
-// AddDecisionTask mocks base method.
-func (m *MockMatchingServiceClient) AddDecisionTask(ctx context.Context, in *matchingservice.AddDecisionTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
+// AddWorkflowTask mocks base method.
+func (m *MockMatchingServiceClient) AddWorkflowTask(ctx context.Context, in *matchingservice.AddWorkflowTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "AddDecisionTask", varargs...)
-	ret0, _ := ret[0].(*matchingservice.AddDecisionTaskResponse)
+	ret := m.ctrl.Call(m, "AddWorkflowTask", varargs...)
+	ret0, _ := ret[0].(*matchingservice.AddWorkflowTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddDecisionTask indicates an expected call of AddDecisionTask.
-func (mr *MockMatchingServiceClientMockRecorder) AddDecisionTask(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// AddWorkflowTask indicates an expected call of AddWorkflowTask.
+func (mr *MockMatchingServiceClientMockRecorder) AddWorkflowTask(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).AddDecisionTask), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).AddWorkflowTask), varargs...)
 }
 
 // AddActivityTask mocks base method.
@@ -239,49 +239,49 @@ func (m *MockMatchingServiceServer) EXPECT() *MockMatchingServiceServerMockRecor
 	return m.recorder
 }
 
-// PollForDecisionTask mocks base method.
-func (m *MockMatchingServiceServer) PollForDecisionTask(arg0 context.Context, arg1 *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error) {
+// PollWorkflowTaskQueue mocks base method.
+func (m *MockMatchingServiceServer) PollWorkflowTaskQueue(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollForDecisionTask", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.PollForDecisionTaskResponse)
+	ret := m.ctrl.Call(m, "PollWorkflowTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.PollWorkflowTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForDecisionTask indicates an expected call of PollForDecisionTask.
-func (mr *MockMatchingServiceServerMockRecorder) PollForDecisionTask(arg0, arg1 interface{}) *gomock.Call {
+// PollWorkflowTaskQueue indicates an expected call of PollWorkflowTaskQueue.
+func (mr *MockMatchingServiceServerMockRecorder) PollWorkflowTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForDecisionTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).PollForDecisionTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).PollWorkflowTaskQueue), arg0, arg1)
 }
 
-// PollForActivityTask mocks base method.
-func (m *MockMatchingServiceServer) PollForActivityTask(arg0 context.Context, arg1 *matchingservice.PollForActivityTaskRequest) (*matchingservice.PollForActivityTaskResponse, error) {
+// PollActivityTaskQueue mocks base method.
+func (m *MockMatchingServiceServer) PollActivityTaskQueue(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollForActivityTask", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.PollForActivityTaskResponse)
+	ret := m.ctrl.Call(m, "PollActivityTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.PollActivityTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForActivityTask indicates an expected call of PollForActivityTask.
-func (mr *MockMatchingServiceServerMockRecorder) PollForActivityTask(arg0, arg1 interface{}) *gomock.Call {
+// PollActivityTaskQueue indicates an expected call of PollActivityTaskQueue.
+func (mr *MockMatchingServiceServerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForActivityTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).PollForActivityTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).PollActivityTaskQueue), arg0, arg1)
 }
 
-// AddDecisionTask mocks base method.
-func (m *MockMatchingServiceServer) AddDecisionTask(arg0 context.Context, arg1 *matchingservice.AddDecisionTaskRequest) (*matchingservice.AddDecisionTaskResponse, error) {
+// AddWorkflowTask mocks base method.
+func (m *MockMatchingServiceServer) AddWorkflowTask(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) (*matchingservice.AddWorkflowTaskResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDecisionTask", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.AddDecisionTaskResponse)
+	ret := m.ctrl.Call(m, "AddWorkflowTask", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.AddWorkflowTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddDecisionTask indicates an expected call of AddDecisionTask.
-func (mr *MockMatchingServiceServerMockRecorder) AddDecisionTask(arg0, arg1 interface{}) *gomock.Call {
+// AddWorkflowTask indicates an expected call of AddWorkflowTask.
+func (mr *MockMatchingServiceServerMockRecorder) AddWorkflowTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).AddDecisionTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).AddWorkflowTask), arg0, arg1)
 }
 
 // AddActivityTask mocks base method.

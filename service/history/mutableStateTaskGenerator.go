@@ -54,7 +54,7 @@ type (
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
-		generateDelayedDecisionTasks(
+		generateDelayedWorkflowTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
@@ -133,7 +133,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 ) error {
 
 	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
+	firstDecisionDelayDuration := time.Duration(attr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
@@ -187,7 +187,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
+func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 	now time.Time,
 	startEvent *historypb.HistoryEvent,
 ) error {
@@ -195,7 +195,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	startVersion := startEvent.GetVersion()
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
+	decisionBackoffDuration := time.Duration(startAttr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
 	executionTimestamp := now.Add(decisionBackoffDuration)
 
 	var workflowBackoffType enumsspb.WorkflowBackoffType
@@ -249,7 +249,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
 	}
 
-	r.mutableState.AddTransferTasks(&persistence.DecisionTask{
+	r.mutableState.AddTransferTasks(&persistence.WorkflowTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		NamespaceID:         executionInfo.NamespaceID,

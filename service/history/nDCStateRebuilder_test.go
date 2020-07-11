@@ -172,18 +172,18 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	event3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
 	event4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	event5 := &historypb.HistoryEvent{
 		EventId:    5,

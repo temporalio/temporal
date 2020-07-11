@@ -148,7 +148,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -157,7 +157,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(1, activityExecutedCount)
@@ -287,7 +287,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		})
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err, err)
 
 	for i := 0; i != 3; i++ {
@@ -338,7 +338,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		}
 	}
 
-	_, err = poller.PollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.True(err == nil, err)
 
 	s.True(workflowComplete)
@@ -502,7 +502,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		})
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil, err)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -539,15 +539,15 @@ func (s *integrationSuite) TestActivityRetry() {
 	for i := 0; i < 3; i++ {
 		s.False(workflowComplete)
 
-		s.Logger.Info("Processing decision task:", tag.Counter(i))
-		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
+		s.Logger.Info("Processing workflow task:", tag.Counter(i))
+		_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
 		if err != nil {
 			s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.GetRunId(),
 			})
 		}
-		s.NoError(err, "Poll for decision task failed")
+		s.NoError(err, "Poll for workflow task failed")
 
 		if workflowComplete {
 			break
@@ -593,7 +593,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
 
-		s.Logger.Info("Calling DecisionTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
+		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
 		if activityCounter < activityCount {
 			activityCounter++
@@ -646,7 +646,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -654,7 +654,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -869,7 +869,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	for i := 0; i < 3; i++ {
@@ -881,9 +881,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 	for i := 0; i < 10; i++ {
-		s.Logger.Info("Processing decision task", tag.Counter(i))
-		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.NoError(err, "Poll for decision task failed")
+		s.Logger.Info("Processing workflow task", tag.Counter(i))
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.NoError(err, "Poll for workflow task failed")
 
 		if workflowComplete {
 			break
@@ -1054,7 +1054,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	for i := 0; i < activityCount; i++ {
@@ -1066,9 +1066,9 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 	for i := 0; i < 10; i++ {
-		s.Logger.Info("Processing decision task", tag.Counter(i))
-		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.NoError(err, "Poll for decision task failed")
+		s.Logger.Info("Processing workflow task", tag.Counter(i))
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.NoError(err, "Poll for workflow task failed")
 
 		if workflowComplete {
 			break
@@ -1191,7 +1191,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	cancelCh := make(chan struct{})
@@ -1200,7 +1200,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		s.Logger.Info("Trying to cancel the task in a different thread")
 		scheduleActivity = false
 		requestCancellation = true
-		_, err := poller.PollAndProcessDecisionTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
 		s.True(err == nil || err == matching.ErrNoTasks, err)
 		cancelCh <- struct{}{}
 	}()
@@ -1305,7 +1305,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	// Send signal so that worker can send an activity cancel
@@ -1326,11 +1326,11 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	// Process signal in decider and send request cancellation
 	scheduleActivity = false
 	requestCancellation = true
-	_, err = poller.PollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
 	scheduleActivity = false
 	requestCancellation = false
-	_, err = poller.PollAndProcessDecisionTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 }

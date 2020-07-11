@@ -52,7 +52,7 @@ import (
 
 const (
 	// Time budget for empty task to propagate through the function stack and be returned to
-	// pollForActivityTask or pollForDecisionTask handler.
+	// pollForActivityTask or pollForWorkflowTask handler.
 	returnEmptyTaskTimeBudget = time.Second
 
 	// Fake Task ID to wrap a task for syncmatch

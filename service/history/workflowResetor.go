@@ -82,7 +82,7 @@ func newWorkflowResetor(historyEngine *historyEngineImpl) *workflowResetorImpl {
 	}
 }
 
-// ResetWorkflowExecution only allows resetting to decisionTaskCompleted, but exclude that batch of decisionTaskCompleted/decisionTaskFailed/decisionTaskTimeout.
+// ResetWorkflowExecution only allows resetting to workflowTaskCompleted, but exclude that batch of workflowTaskCompleted/workflowTaskFailed/workflowTaskTimeout.
 // It will then fail the decision with cause of "reset_workflow"
 func (w *workflowResetorImpl) ResetWorkflowExecution(
 	ctx context.Context,
@@ -287,10 +287,10 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// failed the in-flight decision(started).
-	// Note that we need to ensure DecisionTaskFailed event is appended right after DecisionTaskStarted event
+	// Note that we need to ensure WorkflowTaskFailed event is appended right after WorkflowTaskStarted event
 	decision, _ := newMutableState.GetInFlightDecision()
 
-	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, enumspb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
+	_, err := newMutableState.AddWorkflowTaskFailedEvent(decision.ScheduleID, decision.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision failed event.")
@@ -325,7 +325,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// we always schedule a new decision after reset
-	decision, err = newMutableState.AddDecisionTaskScheduledEvent(false)
+	decision, err = newMutableState.AddWorkflowTaskScheduledEvent(false)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision scheduled event.")
 		return
@@ -333,7 +333,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 
 	// TODO workflow reset logic should use built-in task management
 	newTransferTasks = append(newTransferTasks,
-		&persistence.DecisionTask{
+		&persistence.WorkflowTask{
 			NamespaceID: namespaceID,
 			TaskQueue:   decision.TaskQueue,
 			ScheduleID:  decision.ScheduleID,
@@ -741,26 +741,26 @@ func validateLastBatchOfReset(lastBatch []*historypb.HistoryEvent, decisionFinis
 	firstEvent := lastBatch[0]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if decisionFinishEventID != lastEvent.GetEventId()+1 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be DecisionTaskStarted + 1: %v", lastEvent.GetEventId()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be WorkflowTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
-	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_DECISION_TASK_STARTED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include DecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
+	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include WorkflowTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
 	return nil
 }
 
-func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*historypb.DecisionTaskFailedEventAttributes, error) {
+func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*historypb.WorkflowTaskFailedEventAttributes, error) {
 	historyAfterReset := request.History.Events
-	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != enumspb.EVENT_TYPE_DECISION_TASK_FAILED {
+	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
 		return nil, errUnknownReplicationTask
 	}
 	firstEvent := historyAfterReset[0]
-	if firstEvent.GetDecisionTaskFailedEventAttributes().GetCause() != enumspb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW {
+	if firstEvent.GetWorkflowTaskFailedEventAttributes().GetCause() != enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW {
 		return nil, errUnknownReplicationTask
 	}
-	attr := firstEvent.GetDecisionTaskFailedEventAttributes()
+	attr := firstEvent.GetWorkflowTaskFailedEventAttributes()
 	if attr.GetNewRunId() != request.GetWorkflowExecution().GetRunId() {
 		return nil, errUnknownReplicationTask
 	}
@@ -888,7 +888,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	firstEvent := newRunHistory[0]
 
 	decisionFinishEventID := firstEvent.GetEventId()
-	resetAttr := firstEvent.GetDecisionTaskFailedEventAttributes()
+	resetAttr := firstEvent.GetWorkflowTaskFailedEventAttributes()
 
 	requestID := uuid.New()
 	var sBuilder stateBuilder
@@ -998,7 +998,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 
 	lastEvent = newRunHistory[len(newRunHistory)-1]
-	// replay new history (including decisionTaskScheduled)
+	// replay new history (including workflowTaskScheduled)
 	_, retError = sBuilder.applyEvents(namespaceID, requestID, *baseExecution, newRunHistory, nil, false)
 	if retError != nil {
 		return
@@ -1018,7 +1018,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	// schedule new decision
 	decisionScheduledID := newMsBuilder.GetExecutionInfo().DecisionScheduleID
 	decision, _ = newMsBuilder.GetDecisionInfo(decisionScheduledID)
-	transferTasks = append(transferTasks, &persistence.DecisionTask{
+	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,
 		TaskQueue:        decision.TaskQueue,
 		ScheduleID:       decision.ScheduleID,

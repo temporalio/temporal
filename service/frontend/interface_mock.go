@@ -166,64 +166,64 @@ func (mr *MockHandlerMockRecorder) GetWorkflowExecutionHistory(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistory", reflect.TypeOf((*MockHandler)(nil).GetWorkflowExecutionHistory), arg0, arg1)
 }
 
-// PollForDecisionTask mocks base method.
-func (m *MockHandler) PollForDecisionTask(arg0 context.Context, arg1 *workflowservice.PollForDecisionTaskRequest) (*workflowservice.PollForDecisionTaskResponse, error) {
+// PollWorkflowTaskQueue mocks base method.
+func (m *MockHandler) PollWorkflowTaskQueue(arg0 context.Context, arg1 *workflowservice.PollWorkflowTaskQueueRequest) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollForDecisionTask", arg0, arg1)
-	ret0, _ := ret[0].(*workflowservice.PollForDecisionTaskResponse)
+	ret := m.ctrl.Call(m, "PollWorkflowTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*workflowservice.PollWorkflowTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForDecisionTask indicates an expected call of PollForDecisionTask.
-func (mr *MockHandlerMockRecorder) PollForDecisionTask(arg0, arg1 interface{}) *gomock.Call {
+// PollWorkflowTaskQueue indicates an expected call of PollWorkflowTaskQueue.
+func (mr *MockHandlerMockRecorder) PollWorkflowTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForDecisionTask", reflect.TypeOf((*MockHandler)(nil).PollForDecisionTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollWorkflowTaskQueue), arg0, arg1)
 }
 
-// RespondDecisionTaskCompleted mocks base method.
-func (m *MockHandler) RespondDecisionTaskCompleted(arg0 context.Context, arg1 *workflowservice.RespondDecisionTaskCompletedRequest) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
+// RespondWorkflowTaskCompleted mocks base method.
+func (m *MockHandler) RespondWorkflowTaskCompleted(arg0 context.Context, arg1 *workflowservice.RespondWorkflowTaskCompletedRequest) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RespondDecisionTaskCompleted", arg0, arg1)
-	ret0, _ := ret[0].(*workflowservice.RespondDecisionTaskCompletedResponse)
+	ret := m.ctrl.Call(m, "RespondWorkflowTaskCompleted", arg0, arg1)
+	ret0, _ := ret[0].(*workflowservice.RespondWorkflowTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RespondDecisionTaskCompleted indicates an expected call of RespondDecisionTaskCompleted.
-func (mr *MockHandlerMockRecorder) RespondDecisionTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
+// RespondWorkflowTaskCompleted indicates an expected call of RespondWorkflowTaskCompleted.
+func (mr *MockHandlerMockRecorder) RespondWorkflowTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondDecisionTaskCompleted", reflect.TypeOf((*MockHandler)(nil).RespondDecisionTaskCompleted), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskCompleted", reflect.TypeOf((*MockHandler)(nil).RespondWorkflowTaskCompleted), arg0, arg1)
 }
 
-// RespondDecisionTaskFailed mocks base method.
-func (m *MockHandler) RespondDecisionTaskFailed(arg0 context.Context, arg1 *workflowservice.RespondDecisionTaskFailedRequest) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
+// RespondWorkflowTaskFailed mocks base method.
+func (m *MockHandler) RespondWorkflowTaskFailed(arg0 context.Context, arg1 *workflowservice.RespondWorkflowTaskFailedRequest) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RespondDecisionTaskFailed", arg0, arg1)
-	ret0, _ := ret[0].(*workflowservice.RespondDecisionTaskFailedResponse)
+	ret := m.ctrl.Call(m, "RespondWorkflowTaskFailed", arg0, arg1)
+	ret0, _ := ret[0].(*workflowservice.RespondWorkflowTaskFailedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RespondDecisionTaskFailed indicates an expected call of RespondDecisionTaskFailed.
-func (mr *MockHandlerMockRecorder) RespondDecisionTaskFailed(arg0, arg1 interface{}) *gomock.Call {
+// RespondWorkflowTaskFailed indicates an expected call of RespondWorkflowTaskFailed.
+func (mr *MockHandlerMockRecorder) RespondWorkflowTaskFailed(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondDecisionTaskFailed", reflect.TypeOf((*MockHandler)(nil).RespondDecisionTaskFailed), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskFailed", reflect.TypeOf((*MockHandler)(nil).RespondWorkflowTaskFailed), arg0, arg1)
 }
 
-// PollForActivityTask mocks base method.
-func (m *MockHandler) PollForActivityTask(arg0 context.Context, arg1 *workflowservice.PollForActivityTaskRequest) (*workflowservice.PollForActivityTaskResponse, error) {
+// PollActivityTaskQueue mocks base method.
+func (m *MockHandler) PollActivityTaskQueue(arg0 context.Context, arg1 *workflowservice.PollActivityTaskQueueRequest) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollForActivityTask", arg0, arg1)
-	ret0, _ := ret[0].(*workflowservice.PollForActivityTaskResponse)
+	ret := m.ctrl.Call(m, "PollActivityTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*workflowservice.PollActivityTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PollForActivityTask indicates an expected call of PollForActivityTask.
-func (mr *MockHandlerMockRecorder) PollForActivityTask(arg0, arg1 interface{}) *gomock.Call {
+// PollActivityTaskQueue indicates an expected call of PollActivityTaskQueue.
+func (mr *MockHandlerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForActivityTask", reflect.TypeOf((*MockHandler)(nil).PollForActivityTask), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollActivityTaskQueue), arg0, arg1)
 }
 
 // RecordActivityTaskHeartbeat mocks base method.

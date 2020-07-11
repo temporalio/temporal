@@ -245,32 +245,32 @@ func (c *clientImpl) GetSearchAttributes(
 	return client.GetSearchAttributes(ctx, request, opts...)
 }
 
-func (c *clientImpl) PollForActivityTask(
+func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForActivityTaskRequest,
+	request *workflowservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollForActivityTaskResponse, error) {
+) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForActivityTask(ctx, request, opts...)
+	return client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) PollForDecisionTask(
+func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForDecisionTaskRequest,
+	request *workflowservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollForDecisionTaskResponse, error) {
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForDecisionTask(ctx, request, opts...)
+	return client.PollWorkflowTaskQueue(ctx, request, opts...)
 }
 
 func (c *clientImpl) QueryWorkflow(
@@ -456,32 +456,32 @@ func (c *clientImpl) RespondActivityTaskFailedById(
 	return client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondDecisionTaskCompleted(
+func (c *clientImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskCompletedRequest,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondDecisionTaskCompleted(ctx, request, opts...)
+	return client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondDecisionTaskFailed(
+func (c *clientImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskFailedRequest,
+	request *workflowservice.RespondWorkflowTaskFailedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
+) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondDecisionTaskFailed(ctx, request, opts...)
+	return client.RespondWorkflowTaskFailed(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(

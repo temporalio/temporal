@@ -240,7 +240,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagEventID,
-					Usage: "The eventId of any event after DecisionTaskStarted you want to reset to (exclusive). It can be DecisionTaskCompleted, DecisionTaskFailed or others",
+					Usage: "The eventId of any event after WorkflowTaskStarted you want to reset to (exclusive). It can be WorkflowTaskCompleted, WorkflowTaskFailed or others",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -304,7 +304,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagNonDeterministicOnly,
-					Usage: "Only apply onto workflows whose last event is decisionTaskFailed with non deterministic error.",
+					Usage: "Only apply onto workflows whose last event is workflowTaskFailed with non deterministic error.",
 				},
 				cli.BoolFlag{
 					Name:  FlagDryRun,

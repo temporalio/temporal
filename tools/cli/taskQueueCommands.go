@@ -86,8 +86,8 @@ func ListTaskQueuePartitions(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Operation ListTaskQueuePartitions failed.", err)
 	}
-	if len(response.DecisionTaskQueuePartitions) > 0 {
-		printTaskQueuePartitions("Decision", response.DecisionTaskQueuePartitions)
+	if len(response.WorkflowTaskQueuePartitions) > 0 {
+		printTaskQueuePartitions("Decision", response.WorkflowTaskQueuePartitions)
 	}
 	if len(response.ActivityTaskQueuePartitions) > 0 {
 		printTaskQueuePartitions("Activity", response.ActivityTaskQueuePartitions)

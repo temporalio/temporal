@@ -22,7 +22,7 @@
         "firstExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
         "attempt": 0,
         "cronSchedule": "",
-        "firstDecisionTaskBackoffSeconds": 0,
+        "firstWorkflowTaskBackoffSeconds": 0,
         "header": {}
       }
     },
@@ -41,10 +41,10 @@
     {
       "eventId": 3,
       "timestamp": 1569606123623106000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291590,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "temporal-archival-tq"
         },
@@ -55,10 +55,10 @@
     {
       "eventId": 4,
       "timestamp": 1569606123627344000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291595,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 3,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "de9215e7-2bcc-4294-9fac-1dc75ed159fc"
@@ -67,10 +67,10 @@
     {
       "eventId": 5,
       "timestamp": 1569606123634126000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291598,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 3,
         "startedEventId": 4,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -89,7 +89,7 @@
           "side-effect-id": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"Ng=="}]},
           "data": {"payloads": [{"metadata":{"encoding":"anNvbg=="},"data":"Ng=="}]}
         },
-        "decisionTaskCompletedEventId": 5
+        "workflowTaskCompletedEventId": 5
       }
     },
     {
@@ -101,7 +101,7 @@
       "timerStartedEventAttributes": {
         "timerId": "7",
         "startToFireTimeoutSeconds": 1296000,
-        "decisionTaskCompletedEventId": 5
+        "workflowTaskCompletedEventId": 5
       }
     },
     {
@@ -123,7 +123,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 5,
+        "workflowTaskCompletedEventId": 5,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -165,10 +165,10 @@
     {
       "eventId": 11,
       "timestamp": 1569606123643948000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291611,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -179,10 +179,10 @@
     {
       "eventId": 12,
       "timestamp": 1569606123647878000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291615,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 11,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tq-scanner-taskqueue-0",
         "requestId": "774fa75d-7cef-47c8-96be-4a6db8a4cb99"
@@ -191,10 +191,10 @@
     {
       "eventId": 13,
       "timestamp": 1569606123654654000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291618,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 11,
         "startedEventId": 12,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -210,7 +210,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 13
+        "workflowTaskCompletedEventId": 13
       }
     },
     {
@@ -228,10 +228,10 @@
     {
       "eventId": 16,
       "timestamp": 1569606123918557000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291623,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -242,10 +242,10 @@
     {
       "eventId": 17,
       "timestamp": 1569606123922726000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291627,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 16,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "081890a8-8942-4434-ac52-9e668a406ee2"
@@ -254,10 +254,10 @@
     {
       "eventId": 18,
       "timestamp": 1569606123928159000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291630,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 16,
         "startedEventId": 17,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -283,7 +283,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 18,
+        "workflowTaskCompletedEventId": 18,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -325,10 +325,10 @@
     {
       "eventId": 22,
       "timestamp": 1569606123938450000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291640,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -339,10 +339,10 @@
     {
       "eventId": 23,
       "timestamp": 1569606123942512000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291644,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 22,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-processor-parent-close-policy",
         "requestId": "b66d91d8-f367-4ddd-aad3-1071f937bc48"
@@ -351,10 +351,10 @@
     {
       "eventId": 24,
       "timestamp": 1569606123950344000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291647,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 22,
         "startedEventId": 23,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -370,7 +370,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 24
+        "workflowTaskCompletedEventId": 24
       }
     },
     {
@@ -388,10 +388,10 @@
     {
       "eventId": 27,
       "timestamp": 1569606124919689000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291652,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -426,10 +426,10 @@
     {
       "eventId": 30,
       "timestamp": 1569606124927549000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291660,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 27,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tq-scanner-taskqueue-0",
         "requestId": "a4207044-03be-4913-857c-1caadff199f6"
@@ -438,10 +438,10 @@
     {
       "eventId": 31,
       "timestamp": 1569606124934407000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291663,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 27,
         "startedEventId": 30,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -467,7 +467,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 31,
+        "workflowTaskCompletedEventId": 31,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -500,7 +500,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 31,
+        "workflowTaskCompletedEventId": 31,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -533,7 +533,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 31,
+        "workflowTaskCompletedEventId": 31,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -575,10 +575,10 @@
     {
       "eventId": 37,
       "timestamp": 1569606124945974000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291683,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -639,10 +639,10 @@
     {
       "eventId": 42,
       "timestamp": 1569606124957961000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291703,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 37,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "9008323e-b89d-4c43-967f-e23846522466"
@@ -651,10 +651,10 @@
     {
       "eventId": 43,
       "timestamp": 1569606124964261000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291713,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 37,
         "startedEventId": 42,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -670,7 +670,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 43
+        "workflowTaskCompletedEventId": 43
       }
     },
     {
@@ -682,7 +682,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 43
+        "workflowTaskCompletedEventId": 43
       }
     },
     {
@@ -694,7 +694,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 43
+        "workflowTaskCompletedEventId": 43
       }
     },
     {
@@ -712,10 +712,10 @@
     {
       "eventId": 48,
       "timestamp": 1569606124979363000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291730,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -726,10 +726,10 @@
     {
       "eventId": 49,
       "timestamp": 1569606124983474000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291734,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 48,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-processor-parent-close-policy",
         "requestId": "82a5d9c2-1deb-494c-98ae-bb0c3681abd3"
@@ -738,10 +738,10 @@
     {
       "eventId": 50,
       "timestamp": 1569606124988413000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291737,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 48,
         "startedEventId": 49,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -767,7 +767,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 50,
+        "workflowTaskCompletedEventId": 50,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -809,10 +809,10 @@
     {
       "eventId": 54,
       "timestamp": 1569606124997696000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291747,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -823,10 +823,10 @@
     {
       "eventId": 55,
       "timestamp": 1569606125001619000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291751,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 54,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tl-scanner-taskqueue-0",
         "requestId": "0f0ce318-bc46-4439-81c9-c6288e063df5"
@@ -835,10 +835,10 @@
     {
       "eventId": 56,
       "timestamp": 1569606125007998000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291754,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 54,
         "startedEventId": 55,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -854,7 +854,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 56
+        "workflowTaskCompletedEventId": 56
       }
     },
     {
@@ -872,10 +872,10 @@
     {
       "eventId": 59,
       "timestamp": 1569606125218443000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291759,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -886,10 +886,10 @@
     {
       "eventId": 60,
       "timestamp": 1569606125221695000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291763,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 59,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "8ee8cc2f-88ce-476d-b40f-e82544a9a3f9"
@@ -898,10 +898,10 @@
     {
       "eventId": 61,
       "timestamp": 1569606125226189000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291766,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 59,
         "startedEventId": 60,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -927,7 +927,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 61,
+        "workflowTaskCompletedEventId": 61,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -969,10 +969,10 @@
     {
       "eventId": 65,
       "timestamp": 1569606125234368000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291776,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -983,10 +983,10 @@
     {
       "eventId": 66,
       "timestamp": 1569606125238253000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291780,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 65,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-processor-parent-close-policy",
         "requestId": "44177a34-efe8-4efc-a406-4018f9a46a87"
@@ -995,10 +995,10 @@
     {
       "eventId": 67,
       "timestamp": 1569606125244383000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291783,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 65,
         "startedEventId": 66,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1014,7 +1014,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 67
+        "workflowTaskCompletedEventId": 67
       }
     },
     {
@@ -1032,10 +1032,10 @@
     {
       "eventId": 70,
       "timestamp": 1569606125920408000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291788,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1046,10 +1046,10 @@
     {
       "eventId": 71,
       "timestamp": 1569606125923245000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291792,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 70,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tl-scanner-taskqueue-0",
         "requestId": "c7ee25d5-3d85-464d-a3ad-197f30ad4c13"
@@ -1058,10 +1058,10 @@
     {
       "eventId": 72,
       "timestamp": 1569606125926950000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291795,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 70,
         "startedEventId": 71,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1087,7 +1087,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 72,
+        "workflowTaskCompletedEventId": 72,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -1129,10 +1129,10 @@
     {
       "eventId": 76,
       "timestamp": 1569606125933623000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291805,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1143,10 +1143,10 @@
     {
       "eventId": 77,
       "timestamp": 1569606125936580000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291809,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 76,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "3bd96a83-c2fa-4979-8abb-c3ae80cc6ebb"
@@ -1155,10 +1155,10 @@
     {
       "eventId": 78,
       "timestamp": 1569606125941102000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291812,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 76,
         "startedEventId": 77,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1174,7 +1174,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 78
+        "workflowTaskCompletedEventId": 78
       }
     },
     {
@@ -1192,10 +1192,10 @@
     {
       "eventId": 81,
       "timestamp": 1569606126048949000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291848,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1206,10 +1206,10 @@
     {
       "eventId": 82,
       "timestamp": 1569606126052440000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291852,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 81,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-processor-parent-close-policy",
         "requestId": "304f5dac-44a4-4af2-a759-c206b5a3ec46"
@@ -1218,10 +1218,10 @@
     {
       "eventId": 83,
       "timestamp": 1569606126056194000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291855,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 81,
         "startedEventId": 82,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1247,7 +1247,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 83,
+        "workflowTaskCompletedEventId": 83,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -1289,10 +1289,10 @@
     {
       "eventId": 87,
       "timestamp": 1569606126062987000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291865,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1303,10 +1303,10 @@
     {
       "eventId": 88,
       "timestamp": 1569606126066232000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291869,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 87,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tl-scanner-taskqueue-0",
         "requestId": "26054030-971f-486e-99d8-4151f7f3535b"
@@ -1315,10 +1315,10 @@
     {
       "eventId": 89,
       "timestamp": 1569606126071558000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291872,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 87,
         "startedEventId": 88,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1334,7 +1334,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 89
+        "workflowTaskCompletedEventId": 89
       }
     },
     {
@@ -1352,10 +1352,10 @@
     {
       "eventId": 92,
       "timestamp": 1569606126219405000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291877,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1366,10 +1366,10 @@
     {
       "eventId": 93,
       "timestamp": 1569606126221920000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291881,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 92,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "d0a8f7d9-ed21-4c69-8656-348d497ae0ac"
@@ -1378,10 +1378,10 @@
     {
       "eventId": 94,
       "timestamp": 1569606126225163000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291884,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 92,
         "startedEventId": 93,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1407,7 +1407,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 94,
+        "workflowTaskCompletedEventId": 94,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -1449,10 +1449,10 @@
     {
       "eventId": 98,
       "timestamp": 1569606126231788000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291894,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1463,10 +1463,10 @@
     {
       "eventId": 99,
       "timestamp": 1569606126234682000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291898,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 98,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-processor-parent-close-policy",
         "requestId": "0cd5dc7b-2a41-49d7-9db8-e952f8ce5cc2"
@@ -1475,10 +1475,10 @@
     {
       "eventId": 100,
       "timestamp": 1569606126239125000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291901,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 98,
         "startedEventId": 99,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1494,7 +1494,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 100
+        "workflowTaskCompletedEventId": 100
       }
     },
     {
@@ -1512,10 +1512,10 @@
     {
       "eventId": 103,
       "timestamp": 1569606126923772000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291906,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1526,10 +1526,10 @@
     {
       "eventId": 104,
       "timestamp": 1569606126927973000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291910,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 103,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-sys-tl-scanner-taskqueue-0",
         "requestId": "9ed3f383-bfe8-4f05-b7af-3ebe0763f3ec"
@@ -1538,10 +1538,10 @@
     {
       "eventId": 105,
       "timestamp": 1569606126931546000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291913,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 103,
         "startedEventId": 104,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1567,7 +1567,7 @@
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
         "heartbeatTimeoutSeconds": 0,
-        "decisionTaskCompletedEventId": 105,
+        "workflowTaskCompletedEventId": 105,
         "retryPolicy": {
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
@@ -1609,10 +1609,10 @@
     {
       "eventId": 109,
       "timestamp": 1569606126938692000,
-      "eventType": "DecisionTaskScheduled",
+      "eventType": "WorkflowTaskScheduled",
       "version": -24,
       "taskId": 6291923,
-      "decisionTaskScheduledEventAttributes": {
+      "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
@@ -1623,10 +1623,10 @@
     {
       "eventId": 110,
       "timestamp": 1569606126941424000,
-      "eventType": "DecisionTaskStarted",
+      "eventType": "WorkflowTaskStarted",
       "version": -24,
       "taskId": 6291927,
-      "decisionTaskStartedEventAttributes": {
+      "workflowTaskStartedEventAttributes": {
         "scheduledEventId": 109,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "c0bbf240-9a0e-4323-a182-a06decb5b2f0"
@@ -1635,10 +1635,10 @@
     {
       "eventId": 111,
       "timestamp": 1569606126945774000,
-      "eventType": "DecisionTaskCompleted",
+      "eventType": "WorkflowTaskCompleted",
       "version": -24,
       "taskId": 6291930,
-      "decisionTaskCompletedEventAttributes": {
+      "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": 109,
         "startedEventId": 110,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
@@ -1654,7 +1654,7 @@
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
         "details": null,
-        "decisionTaskCompletedEventId": 111
+        "workflowTaskCompletedEventId": 111
       }
     }
   ]

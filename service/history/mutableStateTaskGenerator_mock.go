@@ -101,18 +101,18 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateRecordWorkflowStart
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "generateRecordWorkflowStartedTasks", reflect.TypeOf((*MockmutableStateTaskGenerator)(nil).generateRecordWorkflowStartedTasks), now, startEvent)
 }
 
-// generateDelayedDecisionTasks mocks base method.
-func (m *MockmutableStateTaskGenerator) generateDelayedDecisionTasks(now time.Time, startEvent *history.HistoryEvent) error {
+// generateDelayedWorkflowTasks mocks base method.
+func (m *MockmutableStateTaskGenerator) generateDelayedWorkflowTasks(now time.Time, startEvent *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "generateDelayedDecisionTasks", now, startEvent)
+	ret := m.ctrl.Call(m, "generateDelayedWorkflowTasks", now, startEvent)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// generateDelayedDecisionTasks indicates an expected call of generateDelayedDecisionTasks.
-func (mr *MockmutableStateTaskGeneratorMockRecorder) generateDelayedDecisionTasks(now, startEvent interface{}) *gomock.Call {
+// generateDelayedWorkflowTasks indicates an expected call of generateDelayedWorkflowTasks.
+func (mr *MockmutableStateTaskGeneratorMockRecorder) generateDelayedWorkflowTasks(now, startEvent interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "generateDelayedDecisionTasks", reflect.TypeOf((*MockmutableStateTaskGenerator)(nil).generateDelayedDecisionTasks), now, startEvent)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "generateDelayedWorkflowTasks", reflect.TypeOf((*MockmutableStateTaskGenerator)(nil).generateDelayedWorkflowTasks), now, startEvent)
 }
 
 // generateDecisionScheduleTasks mocks base method.

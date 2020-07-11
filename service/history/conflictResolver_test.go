@@ -178,7 +178,7 @@ func (s *conflictResolverSuite) TestReset() {
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
 		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}}}
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
 	shardId := s.mockShard.GetShardID()
