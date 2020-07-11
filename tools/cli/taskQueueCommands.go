@@ -39,7 +39,7 @@ import (
 func DescribeTaskQueue(c *cli.Context) {
 	wfClient := getWorkflowClient(c)
 	taskQueue := getRequiredOption(c, FlagTaskQueue)
-	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is decision
+	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is workflow
 
 	ctx, cancel := newContext(c)
 	defer cancel()
