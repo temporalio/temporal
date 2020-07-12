@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -124,7 +124,7 @@ func newWorkflowSizeChecker(
 }
 
 func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
-	decisionTypeTag metrics.Tag,
+	commandTypeTag metrics.Tag,
 	payloadSize int,
 	message string,
 ) (bool, error) {
@@ -137,15 +137,15 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
-		c.metricsScope.Tagged(decisionTypeTag),
+		c.metricsScope.Tagged(commandTypeTag),
 		c.logger,
-		tag.BlobSizeViolationOperation(decisionTypeTag.Value()),
+		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
 	if err == nil {
 		return false, nil
 	}
 
-	attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
+	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 		Failure: failure.NewServerFailure(message, true),
 	}
 
@@ -169,7 +169,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 
-		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
+		attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, true),
 		}
 
@@ -196,7 +196,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *decisionpb.ScheduleActivityTaskDecisionAttributes,
+	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout int32,
 ) error {
 
@@ -208,7 +208,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("ScheduleActivityTaskDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on decision.")
 	}
 
 	defaultTaskQueueName := ""
@@ -295,11 +295,11 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 }
 
 func (v *decisionAttrValidator) validateTimerScheduleAttributes(
-	attributes *decisionpb.StartTimerDecisionAttributes,
+	attributes *commandpb.StartTimerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("StartTimerDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("StartTimerCommandAttributes is not set on decision.")
 	}
 	if attributes.GetTimerId() == "" {
 		return serviceerror.NewInvalidArgument("TimerId is not set on decision.")
@@ -314,11 +314,11 @@ func (v *decisionAttrValidator) validateTimerScheduleAttributes(
 }
 
 func (v *decisionAttrValidator) validateActivityCancelAttributes(
-	attributes *decisionpb.RequestCancelActivityTaskDecisionAttributes,
+	attributes *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RequestCancelActivityTaskDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RequestCancelActivityTaskCommandAttributes is not set on decision.")
 	}
 	if attributes.GetScheduledEventId() <= 0 {
 		return serviceerror.NewInvalidArgument("ScheduledEventId is not set on decision.")
@@ -327,11 +327,11 @@ func (v *decisionAttrValidator) validateActivityCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateTimerCancelAttributes(
-	attributes *decisionpb.CancelTimerDecisionAttributes,
+	attributes *commandpb.CancelTimerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CancelTimerDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CancelTimerCommandAttributes is not set on decision.")
 	}
 	if attributes.GetTimerId() == "" {
 		return serviceerror.NewInvalidArgument("TimerId is not set on decision.")
@@ -343,11 +343,11 @@ func (v *decisionAttrValidator) validateTimerCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateRecordMarkerAttributes(
-	attributes *decisionpb.RecordMarkerDecisionAttributes,
+	attributes *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RecordMarkerDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RecordMarkerCommandAttributes is not set on decision.")
 	}
 	if attributes.GetMarkerName() == "" {
 		return serviceerror.NewInvalidArgument("MarkerName is not set on decision.")
@@ -360,21 +360,21 @@ func (v *decisionAttrValidator) validateRecordMarkerAttributes(
 }
 
 func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
-	attributes *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CompleteWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CompleteWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 	return nil
 }
 
 func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
-	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("FailWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("FailWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 	if attributes.GetFailure() == nil {
 		return serviceerror.NewInvalidArgument("Failure is not set on decision.")
@@ -383,11 +383,11 @@ func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
-	attributes *decisionpb.CancelWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CancelWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CancelWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 	return nil
 }
@@ -395,7 +395,7 @@ func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
 func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -406,7 +406,7 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 	if attributes.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
@@ -428,7 +428,7 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -439,7 +439,7 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 	if attributes.Execution == nil {
 		return serviceerror.NewInvalidArgument("Execution is nil on decision.")
@@ -467,11 +467,11 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 
 func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace string,
-	attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
+	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on decision.")
 	}
 
 	if attributes.SearchAttributes == nil {
@@ -486,12 +486,12 @@ func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
-	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 
 	// Inherit workflow type from previous execution if not provided on decision
@@ -546,7 +546,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
@@ -558,7 +558,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("StartChildWorkflowExecutionDecisionAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on decision.")
 	}
 
 	if attributes.GetWorkflowId() == "" {

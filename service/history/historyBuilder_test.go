@@ -31,8 +31,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -837,7 +837,7 @@ func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID 
 	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
 	*persistence.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
-		&decisionpb.ScheduleActivityTaskDecisionAttributes{
+		&commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    activityID,
 			ActivityType:                  &commonpb.ActivityType{Name: activityType},
 			TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -883,7 +883,7 @@ func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID in
 			fields[name] = value
 		}
 	}
-	event, err := s.msBuilder.AddRecordMarkerEvent(decisionCompletedEventID, &decisionpb.RecordMarkerDecisionAttributes{
+	event, err := s.msBuilder.AddRecordMarkerEvent(decisionCompletedEventID, &commandpb.RecordMarkerCommandAttributes{
 		MarkerName: markerName,
 		Details:    details,
 		Header: &commonpb.Header{
@@ -900,7 +900,7 @@ func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionInitiated
 	event, _, err := s.msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		decisionCompletedEventID,
 		uuid.New(),
-		&decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 			Namespace:         targetNamespace,
 			WorkflowId:        targetExecution.WorkflowId,
 			RunId:             targetExecution.RunId,

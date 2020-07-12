@@ -46,8 +46,8 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -252,15 +252,15 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// upsert search attributes
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertDecision := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertDecision}, nil
 	}
 
 	poller := host.TaskPoller{

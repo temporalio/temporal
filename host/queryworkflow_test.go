@@ -33,8 +33,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -85,16 +85,16 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	activityScheduled := false
 	activityData := int32(1)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -107,9 +107,9 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -245,16 +245,16 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	activityScheduled := false
 	activityData := int32(1)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -267,9 +267,9 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -389,16 +389,16 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	activityScheduled := false
 	activityData := int32(1)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -411,9 +411,9 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -598,16 +598,16 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -622,14 +622,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					handledSignal.Store(true)
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -781,16 +781,16 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	activityScheduled := false
 	activityData := int32(1)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -805,14 +805,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					<-time.After(3 * time.Second) // take longer to respond to the workflow task than the query waits for
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -940,16 +940,16 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -966,14 +966,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 					// wait for some time to force workflow task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
 					handledSignal.Store(true)
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1128,15 +1128,15 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 	activityData := int32(1)
 	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1153,14 +1153,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 					// wait for some time to force workflow task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
 					handledSignal.Store(true)
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1308,7 +1308,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 
 func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	id := "integration-test-query-workflow-before-first-decision"
-	wt := "integration-test-query-workflow-before-first-decision-type"
+	wt := "integration-test-query-workflow-before-first-command-type"
 	tl := "integration-test-query-workflow-before-first-workflow-taskqueue"
 	identity := "worker1"
 	queryType := "test-query"

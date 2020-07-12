@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -865,9 +865,9 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerDecision() {
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*decisionpb.Decision{{
-		DecisionType: enumspb.DECISION_TYPE_RECORD_MARKER,
-		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
+	decisions := []*commandpb.Command{{
+		CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 			MarkerName: markerName,
 			Details: map[string]*commonpb.Payloads{
 				"data": markerDetails,

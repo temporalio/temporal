@@ -30,8 +30,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -50,7 +50,7 @@ import (
 
 type (
 	workflowTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error)
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error)
 	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
 

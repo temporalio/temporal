@@ -652,7 +652,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.NamespaceTag(namespaceEntry.GetInfo().Name),
-		metrics.DecisionTypeTag("ConsistentQuery"))
+		metrics.CommandTypeTag("ConsistentQuery"))
 
 	// if its a heartbeat decision it means local activities may still be running on the worker
 	// which were started by an external event which happened before the query

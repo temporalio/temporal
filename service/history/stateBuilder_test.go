@@ -1750,5 +1750,5 @@ func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
 	eventTypes := enumspb.EventType_value
 	s.Equal(43, len(eventTypes), "If you see this error, you are adding new event type. "+
 		"Before updating the number to make this test pass, please make sure you update stateBuilderImpl.applyEvents method "+
-		"to handle the new decision type. Otherwise cross dc will not work on the new event.")
+		"to handle the new command type. Otherwise cross dc will not work on the new event.")
 }

@@ -25,8 +25,8 @@
 package history
 
 import (
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -148,7 +148,7 @@ func retryWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	parentNamespace string,
-	continueAsNewAttributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (mutableState, error) {
 
 	if decision, ok := mutableState.GetInFlightDecision(); ok {

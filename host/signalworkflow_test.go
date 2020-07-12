@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -96,16 +96,16 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	activityData := int32(1)
 	var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -120,15 +120,15 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -270,16 +270,16 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	var signalEvent *historypb.HistoryEvent
 	numOfSignaledEvent := 0
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -298,13 +298,13 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 					numOfSignaledEvent++
 				}
 			}
-			return []*decisionpb.Decision{}, nil
+			return []*commandpb.Command{}, nil
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -424,15 +424,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -445,9 +445,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -480,15 +480,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
 	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -503,15 +503,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -642,12 +642,12 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	// decider logic
 	var workflowTaskDelay time.Duration
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		workflowTaskDelay = time.Now().Sub(now)
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -717,15 +717,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -738,9 +738,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -773,15 +773,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
 	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -796,15 +796,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -916,15 +916,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -937,9 +937,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow_not_exist",
@@ -1041,15 +1041,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1062,9 +1062,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 				Namespace: s.namespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -1176,16 +1176,16 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted := false
 	var signalEvent, startedEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1200,7 +1200,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		} else if newWorkflowStarted {
@@ -1216,14 +1216,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 				}
 			}
 			if signalEvent != nil && startedEvent != nil {
-				return []*decisionpb.Decision{}, nil
+				return []*commandpb.Command{}, nil
 			}
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1434,15 +1434,15 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1456,9 +1456,9 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil

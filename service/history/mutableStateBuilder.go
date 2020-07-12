@@ -31,8 +31,8 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -960,9 +960,9 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_TIMER_STARTED,
-		// DecisionTypeCancelTimer is an exception. This decision will be mapped
+		// CommandTypeCancelTimer is an exception. This decision will be mapped
 		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-		// So both should not be buffered. Ref: historyEngine, search for "workflow.DecisionTypeCancelTimer"
+		// So both should not be buffered. Ref: historyEngine, search for "workflow.CommandTypeCancelTimer"
 		enumspb.EVENT_TYPE_TIMER_CANCELED,
 		enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED,
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
@@ -1644,7 +1644,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution commonpb.WorkflowExecution,
 	previousExecutionState mutableState,
-	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
 ) (*historypb.HistoryEvent, error) {
 
@@ -2116,7 +2116,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskFailedEvent() error {
 
 func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	decisionCompletedEventID int64,
-	attributes *decisionpb.ScheduleActivityTaskDecisionAttributes,
+	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *persistence.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskScheduled
@@ -2552,7 +2552,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(
 
 func (e *mutableStateBuilder) AddCompletedWorkflowEvent(
 	decisionCompletedEventID int64,
-	attributes *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCompleted
@@ -2593,7 +2593,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 func (e *mutableStateBuilder) AddFailWorkflowEvent(
 	decisionCompletedEventID int64,
 	retryState enumspb.RetryState,
-	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.FailWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowFailed
@@ -2712,7 +2712,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCancelRequestedEvent(
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(
 	workflowTaskCompletedEventID int64,
-	attributes *decisionpb.CancelWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCanceled
@@ -2752,7 +2752,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	cancelRequestID string,
-	request *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
+	request *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelInitiated
@@ -2876,7 +2876,7 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionFai
 func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	signalRequestID string,
-	request *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
+	request *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalInitiated
@@ -2925,7 +2925,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 
 func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	decisionCompletedEventID int64,
-	request *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
+	request *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionUpsertWorkflowSearchAttributes
@@ -3049,7 +3049,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEven
 
 func (e *mutableStateBuilder) AddTimerStartedEvent(
 	decisionCompletedEventID int64,
-	request *decisionpb.StartTimerDecisionAttributes,
+	request *commandpb.StartTimerCommandAttributes,
 ) (*historypb.HistoryEvent, *persistenceblobs.TimerInfo, error) {
 
 	opTag := tag.WorkflowActionTimerStarted
@@ -3144,7 +3144,7 @@ func (e *mutableStateBuilder) ReplicateTimerFiredEvent(
 
 func (e *mutableStateBuilder) AddTimerCanceledEvent(
 	decisionCompletedEventID int64,
-	attributes *decisionpb.CancelTimerDecisionAttributes,
+	attributes *commandpb.CancelTimerCommandAttributes,
 	identity string,
 ) (*historypb.HistoryEvent, error) {
 
@@ -3195,7 +3195,7 @@ func (e *mutableStateBuilder) ReplicateTimerCanceledEvent(
 
 func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
 	decisionCompletedEventID int64,
-	attributes *decisionpb.CancelTimerDecisionAttributes,
+	attributes *commandpb.CancelTimerCommandAttributes,
 	identity string,
 ) (*historypb.HistoryEvent, error) {
 
@@ -3212,7 +3212,7 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
 
 func (e *mutableStateBuilder) AddRecordMarkerEvent(
 	decisionCompletedEventID int64,
-	attributes *decisionpb.RecordMarkerDecisionAttributes,
+	attributes *commandpb.RecordMarkerCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowRecordMarker
@@ -3296,7 +3296,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	firstEventID int64,
 	decisionCompletedEventID int64,
 	parentNamespace string,
-	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, mutableState, error) {
 
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
@@ -3430,7 +3430,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	createRequestID string,
-	attributes *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
+	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, *persistence.ChildExecutionInfo, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiated

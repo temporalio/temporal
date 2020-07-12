@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -95,7 +95,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	for i := 0; i < 12; i++ {
 		resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: []*decisionpb.Decision{},
+			Decisions: []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:               stikyTaskQueue,
 				ScheduleToStartTimeoutSeconds: 5,
@@ -125,10 +125,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: taskToken,
-		Decisions: []*decisionpb.Decision{
+		Decisions: []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("efg"),
 				},
 				},
@@ -198,7 +198,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
-		Decisions: []*decisionpb.Decision{},
+		Decisions: []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
@@ -210,10 +210,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp3, err3 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp2.WorkflowTask.GetTaskToken(),
-		Decisions: []*decisionpb.Decision{
+		Decisions: []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_RECORD_MARKER,
-				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "localActivity1",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
@@ -231,10 +231,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp4, err4 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp3.WorkflowTask.GetTaskToken(),
-		Decisions: []*decisionpb.Decision{
+		Decisions: []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_RECORD_MARKER,
-				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 					MarkerName: "localActivity2",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
@@ -252,10 +252,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp4.WorkflowTask.GetTaskToken(),
-		Decisions: []*decisionpb.Decision{
+		Decisions: []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("efg"),
 				},
 				},

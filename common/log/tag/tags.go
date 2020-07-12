@@ -249,9 +249,9 @@ func WorkflowBranchID(branchID string) Tag {
 
 // workflow task
 
-// WorkflowDecisionType returns tag for WorkflowDecisionType
-func WorkflowDecisionType(decisionType enumspb.DecisionType) Tag {
-	return newStringTag("wf-decision-type", decisionType.String())
+// WorkflowCommandType returns tag for WorkflowCommandType
+func WorkflowCommandType(commandType enumspb.CommandType) Tag {
+	return newStringTag("wf-command-type", commandType.String())
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType

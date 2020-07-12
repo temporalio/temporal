@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -80,16 +80,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -102,9 +102,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -246,16 +246,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -268,9 +268,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -405,17 +405,17 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{
-					ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    "1",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskQueue:                     taskQueue,
@@ -429,10 +429,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
-				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
 		}}, nil
@@ -611,16 +611,16 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -633,9 +633,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -828,16 +828,16 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -850,9 +850,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil

@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -74,15 +74,15 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -95,9 +95,9 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{
 				Details: payloads.EncodeString("Cancelled"),
 			}},
 		}}, nil
@@ -225,15 +225,15 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -246,9 +246,9 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 				Namespace:  s.foreignNamespace,
 				WorkflowId: id,
 				RunId:      we2.RunId,
@@ -275,15 +275,15 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -296,9 +296,9 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{
 				Details: payloads.EncodeString("Cancelled"),
 			}},
 		}}, nil
@@ -445,15 +445,15 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -466,9 +466,9 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 				Namespace:  s.foreignNamespace,
 				WorkflowId: "workflow_not_exist",
 				RunId:      we.RunId,

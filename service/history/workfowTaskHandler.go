@@ -28,8 +28,8 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -115,7 +115,7 @@ func newWorkflowTaskHandler(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisions(
-	decisions []*decisionpb.Decision,
+	decisions []*commandpb.Command,
 ) error {
 
 	// overall workflow size / count check
@@ -135,59 +135,59 @@ func (handler *workflowTaskHandlerImpl) handleDecisions(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecision(decision *decisionpb.Decision) error {
-	switch decision.GetDecisionType() {
-	case enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK:
-		return handler.handleDecisionScheduleActivity(decision.GetScheduleActivityTaskDecisionAttributes())
+func (handler *workflowTaskHandlerImpl) handleDecision(decision *commandpb.Command) error {
+	switch decision.GetCommandType() {
+	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
+		return handler.handleDecisionScheduleActivity(decision.GetScheduleActivityTaskCommandAttributes())
 
-	case enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCompleteWorkflow(decision.GetCompleteWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+		return handler.handleDecisionCompleteWorkflow(decision.GetCompleteWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionFailWorkflow(decision.GetFailWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
+		return handler.handleDecisionFailWorkflow(decision.GetFailWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCancelWorkflow(decision.GetCancelWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
+		return handler.handleDecisionCancelWorkflow(decision.GetCancelWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_START_TIMER:
-		return handler.handleDecisionStartTimer(decision.GetStartTimerDecisionAttributes())
+	case enumspb.COMMAND_TYPE_START_TIMER:
+		return handler.handleDecisionStartTimer(decision.GetStartTimerCommandAttributes())
 
-	case enumspb.DECISION_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		return handler.handleDecisionRequestCancelActivity(decision.GetRequestCancelActivityTaskDecisionAttributes())
+	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
+		return handler.handleDecisionRequestCancelActivity(decision.GetRequestCancelActivityTaskCommandAttributes())
 
-	case enumspb.DECISION_TYPE_CANCEL_TIMER:
-		return handler.handleDecisionCancelTimer(decision.GetCancelTimerDecisionAttributes())
+	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
+		return handler.handleDecisionCancelTimer(decision.GetCancelTimerCommandAttributes())
 
-	case enumspb.DECISION_TYPE_RECORD_MARKER:
-		return handler.handleDecisionRecordMarker(decision.GetRecordMarkerDecisionAttributes())
+	case enumspb.COMMAND_TYPE_RECORD_MARKER:
+		return handler.handleDecisionRecordMarker(decision.GetRecordMarkerCommandAttributes())
 
-	case enumspb.DECISION_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionRequestCancelExternalWorkflow(decision.GetRequestCancelExternalWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
+		return handler.handleDecisionRequestCancelExternalWorkflow(decision.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionSignalExternalWorkflow(decision.GetSignalExternalWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
+		return handler.handleDecisionSignalExternalWorkflow(decision.GetSignalExternalWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-		return handler.handleDecisionContinueAsNewWorkflow(decision.GetContinueAsNewWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
+		return handler.handleDecisionContinueAsNewWorkflow(decision.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-		return handler.handleDecisionStartChildWorkflow(decision.GetStartChildWorkflowExecutionDecisionAttributes())
+	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+		return handler.handleDecisionStartChildWorkflow(decision.GetStartChildWorkflowExecutionCommandAttributes())
 
-	case enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.GetUpsertWorkflowSearchAttributesDecisionAttributes())
+	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown decision type: %v", decision.GetDecisionType()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", decision.GetCommandType()))
 	}
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
-	attr *decisionpb.ScheduleActivityTaskDecisionAttributes,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeScheduleActivityCounter,
+		metrics.CommandTypeScheduleActivityCounter,
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -216,9 +216,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK.String()),
 		attr.GetInput().Size(),
-		"ScheduleActivityTaskDecisionAttributes.Input exceeds size limit.",
+		"ScheduleActivityTaskCommandAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -239,12 +239,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
-	attr *decisionpb.RequestCancelActivityTaskDecisionAttributes,
+	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeCancelActivityCounter,
+		metrics.CommandTypeCancelActivityCounter,
 	)
 
 	if err := handler.validateDecisionAttr(
@@ -291,12 +291,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
-	attr *decisionpb.StartTimerDecisionAttributes,
+	attr *commandpb.StartTimerCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeStartTimerCounter,
+		metrics.CommandTypeStartTimerCounter,
 	)
 
 	if err := handler.validateDecisionAttr(
@@ -322,16 +322,16 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
-	attr *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
+	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeCompleteWorkflowCounter,
+		metrics.CommandTypeCompleteWorkflowCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -344,9 +344,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION.String()),
 		attr.GetResult().Size(),
-		"CompleteWorkflowExecutionDecisionAttributes.Result exceeds size limit.",
+		"CompleteWorkflowExecutionCommandAttributes.Result exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -361,7 +361,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION),
+			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -397,16 +397,16 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
-	attr *decisionpb.FailWorkflowExecutionDecisionAttributes,
+	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeFailWorkflowCounter,
+		metrics.CommandTypeFailWorkflowCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -419,9 +419,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION.String()),
 		attr.GetFailure().Size(),
-		"FailWorkflowExecutionDecisionAttributes.Failure exceeds size limit.",
+		"FailWorkflowExecutionCommandAttributes.Failure exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -436,7 +436,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION),
+			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -480,12 +480,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
-	attr *decisionpb.CancelTimerDecisionAttributes,
+	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeCancelTimerCounter,
+		metrics.CommandTypeCancelTimerCounter,
 	)
 
 	if err := handler.validateDecisionAttr(
@@ -522,14 +522,14 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
-	attr *decisionpb.CancelWorkflowExecutionDecisionAttributes,
+	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeCancelWorkflowCounter)
+		metrics.CommandTypeCancelWorkflowCounter)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -549,7 +549,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_CANCEL_WORKFLOW_EXECUTION),
+			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -560,12 +560,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkflow(
-	attr *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
+	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeCancelExternalWorkflowCounter,
+		metrics.CommandTypeCancelExternalWorkflowCounter,
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -600,12 +600,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
-	attr *decisionpb.RecordMarkerDecisionAttributes,
+	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeRecordMarkerCounter,
+		metrics.CommandTypeRecordMarkerCounter,
 	)
 
 	if err := handler.validateDecisionAttr(
@@ -618,9 +618,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_RECORD_MARKER.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_RECORD_MARKER.String()),
 		common.GetPayloadsMapSize(attr.GetDetails()),
-		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
+		"RecordMarkerCommandAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -632,16 +632,16 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
-	attr *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeContinueAsNewCounter,
+		metrics.CommandTypeContinueAsNewCounter,
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION, "")
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -659,9 +659,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
-		"ContinueAsNewWorkflowExecutionDecisionAttributes. Input exceeds size limit.",
+		"ContinueAsNewWorkflowExecutionCommandAttributes. Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -686,7 +686,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
+			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -718,12 +718,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
-	attr *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
+	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeChildWorkflowCounter,
+		metrics.CommandTypeChildWorkflowCounter,
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -752,9 +752,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
-		"StartChildWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
+		"StartChildWorkflowExecutionCommandAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -778,12 +778,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
-	attr *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
+	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeSignalExternalWorkflowCounter,
+		metrics.CommandTypeSignalExternalWorkflowCounter,
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -811,9 +811,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
-		"SignalExternalWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
+		"SignalExternalWorkflowExecutionCommandAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -828,12 +828,12 @@ func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttributes(
-	attr *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
+	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.DecisionTypeUpsertWorkflowSearchAttributesCounter,
+		metrics.CommandTypeUpsertWorkflowSearchAttributesCounter,
 	)
 
 	// get namespace name
@@ -860,9 +860,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 
 	// blob size limit check
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
-		metrics.DecisionTypeTag(enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 		searchAttributesSize(attr.GetSearchAttributes().GetIndexedFields()),
-		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",
+		"UpsertWorkflowSearchAttributesCommandAttributes exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -893,7 +893,7 @@ func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
 	lastCompletionResult *commonpb.Payloads,
 ) error {
 
-	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 		WorkflowType:                  attr.WorkflowType,
 		TaskQueue:                     attr.TaskQueue,
 		RetryPolicy:                   attr.RetryPolicy,

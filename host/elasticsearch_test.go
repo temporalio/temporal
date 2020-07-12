@@ -44,8 +44,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -203,15 +203,15 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 
 	// test upsert
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertDecision := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertDecision}, nil
 	}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	poller := &TaskPoller{
@@ -864,11 +864,11 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	decisionCount := 0
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes:   &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}}}
+		upsertDecision := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes:  &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}}}
 
 		// handle first upsert
 		if decisionCount == 0 {
@@ -880,19 +880,19 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 					s.testSearchAttributeKey: attrValBytes,
 				},
 			}
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = upsertSearchAttr
-			return []*decisionpb.Decision{upsertDecision}, nil
+			upsertDecision.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
+			return []*commandpb.Command{upsertDecision}, nil
 		}
 		// handle second upsert, which update existing field and add new field
 		if decisionCount == 1 {
 			decisionCount++
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = getUpsertSearchAttributes()
-			return []*decisionpb.Decision{upsertDecision}, nil
+			upsertDecision.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = getUpsertSearchAttributes()
+			return []*commandpb.Command{upsertDecision}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1063,18 +1063,18 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertDecision := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
 						"INVALIDKEY": payload.EncodeBytes([]byte("1")),
 					},
 				},
 			}}}
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertDecision}, nil
 	}
 
 	poller := &TaskPoller{

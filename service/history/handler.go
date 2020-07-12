@@ -591,7 +591,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
+	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag

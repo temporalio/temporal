@@ -178,7 +178,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
 			ScheduledEventId: lastEvent.GetWorkflowTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			Cause:            enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION,
+			Cause:            enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND,
 			Identity:         identity,
 			ForkEventVersion: version,
 		}}

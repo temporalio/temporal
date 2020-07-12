@@ -30,8 +30,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -114,12 +114,12 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
 
-	var attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes
+	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
+	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on decision.")
 
-	attributes = &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{}
+	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is nil on decision.")
 
@@ -144,12 +144,12 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
 	namespace := "testNamespace"
-	var attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes
+	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
+	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on decision.")
 
-	attributes = &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on decision.")
 

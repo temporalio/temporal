@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -754,17 +754,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy1 := enumspb.PARENT_CLOSE_POLICY_ABANDON
 	parentClosePolicy2 := enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	parentClosePolicy3 := enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
-		Decisions: []*decisionpb.Decision{
+		Decisions: []*commandpb.Command{
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow1",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
@@ -775,8 +775,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow2",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
@@ -787,8 +787,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 			{
-				DecisionType: dt,
-				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				CommandType: dt,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 					WorkflowId: "child workflow3",
 					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
@@ -801,7 +801,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultHistoryMaxAutoResetPoints)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
@@ -811,7 +811,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy1,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
@@ -821,7 +821,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy2,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		WorkflowId: "child workflow3",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
@@ -887,13 +887,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
-	var decisions []*decisionpb.Decision
+	var decisions []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &decisionpb.Decision{
-			DecisionType: dt,
-			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		decisions = append(decisions, &commandpb.Command{
+			CommandType: dt,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
@@ -911,7 +911,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + string(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -977,13 +977,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_ABANDON
-	var decisions []*decisionpb.Decision
+	var decisions []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &decisionpb.Decision{
-			DecisionType: dt,
-			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		decisions = append(decisions, &commandpb.Command{
+			CommandType: dt,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
@@ -1001,7 +1001,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + string(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",

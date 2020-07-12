@@ -1687,19 +1687,19 @@ const (
 	ActivityE2ELatency
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
-	DecisionTypeScheduleActivityCounter
-	DecisionTypeCompleteWorkflowCounter
-	DecisionTypeFailWorkflowCounter
-	DecisionTypeCancelWorkflowCounter
-	DecisionTypeStartTimerCounter
-	DecisionTypeCancelActivityCounter
-	DecisionTypeCancelTimerCounter
-	DecisionTypeRecordMarkerCounter
-	DecisionTypeCancelExternalWorkflowCounter
-	DecisionTypeChildWorkflowCounter
-	DecisionTypeContinueAsNewCounter
-	DecisionTypeSignalExternalWorkflowCounter
-	DecisionTypeUpsertWorkflowSearchAttributesCounter
+	CommandTypeScheduleActivityCounter
+	CommandTypeCompleteWorkflowCounter
+	CommandTypeFailWorkflowCounter
+	CommandTypeCancelWorkflowCounter
+	CommandTypeStartTimerCounter
+	CommandTypeCancelActivityCounter
+	CommandTypeCancelTimerCounter
+	CommandTypeRecordMarkerCounter
+	CommandTypeCancelExternalWorkflowCounter
+	CommandTypeChildWorkflowCounter
+	CommandTypeContinueAsNewCounter
+	CommandTypeSignalExternalWorkflowCounter
+	CommandTypeUpsertWorkflowSearchAttributesCounter
 	EmptyCompletionDecisionsCounter
 	MultipleCompletionDecisionsCounter
 	FailedDecisionsCounter
@@ -2102,19 +2102,19 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},
-		DecisionTypeScheduleActivityCounter:               {metricName: "schedule_activity_decision", metricType: Counter},
-		DecisionTypeCompleteWorkflowCounter:               {metricName: "complete_workflow_decision", metricType: Counter},
-		DecisionTypeFailWorkflowCounter:                   {metricName: "fail_workflow_decision", metricType: Counter},
-		DecisionTypeCancelWorkflowCounter:                 {metricName: "cancel_workflow_decision", metricType: Counter},
-		DecisionTypeStartTimerCounter:                     {metricName: "start_timer_decision", metricType: Counter},
-		DecisionTypeCancelActivityCounter:                 {metricName: "cancel_activity_decision", metricType: Counter},
-		DecisionTypeCancelTimerCounter:                    {metricName: "cancel_timer_decision", metricType: Counter},
-		DecisionTypeRecordMarkerCounter:                   {metricName: "record_marker_decision", metricType: Counter},
-		DecisionTypeCancelExternalWorkflowCounter:         {metricName: "cancel_external_workflow_decision", metricType: Counter},
-		DecisionTypeContinueAsNewCounter:                  {metricName: "continue_as_new_decision", metricType: Counter},
-		DecisionTypeSignalExternalWorkflowCounter:         {metricName: "signal_external_workflow_decision", metricType: Counter},
-		DecisionTypeUpsertWorkflowSearchAttributesCounter: {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
-		DecisionTypeChildWorkflowCounter:                  {metricName: "child_workflow_decision", metricType: Counter},
+		CommandTypeScheduleActivityCounter:                {metricName: "schedule_activity_decision", metricType: Counter},
+		CommandTypeCompleteWorkflowCounter:                {metricName: "complete_workflow_decision", metricType: Counter},
+		CommandTypeFailWorkflowCounter:                    {metricName: "fail_workflow_decision", metricType: Counter},
+		CommandTypeCancelWorkflowCounter:                  {metricName: "cancel_workflow_decision", metricType: Counter},
+		CommandTypeStartTimerCounter:                      {metricName: "start_timer_decision", metricType: Counter},
+		CommandTypeCancelActivityCounter:                  {metricName: "cancel_activity_decision", metricType: Counter},
+		CommandTypeCancelTimerCounter:                     {metricName: "cancel_timer_decision", metricType: Counter},
+		CommandTypeRecordMarkerCounter:                    {metricName: "record_marker_decision", metricType: Counter},
+		CommandTypeCancelExternalWorkflowCounter:          {metricName: "cancel_external_workflow_decision", metricType: Counter},
+		CommandTypeContinueAsNewCounter:                   {metricName: "continue_as_new_decision", metricType: Counter},
+		CommandTypeSignalExternalWorkflowCounter:          {metricName: "signal_external_workflow_decision", metricType: Counter},
+		CommandTypeUpsertWorkflowSearchAttributesCounter:  {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
+		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_decision", metricType: Counter},
 		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
 		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
 		FailedDecisionsCounter:                            {metricName: "failed_decisions", metricType: Counter},

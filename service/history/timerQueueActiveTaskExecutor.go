@@ -29,8 +29,8 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -513,7 +513,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 		WorkflowType:                  startAttributes.WorkflowType,
 		TaskQueue:                     startAttributes.TaskQueue,
 		Input:                         startAttributes.Input,
