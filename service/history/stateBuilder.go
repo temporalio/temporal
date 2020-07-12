@@ -195,7 +195,7 @@ func (b *stateBuilderImpl) applyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
-			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			// use event.GetTimestamp() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			decision, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),

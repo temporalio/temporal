@@ -1728,7 +1728,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatTimeout(
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
 
 	commands := []*commandpb.Command{}
 
@@ -1771,7 +1771,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
 
 	commands := []*commandpb.Command{}
 
@@ -1814,7 +1814,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = 0
 
 	commands := []*commandpb.Command{}
 
@@ -4383,7 +4383,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID)
 	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
-		executionBuilder.GetExecutionInfo().DecisionScheduleID, executionBuilder.GetExecutionInfo().DecisionStartedID)
+		executionBuilder.GetExecutionInfo().WorkflowTaskScheduleID, executionBuilder.GetExecutionInfo().WorkflowTaskStartedID)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
 	s.Equal(int64(1), di3.Attempt)
 }
@@ -5194,57 +5194,57 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 
 func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *persistence.WorkflowExecutionInfo {
 	return &persistence.WorkflowExecutionInfo{
-		NamespaceID:                        sourceInfo.NamespaceID,
-		WorkflowID:                         sourceInfo.WorkflowID,
-		RunID:                              sourceInfo.RunID,
-		ParentNamespaceID:                  sourceInfo.ParentNamespaceID,
-		ParentWorkflowID:                   sourceInfo.ParentWorkflowID,
-		ParentRunID:                        sourceInfo.ParentRunID,
-		InitiatedID:                        sourceInfo.InitiatedID,
-		CompletionEventBatchID:             sourceInfo.CompletionEventBatchID,
-		CompletionEvent:                    sourceInfo.CompletionEvent,
-		TaskQueue:                          sourceInfo.TaskQueue,
-		StickyTaskQueue:                    sourceInfo.StickyTaskQueue,
-		StickyScheduleToStartTimeout:       sourceInfo.StickyScheduleToStartTimeout,
-		WorkflowTypeName:                   sourceInfo.WorkflowTypeName,
-		WorkflowRunTimeout:                 sourceInfo.WorkflowRunTimeout,
-		WorkflowTaskTimeout:                sourceInfo.WorkflowTaskTimeout,
-		State:                              sourceInfo.State,
-		Status:                             sourceInfo.Status,
-		LastFirstEventID:                   sourceInfo.LastFirstEventID,
-		LastEventTaskID:                    sourceInfo.LastEventTaskID,
-		NextEventID:                        sourceInfo.NextEventID,
-		LastProcessedEvent:                 sourceInfo.LastProcessedEvent,
-		StartTimestamp:                     sourceInfo.StartTimestamp,
-		LastUpdatedTimestamp:               sourceInfo.LastUpdatedTimestamp,
-		CreateRequestID:                    sourceInfo.CreateRequestID,
-		SignalCount:                        sourceInfo.SignalCount,
-		DecisionVersion:                    sourceInfo.DecisionVersion,
-		DecisionScheduleID:                 sourceInfo.DecisionScheduleID,
-		DecisionStartedID:                  sourceInfo.DecisionStartedID,
-		DecisionRequestID:                  sourceInfo.DecisionRequestID,
-		DecisionTimeout:                    sourceInfo.DecisionTimeout,
-		DecisionAttempt:                    sourceInfo.DecisionAttempt,
-		DecisionStartedTimestamp:           sourceInfo.DecisionStartedTimestamp,
-		DecisionOriginalScheduledTimestamp: sourceInfo.DecisionOriginalScheduledTimestamp,
-		CancelRequested:                    sourceInfo.CancelRequested,
-		CancelRequestID:                    sourceInfo.CancelRequestID,
-		CronSchedule:                       sourceInfo.CronSchedule,
-		ClientLibraryVersion:               sourceInfo.ClientLibraryVersion,
-		ClientFeatureVersion:               sourceInfo.ClientFeatureVersion,
-		ClientImpl:                         sourceInfo.ClientImpl,
-		AutoResetPoints:                    sourceInfo.AutoResetPoints,
-		Memo:                               sourceInfo.Memo,
-		SearchAttributes:                   sourceInfo.SearchAttributes,
-		Attempt:                            sourceInfo.Attempt,
-		HasRetryPolicy:                     sourceInfo.HasRetryPolicy,
-		InitialInterval:                    sourceInfo.InitialInterval,
-		BackoffCoefficient:                 sourceInfo.BackoffCoefficient,
-		MaximumInterval:                    sourceInfo.MaximumInterval,
-		WorkflowExpirationTime:             sourceInfo.WorkflowExpirationTime,
-		MaximumAttempts:                    sourceInfo.MaximumAttempts,
-		NonRetryableErrorTypes:             sourceInfo.NonRetryableErrorTypes,
-		BranchToken:                        sourceInfo.BranchToken,
+		NamespaceID:                            sourceInfo.NamespaceID,
+		WorkflowID:                             sourceInfo.WorkflowID,
+		RunID:                                  sourceInfo.RunID,
+		ParentNamespaceID:                      sourceInfo.ParentNamespaceID,
+		ParentWorkflowID:                       sourceInfo.ParentWorkflowID,
+		ParentRunID:                            sourceInfo.ParentRunID,
+		InitiatedID:                            sourceInfo.InitiatedID,
+		CompletionEventBatchID:                 sourceInfo.CompletionEventBatchID,
+		CompletionEvent:                        sourceInfo.CompletionEvent,
+		TaskQueue:                              sourceInfo.TaskQueue,
+		StickyTaskQueue:                        sourceInfo.StickyTaskQueue,
+		StickyScheduleToStartTimeout:           sourceInfo.StickyScheduleToStartTimeout,
+		WorkflowTypeName:                       sourceInfo.WorkflowTypeName,
+		WorkflowRunTimeout:                     sourceInfo.WorkflowRunTimeout,
+		WorkflowTaskTimeout:                    sourceInfo.WorkflowTaskTimeout,
+		State:                                  sourceInfo.State,
+		Status:                                 sourceInfo.Status,
+		LastFirstEventID:                       sourceInfo.LastFirstEventID,
+		LastEventTaskID:                        sourceInfo.LastEventTaskID,
+		NextEventID:                            sourceInfo.NextEventID,
+		LastProcessedEvent:                     sourceInfo.LastProcessedEvent,
+		StartTimestamp:                         sourceInfo.StartTimestamp,
+		LastUpdatedTimestamp:                   sourceInfo.LastUpdatedTimestamp,
+		CreateRequestID:                        sourceInfo.CreateRequestID,
+		SignalCount:                            sourceInfo.SignalCount,
+		WorkflowTaskVersion:                    sourceInfo.WorkflowTaskVersion,
+		WorkflowTaskScheduleID:                 sourceInfo.WorkflowTaskScheduleID,
+		WorkflowTaskStartedID:                  sourceInfo.WorkflowTaskStartedID,
+		WorkflowTaskRequestID:                  sourceInfo.WorkflowTaskRequestID,
+		CurrentWorkflowTaskTimeout:             sourceInfo.CurrentWorkflowTaskTimeout,
+		WorkflowTaskAttempt:                    sourceInfo.WorkflowTaskAttempt,
+		WorkflowTaskStartedTimestamp:           sourceInfo.WorkflowTaskStartedTimestamp,
+		WorkflowTaskOriginalScheduledTimestamp: sourceInfo.WorkflowTaskOriginalScheduledTimestamp,
+		CancelRequested:                        sourceInfo.CancelRequested,
+		CancelRequestID:                        sourceInfo.CancelRequestID,
+		CronSchedule:                           sourceInfo.CronSchedule,
+		ClientLibraryVersion:                   sourceInfo.ClientLibraryVersion,
+		ClientFeatureVersion:                   sourceInfo.ClientFeatureVersion,
+		ClientImpl:                             sourceInfo.ClientImpl,
+		AutoResetPoints:                        sourceInfo.AutoResetPoints,
+		Memo:                                   sourceInfo.Memo,
+		SearchAttributes:                       sourceInfo.SearchAttributes,
+		Attempt:                                sourceInfo.Attempt,
+		HasRetryPolicy:                         sourceInfo.HasRetryPolicy,
+		InitialInterval:                        sourceInfo.InitialInterval,
+		BackoffCoefficient:                     sourceInfo.BackoffCoefficient,
+		MaximumInterval:                        sourceInfo.MaximumInterval,
+		WorkflowExpirationTime:                 sourceInfo.WorkflowExpirationTime,
+		MaximumAttempts:                        sourceInfo.MaximumAttempts,
+		NonRetryableErrorTypes:                 sourceInfo.NonRetryableErrorTypes,
+		BranchToken:                            sourceInfo.BranchToken,
 	}
 }
 

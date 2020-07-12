@@ -1016,7 +1016,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 
 	// schedule new decision
-	decisionScheduledID := newMsBuilder.GetExecutionInfo().DecisionScheduleID
+	decisionScheduledID := newMsBuilder.GetExecutionInfo().WorkflowTaskScheduleID
 	decision, _ = newMsBuilder.GetWorkflowTaskInfo(decisionScheduledID)
 	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,

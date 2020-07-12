@@ -441,7 +441,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTime: protoTaskTime,
 		EventId:        event.EventId,
@@ -520,7 +520,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTime: protoTaskTime,
 		EventId:        event.GetEventId(),
@@ -589,7 +589,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		VisibilityTime: protoTaskTime,
 		EventId:        scheduledEvent.GetEventId(),
@@ -664,7 +664,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		VisibilityTime: protoTime,
 		EventId:        scheduledEvent2.GetEventId(),
@@ -681,7 +681,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		input.RangeID = 0
 		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 		mutableState.executionInfo.LastEventTaskID = 0
-		mutableState.executionInfo.DecisionOriginalScheduledTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.DecisionOriginalScheduledTimestamp
+		mutableState.executionInfo.WorkflowTaskOriginalScheduledTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTimestamp
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{
 				ExecutionInfo:             mutableState.executionInfo,
@@ -753,7 +753,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_DECISION_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime: protoTime,
 		EventId:        di.ScheduleID,
@@ -797,7 +797,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_DECISION_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		VisibilityTime: protoTaskTime,
 		EventId:        decisionScheduleID,
@@ -845,7 +845,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 		WorkflowId:     execution.GetWorkflowId(),
 		RunId:          execution.GetRunId(),
 		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_DECISION_TIMEOUT,
+		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime: protoTime,
 		EventId:        di.ScheduleID,

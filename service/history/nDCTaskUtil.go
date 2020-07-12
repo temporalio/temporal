@@ -93,8 +93,8 @@ func loadMutableStateForTransferTask(
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
-		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
-		executionInfo.DecisionAttempt > 0
+		executionInfo.WorkflowTaskScheduleID == transferTask.GetScheduleId() &&
+		executionInfo.WorkflowTaskAttempt > 0
 
 	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
@@ -137,9 +137,9 @@ func loadMutableStateForTimerTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := timerTask.TaskType == enumsspb.TASK_TYPE_DECISION_TIMEOUT &&
-		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
-		executionInfo.DecisionAttempt > 0
+	isDecisionRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
+		executionInfo.WorkflowTaskScheduleID == timerTask.GetEventId() &&
+		executionInfo.WorkflowTaskAttempt > 0
 
 	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)

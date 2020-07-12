@@ -96,9 +96,9 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	switch timerTask.TaskType {
 	case enumsspb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)

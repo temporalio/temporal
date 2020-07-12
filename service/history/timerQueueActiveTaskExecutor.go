@@ -90,9 +90,9 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	switch timerTask.TaskType {
 	case enumsspb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		return t.executeDecisionTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
@@ -284,7 +284,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetWorkflowTaskInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_DECISION_TIMEOUT))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

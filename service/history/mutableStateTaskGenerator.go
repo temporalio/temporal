@@ -264,7 +264,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
 		) * time.Second
 
-		r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -282,25 +282,25 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 	decisionScheduleID int64,
 ) error {
 
-	decision, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTaskInfo, ok := r.mutableState.GetWorkflowTaskInfo(
 		decisionScheduleID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", decisionScheduleID))
 	}
 
-	startedTime := time.Unix(0, decision.StartedTimestamp)
-	startToCloseTimeout := time.Duration(
-		decision.WorkflowTaskTimeout,
+	startedTime := time.Unix(0, workflowTaskInfo.StartedTimestamp)
+	workflowTaskTimeout := time.Duration(
+		workflowTaskInfo.WorkflowTaskTimeout,
 	) * time.Second
 
-	r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: startedTime.Add(startToCloseTimeout),
+		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		EventID:             decision.ScheduleID,
-		ScheduleAttempt:     decision.Attempt,
-		Version:             decision.Version,
+		EventID:             workflowTaskInfo.ScheduleID,
+		ScheduleAttempt:     workflowTaskInfo.Attempt,
+		Version:             workflowTaskInfo.Version,
 	})
 
 	return nil

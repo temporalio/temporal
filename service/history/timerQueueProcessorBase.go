@@ -451,10 +451,10 @@ func (t *timerQueueProcessorBase) getTimerTaskType(
 	switch taskType {
 	case enumsspb.TASK_TYPE_USER_TIMER:
 		return "UserTimer"
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
-		return "ActivityTimeout"
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
-		return "DecisionTimeout"
+	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
+		return "ActivityTaskTimeout"
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
+		return "WorkflowTaskTimeout"
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
@@ -472,12 +472,12 @@ func getTimerTaskMetricScope(
 	isActive bool,
 ) int {
 	switch taskType {
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskDecisionTimeoutScope
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}

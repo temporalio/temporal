@@ -402,8 +402,8 @@ func (this *MutableStateChecksumPayload) GoString() string {
 	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
 	s = append(s, "LastProcessedEventId: "+fmt.Sprintf("%#v", this.LastProcessedEventId)+",\n")
 	s = append(s, "SignalCount: "+fmt.Sprintf("%#v", this.SignalCount)+",\n")
-	s = append(s, "DecisionAttempt: "+fmt.Sprintf("%#v", this.DecisionAttempt)+",\n")
-	s = append(s, "DecisionVersion: "+fmt.Sprintf("%#v", this.DecisionVersion)+",\n")
+	s = append(s, "WorkflowTaskAttempt: "+fmt.Sprintf("%#v", this.DecisionAttempt)+",\n")
+	s = append(s, "WorkflowTaskVersion: "+fmt.Sprintf("%#v", this.DecisionVersion)+",\n")
 	s = append(s, "DecisionScheduledId: "+fmt.Sprintf("%#v", this.DecisionScheduledId)+",\n")
 	s = append(s, "DecisionStartedId: "+fmt.Sprintf("%#v", this.DecisionStartedId)+",\n")
 	s = append(s, "PendingTimerStartedIds: "+fmt.Sprintf("%#v", this.PendingTimerStartedIds)+",\n")
@@ -765,8 +765,8 @@ func (this *MutableStateChecksumPayload) String() string {
 		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
 		`LastProcessedEventId:` + fmt.Sprintf("%v", this.LastProcessedEventId) + `,`,
 		`SignalCount:` + fmt.Sprintf("%v", this.SignalCount) + `,`,
-		`DecisionAttempt:` + fmt.Sprintf("%v", this.DecisionAttempt) + `,`,
-		`DecisionVersion:` + fmt.Sprintf("%v", this.DecisionVersion) + `,`,
+		`WorkflowTaskAttempt:` + fmt.Sprintf("%v", this.DecisionAttempt) + `,`,
+		`WorkflowTaskVersion:` + fmt.Sprintf("%v", this.DecisionVersion) + `,`,
 		`DecisionScheduledId:` + fmt.Sprintf("%v", this.DecisionScheduledId) + `,`,
 		`DecisionStartedId:` + fmt.Sprintf("%v", this.DecisionStartedId) + `,`,
 		`PendingTimerStartedIds:` + fmt.Sprintf("%v", this.PendingTimerStartedIds) + `,`,
@@ -991,7 +991,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 			}
 		case 10:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DecisionAttempt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskAttempt", wireType)
 			}
 			m.DecisionAttempt = 0
 			for shift := uint(0); ; shift += 7 {
@@ -1010,7 +1010,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 			}
 		case 11:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DecisionVersion", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskVersion", wireType)
 			}
 			m.DecisionVersion = 0
 			for shift := uint(0); ; shift += 7 {

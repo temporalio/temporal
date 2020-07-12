@@ -472,7 +472,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				// the fake tasks will not be actually used, we just need to make sure
 				// its length > 0 and has correct timestamp, to trigger a db scan
 				fakeWorkflowTask := []persistence.Task{&persistence.WorkflowTask{}}
-				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
+				fakeDecisionTimeoutTask := []persistence.Task{&persistence.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeWorkflowTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}

@@ -223,11 +223,11 @@ func newMutableStateBuilder(
 		metricsClient:   shard.GetMetricsClient(),
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		DecisionRequestID:  emptyUUID,
-		DecisionTimeout:    0,
+		WorkflowTaskVersion:        common.EmptyVersion,
+		WorkflowTaskScheduleID:     common.EmptyEventID,
+		WorkflowTaskStartedID:      common.EmptyEventID,
+		WorkflowTaskRequestID:      emptyUUID,
+		CurrentWorkflowTaskTimeout: 0,
 
 		NextEventID:        common.FirstEventID,
 		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1467,16 +1467,16 @@ func (e *mutableStateBuilder) getDecisionInfo() *workflowTaskInfo {
 		taskQueue = e.executionInfo.StickyTaskQueue
 	}
 	return &workflowTaskInfo{
-		Version:                    e.executionInfo.DecisionVersion,
-		ScheduleID:                 e.executionInfo.DecisionScheduleID,
-		StartedID:                  e.executionInfo.DecisionStartedID,
-		RequestID:                  e.executionInfo.DecisionRequestID,
-		WorkflowTaskTimeout:        e.executionInfo.DecisionTimeout,
-		Attempt:                    e.executionInfo.DecisionAttempt,
-		StartedTimestamp:           e.executionInfo.DecisionStartedTimestamp,
-		ScheduledTimestamp:         e.executionInfo.DecisionScheduledTimestamp,
+		Version:                    e.executionInfo.WorkflowTaskVersion,
+		ScheduleID:                 e.executionInfo.WorkflowTaskScheduleID,
+		StartedID:                  e.executionInfo.WorkflowTaskStartedID,
+		RequestID:                  e.executionInfo.WorkflowTaskRequestID,
+		WorkflowTaskTimeout:        e.executionInfo.CurrentWorkflowTaskTimeout,
+		Attempt:                    e.executionInfo.WorkflowTaskAttempt,
+		StartedTimestamp:           e.executionInfo.WorkflowTaskStartedTimestamp,
+		ScheduledTimestamp:         e.executionInfo.WorkflowTaskScheduledTimestamp,
 		TaskQueue:                  taskQueue,
-		OriginalScheduledTimestamp: e.executionInfo.DecisionOriginalScheduledTimestamp,
+		OriginalScheduledTimestamp: e.executionInfo.WorkflowTaskOriginalScheduledTimestamp,
 	}
 }
 
@@ -1826,11 +1826,11 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.LastProcessedEvent = common.EmptyEventID
 	e.executionInfo.LastFirstEventID = startEvent.GetEventId()
 
-	e.executionInfo.DecisionVersion = common.EmptyVersion
-	e.executionInfo.DecisionScheduleID = common.EmptyEventID
-	e.executionInfo.DecisionStartedID = common.EmptyEventID
-	e.executionInfo.DecisionRequestID = emptyUUID
-	e.executionInfo.DecisionTimeout = 0
+	e.executionInfo.WorkflowTaskVersion = common.EmptyVersion
+	e.executionInfo.WorkflowTaskScheduleID = common.EmptyEventID
+	e.executionInfo.WorkflowTaskStartedID = common.EmptyEventID
+	e.executionInfo.WorkflowTaskRequestID = emptyUUID
+	e.executionInfo.CurrentWorkflowTaskTimeout = 0
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
 	e.executionInfo.ParentNamespaceID = parentNamespaceID
