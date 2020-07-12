@@ -344,7 +344,7 @@ Update_History_Loop:
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
 
-		decisionHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Decisions) == 0
+		decisionHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
 		var decisionHeartbeatTimeout bool
 		var completedEvent *historypb.HistoryEvent
 		if decisionHeartbeating {
@@ -430,8 +430,8 @@ Update_History_Loop:
 				handler.config,
 			)
 
-			if err := workflowTaskHandler.handleDecisions(
-				request.Decisions,
+			if err := workflowTaskHandler.handleCommands(
+				request.Commands,
 			); err != nil {
 				return nil, err
 			}

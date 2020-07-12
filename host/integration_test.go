@@ -3000,19 +3000,19 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(2))
 
 	// Assert for single workflow task failed and workflow completion
-	failedDecisions := 0
+	failedWorkflowTasks := 0
 	workflowComplete := false
 	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-			failedDecisions++
+			failedWorkflowTasks++
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 			workflowComplete = true
 		}
 	}
 	s.True(workflowComplete, "Workflow not complete")
-	s.Equal(2, failedDecisions, "Mismatched failed decision count")
+	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
 }
 
 func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
@@ -3164,19 +3164,19 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(2))
 
 	// Assert for single workflow task failed and workflow completion
-	failedDecisions := 0
+	failedWorkflowTasks := 0
 	workflowComplete := false
 	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-			failedDecisions++
+			failedWorkflowTasks++
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 			workflowComplete = true
 		}
 	}
 	s.True(workflowComplete, "Workflow not complete")
-	s.Equal(2, failedDecisions, "Mismatched failed decision count")
+	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
 }
 
 func (s *integrationSuite) TestBufferedEventsOutOfOrder() {

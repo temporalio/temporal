@@ -121,7 +121,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 
 	newMutableState, newHistorySize, newTransferTasks, newTimerTasks, retError := w.buildNewMutableStateForReset(
 		ctx, namespaceEntry, baseMutableState, currMutableState,
-		request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), resetNewRunID,
+		request.GetReason(), request.GetWorkflowTaskFinishEventId(), request.GetRequestId(), resetNewRunID,
 	)
 	if retError != nil {
 		return response, retError
@@ -705,7 +705,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
 			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-				retError = serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"))
+				retError = serviceerror.NewInvalidArgument(fmt.Sprintf("wrong WorkflowTaskFinishEventId, cannot replay history to continueAsNew"))
 				return
 			}
 
@@ -741,11 +741,11 @@ func validateLastBatchOfReset(lastBatch []*historypb.HistoryEvent, decisionFinis
 	firstEvent := lastBatch[0]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if decisionFinishEventID != lastEvent.GetEventId()+1 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be WorkflowTaskStarted + 1: %v", lastEvent.GetEventId()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong WorkflowTaskFinishEventId, it must be WorkflowTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
 	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include WorkflowTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong WorkflowTaskFinishEventId, previous batch doesn't include WorkflowTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
 	return nil

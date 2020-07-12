@@ -526,7 +526,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	}
 
 	completeRequest := request.CompleteRequest
-	if len(completeRequest.Decisions) == 0 {
+	if len(completeRequest.Commands) == 0 {
 		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionDecisionsCounter)
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)

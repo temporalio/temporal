@@ -878,7 +878,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 			row = append(row, pt.GetBinaryChecksum())
 			row = append(row, time.Unix(0, pt.GetCreateTimeNano()).String())
 			row = append(row, pt.GetRunId())
-			row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
+			row = append(row, strconv.FormatInt(pt.GetFirstWorkflowTaskCompletedId(), 10))
 			table.Append(row)
 		}
 	}
@@ -1376,10 +1376,10 @@ func ResetWorkflow(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 
 	resetBaseRunID := rid
-	decisionFinishID := eventID
+	workflowTaskFinishID := eventID
 	var err error
 	if resetType != "" {
-		resetBaseRunID, decisionFinishID, err = getResetEventIDByType(ctx, c, resetType, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getResetEventIDByType(ctx, c, resetType, namespace, wid, rid, frontendClient)
 		if err != nil {
 			ErrorAndExit("getResetEventIDByType failed", err)
 		}
@@ -1390,9 +1390,9 @@ func ResetWorkflow(c *cli.Context) {
 			WorkflowId: wid,
 			RunId:      resetBaseRunID,
 		},
-		Reason:                fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason),
-		DecisionFinishEventId: decisionFinishID,
-		RequestId:             uuid.New(),
+		Reason:                    fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason),
+		WorkflowTaskFinishEventId: workflowTaskFinishID,
+		RequestId:                 uuid.New(),
 	})
 	if err != nil {
 		ErrorAndExit("reset failed", err)
@@ -1640,14 +1640,14 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 		}
 	}
 
-	resetBaseRunID, decisionFinishID, err := getResetEventIDByType(ctx, c, params.resetType, namespace, wid, rid, frontendClient)
+	resetBaseRunID, workflowTaskFinishID, err := getResetEventIDByType(ctx, c, params.resetType, namespace, wid, rid, frontendClient)
 	if err != nil {
 		return printErrorAndReturn("getResetEventIDByType failed", err)
 	}
-	fmt.Println("DecisionFinishEventId for reset:", wid, rid, resetBaseRunID, decisionFinishID)
+	fmt.Println("WorkflowTaskFinishEventId for reset:", wid, rid, resetBaseRunID, workflowTaskFinishID)
 
 	if params.dryRun {
-		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunId:%v, eventId:%v \n", wid, rid, resetBaseRunID, decisionFinishID)
+		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunId:%v, eventId:%v \n", wid, rid, resetBaseRunID, workflowTaskFinishID)
 	} else {
 		resp2, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: namespace,
@@ -1655,9 +1655,9 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 				WorkflowId: wid,
 				RunId:      resetBaseRunID,
 			},
-			DecisionFinishEventId: decisionFinishID,
-			RequestId:             uuid.New(),
-			Reason:                fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), params.reason),
+			WorkflowTaskFinishEventId: workflowTaskFinishID,
+			RequestId:                 uuid.New(),
+			Reason:                    fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), params.reason),
 		})
 
 		if err != nil {
@@ -1716,27 +1716,27 @@ func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namesp
 	return false, nil
 }
 
-func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
 	case "LastDecisionCompleted":
-		resetBaseRunID, decisionFinishID, err = getLastDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getLastDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "LastContinuedAsNew":
-		resetBaseRunID, decisionFinishID, err = getLastContinueAsNewID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getLastContinueAsNewID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "FirstDecisionCompleted":
-		resetBaseRunID, decisionFinishID, err = getFirstDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getFirstDecisionCompletedID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "BadBinary":
 		binCheckSum := c.String(FlagResetBadBinaryChecksum)
-		resetBaseRunID, decisionFinishID, err = getBadDecisionCompletedID(ctx, namespace, wid, rid, binCheckSum, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getBadDecisionCompletedID(ctx, namespace, wid, rid, binCheckSum, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1746,7 +1746,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	return
 }
 
-func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1765,7 +1765,7 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				decisionFinishID = e.GetEventId()
+				workflowTaskFinishID = e.GetEventId()
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1774,13 +1774,13 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 			break
 		}
 	}
-	if decisionFinishID == 0 {
+	if workflowTaskFinishID == 0 {
 		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
 	}
 	return
 }
 
-func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
@@ -1799,16 +1799,16 @@ func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChec
 		},
 	}, resp.WorkflowExecutionInfo.AutoResetPoints)
 	if p != nil {
-		decisionFinishID = p.GetFirstDecisionCompletedId()
+		workflowTaskFinishID = p.GetFirstWorkflowTaskCompletedId()
 	}
 
-	if decisionFinishID == 0 {
+	if workflowTaskFinishID == 0 {
 		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", serviceerror.NewInvalidArgument("no DecisionFinishID"))
 	}
 	return
 }
 
-func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1827,8 +1827,8 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				decisionFinishID = e.GetEventId()
-				return resetBaseRunID, decisionFinishID, nil
+				workflowTaskFinishID = e.GetEventId()
+				return resetBaseRunID, workflowTaskFinishID, nil
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1837,13 +1837,13 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 			break
 		}
 	}
-	if decisionFinishID == 0 {
+	if workflowTaskFinishID == 0 {
 		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
 	}
 	return
 }
 
-func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	// get first event
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1880,7 +1880,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				decisionFinishID = e.GetEventId()
+				workflowTaskFinishID = e.GetEventId()
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1889,7 +1889,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 			break
 		}
 	}
-	if decisionFinishID == 0 {
+	if workflowTaskFinishID == 0 {
 		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
 	}
 	return

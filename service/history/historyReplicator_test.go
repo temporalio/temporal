@@ -1708,7 +1708,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddWorkflowTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING

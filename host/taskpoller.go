@@ -244,7 +244,7 @@ Loop:
 			require.Equal(p.T, decisionAttempt, lastDecisionScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
-		decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+		commands, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -256,13 +256,13 @@ Loop:
 			return isQueryTask, nil, err
 		}
 
-		p.Logger.Info("Completing Decision.  Decisions", tag.Value(decisions))
+		p.Logger.Info("Completing Commands. Commands ", tag.Value(commands))
 		if !respondStickyTaskQueue {
 			// non sticky taskqueue
 			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
-				Decisions:                  decisions,
+				Commands:                   commands,
 				ReturnNewWorkflowTask:      forceCreateNewDecision,
 				ForceCreateNewWorkflowTask: forceCreateNewDecision,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
@@ -275,7 +275,7 @@ Loop:
 			&workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
-				Decisions: decisions,
+				Commands:  commands,
 				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 					WorkerTaskQueue:               p.StickyTaskQueue,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
@@ -311,7 +311,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollWorkflo
 		p.Logger.Fatal("History Events are empty")
 	}
 
-	decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
+	commands, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
@@ -324,7 +324,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollWorkflo
 		return nil, err
 	}
 
-	p.Logger.Info("Completing Decision", tag.Value(decisions))
+	p.Logger.Info("Completing Commands", tag.Value(commands))
 
 	// sticky taskqueue
 	newTask, err := p.Engine.RespondWorkflowTaskCompleted(
@@ -332,7 +332,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollWorkflo
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
-			Decisions: decisions,
+			Commands:  commands,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:               p.StickyTaskQueue,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,

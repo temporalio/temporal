@@ -185,11 +185,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             "testNamespace",
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 29,
-		RequestId:             uuid.New().String(),
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 29,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -867,11 +867,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             "testNamespace",
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -1455,11 +1455,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -2161,11 +2161,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -2761,11 +2761,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{

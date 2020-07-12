@@ -2303,8 +2303,8 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	if request.GetDecisionFinishEventId() <= common.FirstEventID ||
-		request.GetDecisionFinishEventId() >= baseMutableState.GetNextEventID() {
+	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
+		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Decision finish ID must be > 1 && <= workflow next event ID.")
 	}
 
@@ -2368,7 +2368,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 
 	resetRunID := uuid.New()
-	baseRebuildLastEventID := request.GetDecisionFinishEventId() - 1
+	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
 	baseVersionHistories := baseMutableState.GetVersionHistories()
 	baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
 	if err != nil {

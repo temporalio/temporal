@@ -888,7 +888,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerDecision() {
 		NamespaceId: namespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: serializedTaskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})

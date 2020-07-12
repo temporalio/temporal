@@ -871,7 +871,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedInvalidToken() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: invalidToken,
-			Decisions: nil,
+			Commands:  nil,
 			Identity:  identity,
 		},
 	})

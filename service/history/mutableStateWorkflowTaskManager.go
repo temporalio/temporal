@@ -535,7 +535,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskFailedEvent(
 
 	// always clear decision attempt for reset
 	if cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW ||
-		cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION {
+		cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND {
 		m.msb.executionInfo.DecisionAttempt = 0
 	}
 	return event, nil

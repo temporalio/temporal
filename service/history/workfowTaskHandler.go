@@ -114,8 +114,8 @@ func newWorkflowTaskHandler(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisions(
-	decisions []*commandpb.Command,
+func (handler *workflowTaskHandlerImpl) handleCommands(
+	commands []*commandpb.Command,
 ) error {
 
 	// overall workflow size / count check
@@ -124,9 +124,9 @@ func (handler *workflowTaskHandlerImpl) handleDecisions(
 		return err
 	}
 
-	for _, decision := range decisions {
+	for _, command := range commands {
 
-		err = handler.handleDecision(decision)
+		err = handler.handleCommand(command)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
@@ -135,49 +135,49 @@ func (handler *workflowTaskHandlerImpl) handleDecisions(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecision(decision *commandpb.Command) error {
-	switch decision.GetCommandType() {
+func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command) error {
+	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
-		return handler.handleDecisionScheduleActivity(decision.GetScheduleActivityTaskCommandAttributes())
+		return handler.handleDecisionScheduleActivity(command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCompleteWorkflow(decision.GetCompleteWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionCompleteWorkflow(command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionFailWorkflow(decision.GetFailWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionFailWorkflow(command.GetFailWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCancelWorkflow(decision.GetCancelWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionCancelWorkflow(command.GetCancelWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_TIMER:
-		return handler.handleDecisionStartTimer(decision.GetStartTimerCommandAttributes())
+		return handler.handleDecisionStartTimer(command.GetStartTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		return handler.handleDecisionRequestCancelActivity(decision.GetRequestCancelActivityTaskCommandAttributes())
+		return handler.handleDecisionRequestCancelActivity(command.GetRequestCancelActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
-		return handler.handleDecisionCancelTimer(decision.GetCancelTimerCommandAttributes())
+		return handler.handleDecisionCancelTimer(command.GetCancelTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_RECORD_MARKER:
-		return handler.handleDecisionRecordMarker(decision.GetRecordMarkerCommandAttributes())
+		return handler.handleDecisionRecordMarker(command.GetRecordMarkerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionRequestCancelExternalWorkflow(decision.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionRequestCancelExternalWorkflow(command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionSignalExternalWorkflow(decision.GetSignalExternalWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionSignalExternalWorkflow(command.GetSignalExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-		return handler.handleDecisionContinueAsNewWorkflow(decision.GetContinueAsNewWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionContinueAsNewWorkflow(command.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-		return handler.handleDecisionStartChildWorkflow(decision.GetStartChildWorkflowExecutionCommandAttributes())
+		return handler.handleDecisionStartChildWorkflow(command.GetStartChildWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.GetUpsertWorkflowSearchAttributesCommandAttributes())
+		return handler.handleDecisionUpsertWorkflowSearchAttributes(command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", decision.GetCommandType()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
 }
 

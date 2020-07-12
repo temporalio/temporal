@@ -1998,11 +1998,11 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		resettable = false
 	}
 	info := &workflowpb.ResetPointInfo{
-		BinaryChecksum:           binChecksum,
-		RunId:                    exeInfo.RunID,
-		FirstDecisionCompletedId: event.GetEventId(),
-		CreateTimeNano:           e.timeSource.Now().UnixNano(),
-		Resettable:               resettable,
+		BinaryChecksum:               binChecksum,
+		RunId:                        exeInfo.RunID,
+		FirstWorkflowTaskCompletedId: event.GetEventId(),
+		CreateTimeNano:               e.timeSource.Now().UnixNano(),
+		Resettable:                   resettable,
 	}
 	currResetPoints = append(currResetPoints, info)
 	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
@@ -4450,7 +4450,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover(
 	if err := failDecision(
 		e,
 		decision,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 	); err != nil {
 		return false, err
 	}
@@ -4500,7 +4500,7 @@ func (e *mutableStateBuilder) closeTransactionHandleBufferedEventsLimit(
 		if err := failDecision(
 			e,
 			decision,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
 		}
@@ -4551,7 +4551,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
 			tag.WorkflowResetBaseRunID(pt.GetRunId()),
-			tag.WorkflowEventID(pt.GetFirstDecisionCompletedId()),
+			tag.WorkflowEventID(pt.GetFirstWorkflowTaskCompletedId()),
 			tag.WorkflowBinaryChecksum(pt.GetBinaryChecksum()),
 		)
 	}

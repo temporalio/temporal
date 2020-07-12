@@ -761,7 +761,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
-		Decisions: []*commandpb.Command{
+		Commands: []*commandpb.Command{
 			{
 				CommandType: dt,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -889,9 +889,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
-	var decisions []*commandpb.Command
+	var commands []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &commandpb.Command{
+		commands = append(commands, &commandpb.Command{
 			CommandType: dt,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
@@ -906,8 +906,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "some random identity",
-		Decisions: decisions,
+		Identity: "some random identity",
+		Commands: commands,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
@@ -979,9 +979,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	dt := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_ABANDON
-	var decisions []*commandpb.Command
+	var commands []*commandpb.Command
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &commandpb.Command{
+		commands = append(commands, &commandpb.Command{
 			CommandType: dt,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 				WorkflowId: "child workflow" + string(i),
@@ -996,8 +996,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "some random identity",
-		Decisions: decisions,
+		Identity: "some random identity",
+		Commands: commands,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {

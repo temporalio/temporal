@@ -155,7 +155,7 @@ func retryWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return nil, err
 		}
@@ -183,7 +183,7 @@ func timeoutWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func terminateWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
 		}

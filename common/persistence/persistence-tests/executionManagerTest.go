@@ -808,12 +808,12 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	testResetPoints := workflowpb.ResetPoints{
 		Points: []*workflowpb.ResetPointInfo{
 			{
-				BinaryChecksum:           "test-binary-checksum",
-				RunId:                    "test-runID",
-				FirstDecisionCompletedId: 123,
-				CreateTimeNano:           456,
-				Resettable:               true,
-				ExpireTimeNano:           789,
+				BinaryChecksum:               "test-binary-checksum",
+				RunId:                        "test-runID",
+				FirstWorkflowTaskCompletedId: 123,
+				CreateTimeNano:               456,
+				Resettable:                   true,
+				ExpireTimeNano:               789,
 			},
 		},
 	}
@@ -1203,12 +1203,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	testResetPoints := workflowpb.ResetPoints{
 		Points: []*workflowpb.ResetPointInfo{
 			{
-				BinaryChecksum:           "test-binary-checksum",
-				RunId:                    "test-runID",
-				FirstDecisionCompletedId: 123,
-				CreateTimeNano:           456,
-				Resettable:               true,
-				ExpireTimeNano:           789,
+				BinaryChecksum:               "test-binary-checksum",
+				RunId:                        "test-runID",
+				FirstWorkflowTaskCompletedId: 123,
+				CreateTimeNano:               456,
+				Resettable:                   true,
+				ExpireTimeNano:               789,
 			},
 		},
 	}
@@ -3002,12 +3002,12 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	testResetPoints := workflowpb.ResetPoints{
 		Points: []*workflowpb.ResetPointInfo{
 			{
-				BinaryChecksum:           "test-binary-checksum",
-				RunId:                    "test-runID",
-				FirstDecisionCompletedId: 123,
-				CreateTimeNano:           456,
-				Resettable:               true,
-				ExpireTimeNano:           789,
+				BinaryChecksum:               "test-binary-checksum",
+				RunId:                        "test-runID",
+				FirstWorkflowTaskCompletedId: 123,
+				CreateTimeNano:               456,
+				Resettable:                   true,
+				ExpireTimeNano:               789,
 			},
 		},
 	}

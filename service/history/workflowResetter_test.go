@@ -337,7 +337,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",

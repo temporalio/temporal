@@ -789,7 +789,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	logger = logger.WithTags(
 		tag.WorkflowResetBaseRunID(resetPoint.GetRunId()),
 		tag.WorkflowBinaryChecksum(resetPoint.GetBinaryChecksum()),
-		tag.WorkflowEventID(resetPoint.GetFirstDecisionCompletedId()),
+		tag.WorkflowEventID(resetPoint.GetFirstWorkflowTaskCompletedId()),
 	)
 
 	var baseContext workflowExecutionContext
@@ -1276,9 +1276,9 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 					WorkflowId: workflowID,
 					RunId:      baseRunID,
 				},
-				Reason:                fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPoint.GetBinaryChecksum()),
-				DecisionFinishEventId: resetPoint.GetFirstDecisionCompletedId(),
-				RequestId:             uuid.New(),
+				Reason:                    fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPoint.GetBinaryChecksum()),
+				WorkflowTaskFinishEventId: resetPoint.GetFirstWorkflowTaskCompletedId(),
+				RequestId:                 uuid.New(),
 			},
 			baseContext,
 			baseMutableState,
@@ -1288,7 +1288,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	} else {
 		resetRunID := uuid.New()
 		baseRunID := baseMutableState.GetExecutionInfo().RunID
-		baseRebuildLastEventID := resetPoint.GetFirstDecisionCompletedId() - 1
+		baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
 		baseVersionHistories := baseMutableState.GetVersionHistories()
 		baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
 		if err != nil {

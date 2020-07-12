@@ -276,7 +276,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		inFlightDecision.ScheduleID,
 		inFlightDecision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",

@@ -1123,7 +1123,7 @@ func (r *historyReplicator) flushEventsBuffer(
 	if _, err = msBuilder.AddWorkflowTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil, identityHistoryService,
 		"",
 		"",
@@ -1236,11 +1236,11 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resp, err := r.resetor.ResetWorkflowExecution(
 		ctx,
 		&workflowservice.ResetWorkflowExecutionRequest{
-			Namespace:             namespaceEntry.GetInfo().Name,
-			WorkflowExecution:     context.getExecution(),
-			Reason:                workflowResetReason,
-			DecisionFinishEventId: resetDecisionFinishID,
-			RequestId:             resetRequestID,
+			Namespace:                 namespaceEntry.GetInfo().Name,
+			WorkflowExecution:         context.getExecution(),
+			Reason:                    workflowResetReason,
+			WorkflowTaskFinishEventId: resetDecisionFinishID,
+			RequestId:                 resetRequestID,
 		},
 		baseContext,
 		baseMutableState,

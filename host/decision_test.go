@@ -95,7 +95,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	for i := 0; i < 12; i++ {
 		resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: []*commandpb.Command{},
+			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:               stikyTaskQueue,
 				ScheduleToStartTimeoutSeconds: 5,
@@ -125,7 +125,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: taskToken,
-		Decisions: []*commandpb.Command{
+		Commands: []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -198,7 +198,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
-		Decisions: []*commandpb.Command{},
+		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:               stikyTaskQueue,
 			ScheduleToStartTimeoutSeconds: 5,
@@ -210,7 +210,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp3, err3 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp2.WorkflowTask.GetTaskToken(),
-		Decisions: []*commandpb.Command{
+		Commands: []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -231,7 +231,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp4, err4 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp3.WorkflowTask.GetTaskToken(),
-		Decisions: []*commandpb.Command{
+		Commands: []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -252,7 +252,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp4.WorkflowTask.GetTaskToken(),
-		Decisions: []*commandpb.Command{
+		Commands: []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
