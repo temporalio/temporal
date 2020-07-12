@@ -75,10 +75,10 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type MatchingServiceClient interface {
 	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
-	// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+	// WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
 	PollWorkflowTaskQueue(ctx context.Context, in *PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*PollWorkflowTaskQueueResponse, error)
 	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
-	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+	// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 	PollActivityTaskQueue(ctx context.Context, in *PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*PollActivityTaskQueueResponse, error)
 	// AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
@@ -197,10 +197,10 @@ func (c *matchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in 
 // MatchingServiceServer is the server API for MatchingService service.
 type MatchingServiceServer interface {
 	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
-	// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+	// WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
 	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error)
 	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
-	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+	// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 	PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error)
 	// AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.

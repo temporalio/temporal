@@ -614,9 +614,9 @@ func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(decision, identity)
-		response.DecisionInfo = &historyspb.TransientDecisionInfo{}
-		response.DecisionInfo.ScheduledEvent = scheduledEvent
-		response.DecisionInfo.StartedEvent = startedEvent
+		response.WorkflowTaskInfo = &historyspb.TransientWorkflowTaskInfo{}
+		response.WorkflowTaskInfo.ScheduledEvent = scheduledEvent
+		response.WorkflowTaskInfo.StartedEvent = startedEvent
 	}
 	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {

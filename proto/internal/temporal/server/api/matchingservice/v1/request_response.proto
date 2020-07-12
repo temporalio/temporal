@@ -52,7 +52,7 @@ message PollWorkflowTaskQueueResponse {
     int64 backlog_count_hint = 8;
     bool sticky_execution_enabled = 9;
     temporal.api.query.v1.WorkflowQuery query = 10;
-    temporal.server.api.history.v1.TransientDecisionInfo decision_info = 11;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 11;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     int32 event_store_version = 13;
     bytes branch_token = 14;

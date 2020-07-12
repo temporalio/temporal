@@ -3179,7 +3179,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historyspb.TransientDecisionInfo,
+	transientDecision *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
@@ -3252,7 +3252,7 @@ func (wh *WorkflowHandler) getHistory(
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historyspb.TransientDecisionInfo,
+	transientDecision *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) (*historypb.History, []byte, error) {
 
@@ -3313,7 +3313,7 @@ func (wh *WorkflowHandler) getHistory(
 
 func (wh *WorkflowHandler) validateTransientDecisionEvents(
 	expectedNextEventID int64,
-	decision *historyspb.TransientDecisionInfo,
+	decision *historyspb.TransientWorkflowTaskInfo,
 ) error {
 
 	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&

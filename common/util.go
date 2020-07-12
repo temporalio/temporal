@@ -290,7 +290,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		Attempt:                    historyResponse.GetAttempt(),
 		NextEventId:                historyResponse.NextEventId,
 		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
-		DecisionInfo:               historyResponse.DecisionInfo,
+		DecisionInfo:               historyResponse.WorkflowTaskInfo,
 		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
 		EventStoreVersion:          historyResponse.EventStoreVersion,
 		BranchToken:                historyResponse.BranchToken,

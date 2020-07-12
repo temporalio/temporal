@@ -33,7 +33,7 @@ message HistoryContinuation {
     int64 next_event_id = 3;
     bool is_workflow_running = 5;
     bytes persistence_token = 6;
-    temporal.server.api.history.v1.TransientDecisionInfo transient_decision = 7;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 7;
     bytes branch_token = 8;
     map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 9;
 }

@@ -31,7 +31,7 @@ service HistoryService {
 
     // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
     // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-    // first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+    // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
     // exists with same workflowId.
     rpc StartWorkflowExecution (StartWorkflowExecutionRequest) returns (StartWorkflowExecutionResponse) {
     }
@@ -72,7 +72,7 @@ service HistoryService {
 
     // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
     // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-    // potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+    // potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
     // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
     // for completing the WorkflowTask.
     rpc RespondWorkflowTaskCompleted (RespondWorkflowTaskCompletedRequest) returns (RespondWorkflowTaskCompletedResponse) {
@@ -94,7 +94,7 @@ service HistoryService {
 
     // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
     // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-    // created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
+    // created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
     // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskCompleted (RespondActivityTaskCompletedRequest) returns (RespondActivityTaskCompletedResponse) {
@@ -102,7 +102,7 @@ service HistoryService {
 
     // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
     // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-    // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+    // created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
     // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskFailed (RespondActivityTaskFailedRequest) returns (RespondActivityTaskFailedResponse) {
@@ -110,7 +110,7 @@ service HistoryService {
 
     // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
     // result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-    // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+    // created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
     // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskCanceled (RespondActivityTaskCanceledRequest) returns (RespondActivityTaskCanceledResponse) {
@@ -133,7 +133,7 @@ service HistoryService {
     }
 
     // RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
-    // used to clean execution info when signal decision finished.
+    // used to clean execution info when signal workflow task finished.
     rpc RemoveSignalMutableState (RemoveSignalMutableStateRequest) returns (RemoveSignalMutableStateResponse) {
     }
 
@@ -150,7 +150,7 @@ service HistoryService {
 
     // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
     // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-    // created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+    // created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
     // anymore due to completion or doesn't exist.
     rpc RequestCancelWorkflowExecution (RequestCancelWorkflowExecutionRequest) returns (RequestCancelWorkflowExecutionResponse) {
     }
