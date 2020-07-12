@@ -29,12 +29,13 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-	reflect "reflect"
 )
 
 // MockmutableStateWorkflowTaskManager is a mock of mutableStateWorkflowTaskManager interface.
@@ -61,10 +62,10 @@ func (m *MockmutableStateWorkflowTaskManager) EXPECT() *MockmutableStateWorkflow
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskScheduledEvent(version, scheduleID int64, taskQueue string, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskScheduledEvent(version, scheduleID int64, taskQueue string, startToCloseTimeoutSeconds int32, attempt, scheduleTimestamp, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
-	ret0, _ := ret[0].(*decisionInfo)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -76,10 +77,10 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) ReplicateWorkflowTask
 }
 
 // ReplicateTransientWorkflowTaskScheduled mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) ReplicateTransientWorkflowTaskScheduled() (*decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateTransientWorkflowTaskScheduled")
-	ret0, _ := ret[0].(*decisionInfo)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -91,10 +92,10 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) ReplicateTransientWor
 }
 
 // ReplicateWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskStartedEvent(decision *decisionInfo, version, scheduleID, startedID int64, requestID string, timestamp int64) (*decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) ReplicateWorkflowTaskStartedEvent(decision *workflowTaskInfo, version, scheduleID, startedID int64, requestID string, timestamp int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskStartedEvent", decision, version, scheduleID, startedID, requestID, timestamp)
-	ret0, _ := ret[0].(*decisionInfo)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -163,10 +164,10 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskSchedu
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduledEventAsHeartbeat", bypassTaskGeneration, originalScheduledTimestamp)
-	ret0, _ := ret[0].(*decisionInfo)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -178,10 +179,10 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskSchedu
 }
 
 // AddWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduledEvent", bypassTaskGeneration)
-	ret0, _ := ret[0].(*decisionInfo)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -207,11 +208,11 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddFirstWorkflowTaskS
 }
 
 // AddWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollWorkflowTaskQueueRequest) (*history.HistoryEvent, *decisionInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollWorkflowTaskQueueRequest) (*history.HistoryEvent, *workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", scheduleEventID, requestID, request)
 	ret0, _ := ret[0].(*history.HistoryEvent)
-	ret1, _ := ret[1].(*decisionInfo)
+	ret1, _ := ret[1].(*workflowTaskInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -267,140 +268,140 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskTimedO
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).AddWorkflowTaskTimedOutEvent), scheduleEventID, startedEventID)
 }
 
-// FailDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) FailDecision(incrementAttempt bool) {
+// FailWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) FailWorkflowTask(incrementAttempt bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FailDecision", incrementAttempt)
+	m.ctrl.Call(m, "FailWorkflowTask", incrementAttempt)
 }
 
-// FailDecision indicates an expected call of FailDecision.
+// FailWorkflowTask indicates an expected call of FailWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) FailDecision(incrementAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).FailDecision), incrementAttempt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).FailWorkflowTask), incrementAttempt)
 }
 
-// DeleteDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) DeleteDecision() {
+// DeleteWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) DeleteWorkflowTask() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteDecision")
+	m.ctrl.Call(m, "DeleteWorkflowTask")
 }
 
-// DeleteDecision indicates an expected call of DeleteDecision.
+// DeleteWorkflowTask indicates an expected call of DeleteWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) DeleteDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).DeleteDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).DeleteWorkflowTask))
 }
 
-// UpdateDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) UpdateDecision(decision *decisionInfo) {
+// UpdateWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) UpdateWorkflowTask(decision *workflowTaskInfo) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateDecision", decision)
+	m.ctrl.Call(m, "UpdateWorkflowTask", decision)
 }
 
-// UpdateDecision indicates an expected call of UpdateDecision.
+// UpdateWorkflowTask indicates an expected call of UpdateWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) UpdateDecision(decision interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).UpdateDecision), decision)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).UpdateWorkflowTask), decision)
 }
 
-// HasPendingDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) HasPendingDecision() bool {
+// HasPendingWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) HasPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasPendingDecision")
+	ret := m.ctrl.Call(m, "HasPendingWorkflowTask")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// HasPendingDecision indicates an expected call of HasPendingDecision.
+// HasPendingWorkflowTask indicates an expected call of HasPendingWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasPendingDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasPendingWorkflowTask))
 }
 
-// GetPendingDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) GetPendingDecision() (*decisionInfo, bool) {
+// GetPendingWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) GetPendingWorkflowTask() (*workflowTaskInfo, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPendingDecision")
-	ret0, _ := ret[0].(*decisionInfo)
+	ret := m.ctrl.Call(m, "GetPendingWorkflowTask")
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
-// GetPendingDecision indicates an expected call of GetPendingDecision.
+// GetPendingWorkflowTask indicates an expected call of GetPendingWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetPendingDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetPendingWorkflowTask))
 }
 
-// HasInFlightDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) HasInFlightDecision() bool {
+// HasInFlightWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) HasInFlightWorkflowTask() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasInFlightDecision")
+	ret := m.ctrl.Call(m, "HasInFlightWorkflowTask")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// HasInFlightDecision indicates an expected call of HasInFlightDecision.
+// HasInFlightWorkflowTask indicates an expected call of HasInFlightWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasInFlightDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasInFlightDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasInFlightDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasInFlightWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasInFlightWorkflowTask))
 }
 
-// GetInFlightDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) GetInFlightDecision() (*decisionInfo, bool) {
+// GetInFlightWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) GetInFlightWorkflowTask() (*workflowTaskInfo, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetInFlightDecision")
-	ret0, _ := ret[0].(*decisionInfo)
+	ret := m.ctrl.Call(m, "GetInFlightWorkflowTask")
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
-// GetInFlightDecision indicates an expected call of GetInFlightDecision.
+// GetInFlightWorkflowTask indicates an expected call of GetInFlightWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetInFlightDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInFlightDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetInFlightDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInFlightWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetInFlightWorkflowTask))
 }
 
-// HasProcessedOrPendingDecision mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) HasProcessedOrPendingDecision() bool {
+// HasProcessedOrPendingWorkflowTask mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) HasProcessedOrPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasProcessedOrPendingDecision")
+	ret := m.ctrl.Call(m, "HasProcessedOrPendingWorkflowTask")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// HasProcessedOrPendingDecision indicates an expected call of HasProcessedOrPendingDecision.
+// HasProcessedOrPendingWorkflowTask indicates an expected call of HasProcessedOrPendingWorkflowTask.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasProcessedOrPendingDecision() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingDecision", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasProcessedOrPendingDecision))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasProcessedOrPendingWorkflowTask))
 }
 
-// GetDecisionInfo mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) GetDecisionInfo(scheduleEventID int64) (*decisionInfo, bool) {
+// GetWorkflowTaskInfo mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) GetWorkflowTaskInfo(scheduleEventID int64) (*workflowTaskInfo, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDecisionInfo", scheduleEventID)
-	ret0, _ := ret[0].(*decisionInfo)
+	ret := m.ctrl.Call(m, "GetWorkflowTaskInfo", scheduleEventID)
+	ret0, _ := ret[0].(*workflowTaskInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
-// GetDecisionInfo indicates an expected call of GetDecisionInfo.
+// GetWorkflowTaskInfo indicates an expected call of GetWorkflowTaskInfo.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetDecisionInfo(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDecisionInfo", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetDecisionInfo), scheduleEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskInfo", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetWorkflowTaskInfo), scheduleEventID)
 }
 
-// CreateTransientDecisionEvents mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
+// CreateTransientWorkflowTaskEvents mocks base method.
+func (m *MockmutableStateWorkflowTaskManager) CreateTransientDecisionEvents(decision *workflowTaskInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTransientDecisionEvents", decision, identity)
+	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", decision, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*history.HistoryEvent)
 	return ret0, ret1
 }
 
-// CreateTransientDecisionEvents indicates an expected call of CreateTransientDecisionEvents.
+// CreateTransientWorkflowTaskEvents indicates an expected call of CreateTransientWorkflowTaskEvents.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) CreateTransientDecisionEvents(decision, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientDecisionEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientDecisionEvents), decision, identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientDecisionEvents), decision, identity)
 }

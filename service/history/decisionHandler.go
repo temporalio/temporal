@@ -130,7 +130,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskScheduled(
 				return nil, ErrWorkflowCompleted
 			}
 
-			if mutableState.HasProcessedOrPendingDecision() {
+			if mutableState.HasProcessedOrPendingWorkflowTask() {
 				return &updateWorkflowAction{
 					noop: true,
 				}, nil
@@ -176,7 +176,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskStarted(
 				return nil, ErrWorkflowCompleted
 			}
 
-			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
+			decision, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
@@ -261,7 +261,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskFailed(
 			}
 
 			scheduleID := token.GetScheduleId()
-			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
+			decision, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
 			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
 				return serviceerror.NewNotFound("Workflow task not found.")
 			}
@@ -322,7 +322,7 @@ Update_History_Loop:
 		executionInfo := msBuilder.GetExecutionInfo()
 
 		scheduleID := token.GetScheduleId()
-		currentDecision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
+		currentDecision, isRunning := msBuilder.GetWorkflowTaskInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
@@ -468,7 +468,7 @@ Update_History_Loop:
 		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
 		var newWorkflowTaskScheduledID int64
 		if createNewWorkflowTask {
-			var newDecision *decisionInfo
+			var newDecision *workflowTaskInfo
 			var err error
 			if decisionHeartbeating && !decisionHeartbeatTimeout {
 				newDecision, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
@@ -567,7 +567,7 @@ Update_History_Loop:
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
 		if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-			decision, _ := msBuilder.GetDecisionInfo(newWorkflowTaskScheduledID)
+			decision, _ := msBuilder.GetWorkflowTaskInfo(newWorkflowTaskScheduledID)
 			resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
@@ -585,7 +585,7 @@ Update_History_Loop:
 func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
 	namespaceID string,
 	msBuilder mutableState,
-	decision *decisionInfo,
+	decision *workflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
@@ -613,7 +613,7 @@ func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
 	if decision.Attempt > 0 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
-		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
+		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(decision, identity)
 		response.DecisionInfo = &historyspb.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent

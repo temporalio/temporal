@@ -184,7 +184,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+	if !mutableState.HasProcessedOrPendingWorkflowTask() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
 		if err := taskGenerator.generateDelayedWorkflowTasks(
 			now,
 			startEvent,
@@ -242,12 +242,12 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
 	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	if !mutableState.HasPendingDecision() {
+	if !mutableState.HasPendingWorkflowTask() {
 		// no workflow task at all
 		return nil
 	}
 
-	decision, ok := mutableState.GetPendingDecision()
+	decision, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
 		return serviceerror.NewInternal("it could be a bug, cannot get pending decision")
 	}

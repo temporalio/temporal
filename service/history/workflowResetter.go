@@ -212,7 +212,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	// TODO add checking of reset until event ID == workflow task started ID + 1
-	decision, ok := resetMutableState.GetInFlightDecision()
+	decision, ok := resetMutableState.GetInFlightWorkflowTask()
 	if !ok || decision.StartedID+1 != resetMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to WorkflowTaskStarted + 1: %v", baseRebuildLastEventID+1))
 	}

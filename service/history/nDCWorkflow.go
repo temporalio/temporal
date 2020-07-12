@@ -138,7 +138,7 @@ func (r *nDCWorkflowImpl) revive() error {
 
 	// workflow is in zombie state, need to set the state correctly accordingly
 	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if r.mutableState.HasProcessedOrPendingDecision() {
+	if r.mutableState.HasProcessedOrPendingWorkflowTask() {
 		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
@@ -223,7 +223,7 @@ func (r *nDCWorkflowImpl) failDecision(
 		return err
 	}
 
-	decision, ok := r.mutableState.GetInFlightDecision()
+	decision, ok := r.mutableState.GetInFlightWorkflowTask()
 	if !ok {
 		return nil
 	}

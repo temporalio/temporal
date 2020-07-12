@@ -4804,7 +4804,7 @@ func (this *WorkflowExecutionInfo) GoString() string {
 	s = append(s, "DecisionVersion: "+fmt.Sprintf("%#v", this.DecisionVersion)+",\n")
 	s = append(s, "DecisionScheduleId: "+fmt.Sprintf("%#v", this.DecisionScheduleId)+",\n")
 	s = append(s, "DecisionStartedId: "+fmt.Sprintf("%#v", this.DecisionStartedId)+",\n")
-	s = append(s, "DecisionTimeout: "+fmt.Sprintf("%#v", this.DecisionTimeout)+",\n")
+	s = append(s, "WorkflowTaskTimeout: "+fmt.Sprintf("%#v", this.DecisionTimeout)+",\n")
 	s = append(s, "DecisionAttempt: "+fmt.Sprintf("%#v", this.DecisionAttempt)+",\n")
 	s = append(s, "DecisionStartedTimestampNanos: "+fmt.Sprintf("%#v", this.DecisionStartedTimestampNanos)+",\n")
 	s = append(s, "DecisionScheduledTimestampNanos: "+fmt.Sprintf("%#v", this.DecisionScheduledTimestampNanos)+",\n")
@@ -8960,7 +8960,7 @@ func (this *WorkflowExecutionInfo) String() string {
 		`DecisionVersion:` + fmt.Sprintf("%v", this.DecisionVersion) + `,`,
 		`DecisionScheduleId:` + fmt.Sprintf("%v", this.DecisionScheduleId) + `,`,
 		`DecisionStartedId:` + fmt.Sprintf("%v", this.DecisionStartedId) + `,`,
-		`DecisionTimeout:` + fmt.Sprintf("%v", this.DecisionTimeout) + `,`,
+		`WorkflowTaskTimeout:` + fmt.Sprintf("%v", this.DecisionTimeout) + `,`,
 		`DecisionAttempt:` + fmt.Sprintf("%v", this.DecisionAttempt) + `,`,
 		`DecisionStartedTimestampNanos:` + fmt.Sprintf("%v", this.DecisionStartedTimestampNanos) + `,`,
 		`DecisionScheduledTimestampNanos:` + fmt.Sprintf("%v", this.DecisionScheduledTimestampNanos) + `,`,
@@ -14461,7 +14461,7 @@ func (m *WorkflowExecutionInfo) Unmarshal(dAtA []byte) error {
 			}
 		case 27:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DecisionTimeout", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskTimeout", wireType)
 			}
 			m.DecisionTimeout = 0
 			for shift := uint(0); ; shift += 7 {

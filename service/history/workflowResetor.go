@@ -185,7 +185,7 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 	if retError := newMutableState.CheckResettable(); retError != nil {
 		return retError
 	}
-	if !newMutableState.HasInFlightDecision() {
+	if !newMutableState.HasInFlightWorkflowTask() {
 		return serviceerror.NewInternal(fmt.Sprintf("can't find the last started decision"))
 	}
 	if newMutableState.HasBufferedEvents() {
@@ -288,7 +288,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 
 	// failed the in-flight decision(started).
 	// Note that we need to ensure WorkflowTaskFailed event is appended right after WorkflowTaskStarted event
-	decision, _ := newMutableState.GetInFlightDecision()
+	decision, _ := newMutableState.GetInFlightWorkflowTask()
 
 	_, err := newMutableState.AddWorkflowTaskFailedEvent(decision.ScheduleID, decision.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
@@ -983,9 +983,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 
 	// always enforce the attempt to zero so that we can always schedule a new decision(skip trasientDecision logic)
-	decision, _ := newMsBuilder.GetInFlightDecision()
+	decision, _ := newMsBuilder.GetInFlightWorkflowTask()
 	decision.Attempt = 0
-	newMsBuilder.UpdateDecision(decision)
+	newMsBuilder.UpdateWorkflowTask(decision)
 
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
@@ -1017,7 +1017,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	// schedule new decision
 	decisionScheduledID := newMsBuilder.GetExecutionInfo().DecisionScheduleID
-	decision, _ = newMsBuilder.GetDecisionInfo(decisionScheduledID)
+	decision, _ = newMsBuilder.GetWorkflowTaskInfo(decisionScheduledID)
 	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,
 		TaskQueue:        decision.TaskQueue,

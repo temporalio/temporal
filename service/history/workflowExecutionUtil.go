@@ -108,7 +108,7 @@ func newWorkflowContext(
 
 func failDecision(
 	mutableState mutableState,
-	decision *decisionInfo,
+	decision *workflowTaskInfo,
 	decisionFailureCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
@@ -133,7 +133,7 @@ func scheduleDecision(
 	mutableState mutableState,
 ) error {
 
-	if mutableState.HasPendingDecision() {
+	if mutableState.HasPendingWorkflowTask() {
 		return nil
 	}
 
@@ -151,7 +151,7 @@ func retryWorkflow(
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (mutableState, error) {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
+	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
 		if err := failDecision(
 			mutableState,
 			decision,
@@ -179,7 +179,7 @@ func timeoutWorkflow(
 	retryState enumspb.RetryState,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
+	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
 		if err := failDecision(
 			mutableState,
 			decision,
@@ -204,7 +204,7 @@ func terminateWorkflow(
 	terminateIdentity string,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
+	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
 		if err := failDecision(
 			mutableState,
 			decision,

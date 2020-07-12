@@ -181,7 +181,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
+	decision, found := mutableState.GetWorkflowTaskInfo(task.GetScheduleId())
 	if !found {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK))
 		return nil

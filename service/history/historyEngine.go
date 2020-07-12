@@ -873,7 +873,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// 3. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
-		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
+		(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
 	if safeToDispatchDirectly {
 		release(nil)
 		msResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
@@ -1848,7 +1848,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 			executionInfo := mutableState.GetExecutionInfo()
 			createWorkflowTask := true
 			// Do not create workflow task when the workflow is cron and the cron has not been started yet
-			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
+			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
 				createWorkflowTask = false
 			}
 			postActions := &updateWorkflowAction{
@@ -1953,7 +1953,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 
 			// Create a transfer task to schedule a workflow task
-			if !mutableState.HasPendingDecision() {
+			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
 					return nil, serviceerror.NewInternal("Failed to add decision scheduled event.")
@@ -2477,7 +2477,7 @@ UpdateHistoryLoop:
 
 		if postActions.createDecision {
 			// Create a transfer task to schedule a workflow task
-			if !mutableState.HasPendingDecision() {
+			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
 					return serviceerror.NewInternal("Failed to add decision scheduled event.")
@@ -3028,7 +3028,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				createDecision: true,
 			}
 			// Do not create workflow task when the workflow is cron and the cron has not been started yet
-			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
+			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
 				postActions.createDecision = false
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(

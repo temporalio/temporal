@@ -897,7 +897,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerDecision() {
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecision())
+	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {

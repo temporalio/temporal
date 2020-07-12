@@ -282,7 +282,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleID := task.GetEventId()
-	decision, ok := mutableState.GetDecisionInfo(scheduleID)
+	decision, ok := mutableState.GetWorkflowTaskInfo(scheduleID)
 	if !ok {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_DECISION_TIMEOUT))
 		return nil
@@ -359,7 +359,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
 	}
 
-	if mutableState.HasProcessedOrPendingDecision() {
+	if mutableState.HasProcessedOrPendingWorkflowTask() {
 		// already has workflow task
 		return nil
 	}

@@ -278,7 +278,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decision, isPending := mutableState.GetDecisionInfo(timerTask.GetEventId())
+		decision, isPending := mutableState.GetWorkflowTaskInfo(timerTask.GetEventId())
 		if !isPending {
 			return nil, nil
 		}
@@ -311,7 +311,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		if mutableState.HasProcessedOrPendingDecision() {
+		if mutableState.HasProcessedOrPendingWorkflowTask() {
 			// if there is one decision already been processed
 			// or has pending decision, meaning workflow has already running
 			return nil, nil

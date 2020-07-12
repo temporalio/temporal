@@ -242,7 +242,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 ) error {
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	decision, ok := r.mutableState.GetDecisionInfo(
+	decision, ok := r.mutableState.GetWorkflowTaskInfo(
 		decisionScheduleID,
 	)
 	if !ok {
@@ -282,7 +282,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 	decisionScheduleID int64,
 ) error {
 
-	decision, ok := r.mutableState.GetDecisionInfo(
+	decision, ok := r.mutableState.GetWorkflowTaskInfo(
 		decisionScheduleID,
 	)
 	if !ok {
@@ -291,7 +291,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 
 	startedTime := time.Unix(0, decision.StartedTimestamp)
 	startToCloseTimeout := time.Duration(
-		decision.DecisionTimeout,
+		decision.WorkflowTaskTimeout,
 	) * time.Second
 
 	r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{

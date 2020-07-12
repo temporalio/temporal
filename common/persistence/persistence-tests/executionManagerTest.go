@@ -122,7 +122,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	csum := s.newRandomChecksum()
@@ -137,7 +137,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -193,7 +193,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	csum := s.newRandomChecksum()
@@ -206,7 +206,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -312,7 +312,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	csum := s.newRandomChecksum()
@@ -327,7 +327,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
@@ -397,7 +397,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	csum := s.newRandomChecksum()
@@ -412,7 +412,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -570,7 +570,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	csum := s.newRandomChecksum()
@@ -586,7 +586,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -700,7 +700,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 
@@ -714,7 +714,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -749,7 +749,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	decisionScheduleID := int64(2)
@@ -762,7 +762,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	}
 
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecution, taskqueue,
-		workflowType, workflowTimeout, decisionTimeout, nextEventID,
+		workflowType, workflowTimeout, workflowTaskTimeout, nextEventID,
 		lastProcessedEventID, decisionScheduleID, replicationState, nil)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
@@ -783,7 +783,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -867,7 +867,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -896,7 +896,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -925,7 +925,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -953,12 +953,12 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	decisionScheduleID := int64(2)
 
-	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, taskqueue, workflowType, workflowTimeout, decisionTimeout, nextEventID, lastProcessedEventID, decisionScheduleID, nil)
+	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, taskqueue, workflowType, workflowTimeout, workflowTaskTimeout, nextEventID, lastProcessedEventID, decisionScheduleID, nil)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -992,7 +992,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				TaskQueue:           taskqueue,
 				WorkflowTypeName:    workflowType,
 				WorkflowRunTimeout:  workflowTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
+				WorkflowTaskTimeout: workflowTaskTimeout,
 				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				LastFirstEventID:    common.FirstEventID,
@@ -1019,12 +1019,12 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
+	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 	decisionScheduleID := int64(2)
 
-	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, taskqueue, workflowType, workflowTimeout, decisionTimeout, nextEventID, lastProcessedEventID, decisionScheduleID, nil)
+	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, taskqueue, workflowType, workflowTimeout, workflowTaskTimeout, nextEventID, lastProcessedEventID, decisionScheduleID, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotNil(task0, "Expected non empty task identifier.")
 

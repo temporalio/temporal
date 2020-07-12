@@ -188,7 +188,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil).Times(1)
-	decisionInfo := &decisionInfo{
+	decisionInfo := &workflowTaskInfo{
 		ScheduleID: 1234,
 		StartedID:  2345,
 	}

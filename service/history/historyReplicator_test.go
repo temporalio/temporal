@@ -416,7 +416,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
-	newDecision := &decisionInfo{
+	newDecision := &workflowTaskInfo{
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
@@ -1123,7 +1123,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newDecision := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
@@ -1260,7 +1260,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newDecision := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
@@ -1694,7 +1694,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		}},
 	}
 	startTimeStamp := time.Now()
-	pendingDecisionInfo := &decisionInfo{
+	pendingDecisionInfo := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 56,
 		StartedID:  57,
@@ -1727,7 +1727,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		DecisionStartedID:            common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	newDecision := &decisionInfo{
+	newDecision := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: currentLastEventID + 2,
 		StartedID:  common.EmptyEventID,
@@ -1873,12 +1873,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -1921,7 +1921,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -1993,12 +1993,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2041,7 +2041,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2109,12 +2109,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2157,7 +2157,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2238,12 +2238,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2286,7 +2286,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,
@@ -2382,12 +2382,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2430,7 +2430,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2519,12 +2519,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2567,7 +2567,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2656,12 +2656,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2704,7 +2704,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2810,12 +2810,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2868,7 +2868,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2987,12 +2987,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3045,7 +3045,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3133,7 +3133,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newDecision := &workflowTaskInfo{
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
@@ -3172,12 +3172,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3220,7 +3220,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3328,12 +3328,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3376,7 +3376,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3492,12 +3492,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: decisionTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3540,7 +3540,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionVersion:          di.Version,
 		DecisionScheduleID:       di.ScheduleID,
 		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
+		DecisionTimeout:          di.WorkflowTaskTimeout,
 		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:             cronSchedule,

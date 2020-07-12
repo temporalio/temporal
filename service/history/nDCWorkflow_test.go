@@ -267,7 +267,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
-	inFlightDecision := &decisionInfo{
+	inFlightDecision := &workflowTaskInfo{
 		Version:    1234,
 		ScheduleID: 5678,
 		StartedID:  9012,

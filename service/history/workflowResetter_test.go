@@ -322,7 +322,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
-	decision := &decisionInfo{
+	decision := &workflowTaskInfo{
 		Version:    123,
 		ScheduleID: 1234,
 		StartedID:  5678,

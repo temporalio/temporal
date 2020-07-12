@@ -163,7 +163,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.GetScheduleId())
+		decisionInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}

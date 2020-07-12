@@ -699,14 +699,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 			Attempt:                    decisionAttempt,
 		}},
 	}
-	di := &decisionInfo{
-		Version:         event.GetVersion(),
-		ScheduleID:      event.GetEventId(),
-		StartedID:       common.EmptyEventID,
-		RequestID:       emptyUUID,
-		DecisionTimeout: timeoutSecond,
-		TaskQueue:       taskqueue,
-		Attempt:         decisionAttempt,
+	di := &workflowTaskInfo{
+		Version:             event.GetVersion(),
+		ScheduleID:          event.GetEventId(),
+		StartedID:           common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: timeoutSecond,
+		TaskQueue:           taskqueue,
+		Attempt:             decisionAttempt,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskQueue: taskqueue,
@@ -750,17 +750,17 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 			RequestId:        decisionRequestID,
 		}},
 	}
-	di := &decisionInfo{
-		Version:         event.GetVersion(),
-		ScheduleID:      scheduleID,
-		StartedID:       event.GetEventId(),
-		RequestID:       decisionRequestID,
-		DecisionTimeout: timeoutSecond,
-		TaskQueue:       taskqueue,
-		Attempt:         0,
+	di := &workflowTaskInfo{
+		Version:             event.GetVersion(),
+		ScheduleID:          scheduleID,
+		StartedID:           event.GetEventId(),
+		RequestID:           decisionRequestID,
+		WorkflowTaskTimeout: timeoutSecond,
+		TaskQueue:           taskqueue,
+		Attempt:             0,
 	}
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
-		(*decisionInfo)(nil), event.GetVersion(), scheduleID, event.GetEventId(), decisionRequestID, event.GetTimestamp(),
+		(*workflowTaskInfo)(nil), event.GetVersion(), scheduleID, event.GetEventId(), decisionRequestID, event.GetTimestamp(),
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
@@ -805,7 +805,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&decisionInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&workflowTaskInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
 		TaskQueue:  taskqueue,
@@ -851,7 +851,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&decisionInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&workflowTaskInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
 		TaskQueue:  taskqueue,

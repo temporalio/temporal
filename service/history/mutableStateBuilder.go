@@ -442,7 +442,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	}
 
 	// no decision in-flight, flush all buffered events to committed bucket
-	if !e.HasInFlightDecision() {
+	if !e.HasInFlightWorkflowTask() {
 		// flush persisted buffered events
 		if len(e.bufferedEvents) > 0 {
 			reorderFunc(e.bufferedEvents)
@@ -476,7 +476,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	}
 
 	// if decision is not closed yet, and there are new buffered events, then put those to the pending buffer
-	if e.HasInFlightDecision() && len(newBufferedEvents) > 0 {
+	if e.HasInFlightWorkflowTask() && len(newBufferedEvents) > 0 {
 		e.updateBufferedEvents = newBufferedEvents
 	}
 
@@ -973,7 +973,7 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		// do not buffer event if event is directly generated from a corresponding decision
 
 		// sanity check there is no decision on the fly
-		if e.HasInFlightDecision() {
+		if e.HasInFlightWorkflowTask() {
 			msg := fmt.Sprintf("history mutable state is processing event: %v while there is decision pending. "+
 				"namespaceID: %v, workflow ID: %v, run ID: %v.", eventType, e.executionInfo.NamespaceID, e.executionInfo.WorkflowID, e.executionInfo.RunID)
 			panic(msg)
@@ -1460,18 +1460,18 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 }
 
 // nolint:unused
-func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
+func (e *mutableStateBuilder) getDecisionInfo() *workflowTaskInfo {
 
 	taskQueue := e.executionInfo.TaskQueue
 	if e.IsStickyTaskQueueEnabled() {
 		taskQueue = e.executionInfo.StickyTaskQueue
 	}
-	return &decisionInfo{
+	return &workflowTaskInfo{
 		Version:                    e.executionInfo.DecisionVersion,
 		ScheduleID:                 e.executionInfo.DecisionScheduleID,
 		StartedID:                  e.executionInfo.DecisionStartedID,
 		RequestID:                  e.executionInfo.DecisionRequestID,
-		DecisionTimeout:            e.executionInfo.DecisionTimeout,
+		WorkflowTaskTimeout:        e.executionInfo.DecisionTimeout,
 		Attempt:                    e.executionInfo.DecisionAttempt,
 		StartedTimestamp:           e.executionInfo.DecisionStartedTimestamp,
 		ScheduledTimestamp:         e.executionInfo.DecisionScheduledTimestamp,
@@ -1480,11 +1480,11 @@ func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 	}
 }
 
-// GetDecisionInfo returns details about the in-progress workflow task
-func (e *mutableStateBuilder) GetDecisionInfo(
+// GetWorkflowTaskInfo returns details about the in-progress workflow task
+func (e *mutableStateBuilder) GetWorkflowTaskInfo(
 	scheduleEventID int64,
-) (*decisionInfo, bool) {
-	return e.workflowTaskManager.GetDecisionInfo(scheduleEventID)
+) (*workflowTaskInfo, bool) {
+	return e.workflowTaskManager.GetWorkflowTaskInfo(scheduleEventID)
 }
 
 func (e *mutableStateBuilder) GetPendingActivityInfos() map[int64]*persistence.ActivityInfo {
@@ -1507,24 +1507,24 @@ func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persist
 	return e.pendingSignalInfoIDs
 }
 
-func (e *mutableStateBuilder) HasProcessedOrPendingDecision() bool {
-	return e.workflowTaskManager.HasProcessedOrPendingDecision()
+func (e *mutableStateBuilder) HasProcessedOrPendingWorkflowTask() bool {
+	return e.workflowTaskManager.HasProcessedOrPendingWorkflowTask()
 }
 
-func (e *mutableStateBuilder) HasPendingDecision() bool {
-	return e.workflowTaskManager.HasPendingDecision()
+func (e *mutableStateBuilder) HasPendingWorkflowTask() bool {
+	return e.workflowTaskManager.HasPendingWorkflowTask()
 }
 
-func (e *mutableStateBuilder) GetPendingDecision() (*decisionInfo, bool) {
-	return e.workflowTaskManager.GetPendingDecision()
+func (e *mutableStateBuilder) GetPendingWorkflowTask() (*workflowTaskInfo, bool) {
+	return e.workflowTaskManager.GetPendingWorkflowTask()
 }
 
-func (e *mutableStateBuilder) HasInFlightDecision() bool {
-	return e.workflowTaskManager.HasInFlightDecision()
+func (e *mutableStateBuilder) HasInFlightWorkflowTask() bool {
+	return e.workflowTaskManager.HasInFlightWorkflowTask()
 }
 
-func (e *mutableStateBuilder) GetInFlightDecision() (*decisionInfo, bool) {
-	return e.workflowTaskManager.GetInFlightDecision()
+func (e *mutableStateBuilder) GetInFlightWorkflowTask() (*workflowTaskInfo, bool) {
+	return e.workflowTaskManager.GetInFlightWorkflowTask()
 }
 
 func (e *mutableStateBuilder) HasBufferedEvents() bool {
@@ -1541,22 +1541,22 @@ func (e *mutableStateBuilder) HasBufferedEvents() bool {
 	return false
 }
 
-// UpdateDecision updates a workflow task.
-func (e *mutableStateBuilder) UpdateDecision(
-	decision *decisionInfo,
+// UpdateWorkflowTask updates a workflow task.
+func (e *mutableStateBuilder) UpdateWorkflowTask(
+	decision *workflowTaskInfo,
 ) {
-	e.workflowTaskManager.UpdateDecision(decision)
+	e.workflowTaskManager.UpdateWorkflowTask(decision)
 }
 
-// DeleteDecision deletes a workflow task.
-func (e *mutableStateBuilder) DeleteDecision() {
-	e.workflowTaskManager.DeleteDecision()
+// DeleteWorkflowTask deletes a workflow task.
+func (e *mutableStateBuilder) DeleteWorkflowTask() {
+	e.workflowTaskManager.DeleteWorkflowTask()
 }
 
-func (e *mutableStateBuilder) FailDecision(
+func (e *mutableStateBuilder) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
-	e.workflowTaskManager.FailDecision(incrementAttempt)
+	e.workflowTaskManager.FailWorkflowTask(incrementAttempt)
 }
 
 func (e *mutableStateBuilder) ClearStickyness() {
@@ -1889,7 +1889,7 @@ func (e *mutableStateBuilder) AddFirstWorkflowTaskScheduled(
 
 func (e *mutableStateBuilder) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1901,7 +1901,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskScheduledEvent(
 func (e *mutableStateBuilder) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1909,7 +1909,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskScheduledEventAsHeartbeat(
 	return e.workflowTaskManager.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, originalScheduledTimestamp)
 }
 
-func (e *mutableStateBuilder) ReplicateTransientWorkflowTaskScheduled() (*decisionInfo, error) {
+func (e *mutableStateBuilder) ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateTransientWorkflowTaskScheduled()
 }
 
@@ -1921,7 +1921,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	attempt int64,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
@@ -1929,7 +1929,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
 	request *workflowservice.PollWorkflowTaskQueueRequest,
-) (*historypb.HistoryEvent, *decisionInfo, error) {
+) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
@@ -1938,19 +1938,19 @@ func (e *mutableStateBuilder) AddWorkflowTaskStartedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
-	decision *decisionInfo,
+	decision *workflowTaskInfo,
 	version int64,
 	scheduleID int64,
 	startedID int64,
 	requestID string,
 	timestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 
 	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(decision, version, scheduleID, startedID, requestID, timestamp)
 }
 
-func (e *mutableStateBuilder) CreateTransientDecisionEvents(
-	decision *decisionInfo,
+func (e *mutableStateBuilder) CreateTransientWorkflowTaskEvents(
+	decision *workflowTaskInfo,
 	identity string,
 ) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	return e.workflowTaskManager.CreateTransientDecisionEvents(decision, identity)
@@ -4385,7 +4385,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover(
 	// all events ending in the buffer should have the same version
 
 	// Handling mutable state turn from standby to active, while having a decision on the fly
-	decision, ok := e.GetInFlightDecision()
+	decision, ok := e.GetInFlightWorkflowTask()
 	if !ok || decision.Version >= e.GetCurrentVersion() {
 		// no pending decision, no buffered events
 		// or decision has higher / equal version
@@ -4495,7 +4495,7 @@ func (e *mutableStateBuilder) closeTransactionHandleBufferedEventsLimit(
 	}
 
 	// Handling buffered events size issue
-	if decision, ok := e.GetInFlightDecision(); ok {
+	if decision, ok := e.GetInFlightWorkflowTask(); ok {
 		// we have a decision on the fly with a lower version, fail it
 		if err := failDecision(
 			e,

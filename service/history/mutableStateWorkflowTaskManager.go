@@ -52,16 +52,16 @@ type (
 			attempt int64,
 			scheduleTimestamp int64,
 			originalScheduledTimestamp int64,
-		) (*decisionInfo, error)
-		ReplicateTransientWorkflowTaskScheduled() (*decisionInfo, error)
+		) (*workflowTaskInfo, error)
+		ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskStartedEvent(
-			decision *decisionInfo,
+			decision *workflowTaskInfo,
 			version int64,
 			scheduleID int64,
 			startedID int64,
 			requestID string,
 			timestamp int64,
-		) (*decisionInfo, error)
+		) (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskCompletedEvent(event *historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
 		ReplicateWorkflowTaskTimedOutEvent(timeoutType enumspb.TimeoutType) error
@@ -70,14 +70,14 @@ type (
 		AddWorkflowTaskScheduledEventAsHeartbeat(
 			bypassTaskGeneration bool,
 			originalScheduledTimestamp int64,
-		) (*decisionInfo, error)
-		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
+		) (*workflowTaskInfo, error)
+		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*workflowTaskInfo, error)
 		AddFirstWorkflowTaskScheduled(startEvent *historypb.HistoryEvent) error
 		AddWorkflowTaskStartedEvent(
 			scheduleEventID int64,
 			requestID string,
 			request *workflowservice.PollWorkflowTaskQueueRequest,
-		) (*historypb.HistoryEvent, *decisionInfo, error)
+		) (*historypb.HistoryEvent, *workflowTaskInfo, error)
 		AddWorkflowTaskCompletedEvent(
 			scheduleEventID int64,
 			startedEventID int64,
@@ -97,18 +97,18 @@ type (
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskTimedOutEvent(scheduleEventID int64, startedEventID int64) (*historypb.HistoryEvent, error)
 
-		FailDecision(incrementAttempt bool)
-		DeleteDecision()
-		UpdateDecision(decision *decisionInfo)
+		FailWorkflowTask(incrementAttempt bool)
+		DeleteWorkflowTask()
+		UpdateWorkflowTask(decision *workflowTaskInfo)
 
-		HasPendingDecision() bool
-		GetPendingDecision() (*decisionInfo, bool)
-		HasInFlightDecision() bool
-		GetInFlightDecision() (*decisionInfo, bool)
-		HasProcessedOrPendingDecision() bool
-		GetDecisionInfo(scheduleEventID int64) (*decisionInfo, bool)
+		HasPendingWorkflowTask() bool
+		GetPendingWorkflowTask() (*workflowTaskInfo, bool)
+		HasInFlightWorkflowTask() bool
+		GetInFlightWorkflowTask() (*workflowTaskInfo, bool)
+		HasProcessedOrPendingWorkflowTask() bool
+		GetWorkflowTaskInfo(scheduleEventID int64) (*workflowTaskInfo, bool)
 
-		CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
+		CreateTransientDecisionEvents(decision *workflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
 	}
 
 	mutableStateWorkflowTaskManagerImpl struct {
@@ -130,7 +130,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 	attempt int64,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
@@ -144,12 +144,12 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 		}
 	}
 
-	decision := &decisionInfo{
+	decision := &workflowTaskInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
-		DecisionTimeout:            startToCloseTimeoutSeconds,
+		WorkflowTaskTimeout:        startToCloseTimeoutSeconds,
 		TaskQueue:                  taskQueue,
 		Attempt:                    attempt,
 		ScheduledTimestamp:         scheduleTimestamp,
@@ -157,12 +157,12 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 		OriginalScheduledTimestamp: originalScheduledTimestamp,
 	}
 
-	m.UpdateDecision(decision)
+	m.UpdateWorkflowTask(decision)
 	return decision, nil
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskScheduled() (*decisionInfo, error) {
-	if m.HasPendingDecision() || m.msb.GetExecutionInfo().DecisionAttempt == 0 {
+func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error) {
+	if m.HasPendingWorkflowTask() || m.msb.GetExecutionInfo().DecisionAttempt == 0 {
 		return nil, nil
 	}
 
@@ -176,35 +176,35 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 	// 2. if no failover happen during the life time of this transient decision
 	// then ReplicateWorkflowTaskScheduledEvent will overwrite everything
 	// including the decision schedule ID
-	decision := &decisionInfo{
-		Version:            m.msb.GetCurrentVersion(),
-		ScheduleID:         m.msb.GetNextEventID(),
-		StartedID:          common.EmptyEventID,
-		RequestID:          emptyUUID,
-		DecisionTimeout:    m.msb.GetExecutionInfo().WorkflowTaskTimeout,
-		TaskQueue:          m.msb.GetExecutionInfo().TaskQueue,
-		Attempt:            m.msb.GetExecutionInfo().DecisionAttempt,
-		ScheduledTimestamp: m.msb.timeSource.Now().UnixNano(),
-		StartedTimestamp:   0,
+	decision := &workflowTaskInfo{
+		Version:             m.msb.GetCurrentVersion(),
+		ScheduleID:          m.msb.GetNextEventID(),
+		StartedID:           common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: m.msb.GetExecutionInfo().WorkflowTaskTimeout,
+		TaskQueue:           m.msb.GetExecutionInfo().TaskQueue,
+		Attempt:             m.msb.GetExecutionInfo().DecisionAttempt,
+		ScheduledTimestamp:  m.msb.timeSource.Now().UnixNano(),
+		StartedTimestamp:    0,
 	}
 
-	m.UpdateDecision(decision)
+	m.UpdateWorkflowTask(decision)
 	return decision, nil
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
-	decision *decisionInfo,
+	decision *workflowTaskInfo,
 	version int64,
 	scheduleID int64,
 	startedID int64,
 	requestID string,
 	timestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	// Replicator calls it with a nil decision info, and it is safe to always lookup the decision in this case as it
 	// does not have to deal with transient decision case.
 	var ok bool
 	if decision == nil {
-		decision, ok = m.GetDecisionInfo(scheduleID)
+		decision, ok = m.GetWorkflowTaskInfo(scheduleID)
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find decision: %v", scheduleID))
 		}
@@ -220,12 +220,12 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 	}
 
 	// Update mutable decision state
-	decision = &decisionInfo{
+	decision = &workflowTaskInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
 		StartedID:                  startedID,
 		RequestID:                  requestID,
-		DecisionTimeout:            decision.DecisionTimeout,
+		WorkflowTaskTimeout:        decision.WorkflowTaskTimeout,
 		Attempt:                    decision.Attempt,
 		StartedTimestamp:           timestamp,
 		ScheduledTimestamp:         decision.ScheduledTimestamp,
@@ -233,7 +233,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskStartedEvent(
 		OriginalScheduledTimestamp: decision.OriginalScheduledTimestamp,
 	}
 
-	m.UpdateDecision(decision)
+	m.UpdateWorkflowTask(decision)
 	return decision, nil
 }
 
@@ -245,7 +245,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskCompletedEven
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskFailedEvent() error {
-	m.FailDecision(true)
+	m.FailWorkflowTask(true)
 	return nil
 }
 
@@ -257,7 +257,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskTimedOutEvent
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
-	m.FailDecision(incrementAttempt)
+	m.FailWorkflowTask(incrementAttempt)
 	return nil
 }
 
@@ -289,9 +289,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduleToStartTime
 func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
-	if m.HasPendingDecision() {
+	if m.HasPendingWorkflowTask() {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -363,7 +363,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 
 func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
-) (*decisionInfo, error) {
+) (*workflowTaskInfo, error) {
 	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, m.msb.timeSource.Now().UnixNano())
 }
 
@@ -409,9 +409,9 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
 	request *workflowservice.PollWorkflowTaskQueueRequest,
-) (*historypb.HistoryEvent, *decisionInfo, error) {
+) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
-	decision, ok := m.GetDecisionInfo(scheduleEventID)
+	decision, ok := m.GetWorkflowTaskInfo(scheduleEventID)
 	if !ok || decision.StartedID != common.EmptyEventID {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
@@ -428,7 +428,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	// First check to see if new events came since transient decision was scheduled
 	if decision.Attempt > 0 && decision.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(taskqueue, decision.DecisionTimeout, 0)
+		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(taskqueue, decision.WorkflowTaskTimeout, 0)
 		scheduleID = scheduleEvent.GetEventId()
 		decision.Attempt = 0
 	}
@@ -459,7 +459,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 	maxResetPoints int,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskCompleted
-	decision, ok := m.GetDecisionInfo(scheduleEventID)
+	decision, ok := m.GetWorkflowTaskInfo(scheduleEventID)
 	if !ok || decision.StartedID != startedEventID {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
@@ -473,7 +473,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 	m.beforeAddWorkflowTaskCompletedEvent()
 	if decision.Attempt > 0 {
 		// Create corresponding WorkflowTaskSchedule and WorkflowTaskStarted events for decisions we have been retrying
-		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(m.msb.executionInfo.TaskQueue, decision.DecisionTimeout,
+		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(m.msb.executionInfo.TaskQueue, decision.WorkflowTaskTimeout,
 			decision.Attempt, decision.ScheduledTimestamp)
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), decision.RequestID,
 			request.GetIdentity(), decision.StartedTimestamp)
@@ -513,7 +513,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskFailedEvent(
 		ForkEventVersion: forkEventVersion,
 	}
 
-	dt, ok := m.GetDecisionInfo(scheduleEventID)
+	dt, ok := m.GetWorkflowTaskInfo(scheduleEventID)
 	if !ok || dt.StartedID != startedEventID {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
@@ -546,7 +546,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskTimedOutEvent(
 	startedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
-	dt, ok := m.GetDecisionInfo(scheduleEventID)
+	dt, ok := m.GetWorkflowTaskInfo(scheduleEventID)
 	if !ok || dt.StartedID != startedEventID {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
@@ -568,18 +568,18 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskTimedOutEvent(
 	return event, nil
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) FailDecision(
+func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	failDecisionInfo := &decisionInfo{
+	failDecisionInfo := &workflowTaskInfo{
 		Version:                    common.EmptyVersion,
 		ScheduleID:                 common.EmptyEventID,
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
-		DecisionTimeout:            0,
+		WorkflowTaskTimeout:        0,
 		StartedTimestamp:           0,
 		TaskQueue:                  "",
 		OriginalScheduledTimestamp: 0,
@@ -588,36 +588,36 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailDecision(
 		failDecisionInfo.Attempt = m.msb.executionInfo.DecisionAttempt + 1
 		failDecisionInfo.ScheduledTimestamp = m.msb.timeSource.Now().UnixNano()
 	}
-	m.UpdateDecision(failDecisionInfo)
+	m.UpdateWorkflowTask(failDecisionInfo)
 }
 
-// DeleteDecision deletes a workflow task.
-func (m *mutableStateWorkflowTaskManagerImpl) DeleteDecision() {
-	resetDecisionInfo := &decisionInfo{
-		Version:            common.EmptyVersion,
-		ScheduleID:         common.EmptyEventID,
-		StartedID:          common.EmptyEventID,
-		RequestID:          emptyUUID,
-		DecisionTimeout:    0,
-		Attempt:            0,
-		StartedTimestamp:   0,
-		ScheduledTimestamp: 0,
-		TaskQueue:          "",
+// DeleteWorkflowTask deletes a workflow task.
+func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
+	resetDecisionInfo := &workflowTaskInfo{
+		Version:             common.EmptyVersion,
+		ScheduleID:          common.EmptyEventID,
+		StartedID:           common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: 0,
+		Attempt:             0,
+		StartedTimestamp:    0,
+		ScheduledTimestamp:  0,
+		TaskQueue:           "",
 		// Keep the last original scheduled timestamp, so that AddDecisionAsHeartbeat can continue with it.
 		OriginalScheduledTimestamp: m.getDecisionInfo().OriginalScheduledTimestamp,
 	}
-	m.UpdateDecision(resetDecisionInfo)
+	m.UpdateWorkflowTask(resetDecisionInfo)
 }
 
-// UpdateDecision updates a workflow task.
-func (m *mutableStateWorkflowTaskManagerImpl) UpdateDecision(
-	decision *decisionInfo,
+// UpdateWorkflowTask updates a workflow task.
+func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
+	decision *workflowTaskInfo,
 ) {
 	m.msb.executionInfo.DecisionVersion = decision.Version
 	m.msb.executionInfo.DecisionScheduleID = decision.ScheduleID
 	m.msb.executionInfo.DecisionStartedID = decision.StartedID
 	m.msb.executionInfo.DecisionRequestID = decision.RequestID
-	m.msb.executionInfo.DecisionTimeout = decision.DecisionTimeout
+	m.msb.executionInfo.DecisionTimeout = decision.WorkflowTaskTimeout
 	m.msb.executionInfo.DecisionAttempt = decision.Attempt
 	m.msb.executionInfo.DecisionStartedTimestamp = decision.StartedTimestamp
 	m.msb.executionInfo.DecisionScheduledTimestamp = decision.ScheduledTimestamp
@@ -629,16 +629,16 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateDecision(
 		tag.WorkflowScheduleID(decision.ScheduleID),
 		tag.WorkflowStartedID(decision.StartedID),
 		tag.DecisionRequestId(decision.RequestID),
-		tag.WorkflowDecisionTimeoutSeconds(decision.DecisionTimeout),
+		tag.WorkflowDecisionTimeoutSeconds(decision.WorkflowTaskTimeout),
 		tag.Attempt(int32(decision.Attempt)),
 		tag.TimestampInt(decision.StartedTimestamp))
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) HasPendingDecision() bool {
+func (m *mutableStateWorkflowTaskManagerImpl) HasPendingWorkflowTask() bool {
 	return m.msb.executionInfo.DecisionScheduleID != common.EmptyEventID
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) GetPendingDecision() (*decisionInfo, bool) {
+func (m *mutableStateWorkflowTaskManagerImpl) GetPendingWorkflowTask() (*workflowTaskInfo, bool) {
 	if m.msb.executionInfo.DecisionScheduleID == common.EmptyEventID {
 		return nil, false
 	}
@@ -647,11 +647,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) GetPendingDecision() (*decisionInf
 	return decision, true
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) HasInFlightDecision() bool {
+func (m *mutableStateWorkflowTaskManagerImpl) HasInFlightWorkflowTask() bool {
 	return m.msb.executionInfo.DecisionStartedID > 0
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) GetInFlightDecision() (*decisionInfo, bool) {
+func (m *mutableStateWorkflowTaskManagerImpl) GetInFlightWorkflowTask() (*workflowTaskInfo, bool) {
 	if m.msb.executionInfo.DecisionScheduleID == common.EmptyEventID ||
 		m.msb.executionInfo.DecisionStartedID == common.EmptyEventID {
 		return nil, false
@@ -661,14 +661,14 @@ func (m *mutableStateWorkflowTaskManagerImpl) GetInFlightDecision() (*decisionIn
 	return decision, true
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) HasProcessedOrPendingDecision() bool {
-	return m.HasPendingDecision() || m.msb.GetPreviousStartedEventID() != common.EmptyEventID
+func (m *mutableStateWorkflowTaskManagerImpl) HasProcessedOrPendingWorkflowTask() bool {
+	return m.HasPendingWorkflowTask() || m.msb.GetPreviousStartedEventID() != common.EmptyEventID
 }
 
-// GetDecisionInfo returns details about the in-progress workflow task
-func (m *mutableStateWorkflowTaskManagerImpl) GetDecisionInfo(
+// GetWorkflowTaskInfo returns details about the in-progress workflow task
+func (m *mutableStateWorkflowTaskManagerImpl) GetWorkflowTaskInfo(
 	scheduleEventID int64,
-) (*decisionInfo, bool) {
+) (*workflowTaskInfo, bool) {
 	decision := m.getDecisionInfo()
 	if scheduleEventID == decision.ScheduleID {
 		return decision, true
@@ -677,7 +677,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) GetDecisionInfo(
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientDecisionEvents(
-	decision *decisionInfo,
+	decision *workflowTaskInfo,
 	identity string,
 ) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	taskqueue := m.msb.executionInfo.TaskQueue
@@ -685,7 +685,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientDecisionEvents(
 		decision.ScheduleID,
 		decision.ScheduledTimestamp,
 		taskqueue,
-		decision.DecisionTimeout,
+		decision.WorkflowTaskTimeout,
 		decision.Attempt,
 	)
 
@@ -700,17 +700,17 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientDecisionEvents(
 	return scheduledEvent, startedEvent
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) getDecisionInfo() *decisionInfo {
+func (m *mutableStateWorkflowTaskManagerImpl) getDecisionInfo() *workflowTaskInfo {
 	taskQueue := m.msb.executionInfo.TaskQueue
 	if m.msb.IsStickyTaskQueueEnabled() {
 		taskQueue = m.msb.executionInfo.StickyTaskQueue
 	}
-	return &decisionInfo{
+	return &workflowTaskInfo{
 		Version:                    m.msb.executionInfo.DecisionVersion,
 		ScheduleID:                 m.msb.executionInfo.DecisionScheduleID,
 		StartedID:                  m.msb.executionInfo.DecisionStartedID,
 		RequestID:                  m.msb.executionInfo.DecisionRequestID,
-		DecisionTimeout:            m.msb.executionInfo.DecisionTimeout,
+		WorkflowTaskTimeout:        m.msb.executionInfo.DecisionTimeout,
 		Attempt:                    m.msb.executionInfo.DecisionAttempt,
 		StartedTimestamp:           m.msb.executionInfo.DecisionStartedTimestamp,
 		ScheduledTimestamp:         m.msb.executionInfo.DecisionScheduledTimestamp,
@@ -721,7 +721,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) getDecisionInfo() *decisionInfo {
 
 func (m *mutableStateWorkflowTaskManagerImpl) beforeAddWorkflowTaskCompletedEvent() {
 	// Make sure to delete decision before adding events.  Otherwise they are buffered rather than getting appended
-	m.DeleteDecision()
+	m.DeleteWorkflowTask()
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) afterAddWorkflowTaskCompletedEvent(
