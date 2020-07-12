@@ -228,10 +228,10 @@ func (r *nDCWorkflowImpl) failDecision(
 		return nil
 	}
 
-	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
+	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil,
 		identityHistoryService,
 		"",

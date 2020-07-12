@@ -161,18 +161,18 @@ func (h *Handler) AddActivityTask(
 	return &matchingservice.AddActivityTaskResponse{}, hCtx.handleErr(err)
 }
 
-// AddDecisionTask - adds a decision task.
-func (h *Handler) AddDecisionTask(
+// AddWorkflowTask - adds a workflow task.
+func (h *Handler) AddWorkflowTask(
 	ctx context.Context,
-	request *matchingservice.AddDecisionTaskRequest,
-) (_ *matchingservice.AddDecisionTaskResponse, retError error) {
+	request *matchingservice.AddWorkflowTaskRequest,
+) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	startT := time.Now()
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
-		metrics.MatchingAddDecisionTaskScope,
+		metrics.MatchingAddWorkflowTaskScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
@@ -183,27 +183,27 @@ func (h *Handler) AddDecisionTask(
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return &matchingservice.AddDecisionTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
+		return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	syncMatch, err := h.engine.AddDecisionTask(hCtx, request)
+	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
 	if syncMatch {
 		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
 	}
-	return &matchingservice.AddDecisionTaskResponse{}, hCtx.handleErr(err)
+	return &matchingservice.AddWorkflowTaskResponse{}, hCtx.handleErr(err)
 }
 
-// PollForActivityTask - long poll for an activity task.
-func (h *Handler) PollForActivityTask(
+// PollActivityTaskQueue - long poll for an activity task.
+func (h *Handler) PollActivityTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForActivityTaskRequest,
-) (_ *matchingservice.PollForActivityTaskResponse, retError error) {
+	request *matchingservice.PollActivityTaskQueueRequest,
+) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),
-		metrics.MatchingPollForActivityTaskScope,
+		metrics.MatchingPollActivityTaskQueueScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
@@ -219,27 +219,27 @@ func (h *Handler) PollForActivityTask(
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
-		"PollForActivityTask",
+		"PollActivityTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
 		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForActivityTask(hCtx, request)
+	response, err := h.engine.PollActivityTaskQueue(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 
-// PollForDecisionTask - long poll for a decision task.
-func (h *Handler) PollForDecisionTask(
+// PollWorkflowTaskQueue - long poll for a workflow task.
+func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForDecisionTaskRequest,
-) (_ *matchingservice.PollForDecisionTaskResponse, retError error) {
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),
-		metrics.MatchingPollForDecisionTaskScope,
+		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
 	sw := hCtx.startProfiling(&h.startWG)
@@ -255,13 +255,13 @@ func (h *Handler) PollForDecisionTask(
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
-		"PollForDecisionTask",
+		"PollWorkflowTaskQueue",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
 		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForDecisionTask(hCtx, request)
+	response, err := h.engine.PollWorkflowTaskQueue(hCtx, request)
 	return response, hCtx.handleErr(err)
 }
 

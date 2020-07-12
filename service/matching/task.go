@@ -33,7 +33,7 @@ import (
 )
 
 type (
-	// genericTaskInfo contains the info for an activity or decision task
+	// genericTaskInfo contains the info for an activity or workflow task
 	genericTaskInfo struct {
 		*persistenceblobs.AllocatedTaskInfo
 		completionFunc func(*persistenceblobs.AllocatedTaskInfo, error)
@@ -46,14 +46,14 @@ type (
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
 	startedTaskInfo struct {
-		decisionTaskInfo *matchingservice.PollForDecisionTaskResponse
-		activityTaskInfo *matchingservice.PollForActivityTaskResponse
+		workflowTaskInfo *matchingservice.PollWorkflowTaskQueueResponse
+		activityTaskInfo *matchingservice.PollActivityTaskQueueResponse
 	}
 	// internalTask represents an activity, decision, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
 	internalTask struct {
-		event            *genericTaskInfo // non-nil for activity or decision task that's locally generated
+		event            *genericTaskInfo // non-nil for activity or workflow task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        string
@@ -125,26 +125,26 @@ func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 		return &commonpb.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: task.event.Data.GetRunId()}
 	case task.query != nil:
 		return task.query.request.GetQueryRequest().GetExecution()
-	case task.started != nil && task.started.decisionTaskInfo != nil:
-		return task.started.decisionTaskInfo.WorkflowExecution
+	case task.started != nil && task.started.workflowTaskInfo != nil:
+		return task.started.workflowTaskInfo.WorkflowExecution
 	case task.started != nil && task.started.activityTaskInfo != nil:
 		return task.started.activityTaskInfo.WorkflowExecution
 	}
 	return &commonpb.WorkflowExecution{}
 }
 
-// pollForDecisionResponse returns the poll response for a decision task that is
+// pollForDecisionResponse returns the poll response for a workflow task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForDecisionResponse() *matchingservice.PollForDecisionTaskResponse {
+func (task *internalTask) pollForDecisionResponse() *matchingservice.PollWorkflowTaskQueueResponse {
 	if task.isStarted() {
-		return task.started.decisionTaskInfo
+		return task.started.workflowTaskInfo
 	}
 	return nil
 }
 
 // pollForActivityResponse returns the poll response for an activity task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForActivityResponse() *matchingservice.PollForActivityTaskResponse {
+func (task *internalTask) pollForActivityResponse() *matchingservice.PollActivityTaskQueueResponse {
 	if task.isStarted() {
 		return task.started.activityTaskInfo
 	}

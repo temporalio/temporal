@@ -177,19 +177,19 @@ func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).DescribeWorkflowExecution), ctx, request)
 }
 
-// RecordDecisionTaskStarted mocks base method.
-func (m *MockEngine) RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+// RecordWorkflowTaskStarted mocks base method.
+func (m *MockEngine) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RecordDecisionTaskStarted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordDecisionTaskStartedResponse)
+	ret := m.ctrl.Call(m, "RecordWorkflowTaskStarted", ctx, request)
+	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RecordDecisionTaskStarted indicates an expected call of RecordDecisionTaskStarted.
-func (mr *MockEngineMockRecorder) RecordDecisionTaskStarted(ctx, request interface{}) *gomock.Call {
+// RecordWorkflowTaskStarted indicates an expected call of RecordWorkflowTaskStarted.
+func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordDecisionTaskStarted", reflect.TypeOf((*MockEngine)(nil).RecordDecisionTaskStarted), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowTaskStarted", reflect.TypeOf((*MockEngine)(nil).RecordWorkflowTaskStarted), ctx, request)
 }
 
 // RecordActivityTaskStarted mocks base method.
@@ -207,33 +207,33 @@ func (mr *MockEngineMockRecorder) RecordActivityTaskStarted(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordActivityTaskStarted", reflect.TypeOf((*MockEngine)(nil).RecordActivityTaskStarted), ctx, request)
 }
 
-// RespondDecisionTaskCompleted mocks base method.
-func (m *MockEngine) RespondDecisionTaskCompleted(ctx context.Context, request *historyservice.RespondDecisionTaskCompletedRequest) (*historyservice.RespondDecisionTaskCompletedResponse, error) {
+// RespondWorkflowTaskCompleted mocks base method.
+func (m *MockEngine) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RespondDecisionTaskCompleted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RespondDecisionTaskCompletedResponse)
+	ret := m.ctrl.Call(m, "RespondWorkflowTaskCompleted", ctx, request)
+	ret0, _ := ret[0].(*historyservice.RespondWorkflowTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RespondDecisionTaskCompleted indicates an expected call of RespondDecisionTaskCompleted.
-func (mr *MockEngineMockRecorder) RespondDecisionTaskCompleted(ctx, request interface{}) *gomock.Call {
+// RespondWorkflowTaskCompleted indicates an expected call of RespondWorkflowTaskCompleted.
+func (mr *MockEngineMockRecorder) RespondWorkflowTaskCompleted(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondDecisionTaskCompleted", reflect.TypeOf((*MockEngine)(nil).RespondDecisionTaskCompleted), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskCompleted", reflect.TypeOf((*MockEngine)(nil).RespondWorkflowTaskCompleted), ctx, request)
 }
 
-// RespondDecisionTaskFailed mocks base method.
-func (m *MockEngine) RespondDecisionTaskFailed(ctx context.Context, request *historyservice.RespondDecisionTaskFailedRequest) error {
+// RespondWorkflowTaskFailed mocks base method.
+func (m *MockEngine) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RespondDecisionTaskFailed", ctx, request)
+	ret := m.ctrl.Call(m, "RespondWorkflowTaskFailed", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RespondDecisionTaskFailed indicates an expected call of RespondDecisionTaskFailed.
-func (mr *MockEngineMockRecorder) RespondDecisionTaskFailed(ctx, request interface{}) *gomock.Call {
+// RespondWorkflowTaskFailed indicates an expected call of RespondWorkflowTaskFailed.
+func (mr *MockEngineMockRecorder) RespondWorkflowTaskFailed(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondDecisionTaskFailed", reflect.TypeOf((*MockEngine)(nil).RespondDecisionTaskFailed), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskFailed", reflect.TypeOf((*MockEngine)(nil).RespondWorkflowTaskFailed), ctx, request)
 }
 
 // RespondActivityTaskCompleted mocks base method.
@@ -379,18 +379,18 @@ func (mr *MockEngineMockRecorder) ResetWorkflowExecution(ctx, request interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).ResetWorkflowExecution), ctx, request)
 }
 
-// ScheduleDecisionTask mocks base method.
-func (m *MockEngine) ScheduleDecisionTask(ctx context.Context, request *historyservice.ScheduleDecisionTaskRequest) error {
+// ScheduleWorkflowTask mocks base method.
+func (m *MockEngine) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScheduleDecisionTask", ctx, request)
+	ret := m.ctrl.Call(m, "ScheduleWorkflowTask", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ScheduleDecisionTask indicates an expected call of ScheduleDecisionTask.
-func (mr *MockEngineMockRecorder) ScheduleDecisionTask(ctx, request interface{}) *gomock.Call {
+// ScheduleWorkflowTask indicates an expected call of ScheduleWorkflowTask.
+func (mr *MockEngineMockRecorder) ScheduleWorkflowTask(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleDecisionTask", reflect.TypeOf((*MockEngine)(nil).ScheduleDecisionTask), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleWorkflowTask", reflect.TypeOf((*MockEngine)(nil).ScheduleWorkflowTask), ctx, request)
 }
 
 // RecordChildExecutionCompleted mocks base method.

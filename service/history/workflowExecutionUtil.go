@@ -109,10 +109,10 @@ func newWorkflowContext(
 func failDecision(
 	mutableState mutableState,
 	decision *decisionInfo,
-	decisionFailureCause enumspb.DecisionTaskFailedCause,
+	decisionFailureCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
-	if _, err := mutableState.AddDecisionTaskFailedEvent(
+	if _, err := mutableState.AddWorkflowTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
 		decisionFailureCause,
@@ -137,7 +137,7 @@ func scheduleDecision(
 		return nil
 	}
 
-	_, err := mutableState.AddDecisionTaskScheduledEvent(false)
+	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add decision scheduled event.")
 	}
@@ -155,7 +155,7 @@ func retryWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.DECISION_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
 		); err != nil {
 			return nil, err
 		}
@@ -183,7 +183,7 @@ func timeoutWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.DECISION_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
 		); err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func terminateWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enumspb.DECISION_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
 		); err != nil {
 			return err
 		}

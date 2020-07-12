@@ -92,8 +92,8 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	switch transferTask.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(transferTask)
-	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-		return t.processDecisionTask(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+		return t.processWorkflowTask(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
@@ -156,7 +156,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
+func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	transferTask *persistenceblobs.TransferTaskInfo,
 ) error {
 

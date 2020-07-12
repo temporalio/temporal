@@ -42,15 +42,15 @@ var (
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 
 	// decision
-	WorkflowActionDecisionTaskScheduled = workflowAction("add-decisiontask-scheduled-event")
-	WorkflowActionDecisionTaskStarted   = workflowAction("add-decisiontask-started-event")
-	WorkflowActionDecisionTaskCompleted = workflowAction("add-decisiontask-completed-event")
-	WorkflowActionDecisionTaskTimedOut  = workflowAction("add-decisiontask-timedout-event")
-	WorkflowActionDecisionTaskFailed    = workflowAction("add-decisiontask-failed-event")
+	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")
+	WorkflowActionWorkflowTaskStarted   = workflowAction("add-workflowtask-started-event")
+	WorkflowActionWorkflowTaskCompleted = workflowAction("add-workflowtask-completed-event")
+	WorkflowActionWorkflowTaskTimedOut  = workflowAction("add-workflowtask-timedout-event")
+	WorkflowActionWorkflowTaskFailed    = workflowAction("add-workflowtask-failed-event")
 
 	// in memory decision
-	WorkflowActionInMemoryDecisionTaskScheduled = workflowAction("add-in-memory-decisiontask-scheduled")
-	WorkflowActionInMemoryDecisionTaskStarted   = workflowAction("add-in-memory-decisiontask-started")
+	WorkflowActionInMemoryWorkflowTaskScheduled = workflowAction("add-in-memory-workflowtask-scheduled")
+	WorkflowActionInMemoryWorkflowTaskStarted   = workflowAction("add-in-memory-workflowtask-started")
 
 	// activity
 	WorkflowActionActivityTaskScheduled       = workflowAction("add-activitytask-scheduled-event")
@@ -153,7 +153,7 @@ var (
 	ErrorTypeDuplicateTransferTask        = errorType("DuplicateTransferTask")
 	ErrorTypeDecisionFailed               = errorType("DecisionFailed")
 	ErrorTypeInvalidMutableStateAction    = errorType("InvalidMutableStateAction")
-	ErrorTypeInvalidMemDecisionTaskAction = errorType("InvalidMemDecisionTaskAction")
+	ErrorTypeInvalidMemWorkflowTaskAction = errorType("InvalidMemWorkflowTaskAction")
 )
 
 // Pre-defined values for SysShardUpdate

@@ -60,7 +60,7 @@ func TestScopeDefsMapped(t *testing.T) {
 			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
 		}
 	}
-	for i := MatchingPollForDecisionTaskScope; i < NumMatchingScopes; i++ {
+	for i := MatchingPollWorkflowTaskQueueScope; i < NumMatchingScopes; i++ {
 		key, ok := ScopeDefs[Matching][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)

@@ -709,10 +709,10 @@ func createTransferTasks(
 			info.TaskQueue = task.(*p.ActivityTask).TaskQueue
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-			info.TargetNamespaceId = task.(*p.DecisionTask).NamespaceID
-			info.TaskQueue = task.(*p.DecisionTask).TaskQueue
-			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
+		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+			info.TargetNamespaceId = task.(*p.WorkflowTask).NamespaceID
+			info.TaskQueue = task.(*p.WorkflowTask).TaskQueue
+			info.ScheduleId = task.(*p.WorkflowTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			info.TargetNamespaceId = task.(*p.CancelExecutionTask).TargetNamespaceID

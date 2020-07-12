@@ -41,7 +41,7 @@ type (
 	// available task queue partitions when possible
 	LoadBalancer interface {
 		// PickWritePartition returns the task queue partition for adding
-		// an activity or decision task. The input is the name of the
+		// an activity or workflow task. The input is the name of the
 		// original task queue (with no partition info). When forwardedFrom
 		// is non-empty, this call is forwardedFrom from a child partition
 		// to a parent partition in which case, no load balancing should be

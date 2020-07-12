@@ -30,75 +30,74 @@ func init() {
 }
 
 var fileDescriptor_655983da427ae822 = []byte{
-	// 1076 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x99, 0xcf, 0x6b, 0x24, 0x45,
-	0x14, 0xc7, 0xa7, 0x2e, 0x1e, 0x0a, 0x5d, 0xb5, 0x15, 0x7f, 0x44, 0x6d, 0x44, 0xf0, 0x3a, 0x21,
+	// 1070 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x99, 0xcd, 0x6b, 0x24, 0x45,
+	0x18, 0x87, 0xa7, 0x2e, 0x1e, 0x0a, 0x5d, 0xb5, 0x15, 0x3f, 0xa2, 0x36, 0x22, 0x78, 0x9d, 0x21,
 	0xd9, 0xcb, 0xee, 0x26, 0xeb, 0x6e, 0x32, 0x49, 0x26, 0xd9, 0x4d, 0xd4, 0xcc, 0x2c, 0x2b, 0x78,
-	0x91, 0x4a, 0xcf, 0xdb, 0x4c, 0x91, 0x4e, 0x57, 0xdb, 0x5d, 0x3d, 0xeb, 0xdc, 0x04, 0x4f, 0x82,
-	0xa0, 0x08, 0x82, 0x20, 0x08, 0x9e, 0x14, 0x41, 0x10, 0x04, 0x41, 0x10, 0xf6, 0x24, 0x78, 0xcc,
-	0x71, 0x8f, 0x66, 0x72, 0xf1, 0xb8, 0x7f, 0xc2, 0x32, 0xd3, 0x53, 0x95, 0xa9, 0xee, 0xea, 0xa1,
-	0xaa, 0x7a, 0x6e, 0xc9, 0x4c, 0x7d, 0x3f, 0xfd, 0xe9, 0xae, 0xaa, 0x79, 0x6f, 0x6a, 0xf0, 0x55,
-	0x0e, 0xa7, 0x31, 0x4b, 0x48, 0xb8, 0x9c, 0x42, 0x32, 0x80, 0x64, 0x99, 0xc4, 0x74, 0xb9, 0x4f,
-	0x53, 0xce, 0x92, 0xe1, 0xf8, 0x15, 0x1a, 0xc0, 0xf2, 0x60, 0x65, 0x79, 0xfa, 0x67, 0x33, 0x4e,
-	0x18, 0x67, 0xde, 0xbb, 0x22, 0xd4, 0xcc, 0x43, 0x4d, 0x12, 0xd3, 0xa6, 0x1a, 0x6a, 0x0e, 0x56,
-	0x96, 0xd6, 0xcd, 0xd8, 0x09, 0x7c, 0x9a, 0x41, 0xca, 0x3f, 0x49, 0x20, 0x8d, 0x59, 0x94, 0x4e,
-	0x2f, 0xb2, 0xfa, 0x68, 0x05, 0x5f, 0xd9, 0xcd, 0x07, 0x77, 0xf3, 0xc1, 0xde, 0xcf, 0x08, 0xbf,
-	0xd2, 0xe5, 0x24, 0xe1, 0x1f, 0xb1, 0xe4, 0xe4, 0x41, 0xc8, 0x1e, 0x6e, 0x7f, 0x06, 0x41, 0xc6,
-	0x29, 0x8b, 0xbc, 0xad, 0xa6, 0x91, 0x53, 0x53, 0x1f, 0xef, 0xe4, 0x0a, 0x4b, 0xdb, 0x35, 0x29,
-	0xf9, 0x0d, 0xbc, 0xd3, 0xf0, 0xbe, 0x45, 0xf8, 0xf9, 0x36, 0xf0, 0x83, 0x8c, 0x93, 0xa3, 0x10,
-	0xba, 0x9c, 0x70, 0xf0, 0x6e, 0x1a, 0xc2, 0x0b, 0x39, 0xe1, 0xf6, 0x9e, 0x6b, 0x5c, 0x4a, 0x7d,
-	0x87, 0xf0, 0x0b, 0x1f, 0xb2, 0x30, 0x54, 0xac, 0x4c, 0xb1, 0xc5, 0xa0, 0xd0, 0xba, 0xe5, 0x9c,
-	0x97, 0x5e, 0x3f, 0x21, 0xfc, 0x72, 0x07, 0x52, 0xe0, 0x5d, 0x4e, 0x83, 0x93, 0xe1, 0x3d, 0x92,
-	0x9e, 0x1c, 0x66, 0x90, 0x81, 0xb7, 0x69, 0xc8, 0xd6, 0x85, 0x85, 0x5f, 0xab, 0x16, 0x43, 0x3a,
-	0xfe, 0x8e, 0xf0, 0xeb, 0x1d, 0x08, 0x58, 0xd2, 0xdb, 0x82, 0x80, 0xa6, 0x94, 0x45, 0xe3, 0x51,
-	0x93, 0x75, 0x00, 0x3d, 0xaf, 0x6d, 0x7c, 0x91, 0x0a, 0x82, 0xb0, 0xdd, 0xad, 0x0f, 0xd2, 0x28,
-	0x6f, 0x04, 0x9c, 0x0e, 0x28, 0x1f, 0xba, 0x2b, 0x6b, 0x08, 0x6e, 0xca, 0x5a, 0x90, 0x54, 0xfe,
-	0x0b, 0xe1, 0x37, 0xf3, 0x7f, 0x95, 0x7b, 0x6b, 0xb1, 0xd3, 0x38, 0x84, 0xb1, 0xf5, 0x1d, 0xf3,
-	0xd9, 0xac, 0x84, 0x08, 0xf1, 0xbb, 0x0b, 0x61, 0x15, 0x1e, 0x77, 0x69, 0xe8, 0x0e, 0xa1, 0xa1,
-	0xd5, 0xe3, 0xae, 0x20, 0xd8, 0x3f, 0xee, 0x4a, 0x90, 0x54, 0xfe, 0x13, 0xe1, 0x37, 0xca, 0xd3,
-	0xb2, 0x0b, 0x24, 0xe1, 0x47, 0x40, 0xb8, 0xb7, 0xe7, 0x3c, 0xb5, 0x92, 0x21, 0xb4, 0xef, 0x2c,
-	0x02, 0xa5, 0x5b, 0x27, 0xb3, 0x43, 0x9d, 0xd7, 0x89, 0x16, 0xe2, 0xb8, 0x4e, 0x2a, 0x58, 0xba,
-	0x75, 0x32, 0x3b, 0xd4, 0x6d, 0x9d, 0x94, 0x09, 0x8e, 0xeb, 0x44, 0x07, 0x2a, 0xac, 0x93, 0xf2,
-	0xdd, 0x91, 0x28, 0x80, 0xb1, 0xf4, 0x5e, 0x8d, 0x27, 0x34, 0x65, 0xd8, 0xaf, 0x93, 0x39, 0x28,
-	0x29, 0xfe, 0x2b, 0xc2, 0xaf, 0x76, 0xe9, 0x71, 0x44, 0xc2, 0x72, 0xc7, 0x60, 0x5c, 0xeb, 0xf5,
-	0x79, 0x21, 0xbc, 0x53, 0x17, 0x23, 0x65, 0xff, 0x41, 0xf8, 0xed, 0xe9, 0x28, 0xca, 0xfb, 0x15,
-	0x7d, 0xce, 0xfb, 0x76, 0x97, 0xab, 0x04, 0x09, 0xfd, 0x0f, 0x16, 0xc6, 0x93, 0xf7, 0xf1, 0x1b,
-	0xc2, 0xaf, 0x75, 0xe0, 0x94, 0x0d, 0x20, 0x0f, 0x29, 0xed, 0xc6, 0x8e, 0xf1, 0xfc, 0xea, 0x01,
-	0xc2, 0xbb, 0x5d, 0x9b, 0x23, 0x7d, 0xff, 0x40, 0x78, 0xe9, 0x1e, 0x24, 0xa7, 0x34, 0x22, 0x1c,
-	0xca, 0x4f, 0xdc, 0x74, 0x23, 0x55, 0x23, 0x84, 0xf3, 0xde, 0x02, 0x48, 0xd2, 0x7a, 0xdc, 0x0b,
-	0x4f, 0x7a, 0x16, 0xf7, 0x5e, 0x58, 0x1f, 0xb7, 0xed, 0x85, 0xab, 0x28, 0xd2, 0xf4, 0x11, 0xc2,
-	0xfe, 0x14, 0x9a, 0x6f, 0xd1, 0xb2, 0xf1, 0xbe, 0xf1, 0xb5, 0xe6, 0x61, 0x84, 0xf9, 0xc1, 0x82,
-	0x68, 0x4a, 0x83, 0xda, 0x0d, 0xfa, 0xd0, 0xcb, 0x42, 0x98, 0x2d, 0xa8, 0xc6, 0x0d, 0xaa, 0x2e,
-	0x6c, 0xdb, 0xa0, 0xea, 0x19, 0xd2, 0xf1, 0x6f, 0x84, 0xdf, 0xca, 0x8b, 0x67, 0xab, 0x4f, 0xc3,
-	0x9e, 0xbc, 0x8d, 0xcb, 0x9a, 0x78, 0xd7, 0xaa, 0x04, 0x57, 0x50, 0x84, 0xf5, 0xfe, 0x62, 0x60,
-	0x4a, 0x55, 0xdc, 0x82, 0x34, 0x48, 0xe8, 0x91, 0x66, 0x0f, 0x9a, 0xee, 0xf6, 0x4a, 0x82, 0x6d,
-	0x55, 0x9c, 0x03, 0x52, 0xbe, 0xe3, 0x75, 0x20, 0x0e, 0x69, 0x40, 0x38, 0x6c, 0x0f, 0x20, 0xe2,
-	0xa9, 0xf1, 0x77, 0xbc, 0x42, 0xce, 0xf6, 0x3b, 0x5e, 0x29, 0x2e, 0xa5, 0x7e, 0x40, 0xd8, 0x93,
-	0xef, 0x76, 0xc8, 0xc3, 0xa9, 0xd7, 0x6d, 0x5b, 0xb0, 0x8c, 0x0a, 0xb5, 0x8d, 0x1a, 0x04, 0x69,
-	0xf7, 0x3d, 0xc2, 0x2f, 0x16, 0xdc, 0xef, 0xaf, 0x7a, 0xb7, 0xdc, 0xee, 0xfa, 0xfe, 0xaa, 0x70,
-	0xbb, 0xed, 0x0e, 0x50, 0x66, 0xb3, 0x3b, 0x8c, 0x82, 0x6e, 0x9f, 0x24, 0xbd, 0x71, 0x89, 0xc8,
-	0xcc, 0x67, 0xb3, 0x90, 0xb3, 0x9d, 0xcd, 0x52, 0x5c, 0x4a, 0x7d, 0x89, 0xf0, 0xb3, 0xe3, 0x77,
-	0x45, 0x9b, 0xe3, 0xdd, 0xb0, 0x40, 0x8a, 0x90, 0xd0, 0x59, 0x73, 0xca, 0x2a, 0x1f, 0x82, 0x62,
-	0x5b, 0x28, 0x25, 0x7d, 0xd3, 0x72, 0x4f, 0xe9, 0xca, 0x79, 0xab, 0x16, 0x43, 0x3a, 0xfe, 0x88,
-	0xf0, 0x4b, 0x62, 0xc8, 0xf4, 0xec, 0x68, 0x97, 0xa5, 0xdc, 0xdb, 0xb0, 0xc4, 0xcf, 0x64, 0x85,
-	0xe1, 0x66, 0x1d, 0x84, 0x14, 0xfc, 0x02, 0x61, 0xdc, 0x0a, 0x59, 0x0a, 0x93, 0xf9, 0xf6, 0xae,
-	0x19, 0x42, 0x2f, 0x23, 0x42, 0xe7, 0xba, 0x43, 0x52, 0xb1, 0xc8, 0x1b, 0xa3, 0x49, 0x15, 0xbb,
-	0x66, 0xd5, 0x4b, 0xcd, 0xd6, 0xae, 0xeb, 0x0e, 0x49, 0xa5, 0x83, 0x69, 0x03, 0x17, 0x9b, 0x92,
-	0xb2, 0xe8, 0x00, 0xd2, 0x94, 0x1c, 0x43, 0x6a, 0xdc, 0xc1, 0xe8, 0xe3, 0xb6, 0x1d, 0x4c, 0x15,
-	0x45, 0x29, 0x4e, 0x6d, 0xe0, 0x5b, 0xfb, 0x87, 0x3a, 0xd9, 0xb6, 0xf9, 0x65, 0xf4, 0x04, 0xdb,
-	0xe2, 0x34, 0x07, 0x24, 0x95, 0xbf, 0x42, 0xf8, 0xb9, 0xc3, 0x0c, 0x92, 0xa1, 0xa8, 0x60, 0x9e,
-	0xe9, 0xf6, 0x57, 0x52, 0x42, 0x6d, 0xdd, 0x2d, 0xac, 0xe8, 0x74, 0x80, 0xc4, 0x71, 0x38, 0x9c,
-	0x56, 0xa4, 0x35, 0xe3, 0xa5, 0x33, 0x93, 0xb2, 0xd5, 0x29, 0x84, 0xa5, 0xce, 0xd7, 0x08, 0x5f,
-	0xc9, 0x9f, 0xa2, 0x9c, 0xc5, 0x75, 0xab, 0x87, 0x5f, 0x9c, 0xba, 0x9b, 0x8e, 0x69, 0xf5, 0x6c,
-	0x36, 0x4b, 0x8e, 0x61, 0xd6, 0xc9, 0xf8, 0x6c, 0xb6, 0x10, 0xb4, 0x3e, 0x9b, 0x2d, 0xe5, 0x15,
-	0xaf, 0x03, 0x70, 0xf4, 0x2a, 0x06, 0x6d, 0xbd, 0xca, 0xf9, 0xc2, 0x99, 0xf1, 0x83, 0x04, 0xd2,
-	0xbe, 0x58, 0x6e, 0xe3, 0x8f, 0x97, 0xd4, 0xe2, 0xcc, 0xb8, 0x1c, 0xb6, 0x3f, 0x33, 0xd6, 0x31,
-	0x84, 0xe3, 0x66, 0x7c, 0x76, 0xee, 0x37, 0x1e, 0x9f, 0xfb, 0x8d, 0x27, 0xe7, 0x3e, 0xfa, 0x7c,
-	0xe4, 0xa3, 0x5f, 0x46, 0x3e, 0xfa, 0x77, 0xe4, 0xa3, 0xb3, 0x91, 0x8f, 0xfe, 0x1b, 0xf9, 0xe8,
-	0xff, 0x91, 0xdf, 0x78, 0x32, 0xf2, 0xd1, 0x37, 0x17, 0x7e, 0xe3, 0xec, 0xc2, 0x6f, 0x3c, 0xbe,
-	0xf0, 0x1b, 0x1f, 0xdf, 0x38, 0x66, 0x97, 0x97, 0xa7, 0x6c, 0xee, 0x6f, 0x27, 0x6b, 0xea, 0x2b,
-	0x47, 0xcf, 0x4c, 0x7e, 0x3a, 0xb9, 0xfa, 0x34, 0x00, 0x00, 0xff, 0xff, 0xc9, 0x7d, 0xfa, 0xda,
-	0xd6, 0x19, 0x00, 0x00,
+	0x91, 0x4a, 0xcf, 0xbb, 0x99, 0x26, 0x3d, 0x53, 0x6d, 0x75, 0xf5, 0xac, 0x73, 0x13, 0x3c, 0x09,
+	0x82, 0x22, 0x08, 0x82, 0x20, 0x78, 0x52, 0x04, 0x41, 0x10, 0x04, 0x41, 0xd8, 0x93, 0xe0, 0x31,
+	0xc7, 0x3d, 0x9a, 0xc9, 0xc5, 0xe3, 0xfe, 0x09, 0xcb, 0x4c, 0x4f, 0x55, 0xa6, 0xba, 0xab, 0x87,
+	0xaa, 0xea, 0xb9, 0xed, 0x26, 0xf5, 0x7b, 0xfa, 0xe9, 0xfa, 0xc8, 0xfb, 0x4e, 0x0d, 0xbe, 0xca,
+	0xa1, 0x1f, 0x53, 0x46, 0xa2, 0x46, 0x02, 0x6c, 0x08, 0xac, 0x41, 0xe2, 0xb0, 0xd1, 0x0b, 0x13,
+	0x4e, 0xd9, 0x68, 0xf2, 0x93, 0x30, 0x80, 0xc6, 0x70, 0xb5, 0x31, 0xfb, 0x67, 0x3d, 0x66, 0x94,
+	0x53, 0xef, 0x5d, 0x11, 0xaa, 0x67, 0xa1, 0x3a, 0x89, 0xc3, 0xba, 0x1a, 0xaa, 0x0f, 0x57, 0x57,
+	0x36, 0xcc, 0xd8, 0x0c, 0x3e, 0x4d, 0x21, 0xe1, 0x9f, 0x30, 0x48, 0x62, 0x3a, 0x48, 0x66, 0x0f,
+	0x59, 0x7b, 0xb4, 0x8a, 0xaf, 0xec, 0x65, 0x83, 0x3b, 0xd9, 0x60, 0xef, 0x67, 0x84, 0x5f, 0xe9,
+	0x70, 0xc2, 0xf8, 0x47, 0x94, 0x9d, 0x3e, 0x88, 0xe8, 0xc3, 0x9d, 0xcf, 0x20, 0x48, 0x79, 0x48,
+	0x07, 0xde, 0x76, 0xdd, 0xc8, 0xa9, 0xae, 0x8f, 0xb7, 0x33, 0x85, 0x95, 0x9d, 0x8a, 0x94, 0xec,
+	0x05, 0xde, 0xa9, 0x79, 0xdf, 0x22, 0xfc, 0x7c, 0x0b, 0xf8, 0x61, 0xca, 0xc9, 0x71, 0x04, 0x1d,
+	0x4e, 0x38, 0x78, 0x37, 0x0d, 0xe1, 0xb9, 0x9c, 0x70, 0x7b, 0xcf, 0x35, 0x2e, 0xa5, 0xbe, 0x43,
+	0xf8, 0x85, 0x0f, 0x69, 0x14, 0x29, 0x56, 0xa6, 0xd8, 0x7c, 0x50, 0x68, 0xdd, 0x72, 0xce, 0x4b,
+	0xaf, 0x9f, 0x10, 0x7e, 0xb9, 0x0d, 0x09, 0xf0, 0x0e, 0x0f, 0x83, 0xd3, 0xd1, 0x3d, 0x92, 0x9c,
+	0x1e, 0xa5, 0x90, 0x82, 0xb7, 0x65, 0xc8, 0xd6, 0x85, 0x85, 0x5f, 0xb3, 0x12, 0x43, 0x3a, 0xfe,
+	0x8e, 0xf0, 0xeb, 0x6d, 0x08, 0x28, 0xeb, 0x8a, 0x65, 0x9f, 0x8c, 0x9a, 0xee, 0x03, 0xe8, 0x7a,
+	0x2d, 0xe3, 0x87, 0x94, 0x10, 0x84, 0xed, 0x5e, 0x75, 0x90, 0x46, 0x79, 0x33, 0xe0, 0xe1, 0x30,
+	0xe4, 0x23, 0x77, 0x65, 0x0d, 0xc1, 0x4d, 0x59, 0x0b, 0x92, 0xca, 0x7f, 0x21, 0xfc, 0x66, 0xf6,
+	0x5f, 0xe5, 0xdd, 0x9a, 0xb4, 0x1f, 0x47, 0x30, 0xb1, 0xbe, 0x63, 0xbe, 0x9a, 0xa5, 0x10, 0x21,
+	0x7e, 0x77, 0x29, 0xac, 0xdc, 0x74, 0x17, 0x86, 0xee, 0x92, 0x30, 0xb2, 0x9a, 0xee, 0x12, 0x82,
+	0xfd, 0x74, 0x97, 0x82, 0xa4, 0xf2, 0x9f, 0x08, 0xbf, 0x51, 0x5c, 0x96, 0x3d, 0x20, 0x8c, 0x1f,
+	0x03, 0xe1, 0xde, 0xbe, 0xf3, 0xd2, 0x4a, 0x86, 0xd0, 0xbe, 0xb3, 0x0c, 0x94, 0x6e, 0x9f, 0xcc,
+	0x0f, 0x75, 0xde, 0x27, 0x5a, 0x88, 0xe3, 0x3e, 0x29, 0x61, 0xe9, 0xf6, 0xc9, 0xfc, 0x50, 0xb7,
+	0x7d, 0x52, 0x24, 0x38, 0xee, 0x13, 0x1d, 0x28, 0xb7, 0x4f, 0x8a, 0x6f, 0x47, 0x06, 0x01, 0x4c,
+	0xa4, 0xf7, 0x2b, 0xcc, 0xd0, 0x8c, 0x61, 0xbf, 0x4f, 0x16, 0xa0, 0xa4, 0xf8, 0xaf, 0x08, 0xbf,
+	0xda, 0x09, 0x4f, 0x06, 0x24, 0x2a, 0x76, 0x0c, 0xc6, 0xb5, 0x5e, 0x9f, 0x17, 0xc2, 0xbb, 0x55,
+	0x31, 0x52, 0xf6, 0x1f, 0x84, 0xdf, 0x9e, 0x8d, 0x0a, 0x79, 0xaf, 0xa4, 0xcf, 0x79, 0xdf, 0xee,
+	0x71, 0xa5, 0x20, 0xa1, 0xff, 0xc1, 0xd2, 0x78, 0xf2, 0x3d, 0x7e, 0x43, 0xf8, 0xb5, 0x36, 0xf4,
+	0xe9, 0x10, 0xb2, 0x90, 0xd2, 0x6e, 0xec, 0x1a, 0xaf, 0xaf, 0x1e, 0x20, 0xbc, 0x5b, 0x95, 0x39,
+	0xd2, 0xf7, 0x0f, 0x84, 0x57, 0xee, 0x01, 0xeb, 0x87, 0x03, 0xc2, 0xa1, 0x38, 0xe3, 0xa6, 0x07,
+	0xa9, 0x1c, 0x21, 0x9c, 0xf7, 0x97, 0x40, 0x92, 0xd6, 0x93, 0x5e, 0x78, 0xda, 0xb3, 0xb8, 0xf7,
+	0xc2, 0xfa, 0xb8, 0x6d, 0x2f, 0x5c, 0x46, 0x91, 0xa6, 0x8f, 0x10, 0xf6, 0x67, 0xd0, 0xec, 0x88,
+	0x16, 0x8d, 0x0f, 0x8c, 0x9f, 0xb5, 0x08, 0x23, 0xcc, 0x0f, 0x97, 0x44, 0x53, 0x1a, 0xd4, 0x4e,
+	0xd0, 0x83, 0x6e, 0x1a, 0xc1, 0x7c, 0x41, 0x35, 0x6e, 0x50, 0x75, 0x61, 0xdb, 0x06, 0x55, 0xcf,
+	0x90, 0x8e, 0x7f, 0x23, 0xfc, 0x56, 0x56, 0x3c, 0x9b, 0xbd, 0x30, 0xea, 0xca, 0xd7, 0xb8, 0xac,
+	0x89, 0x77, 0xad, 0x4a, 0x70, 0x09, 0x45, 0x58, 0x1f, 0x2c, 0x07, 0xa6, 0x54, 0xc5, 0x6d, 0x48,
+	0x02, 0x16, 0x1e, 0x6b, 0xce, 0xa0, 0xe9, 0x69, 0x2f, 0x25, 0xd8, 0x56, 0xc5, 0x05, 0x20, 0xe5,
+	0x33, 0x5e, 0x1b, 0xe2, 0x28, 0x0c, 0x08, 0x87, 0x9d, 0x21, 0x0c, 0x78, 0x62, 0xfc, 0x19, 0x2f,
+	0x97, 0xb3, 0xfd, 0x8c, 0x57, 0x88, 0x4b, 0xa9, 0x1f, 0x10, 0xf6, 0xe4, 0x6f, 0xdb, 0xe4, 0xe1,
+	0xcc, 0xeb, 0xb6, 0x2d, 0x58, 0x46, 0x85, 0xda, 0x66, 0x05, 0x82, 0xb4, 0xfb, 0x1e, 0xe1, 0x17,
+	0x73, 0xee, 0xf7, 0xd7, 0xbc, 0x5b, 0x6e, 0x6f, 0x7d, 0x7f, 0x4d, 0xb8, 0xdd, 0x76, 0x07, 0x28,
+	0xab, 0xd9, 0x19, 0x0d, 0x82, 0x4e, 0x8f, 0xb0, 0xee, 0xa4, 0x44, 0xa4, 0xe6, 0xab, 0x99, 0xcb,
+	0xd9, 0xae, 0x66, 0x21, 0x2e, 0xa5, 0xbe, 0x44, 0xf8, 0xd9, 0xc9, 0x6f, 0x45, 0x9b, 0xe3, 0xdd,
+	0xb0, 0x40, 0x8a, 0x90, 0xd0, 0x59, 0x77, 0xca, 0x2a, 0x7f, 0x04, 0xc5, 0xb1, 0x50, 0x4a, 0xfa,
+	0x96, 0xe5, 0x99, 0xd2, 0x95, 0xf3, 0x66, 0x25, 0x86, 0x74, 0xfc, 0x11, 0xe1, 0x97, 0xc4, 0x90,
+	0xd9, 0xdd, 0xd1, 0x1e, 0x4d, 0xb8, 0xb7, 0x69, 0x89, 0x9f, 0xcb, 0x0a, 0xc3, 0xad, 0x2a, 0x08,
+	0x29, 0xf8, 0x05, 0xc2, 0xb8, 0x19, 0xd1, 0x04, 0xa6, 0xeb, 0xed, 0x5d, 0x33, 0x84, 0x5e, 0x46,
+	0x84, 0xce, 0x75, 0x87, 0xa4, 0x62, 0x91, 0x35, 0x46, 0xd3, 0x2a, 0x76, 0xcd, 0xaa, 0x97, 0x9a,
+	0xaf, 0x5d, 0xd7, 0x1d, 0x92, 0x4a, 0x07, 0xd3, 0x02, 0x2e, 0x0e, 0x65, 0x48, 0x07, 0x87, 0x90,
+	0x24, 0xe4, 0x04, 0x12, 0xe3, 0x0e, 0x46, 0x1f, 0xb7, 0xed, 0x60, 0xca, 0x28, 0x4a, 0x71, 0x6a,
+	0x01, 0xdf, 0x3e, 0x38, 0xd2, 0xc9, 0xb6, 0xcc, 0x1f, 0xa3, 0x27, 0xd8, 0x16, 0xa7, 0x05, 0x20,
+	0xa9, 0xfc, 0x15, 0xc2, 0xcf, 0x1d, 0xa5, 0xc0, 0x46, 0xa2, 0x82, 0x79, 0xa6, 0xc7, 0x5f, 0x49,
+	0x09, 0xb5, 0x0d, 0xb7, 0xb0, 0xa2, 0xd3, 0x06, 0x12, 0xc7, 0xd1, 0x68, 0x56, 0x91, 0xd6, 0x8d,
+	0xb7, 0xce, 0x5c, 0xca, 0x56, 0x27, 0x17, 0x96, 0x3a, 0x5f, 0x23, 0x7c, 0x25, 0x9b, 0x45, 0xb9,
+	0x8a, 0x1b, 0x56, 0x93, 0x9f, 0x5f, 0xba, 0x9b, 0x8e, 0x69, 0xf5, 0x6e, 0x36, 0x65, 0x27, 0x30,
+	0xef, 0x64, 0x7c, 0x37, 0x9b, 0x0b, 0x5a, 0xdf, 0xcd, 0x16, 0xf2, 0x8a, 0xd7, 0x21, 0x38, 0x7a,
+	0xe5, 0x83, 0xb6, 0x5e, 0xc5, 0x7c, 0xee, 0xce, 0xf8, 0x01, 0x83, 0xa4, 0x37, 0xdf, 0x10, 0x27,
+	0x16, 0x77, 0xc6, 0xc5, 0xb0, 0xfd, 0x9d, 0xb1, 0x8e, 0x21, 0x1c, 0xb7, 0xe2, 0xb3, 0x73, 0xbf,
+	0xf6, 0xf8, 0xdc, 0xaf, 0x3d, 0x39, 0xf7, 0xd1, 0xe7, 0x63, 0x1f, 0xfd, 0x32, 0xf6, 0xd1, 0xbf,
+	0x63, 0x1f, 0x9d, 0x8d, 0x7d, 0xf4, 0xdf, 0xd8, 0x47, 0xff, 0x8f, 0xfd, 0xda, 0x93, 0xb1, 0x8f,
+	0xbe, 0xb9, 0xf0, 0x6b, 0x67, 0x17, 0x7e, 0xed, 0xf1, 0x85, 0x5f, 0xfb, 0xf8, 0xc6, 0x09, 0xbd,
+	0x7c, 0x7c, 0x48, 0x17, 0x7e, 0x77, 0xb2, 0xae, 0xfe, 0xe4, 0xf8, 0x99, 0xe9, 0x57, 0x27, 0x57,
+	0x9f, 0x06, 0x00, 0x00, 0xff, 0xff, 0x4c, 0xba, 0xa4, 0x12, 0xd6, 0x19, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -114,7 +113,7 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HistoryServiceClient interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 	// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(ctx context.Context, in *StartWorkflowExecutionRequest, opts ...grpc.CallOption) (*StartWorkflowExecutionResponse, error)
@@ -134,56 +133,56 @@ type HistoryServiceClient interface {
 	// 4. ClientFeatureVersion
 	// 5. ClientImpl
 	ResetStickyTaskQueue(ctx context.Context, in *ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*ResetStickyTaskQueueResponse, error)
-	// RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-	// a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
-	RecordDecisionTaskStarted(ctx context.Context, in *RecordDecisionTaskStartedRequest, opts ...grpc.CallOption) (*RecordDecisionTaskStartedResponse, error)
-	// RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-	// a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+	RecordWorkflowTaskStarted(ctx context.Context, in *RecordWorkflowTaskStartedRequest, opts ...grpc.CallOption) (*RecordWorkflowTaskStartedResponse, error)
+	// RecordActivityTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(ctx context.Context, in *RecordActivityTaskStartedRequest, opts ...grpc.CallOption) (*RecordActivityTaskStartedResponse, error)
-	// RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of
-	// 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
-	// for completing the DecisionTask.
-	RespondDecisionTaskCompleted(ctx context.Context, in *RespondDecisionTaskCompletedRequest, opts ...grpc.CallOption) (*RespondDecisionTaskCompletedResponse, error)
-	// RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
-	// DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-	// either clear sticky task queue or report ny panics during DecisionTask processing.
-	RespondDecisionTaskFailed(ctx context.Context, in *RespondDecisionTaskFailedRequest, opts ...grpc.CallOption) (*RespondDecisionTaskFailedResponse, error)
+	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
+	// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
+	// for completing the WorkflowTask.
+	RespondWorkflowTaskCompleted(ctx context.Context, in *RespondWorkflowTaskCompletedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskCompletedResponse, error)
+	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
+	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
+	// either clear sticky task queue or report ny panics during WorkflowTask processing.
+	RespondWorkflowTaskFailed(ctx context.Context, in *RespondWorkflowTaskFailedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskFailedResponse, error)
 	// RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
 	// to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
 	// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will
 	// fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for heartbeating.
+	// PollActivityTaskQueue API call for heartbeating.
 	RecordActivityTaskHeartbeat(ctx context.Context, in *RecordActivityTaskHeartbeatRequest, opts ...grpc.CallOption) (*RecordActivityTaskHeartbeatResponse, error)
 	// RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
-	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCompleted(ctx context.Context, in *RespondActivityTaskCompletedRequest, opts ...grpc.CallOption) (*RespondActivityTaskCompletedResponse, error)
 	// RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
-	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskFailed(ctx context.Context, in *RespondActivityTaskFailedRequest, opts ...grpc.CallOption) (*RespondActivityTaskFailedResponse, error)
 	// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
-	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(ctx context.Context, in *RespondActivityTaskCanceledRequest, opts ...grpc.CallOption) (*RespondActivityTaskCanceledResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-	// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(ctx context.Context, in *SignalWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
 	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-	// and a decision task being created for the execution.
+	// and a workflow task being created for the execution.
 	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdResuePolicy,
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
@@ -199,15 +198,15 @@ type HistoryServiceClient interface {
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
-	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
+	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 	// anymore due to completion or doesn't exist.
 	RequestCancelWorkflowExecution(ctx context.Context, in *RequestCancelWorkflowExecutionRequest, opts ...grpc.CallOption) (*RequestCancelWorkflowExecutionResponse, error)
-	// ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+	// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
 	// used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
-	// child execution without creating the decision task and then calls this API after updating the mutable state of
+	// child execution without creating the workflow task and then calls this API after updating the mutable state of
 	// parent execution.
-	ScheduleDecisionTask(ctx context.Context, in *ScheduleDecisionTaskRequest, opts ...grpc.CallOption) (*ScheduleDecisionTaskResponse, error)
+	ScheduleWorkflowTask(ctx context.Context, in *ScheduleWorkflowTaskRequest, opts ...grpc.CallOption) (*ScheduleWorkflowTaskResponse, error)
 	// RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 	// This is mainly called by transfer queue processor during the processing of DeleteExecution task.
 	RecordChildExecutionCompleted(ctx context.Context, in *RecordChildExecutionCompletedRequest, opts ...grpc.CallOption) (*RecordChildExecutionCompletedResponse, error)
@@ -290,9 +289,9 @@ func (c *historyServiceClient) ResetStickyTaskQueue(ctx context.Context, in *Res
 	return out, nil
 }
 
-func (c *historyServiceClient) RecordDecisionTaskStarted(ctx context.Context, in *RecordDecisionTaskStartedRequest, opts ...grpc.CallOption) (*RecordDecisionTaskStartedResponse, error) {
-	out := new(RecordDecisionTaskStartedResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RecordDecisionTaskStarted", in, out, opts...)
+func (c *historyServiceClient) RecordWorkflowTaskStarted(ctx context.Context, in *RecordWorkflowTaskStartedRequest, opts ...grpc.CallOption) (*RecordWorkflowTaskStartedResponse, error) {
+	out := new(RecordWorkflowTaskStartedResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RecordWorkflowTaskStarted", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -308,18 +307,18 @@ func (c *historyServiceClient) RecordActivityTaskStarted(ctx context.Context, in
 	return out, nil
 }
 
-func (c *historyServiceClient) RespondDecisionTaskCompleted(ctx context.Context, in *RespondDecisionTaskCompletedRequest, opts ...grpc.CallOption) (*RespondDecisionTaskCompletedResponse, error) {
-	out := new(RespondDecisionTaskCompletedResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RespondDecisionTaskCompleted", in, out, opts...)
+func (c *historyServiceClient) RespondWorkflowTaskCompleted(ctx context.Context, in *RespondWorkflowTaskCompletedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskCompletedResponse, error) {
+	out := new(RespondWorkflowTaskCompletedResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *historyServiceClient) RespondDecisionTaskFailed(ctx context.Context, in *RespondDecisionTaskFailedRequest, opts ...grpc.CallOption) (*RespondDecisionTaskFailedResponse, error) {
-	out := new(RespondDecisionTaskFailedResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RespondDecisionTaskFailed", in, out, opts...)
+func (c *historyServiceClient) RespondWorkflowTaskFailed(ctx context.Context, in *RespondWorkflowTaskFailedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskFailedResponse, error) {
+	out := new(RespondWorkflowTaskFailedResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskFailed", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -416,9 +415,9 @@ func (c *historyServiceClient) RequestCancelWorkflowExecution(ctx context.Contex
 	return out, nil
 }
 
-func (c *historyServiceClient) ScheduleDecisionTask(ctx context.Context, in *ScheduleDecisionTaskRequest, opts ...grpc.CallOption) (*ScheduleDecisionTaskResponse, error) {
-	out := new(ScheduleDecisionTaskResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/ScheduleDecisionTask", in, out, opts...)
+func (c *historyServiceClient) ScheduleWorkflowTask(ctx context.Context, in *ScheduleWorkflowTaskRequest, opts ...grpc.CallOption) (*ScheduleWorkflowTaskResponse, error) {
+	out := new(ScheduleWorkflowTaskResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.historyservice.v1.HistoryService/ScheduleWorkflowTask", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +598,7 @@ func (c *historyServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Ref
 // HistoryServiceServer is the server API for HistoryService service.
 type HistoryServiceServer interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 	// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(context.Context, *StartWorkflowExecutionRequest) (*StartWorkflowExecutionResponse, error)
@@ -619,56 +618,56 @@ type HistoryServiceServer interface {
 	// 4. ClientFeatureVersion
 	// 5. ClientImpl
 	ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error)
-	// RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-	// a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
-	RecordDecisionTaskStarted(context.Context, *RecordDecisionTaskStartedRequest) (*RecordDecisionTaskStartedResponse, error)
-	// RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-	// a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+	RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponse, error)
+	// RecordActivityTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(context.Context, *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
-	// RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of
-	// 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
-	// for completing the DecisionTask.
-	RespondDecisionTaskCompleted(context.Context, *RespondDecisionTaskCompletedRequest) (*RespondDecisionTaskCompletedResponse, error)
-	// RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
-	// DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-	// either clear sticky task queue or report ny panics during DecisionTask processing.
-	RespondDecisionTaskFailed(context.Context, *RespondDecisionTaskFailedRequest) (*RespondDecisionTaskFailedResponse, error)
+	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
+	// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
+	// for completing the WorkflowTask.
+	RespondWorkflowTaskCompleted(context.Context, *RespondWorkflowTaskCompletedRequest) (*RespondWorkflowTaskCompletedResponse, error)
+	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
+	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
+	// either clear sticky task queue or report ny panics during WorkflowTask processing.
+	RespondWorkflowTaskFailed(context.Context, *RespondWorkflowTaskFailedRequest) (*RespondWorkflowTaskFailedResponse, error)
 	// RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
 	// to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
 	// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will
 	// fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for heartbeating.
+	// PollActivityTaskQueue API call for heartbeating.
 	RecordActivityTaskHeartbeat(context.Context, *RecordActivityTaskHeartbeatRequest) (*RecordActivityTaskHeartbeatResponse, error)
 	// RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
-	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCompleted(context.Context, *RespondActivityTaskCompletedRequest) (*RespondActivityTaskCompletedResponse, error)
 	// RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
-	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskFailed(context.Context, *RespondActivityTaskFailedRequest) (*RespondActivityTaskFailedResponse, error)
 	// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
-	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(context.Context, *RespondActivityTaskCanceledRequest) (*RespondActivityTaskCanceledResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-	// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(context.Context, *SignalWorkflowExecutionRequest) (*SignalWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
 	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-	// and a decision task being created for the execution.
+	// and a workflow task being created for the execution.
 	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdResuePolicy,
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
@@ -684,15 +683,15 @@ type HistoryServiceServer interface {
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
-	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
+	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 	// anymore due to completion or doesn't exist.
 	RequestCancelWorkflowExecution(context.Context, *RequestCancelWorkflowExecutionRequest) (*RequestCancelWorkflowExecutionResponse, error)
-	// ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+	// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
 	// used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
-	// child execution without creating the decision task and then calls this API after updating the mutable state of
+	// child execution without creating the workflow task and then calls this API after updating the mutable state of
 	// parent execution.
-	ScheduleDecisionTask(context.Context, *ScheduleDecisionTaskRequest) (*ScheduleDecisionTaskResponse, error)
+	ScheduleWorkflowTask(context.Context, *ScheduleWorkflowTaskRequest) (*ScheduleWorkflowTaskResponse, error)
 	// RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 	// This is mainly called by transfer queue processor during the processing of DeleteExecution task.
 	RecordChildExecutionCompleted(context.Context, *RecordChildExecutionCompletedRequest) (*RecordChildExecutionCompletedResponse, error)
@@ -747,17 +746,17 @@ func (*UnimplementedHistoryServiceServer) PollMutableState(ctx context.Context, 
 func (*UnimplementedHistoryServiceServer) ResetStickyTaskQueue(ctx context.Context, req *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetStickyTaskQueue not implemented")
 }
-func (*UnimplementedHistoryServiceServer) RecordDecisionTaskStarted(ctx context.Context, req *RecordDecisionTaskStartedRequest) (*RecordDecisionTaskStartedResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RecordDecisionTaskStarted not implemented")
+func (*UnimplementedHistoryServiceServer) RecordWorkflowTaskStarted(ctx context.Context, req *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecordWorkflowTaskStarted not implemented")
 }
 func (*UnimplementedHistoryServiceServer) RecordActivityTaskStarted(ctx context.Context, req *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordActivityTaskStarted not implemented")
 }
-func (*UnimplementedHistoryServiceServer) RespondDecisionTaskCompleted(ctx context.Context, req *RespondDecisionTaskCompletedRequest) (*RespondDecisionTaskCompletedResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RespondDecisionTaskCompleted not implemented")
+func (*UnimplementedHistoryServiceServer) RespondWorkflowTaskCompleted(ctx context.Context, req *RespondWorkflowTaskCompletedRequest) (*RespondWorkflowTaskCompletedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondWorkflowTaskCompleted not implemented")
 }
-func (*UnimplementedHistoryServiceServer) RespondDecisionTaskFailed(ctx context.Context, req *RespondDecisionTaskFailedRequest) (*RespondDecisionTaskFailedResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RespondDecisionTaskFailed not implemented")
+func (*UnimplementedHistoryServiceServer) RespondWorkflowTaskFailed(ctx context.Context, req *RespondWorkflowTaskFailedRequest) (*RespondWorkflowTaskFailedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondWorkflowTaskFailed not implemented")
 }
 func (*UnimplementedHistoryServiceServer) RecordActivityTaskHeartbeat(ctx context.Context, req *RecordActivityTaskHeartbeatRequest) (*RecordActivityTaskHeartbeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordActivityTaskHeartbeat not implemented")
@@ -789,8 +788,8 @@ func (*UnimplementedHistoryServiceServer) ResetWorkflowExecution(ctx context.Con
 func (*UnimplementedHistoryServiceServer) RequestCancelWorkflowExecution(ctx context.Context, req *RequestCancelWorkflowExecutionRequest) (*RequestCancelWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestCancelWorkflowExecution not implemented")
 }
-func (*UnimplementedHistoryServiceServer) ScheduleDecisionTask(ctx context.Context, req *ScheduleDecisionTaskRequest) (*ScheduleDecisionTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ScheduleDecisionTask not implemented")
+func (*UnimplementedHistoryServiceServer) ScheduleWorkflowTask(ctx context.Context, req *ScheduleWorkflowTaskRequest) (*ScheduleWorkflowTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ScheduleWorkflowTask not implemented")
 }
 func (*UnimplementedHistoryServiceServer) RecordChildExecutionCompleted(ctx context.Context, req *RecordChildExecutionCompletedRequest) (*RecordChildExecutionCompletedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordChildExecutionCompleted not implemented")
@@ -926,20 +925,20 @@ func _HistoryService_ResetStickyTaskQueue_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_RecordDecisionTaskStarted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RecordDecisionTaskStartedRequest)
+func _HistoryService_RecordWorkflowTaskStarted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordWorkflowTaskStartedRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).RecordDecisionTaskStarted(ctx, in)
+		return srv.(HistoryServiceServer).RecordWorkflowTaskStarted(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RecordDecisionTaskStarted",
+		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RecordWorkflowTaskStarted",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).RecordDecisionTaskStarted(ctx, req.(*RecordDecisionTaskStartedRequest))
+		return srv.(HistoryServiceServer).RecordWorkflowTaskStarted(ctx, req.(*RecordWorkflowTaskStartedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -962,38 +961,38 @@ func _HistoryService_RecordActivityTaskStarted_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_RespondDecisionTaskCompleted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RespondDecisionTaskCompletedRequest)
+func _HistoryService_RespondWorkflowTaskCompleted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondWorkflowTaskCompletedRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).RespondDecisionTaskCompleted(ctx, in)
+		return srv.(HistoryServiceServer).RespondWorkflowTaskCompleted(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondDecisionTaskCompleted",
+		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).RespondDecisionTaskCompleted(ctx, req.(*RespondDecisionTaskCompletedRequest))
+		return srv.(HistoryServiceServer).RespondWorkflowTaskCompleted(ctx, req.(*RespondWorkflowTaskCompletedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_RespondDecisionTaskFailed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RespondDecisionTaskFailedRequest)
+func _HistoryService_RespondWorkflowTaskFailed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondWorkflowTaskFailedRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).RespondDecisionTaskFailed(ctx, in)
+		return srv.(HistoryServiceServer).RespondWorkflowTaskFailed(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondDecisionTaskFailed",
+		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskFailed",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).RespondDecisionTaskFailed(ctx, req.(*RespondDecisionTaskFailedRequest))
+		return srv.(HistoryServiceServer).RespondWorkflowTaskFailed(ctx, req.(*RespondWorkflowTaskFailedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1178,20 +1177,20 @@ func _HistoryService_RequestCancelWorkflowExecution_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_ScheduleDecisionTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ScheduleDecisionTaskRequest)
+func _HistoryService_ScheduleWorkflowTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScheduleWorkflowTaskRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).ScheduleDecisionTask(ctx, in)
+		return srv.(HistoryServiceServer).ScheduleWorkflowTask(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/ScheduleDecisionTask",
+		FullMethod: "/temporal.server.api.historyservice.v1.HistoryService/ScheduleWorkflowTask",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).ScheduleDecisionTask(ctx, req.(*ScheduleDecisionTaskRequest))
+		return srv.(HistoryServiceServer).ScheduleWorkflowTask(ctx, req.(*ScheduleWorkflowTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1559,20 +1558,20 @@ var _HistoryService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_ResetStickyTaskQueue_Handler,
 		},
 		{
-			MethodName: "RecordDecisionTaskStarted",
-			Handler:    _HistoryService_RecordDecisionTaskStarted_Handler,
+			MethodName: "RecordWorkflowTaskStarted",
+			Handler:    _HistoryService_RecordWorkflowTaskStarted_Handler,
 		},
 		{
 			MethodName: "RecordActivityTaskStarted",
 			Handler:    _HistoryService_RecordActivityTaskStarted_Handler,
 		},
 		{
-			MethodName: "RespondDecisionTaskCompleted",
-			Handler:    _HistoryService_RespondDecisionTaskCompleted_Handler,
+			MethodName: "RespondWorkflowTaskCompleted",
+			Handler:    _HistoryService_RespondWorkflowTaskCompleted_Handler,
 		},
 		{
-			MethodName: "RespondDecisionTaskFailed",
-			Handler:    _HistoryService_RespondDecisionTaskFailed_Handler,
+			MethodName: "RespondWorkflowTaskFailed",
+			Handler:    _HistoryService_RespondWorkflowTaskFailed_Handler,
 		},
 		{
 			MethodName: "RecordActivityTaskHeartbeat",
@@ -1615,8 +1614,8 @@ var _HistoryService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_RequestCancelWorkflowExecution_Handler,
 		},
 		{
-			MethodName: "ScheduleDecisionTask",
-			Handler:    _HistoryService_ScheduleDecisionTask_Handler,
+			MethodName: "ScheduleWorkflowTask",
+			Handler:    _HistoryService_ScheduleWorkflowTask_Handler,
 		},
 		{
 			MethodName: "RecordChildExecutionCompleted",

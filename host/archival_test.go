@@ -336,8 +336,8 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
-			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
@@ -348,7 +348,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessDecisionTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(true, false)
 		s.NoError(err)
 	}
 

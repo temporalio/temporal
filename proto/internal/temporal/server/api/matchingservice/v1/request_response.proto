@@ -34,14 +34,14 @@ import "temporal/server/api/history/v1/message.proto";
 // TODO: remove this dependency
 import "temporal/api/workflowservice/v1/request_response.proto";
 
-message PollForDecisionTaskRequest {
+message PollWorkflowTaskQueueRequest {
     string namespace_id = 1;
     string poller_id = 2;
-    temporal.api.workflowservice.v1.PollForDecisionTaskRequest poll_request = 3;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
     string forwarded_from = 4;
 }
 
-message PollForDecisionTaskResponse {
+message PollWorkflowTaskQueueResponse {
     bytes task_token = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     temporal.api.common.v1.WorkflowType workflow_type = 3;
@@ -61,14 +61,14 @@ message PollForDecisionTaskResponse {
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
 }
 
-message PollForActivityTaskRequest {
+message PollActivityTaskQueueRequest {
     string namespace_id = 1;
     string poller_id = 2;
-    temporal.api.workflowservice.v1.PollForActivityTaskRequest poll_request = 3;
+    temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
     string forwarded_from = 4;
 }
 
-message PollForActivityTaskResponse {
+message PollActivityTaskQueueResponse {
     bytes task_token = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     string activity_id = 3;
@@ -87,7 +87,7 @@ message PollForActivityTaskResponse {
     temporal.api.common.v1.Header header = 16;
 }
 
-message AddDecisionTaskRequest {
+message AddWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
@@ -97,7 +97,7 @@ message AddDecisionTaskRequest {
     temporal.server.api.enums.v1.TaskSource source = 7;
 }
 
-message AddDecisionTaskResponse {
+message AddWorkflowTaskResponse {
 }
 
 message AddActivityTaskRequest {
@@ -163,5 +163,5 @@ message ListTaskQueuePartitionsRequest {
 
 message ListTaskQueuePartitionsResponse {
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
-    repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata decision_task_queue_partitions = 2;
+    repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata workflow_task_queue_partitions = 2;
 }

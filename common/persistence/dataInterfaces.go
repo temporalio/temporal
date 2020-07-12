@@ -306,8 +306,8 @@ type (
 		Version             int64
 	}
 
-	// DecisionTask identifies a transfer task for decision
-	DecisionTask struct {
+	// WorkflowTask identifies a transfer task for decision
+	WorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string
@@ -432,7 +432,7 @@ type (
 		Attempt             int32
 	}
 
-	// WorkflowBackoffTimerTask to schedule first decision task for retried workflow
+	// WorkflowBackoffTimerTask to schedule first workflow task for retried workflow
 	WorkflowBackoffTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -1545,28 +1545,28 @@ func (a *ActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
-// GetType returns the type of the decision task
-func (d *DecisionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK
+// GetType returns the type of the workflow task
+func (d *WorkflowTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
 }
 
-// GetVersion returns the version of the decision task
-func (d *DecisionTask) GetVersion() int64 {
+// GetVersion returns the version of the workflow task
+func (d *WorkflowTask) GetVersion() int64 {
 	return d.Version
 }
 
-// SetVersion returns the version of the decision task
-func (d *DecisionTask) SetVersion(version int64) {
+// SetVersion returns the version of the workflow task
+func (d *WorkflowTask) SetVersion(version int64) {
 	d.Version = version
 }
 
-// GetTaskID returns the sequence ID of the decision task.
-func (d *DecisionTask) GetTaskID() int64 {
+// GetTaskID returns the sequence ID of the workflow task.
+func (d *WorkflowTask) GetTaskID() int64 {
 	return d.TaskID
 }
 
-// SetTaskID sets the sequence ID of the decision task
-func (d *DecisionTask) SetTaskID(id int64) {
+// SetTaskID sets the sequence ID of the workflow task
+func (d *WorkflowTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
@@ -1576,12 +1576,12 @@ func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (d *DecisionTask) GetVisibilityTimestamp() time.Time {
+func (d *WorkflowTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp set the visibility timestamp
-func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
+func (d *WorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 	d.VisibilityTimestamp = timestamp
 }
 

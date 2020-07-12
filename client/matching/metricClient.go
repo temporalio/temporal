@@ -74,77 +74,77 @@ func (c *metricClient) AddActivityTask(
 	return resp, err
 }
 
-func (c *metricClient) AddDecisionTask(
+func (c *metricClient) AddWorkflowTask(
 	ctx context.Context,
-	request *matchingservice.AddDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientLatency)
 
 	c.emitForwardedFromStats(
-		metrics.MatchingClientAddDecisionTaskScope,
+		metrics.MatchingClientAddWorkflowTaskScope,
 		request.GetForwardedFrom(),
 		request.TaskQueue,
 	)
 
-	resp, err := c.client.AddDecisionTask(ctx, request, opts...)
+	resp, err := c.client.AddWorkflowTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) PollForActivityTask(
+func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
 		c.emitForwardedFromStats(
-			metrics.MatchingClientPollForActivityTaskScope,
+			metrics.MatchingClientPollActivityTaskQueueScope,
 			request.GetForwardedFrom(),
 			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollForActivityTask(ctx, request, opts...)
+	resp, err := c.client.PollActivityTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
 }
 
-func (c *metricClient) PollForDecisionTask(
+func (c *metricClient) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
 		c.emitForwardedFromStats(
-			metrics.MatchingClientPollForDecisionTaskScope,
+			metrics.MatchingClientPollWorkflowTaskQueueScope,
 			request.GetForwardedFrom(),
 			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollForDecisionTask(ctx, request, opts...)
+	resp, err := c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientFailures)
 	}
 
 	return resp, err
