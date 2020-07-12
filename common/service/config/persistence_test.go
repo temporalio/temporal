@@ -25,179 +25,163 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/gocql/gocql"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestCassandraStoreConsistencyValidation(t *testing.T) {
-	defaultSettings := &CassandraConsistencySettings{
-		Consistency:       "LOCAL_QUORUM",
-		SerialConsistency: "LOCAL_SERIAL",
-	}
-
-	overrideSettings := &CassandraConsistencySettings{
-		Consistency:       "ALL",
-		SerialConsistency: "SERIAL",
-	}
-
+func TestCassandraStoreConsistency_GetConsistency(t *testing.T) {
 	tests := []struct {
 		name      string
-		cassandra *Cassandra
-		want      *CassandraStoreConsistency
-		wantErr   bool
+		input     *CassandraStoreConsistency
+		storeType StoreType
+		want      gocql.Consistency
 	}{
 		{
-			name:      "Consistency field completely unset",
-			cassandra: &Cassandra{},
-			want: &CassandraStoreConsistency{
-				Default:           defaultSettings,
-				Execution:         defaultSettings,
-				History:           defaultSettings,
-				Visibility:        defaultSettings,
-				NamespaceMetadata: defaultSettings,
-				ClusterMetadata:   defaultSettings,
-				Shard:             defaultSettings,
-				Task:              defaultSettings,
-				Queue:             defaultSettings,
-			},
-			wantErr: false,
+			name:      "Nil Consistency Settings",
+			input:     nil,
+			storeType: HistoryStoreType,
+			want:      gocql.LocalQuorum,
 		},
 		{
-			name: "Consistency field partially set",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Execution: &CassandraConsistencySettings{},
-				},
-			},
-			want: &CassandraStoreConsistency{
-				Default:           defaultSettings,
-				Execution:         defaultSettings,
-				History:           defaultSettings,
-				Visibility:        defaultSettings,
-				NamespaceMetadata: defaultSettings,
-				ClusterMetadata:   defaultSettings,
-				Shard:             defaultSettings,
-				Task:              defaultSettings,
-				Queue:             defaultSettings,
-			},
-			wantErr: false,
+			name:      "Empty Consistency Settings",
+			input:     &CassandraStoreConsistency{},
+			storeType: ExecutionStoreType,
+			want:      gocql.LocalQuorum,
 		},
 		{
-			name: "Override set on Queue store without explicit default",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Queue: overrideSettings,
-				},
+			name: "Empty Default Settings",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{},
 			},
-			want: &CassandraStoreConsistency{
-				Default:           defaultSettings,
-				Execution:         defaultSettings,
-				History:           defaultSettings,
-				Visibility:        defaultSettings,
-				NamespaceMetadata: defaultSettings,
-				ClusterMetadata:   defaultSettings,
-				Shard:             defaultSettings,
-				Task:              defaultSettings,
-				Queue:             overrideSettings,
-			},
-			wantErr: false,
+			storeType: ShardStoreType,
+			want:      gocql.LocalQuorum,
 		},
 		{
-			name: "Override set on History store with explicit default",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Default: defaultSettings,
-					History: overrideSettings,
+			name: "Default Override",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					Consistency: "All",
 				},
 			},
-			want: &CassandraStoreConsistency{
-				Default:           defaultSettings,
-				Execution:         defaultSettings,
-				History:           overrideSettings,
-				Visibility:        defaultSettings,
-				NamespaceMetadata: defaultSettings,
-				ClusterMetadata:   defaultSettings,
-				Shard:             defaultSettings,
-				Task:              defaultSettings,
-				Queue:             defaultSettings,
-			},
-			wantErr: false,
+			storeType: TaskStoreType,
+			want:      gocql.All,
 		},
 		{
-			name: "Override on default applies to all stores",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Default: overrideSettings,
+			name: "Specific Store Override",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					Consistency: "All",
+				},
+				NamespaceMetadata: &CassandraConsistencySettings{
+					Consistency: "LocaL_OnE",
 				},
 			},
-			want: &CassandraStoreConsistency{
-				Default:           overrideSettings,
-				Execution:         overrideSettings,
-				History:           overrideSettings,
-				Visibility:        overrideSettings,
-				NamespaceMetadata: overrideSettings,
-				ClusterMetadata:   overrideSettings,
-				Shard:             overrideSettings,
-				Task:              overrideSettings,
-				Queue:             overrideSettings,
-			},
-			wantErr: false,
-		},
-		{
-			name: "Bad default",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Default: &CassandraConsistencySettings{
-						Consistency:       "BAD_VALUE",
-						SerialConsistency: "LOCAL_SERIAL",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "Bad override",
-			cassandra: &Cassandra{
-				Consistency: &CassandraStoreConsistency{
-					Queue: &CassandraConsistencySettings{
-						Consistency:       "BAD_VALUE",
-						SerialConsistency: "LOCAL_SERIAL",
-					},
-				},
-			},
-			wantErr: true,
+			storeType: NamespaceMetadataStoreType,
+			want:      gocql.LocalOne,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := tt.cassandra
-			if err := c.validate(); (err != nil) != tt.wantErr {
-				t.Errorf("Cassandra.validate() error = %v, wantErr %v", err, tt.wantErr)
-			} else if !tt.wantErr {
-				assert.Equal(t, tt.want, c.Consistency)
+			c := tt.input
+			if got := c.GetConsistency(tt.storeType); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CassandraStoreConsistency.GetConsistency() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestCassandraConsistencySettingsValidation(t *testing.T) {
+func TestCassandraStoreConsistency_GetSerialConsistency(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     *CassandraStoreConsistency
+		storeType StoreType
+		want      gocql.SerialConsistency
+	}{
+		{
+			name:      "Nil Consistency Settings",
+			input:     nil,
+			storeType: HistoryStoreType,
+			want:      gocql.LocalSerial,
+		},
+		{
+			name:      "Empty Consistency Settings",
+			input:     &CassandraStoreConsistency{},
+			storeType: ExecutionStoreType,
+			want:      gocql.LocalSerial,
+		},
+		{
+			name: "Empty Default Settings",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{},
+			},
+			storeType: ShardStoreType,
+			want:      gocql.LocalSerial,
+		},
+		{
+			name: "Default Override",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					SerialConsistency: "serial",
+				},
+			},
+			storeType: TaskStoreType,
+			want:      gocql.Serial,
+		},
+		{
+			name: "Specific Store Override",
+			input: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					SerialConsistency: "Serial",
+				},
+				NamespaceMetadata: &CassandraConsistencySettings{
+					SerialConsistency: "LocaL_SeRiAl",
+				},
+			},
+			storeType: NamespaceMetadataStoreType,
+			want:      gocql.LocalSerial,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := tt.input
+			if got := c.GetSerialConsistency(tt.storeType); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CassandraStoreConsistency.GetSerialConsistency() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCassandraConsistencySettings_validate(t *testing.T) {
 	tests := []struct {
 		name     string
 		settings *CassandraConsistencySettings
 		wantErr  bool
 	}{
 		{
-			name: "valid values",
+			name:     "nil settings",
+			settings: nil,
+			wantErr:  false,
+		},
+		{
+			name: "empty fields",
 			settings: &CassandraConsistencySettings{
-				Consistency:       "locAl_quOruM",
+				Consistency:       "",
+				SerialConsistency: "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "happy path",
+			settings: &CassandraConsistencySettings{
+				Consistency:       "Local_Quorum",
 				SerialConsistency: "lOcal_sErial",
 			},
 			wantErr: false,
 		},
 		{
-			name: "invalid consistency",
+			name: "bad consistency",
 			settings: &CassandraConsistencySettings{
 				Consistency:       "bad_value",
 				SerialConsistency: "local_serial",
@@ -205,18 +189,10 @@ func TestCassandraConsistencySettingsValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid serial consistency",
+			name: "bad serial consistency",
 			settings: &CassandraConsistencySettings{
 				Consistency:       "local_quorum",
 				SerialConsistency: "bad_value",
-			},
-			wantErr: true,
-		},
-		{
-			name: "both not set",
-			settings: &CassandraConsistencySettings{
-				Consistency:       "",
-				SerialConsistency: "",
 			},
 			wantErr: true,
 		},
@@ -231,27 +207,78 @@ func TestCassandraConsistencySettingsValidation(t *testing.T) {
 	}
 }
 
-func TestCassandraConsistencySettingsGetters(t *testing.T) {
+func TestCassandraStoreConsistency_validate(t *testing.T) {
 	tests := []struct {
-		name                  string
-		settings              *CassandraConsistencySettings
-		wantConsistency       gocql.Consistency
-		wantSerialConsistency gocql.SerialConsistency
+		name     string
+		settings *CassandraStoreConsistency
+		wantErr  bool
 	}{
 		{
-			name: "Tests getters for consistency settings",
-			settings: &CassandraConsistencySettings{
-				Consistency:       "LOCAL_ONE",
-				SerialConsistency: "LOCAL_SERIAL",
+			name:     "nil settings",
+			settings: nil,
+			wantErr:  false,
+		},
+		{
+			name:     "empty settings",
+			settings: &CassandraStoreConsistency{},
+			wantErr:  false,
+		},
+		{
+			name: "empty default settings",
+			settings: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{},
 			},
-			wantConsistency:       gocql.LocalOne,
-			wantSerialConsistency: gocql.LocalSerial,
+			wantErr: false,
+		},
+		{
+			name: "good default settings",
+			settings: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					Consistency: "one",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "good override settings",
+			settings: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					SerialConsistency: "serial",
+				},
+				Execution: &CassandraConsistencySettings{
+					Consistency: "two",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "bad default settings",
+			settings: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					Consistency: "fake_value",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "bad override settings",
+			settings: &CassandraStoreConsistency{
+				Default: &CassandraConsistencySettings{
+					Consistency: "all",
+				},
+				Visibility: &CassandraConsistencySettings{
+					SerialConsistency: "bad_value",
+				},
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantConsistency, tt.settings.GetConsistency())
-			assert.Equal(t, tt.wantSerialConsistency, tt.settings.GetSerialConsistency())
+			c := tt.settings
+			if err := c.validate(); (err != nil) != tt.wantErr {
+				t.Errorf("CassandraStoreConsistency.validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }

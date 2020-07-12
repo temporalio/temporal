@@ -81,8 +81,8 @@ type (
 func NewVisibilityPersistenceV2(persistence p.VisibilityStore, cfg *config.Cassandra, logger log.Logger) (p.VisibilityStore, error) {
 	cluster := cassandra.NewCassandraCluster(*cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.Visibility.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.Visibility.GetSerialConsistency()
+	cluster.Consistency = cfg.Consistency.GetConsistency(config.VisibilityStoreType)
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.VisibilityStoreType)
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()

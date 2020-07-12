@@ -726,8 +726,8 @@ var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Logger) (p.ShardStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.Shard.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.Shard.GetSerialConsistency()
+	cluster.Consistency = cfg.Consistency.GetConsistency(config.ShardStoreType)
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.ShardStoreType)
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -755,8 +755,8 @@ func NewWorkflowExecutionPersistence(
 func newTaskPersistence(cfg config.Cassandra, logger log.Logger) (p.TaskStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.Task.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.Task.GetSerialConsistency()
+	cluster.Consistency = cfg.Consistency.GetConsistency(config.TaskStoreType)
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.TaskStoreType)
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {

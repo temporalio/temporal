@@ -103,8 +103,8 @@ type (
 func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, logger log.Logger) (p.MetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.NamespaceMetadata.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.NamespaceMetadata.GetSerialConsistency()
+	cluster.Consistency = cfg.Consistency.GetConsistency(config.NamespaceMetadataStoreType)
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.NamespaceMetadataStoreType)
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()

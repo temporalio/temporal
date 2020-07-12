@@ -174,7 +174,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
-	pConfig.Validate()
 
 	temporalParams := &TemporalParams{
 		ClusterMetadata:                  clusterMetadata,

@@ -80,8 +80,8 @@ func newQueue(
 ) (persistence.Queue, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.Queue.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.Queue.GetSerialConsistency()
+	cluster.Consistency = cfg.Consistency.GetConsistency(config.QueueStoreType)
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.QueueStoreType)
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
