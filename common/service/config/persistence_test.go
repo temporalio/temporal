@@ -32,6 +32,8 @@ import (
 )
 
 func TestCassandraStoreConsistency_GetConsistency(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     *CassandraStoreConsistency
@@ -93,6 +95,8 @@ func TestCassandraStoreConsistency_GetConsistency(t *testing.T) {
 }
 
 func TestCassandraStoreConsistency_GetSerialConsistency(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     *CassandraStoreConsistency
@@ -154,6 +158,8 @@ func TestCassandraStoreConsistency_GetSerialConsistency(t *testing.T) {
 }
 
 func TestCassandraConsistencySettings_validate(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		settings *CassandraConsistencySettings
@@ -208,6 +214,8 @@ func TestCassandraConsistencySettings_validate(t *testing.T) {
 }
 
 func TestCassandraStoreConsistency_validate(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		settings *CassandraStoreConsistency
@@ -278,6 +286,95 @@ func TestCassandraStoreConsistency_validate(t *testing.T) {
 			c := tt.settings
 			if err := c.validate(); (err != nil) != tt.wantErr {
 				t.Errorf("CassandraStoreConsistency.validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCassandraStoreConsistency_getConsistencySettings(t *testing.T) {
+	t.Parallel()
+
+	overrideSettings := &CassandraConsistencySettings{
+		Consistency:       "ALL",
+		SerialConsistency: "SERIAL",
+	}
+
+	tests := []struct {
+		name      string
+		settings  *CassandraStoreConsistency
+		storeType StoreType
+		want      *CassandraConsistencySettings
+	}{
+		{
+			name: "History Store override",
+			settings: &CassandraStoreConsistency{
+				History: overrideSettings,
+			},
+			storeType: HistoryStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Task Store override",
+			settings: &CassandraStoreConsistency{
+				Task: overrideSettings,
+			},
+			storeType: TaskStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Execution Store override",
+			settings: &CassandraStoreConsistency{
+				Execution: overrideSettings,
+			},
+			storeType: ExecutionStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Shard Store override",
+			settings: &CassandraStoreConsistency{
+				Shard: overrideSettings,
+			},
+			storeType: ShardStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Visibility Store override",
+			settings: &CassandraStoreConsistency{
+				Visibility: overrideSettings,
+			},
+			storeType: VisibilityStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Namespace Metadata Store override",
+			settings: &CassandraStoreConsistency{
+				NamespaceMetadata: overrideSettings,
+			},
+			storeType: NamespaceMetadataStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Cluster Metadata Store override",
+			settings: &CassandraStoreConsistency{
+				ClusterMetadata: overrideSettings,
+			},
+			storeType: ClusterMetadataStoreType,
+			want:      overrideSettings,
+		},
+		{
+			name: "Queue Store override",
+			settings: &CassandraStoreConsistency{
+				Queue: overrideSettings,
+			},
+			storeType: QueueStoreType,
+			want:      overrideSettings,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := tt.settings
+			if got := c.getConsistencySettings(tt.storeType); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CassandraStoreConsistency.getConsistencySettings() = %v, want %v", got, tt.want)
 			}
 		})
 	}
