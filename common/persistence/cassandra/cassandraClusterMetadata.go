@@ -85,7 +85,7 @@ type (
 
 var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 
-// newMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
+// newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion

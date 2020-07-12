@@ -79,7 +79,7 @@ func NewHistoryV2PersistenceFromSession(
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
 
-// newHistoryPersistence is used to create an instance of HistoryManager implementation
+// newHistoryV2Persistence is used to create an instance of HistoryManager implementation
 func newHistoryV2Persistence(
 	cfg config.Cassandra,
 	logger log.Logger,

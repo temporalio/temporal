@@ -238,6 +238,39 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
+		// Consistency (defaults to LocalQuorum && LOCAL_SERIAL if not set)
+		Consistency *CassandraStoreConsistency `yaml:"consistency"`
+	}
+
+	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal
+	CassandraStoreConsistency struct {
+		// Default defines the consistency level for ALL stores. Each store can be overwritten with the respective setting below.
+		Default *CassandraConsistencySettings `yaml:"default"`
+		// ClusterMetadata sets the consistency level for metadata store queries.
+		ClusterMetadata *CassandraConsistencySettings `yaml:"clusterMetadata"`
+		// History sets the consistency level for history store queries.
+		History *CassandraConsistencySettings `yaml:"history"`
+		// NamespaceMetadata sets the consistency level for namespace metadata queries to Cassandra.
+		NamespaceMetadata *CassandraConsistencySettings `yaml:"namespaceMetadata"`
+		// Shard sets the consistency level for shard manager queries to Cassandra.
+		Shard *CassandraConsistencySettings `yaml:"shard"`
+		// Task sets the consistency level for task queries to Cassandra.
+		Task *CassandraConsistencySettings `yaml:"task"`
+		// Queue sets the consistency level for queue queries to Cassandra.
+		Queue *CassandraConsistencySettings `yaml:"queue"`
+		// Visibility sets the consistency level for visibility queries to Cassandra.
+		Visibility *CassandraConsistencySettings `yaml:"visibility"`
+		// Execution sets the consistency level for execution store queries to Cassandra.
+		Execution *CassandraConsistencySettings `yaml:"execution"`
+	}
+
+	// CassandraConsistencySettings sets the default consistency level for regular & serial queries to Cassandra.
+	CassandraConsistencySettings struct {
+		// Consistency sets the default consistency level. Values identical to gcql Consistency values. (default: LOCALQUORUM).
+		Consistency string `yaml:"consistency"`
+
+		// SerialConsistency sets the consistency for the serial prtion of queries. Values identical to gocql SerialConsistency values. (default: LOCAL_SERIAL)
+		SerialConsistency string `yaml:"serialconsistency"`
 	}
 
 	// SQL is the configuration for connecting to a SQL backed datastore

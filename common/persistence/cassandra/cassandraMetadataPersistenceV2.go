@@ -99,7 +99,7 @@ type (
 	}
 )
 
-// newMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
+// newMetadataPersistenceV2 is used to create an instance of the Namespace MetadataStore implementation
 func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, logger log.Logger) (p.MetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
