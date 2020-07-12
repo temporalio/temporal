@@ -111,7 +111,7 @@ func (c *CassandraStoreConsistency) validate() error {
 		*s = ensure(*s, c.Default)
 
 		if err := (*s).validate(); err != nil {
-			return fmt.Errorf("bad consistency settings for %+v. error: %v", c, err)
+			return err
 		}
 	}
 
