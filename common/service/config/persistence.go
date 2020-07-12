@@ -84,7 +84,7 @@ func (c *CassandraConsistencySettings) GetConsistency() gocql.Consistency {
 
 // GetSerialConsistency returns the gosql.SerialConsistency setting from the configuration for the store
 func (c *CassandraConsistencySettings) GetSerialConsistency() gocql.SerialConsistency {
-	// We ignore the error field as configuration was already validated
+	// We ignore the error return value as configuration must be already validated
 	res, _ := parseSerialConsistency(c.SerialConsistency)
 	return res
 }
@@ -166,8 +166,5 @@ func (c *CassandraConsistencySettings) validate() error {
 func parseSerialConsistency(serialConsistency string) (gocql.SerialConsistency, error) {
 	var s gocql.SerialConsistency
 	err := s.UnmarshalText([]byte(strings.ToUpper(serialConsistency)))
-	if err != nil {
-		err = fmt.Errorf("bad cassandra serial consistency: %v", err)
-	}
 	return s, err
 }
