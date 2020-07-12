@@ -238,13 +238,14 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
-		// Consistency (defaults to LocalQuorum && LOCAL_SERIAL if not set)
+		// Consistency configuration (defaults to LOCAL_QUORUM && LOCAL_SERIAL for all stores if this not set)
 		Consistency *CassandraStoreConsistency `yaml:"consistency"`
 	}
 
 	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal
 	CassandraStoreConsistency struct {
-		// Default defines the consistency level for ALL stores. Each store can be overwritten with the respective setting below.
+		// Default defines the consistency level for ALL stores. Each store can be overwritten with optional respective settings below.
+		// Defaults to LOCAL_QUORUM AND LOCAL_SERIAL if not set
 		Default *CassandraConsistencySettings `yaml:"default"`
 		// ClusterMetadata sets the consistency level for metadata store queries.
 		ClusterMetadata *CassandraConsistencySettings `yaml:"clusterMetadata"`
@@ -266,9 +267,8 @@ type (
 
 	// CassandraConsistencySettings sets the default consistency level for regular & serial queries to Cassandra.
 	CassandraConsistencySettings struct {
-		// Consistency sets the default consistency level. Values identical to gcql Consistency values. (default: LOCALQUORUM).
+		// Consistency sets the default consistency level. Values identical to gocql Consistency values. (default: LOCAL_QUORUM).
 		Consistency string `yaml:"consistency"`
-
 		// SerialConsistency sets the consistency for the serial prtion of queries. Values identical to gocql SerialConsistency values. (default: LOCAL_SERIAL)
 		SerialConsistency string `yaml:"serialconsistency"`
 	}

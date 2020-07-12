@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
@@ -89,8 +88,8 @@ var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.ClusterMetadata.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.ClusterMetadata.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()

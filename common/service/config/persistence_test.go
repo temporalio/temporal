@@ -191,8 +191,8 @@ func TestCassandraConsistencySettingsValidation(t *testing.T) {
 		{
 			name: "valid values",
 			settings: &CassandraConsistencySettings{
-				Consistency:       "local_quorum",
-				SerialConsistency: "local_serial",
+				Consistency:       "locAl_quOruM",
+				SerialConsistency: "lOcal_sErial",
 			},
 			wantErr: false,
 		},
