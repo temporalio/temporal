@@ -218,6 +218,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
+		vCfg.Validate()
 		visibilityFactory = client.NewFactory(&vCfg, nil, nil, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
