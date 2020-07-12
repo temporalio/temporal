@@ -1083,7 +1083,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    activity3ID,
@@ -1119,7 +1119,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1183,7 +1183,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedMaxAttemptsExceeded() {
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    "activity1",
@@ -1211,7 +1211,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedMaxAttemptsExceeded() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1263,7 +1263,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 			Result: workflowResult,
@@ -1283,7 +1283,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1343,7 +1343,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 			Failure: failure.NewServerFailure(reason, false),
@@ -1363,7 +1363,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1414,7 +1414,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	taskToken, _ := tt.Marshal()
 
 	// Decision with nil attributes
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 	}}
 
@@ -1432,7 +1432,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1519,7 +1519,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		di := addWorkflowTaskScheduledEvent(msBuilder)
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-		decisions := []*commandpb.Command{{
+		commands := []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 				ActivityId:                    "activity1",
@@ -1547,7 +1547,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			NamespaceId: testNamespaceID,
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: taskToken,
-				Decisions: decisions,
+				Commands:  commands,
 				Identity:  identity,
 			},
 		})
@@ -1610,7 +1610,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	var decisions []*commandpb.Command
+	var commands []*commandpb.Command
 
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
@@ -1625,7 +1625,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 		NamespaceId: namespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken:      taskToken,
-			Decisions:      decisions,
+			Commands:       commands,
 			Identity:       identity,
 			BinaryChecksum: "test-bad-binary",
 		},
@@ -1660,7 +1660,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledDec
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    "activity1",
@@ -1685,7 +1685,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledDec
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1730,7 +1730,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatTimeout(
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
 
-	decisions := []*commandpb.Command{}
+	commands := []*commandpb.Command{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1744,7 +1744,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatTimeout(
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			ForceCreateNewWorkflowTask: true,
 			TaskToken:                  taskToken,
-			Decisions:                  decisions,
+			Commands:                   commands,
 			Identity:                   identity,
 		},
 	})
@@ -1773,7 +1773,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
 
-	decisions := []*commandpb.Command{}
+	commands := []*commandpb.Command{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1787,7 +1787,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			ForceCreateNewWorkflowTask: true,
 			TaskToken:                  taskToken,
-			Decisions:                  decisions,
+			Commands:                   commands,
 			Identity:                   identity,
 		},
 	})
@@ -1816,7 +1816,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
 
-	decisions := []*commandpb.Command{}
+	commands := []*commandpb.Command{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1830,7 +1830,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			ForceCreateNewWorkflowTask: true,
 			TaskToken:                  taskToken,
-			Decisions:                  decisions,
+			Commands:                   commands,
 			Identity:                   identity,
 		},
 	})
@@ -1859,7 +1859,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 			Result: workflowResult,
@@ -1877,7 +1877,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1911,7 +1911,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 			Failure: failure.NewServerFailure(reason, false),
@@ -1929,7 +1929,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -1962,7 +1962,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: testNamespace,
@@ -1986,7 +1986,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -2018,7 +2018,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
 	abandon := enumspb.PARENT_CLOSE_POLICY_ABANDON
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:  testNamespace,
@@ -2041,7 +2041,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -2081,7 +2081,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
 	terminate := enumspb.PARENT_CLOSE_POLICY_TERMINATE
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:  testNamespace,
@@ -2104,7 +2104,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -2145,7 +2145,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: testNamespaceID,
@@ -2162,7 +2162,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Task:        taskToken,
-			Decisions:        decisions,
+			Commands: commands,
 			ExecutionContext: executionContext,
 			Identity:         identity,
 		},
@@ -2193,7 +2193,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: foreignNamespace,
@@ -2218,7 +2218,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -3713,7 +3713,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: activityScheduleID,
@@ -3734,7 +3734,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -3778,7 +3778,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: aInfo.ScheduleID,
@@ -3793,7 +3793,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -3843,7 +3843,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: activityScheduledEvent.GetEventId(),
@@ -3858,7 +3858,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -3901,7 +3901,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	di2 := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{
+	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
@@ -3926,7 +3926,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -3972,7 +3972,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: activityScheduledEvent.GetEventId(),
@@ -3987,7 +3987,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4075,7 +4075,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: activityScheduledEvent.GetEventId(),
@@ -4090,7 +4090,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4177,7 +4177,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 			ScheduledEventId: activityScheduledEvent.GetEventId(),
@@ -4216,7 +4216,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken:    taskToken,
-			Decisions:    decisions,
+			Commands:     commands,
 			Identity:     identity,
 			QueryResults: queryResults,
 		},
@@ -4318,7 +4318,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 		Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 			TimerId:                   timerID,
@@ -4334,7 +4334,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4371,7 +4371,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken2,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4418,7 +4418,7 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 		Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
 			TimerId: timerID,
@@ -4433,7 +4433,7 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4472,7 +4472,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 		Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
 			TimerId: timerID,
@@ -4487,7 +4487,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -4534,7 +4534,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.True(len(gwmsResponse.State.BufferedEvents) > 0)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 		Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
 			TimerId: timerID,
@@ -4553,7 +4553,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: taskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})

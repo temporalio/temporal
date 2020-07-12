@@ -865,7 +865,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerDecision() {
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commandpb.Command{{
+	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 		Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 			MarkerName: markerName,
