@@ -19,6 +19,8 @@ services:
     container_name: temporal-cassandra
     ports:
       - "9042:9042"
+    environment:
+      CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
     networks:
       - temporal-dependencies-network
   postgres:
