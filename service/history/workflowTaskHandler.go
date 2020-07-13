@@ -510,12 +510,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 		handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
 		return nil
 	case *serviceerror.InvalidArgument:
-		_, err = handler.mutableState.AddCancelTimerFailedEvent(
-			handler.workflowTaskCompletedID,
-			attr,
-			handler.identity,
-		)
-		return err
+		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES,
+			err.Error())
 	default:
 		return err
 	}
