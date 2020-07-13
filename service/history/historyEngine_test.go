@@ -1413,7 +1413,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	// Decision with nil attributes
+	// commands with nil attributes
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 	}}
@@ -1440,7 +1440,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 }
 
 // This test unit tests the activity schedule timeout validation logic of HistoryEngine's RespondWorkflowTaskComplete function.
-// An scheduled activity decision has 3 timeouts: ScheduleToClose, ScheduleToStart and StartToClose.
+// A ScheduleActivityTask command and the corresponding ActivityTaskScheduledEvent have 3 timeouts: ScheduleToClose, ScheduleToStart and StartToClose.
 // This test verifies that when either ScheduleToClose or ScheduleToStart and StartToClose are specified,
 // HistoryEngine's validateActivityScheduleAttribute will deduce the missing timeout and fill it in
 // instead of returning a BadRequest error and only when all three are missing should a BadRequest be returned.
@@ -1454,7 +1454,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		expectedScheduleToClose int32
 		expectedScheduleToStart int32
 		expectedStartToClose    int32
-		expectDecisionFail      bool
+		expectWorkflowTaskFail  bool
 	}{
 		// No ScheduleToClose timeout, will use runTimeout
 		{0, 3, 7, 0,
@@ -1535,7 +1535,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 
 		gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
-		if iVar.expectDecisionFail {
+		if iVar.expectWorkflowTaskFail {
 			gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 			s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 		}
@@ -1554,7 +1554,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 
 		s.Nil(err, s.printHistory(msBuilder))
 		executionBuilder := s.getBuilder(testNamespaceID, we)
-		if !iVar.expectDecisionFail {
+		if !iVar.expectWorkflowTaskFail {
 			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
@@ -1638,7 +1638,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledDecision() {
+func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWorkflowTask() {
 
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -1708,7 +1708,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledDec
 	s.Equal(int32(5), activity1Attributes.HeartbeatTimeoutSeconds)
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatTimeout() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTimeout() {
 
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -1748,10 +1748,10 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatTimeout(
 			Identity:                   identity,
 		},
 	})
-	s.Error(err, "decision heartbeat timeout")
+	s.Error(err, "workflow task heartbeat timeout")
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeout() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout() {
 
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -1794,7 +1794,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeo
 	s.Nil(err)
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_DecisionHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
 
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -4607,7 +4607,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	s.Nil(err)
 }
 
-// Test signal decision by adding request ID
+// Test signal workflow task by adding request ID
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
