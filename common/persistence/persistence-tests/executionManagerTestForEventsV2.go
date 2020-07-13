@@ -613,8 +613,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 }
 
 func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskQueue, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
-	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
+	taskQueue, wType string, wTimeout int32, workflowTaskTimeout int32, nextEventID int64,
+	lastProcessedEventID int64, workflowTaskScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
 	var timerTasks []p.Task
@@ -635,7 +635,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
-		ScheduleID:  decisionScheduleID,
+		ScheduleID:  workflowTaskScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -647,12 +647,12 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				TaskQueue:                  taskQueue,
 				WorkflowTypeName:           wType,
 				WorkflowRunTimeout:         wTimeout,
-				WorkflowTaskTimeout:        decisionTimeout,
+				WorkflowTaskTimeout:        workflowTaskTimeout,
 				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
-				WorkflowTaskScheduleID:     decisionScheduleID,
+				WorkflowTaskScheduleID:     workflowTaskScheduleID,
 				WorkflowTaskStartedID:      common.EmptyEventID,
 				CurrentWorkflowTaskTimeout: 1,
 				BranchToken:                brToken,

@@ -236,7 +236,7 @@ var keys = map[Key]string{
 	DefaultWorkflowRunTimeout:                              "history.defaultWorkflowRunTimeout",
 	MaxWorkflowExecutionTimeout:                            "history.maximumWorkflowExecutionTimeout",
 	MaxWorkflowRunTimeout:                                  "history.maximumWorkflowRunTimeout",
-	WorkflowTaskHeartbeatTimeout:                           "history.decisionHeartbeatTimeout",
+	WorkflowTaskHeartbeatTimeout:                           "history.workflowTaskHeartbeatTimeout",
 	DefaultWorkflowTaskTimeout:                             "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                             "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                    "history.numParentClosePolicySystemWorkflows",
@@ -343,7 +343,7 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxWorkflowTaskTimeout  is the maximum allowed decision start to close timeout
+	// MaxWorkflowTaskTimeout  is the maximum allowed workflow task start to close timeout
 	MaxWorkflowTaskTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
@@ -657,7 +657,7 @@ const (
 	HistoryThrottledLogRPS
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	StickyTTL
-	// WorkflowTaskHeartbeatTimeout for decision heartbeat
+	// WorkflowTaskHeartbeatTimeout for workflow task heartbeat
 	WorkflowTaskHeartbeatTimeout
 	// DefaultWorkflowExecutionTimeout for a workflow execution
 	DefaultWorkflowExecutionTimeout
@@ -811,7 +811,7 @@ const (
 	NamespaceID
 	// TaskQueueName is the taskqueue name
 	TaskQueueName
-	// TaskType is the task type (0:Decision, 1:Activity)
+	// TaskType is the task type (0:Workflow, 1:Activity)
 	TaskType
 	// ShardID is the shard id
 	ShardID

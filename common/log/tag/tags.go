@@ -158,7 +158,7 @@ func WorkflowEndingRunID(endingRunID string) Tag {
 
 // WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
 func WorkflowTaskTimeoutSeconds(s int32) Tag {
-	return newInt32("wf-decision-timeout", s)
+	return newInt32("wf-workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
@@ -260,8 +260,8 @@ func WorkflowQueryType(qt string) Tag {
 }
 
 // WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
-func WorkflowTaskFailedCause(decisionFailCause enumspb.WorkflowTaskFailedCause) Tag {
-	return newStringTag("wf-decision-fail-cause", decisionFailCause.String())
+func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCause) Tag {
+	return newStringTag("wf-workflow-task-fail-cause", workflowTaskFailCause.String())
 }
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
@@ -833,9 +833,9 @@ func ActivityInfo(activityInfo interface{}) Tag {
 	return newObjectTag("activity-info", activityInfo)
 }
 
-// WorkflowTaskRequestId returns tag for decision RequestId
+// WorkflowTaskRequestId returns tag for workflow task RequestId
 func WorkflowTaskRequestId(s string) Tag {
-	return newStringTag("decision-request-id", s)
+	return newStringTag("workflow-task-request-id", s)
 }
 
 // AckLevel returns tag for ack level

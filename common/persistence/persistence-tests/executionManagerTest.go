@@ -752,7 +752,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	workflowTaskTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
-	decisionScheduleID := int64(2)
+	workflowTaskScheduleID := int64(2)
 	version := int64(0)
 	replicationState := &p.ReplicationState{
 		StartVersion:     version,
@@ -763,7 +763,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecution, taskqueue,
 		workflowType, workflowTimeout, workflowTaskTimeout, nextEventID,
-		lastProcessedEventID, decisionScheduleID, replicationState, nil)
+		lastProcessedEventID, workflowTaskScheduleID, replicationState, nil)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 

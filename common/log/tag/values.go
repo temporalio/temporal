@@ -41,14 +41,14 @@ var (
 	WorkflowActionWorkflowRecordMarker           = workflowAction("add-workflow-marker-record-event")
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 
-	// decision
+	// workflow task
 	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")
 	WorkflowActionWorkflowTaskStarted   = workflowAction("add-workflowtask-started-event")
 	WorkflowActionWorkflowTaskCompleted = workflowAction("add-workflowtask-completed-event")
 	WorkflowActionWorkflowTaskTimedOut  = workflowAction("add-workflowtask-timedout-event")
 	WorkflowActionWorkflowTaskFailed    = workflowAction("add-workflowtask-failed-event")
 
-	// in memory decision
+	// in memory workflow task
 	WorkflowActionInMemoryWorkflowTaskScheduled = workflowAction("add-in-memory-workflowtask-scheduled")
 	WorkflowActionInMemoryWorkflowTaskStarted   = workflowAction("add-in-memory-workflowtask-started")
 
@@ -149,9 +149,9 @@ var (
 	ErrorTypeHistorySerializationError    = errorType("HistorySerializationError")
 	ErrorTypeHistoryDeserializationError  = errorType("HistoryDeserializationError")
 	ErrorTypeDuplicateTask                = errorType("DuplicateTask")
-	ErrorTypeMultipleCompletionCommands   = errorType("MultipleCompletionDecisions")
+	ErrorTypeMultipleCompletionCommands   = errorType("MultipleCompletionCommands")
 	ErrorTypeDuplicateTransferTask        = errorType("DuplicateTransferTask")
-	ErrorTypeDecisionFailed               = errorType("DecisionFailed")
+	ErrorTypeWorkflowTaskFailed           = errorType("WorkflowTaskFailed")
 	ErrorTypeInvalidMutableStateAction    = errorType("InvalidMutableStateAction")
 	ErrorTypeInvalidMemWorkflowTaskAction = errorType("InvalidMemWorkflowTaskAction")
 )
