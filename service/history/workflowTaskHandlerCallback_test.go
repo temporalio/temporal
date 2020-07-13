@@ -48,7 +48,7 @@ type (
 
 		controller *gomock.Controller
 
-		decisionHandler  *decisionHandlerImpl
+		decisionHandler  *workflowTaskHandlerCallbackImpl
 		queryRegistry    queryRegistry
 		mockMutableState *MockmutableState
 	}
@@ -62,7 +62,7 @@ func (s *DecisionHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.decisionHandler = &decisionHandlerImpl{
+	s.decisionHandler = &workflowTaskHandlerCallbackImpl{
 		versionChecker: headers.NewVersionChecker(),
 		metricsClient:  metrics.NewClient(tally.NoopScope, metrics.History),
 		config:         NewDynamicConfigForTest(),

@@ -53,8 +53,8 @@ import (
 )
 
 type (
-	// decision business logic handler
-	decisionHandler interface {
+	// workflow task business logic handler
+	workflowTaskHandlerCallback interface {
 		handleWorkflowTaskScheduled(context.Context, *historyservice.ScheduleWorkflowTaskRequest) error
 		handleWorkflowTaskStarted(context.Context,
 			*historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error)
@@ -62,10 +62,10 @@ type (
 			*historyservice.RespondWorkflowTaskFailedRequest) error
 		handleWorkflowTaskCompleted(context.Context,
 			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
-		// TODO also include the handle of decision timeout here
+		// TODO also include the handle of workflow task timeout here
 	}
 
-	decisionHandlerImpl struct {
+	workflowTaskHandlerCallbackImpl struct {
 		currentClusterName    string
 		config                *Config
 		shard                 ShardContext
@@ -84,8 +84,8 @@ type (
 	}
 )
 
-func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
-	return &decisionHandlerImpl{
+func newDecisionHandler(historyEngine *historyEngineImpl) *workflowTaskHandlerCallbackImpl {
+	return &workflowTaskHandlerCallbackImpl{
 		currentClusterName: historyEngine.currentClusterName,
 		config:             historyEngine.config,
 		shard:              historyEngine.shard,
@@ -108,7 +108,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 	}
 }
 
-func (handler *decisionHandlerImpl) handleWorkflowTaskScheduled(
+func (handler *workflowTaskHandlerCallbackImpl) handleWorkflowTaskScheduled(
 	ctx context.Context,
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
@@ -150,7 +150,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskScheduled(
 		})
 }
 
-func (handler *decisionHandlerImpl) handleWorkflowTaskStarted(
+func (handler *workflowTaskHandlerCallbackImpl) handleWorkflowTaskStarted(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
@@ -232,7 +232,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskStarted(
 	return resp, nil
 }
 
-func (handler *decisionHandlerImpl) handleWorkflowTaskFailed(
+func (handler *workflowTaskHandlerCallbackImpl) handleWorkflowTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) (retError error) {
@@ -272,7 +272,7 @@ func (handler *decisionHandlerImpl) handleWorkflowTaskFailed(
 		})
 }
 
-func (handler *decisionHandlerImpl) handleWorkflowTaskCompleted(
+func (handler *workflowTaskHandlerCallbackImpl) handleWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (resp *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
@@ -440,9 +440,9 @@ Update_History_Loop:
 			// further refactor should also clean up the vars used below
 			failDecision = workflowTaskHandler.failDecisionInfo
 
-			// failMessage is not used by workflowTaskHandler
+			// failMessage is not used by workflowTaskHandlerCallback
 			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
-			// continueAsNewTimerTasks is not used by workflowTaskHandler
+			// continueAsNewTimerTasks is not used by workflowTaskHandlerCallback
 
 			continueAsNewBuilder = workflowTaskHandler.continueAsNewBuilder
 
@@ -582,7 +582,7 @@ Update_History_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
+func (handler *workflowTaskHandlerCallbackImpl) createRecordWorkflowTaskStartedResponse(
 	namespaceID string,
 	msBuilder mutableState,
 	decision *workflowTaskInfo,
@@ -638,7 +638,7 @@ func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbackImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
