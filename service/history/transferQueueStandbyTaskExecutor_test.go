@@ -446,7 +446,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_FirstDecision() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_FirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -497,7 +497,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_NonFirstDecision() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_NonFirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",

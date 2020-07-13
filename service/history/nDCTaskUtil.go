@@ -90,13 +90,13 @@ func loadMutableStateForTransferTask(
 	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is decision consistently fail
-	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
+	// the exception is workflow task consistently fail
+	// there will be no event generated, thus making the workflow task schedule ID == next event ID
+	isWorkflowTaskRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
 		executionInfo.WorkflowTaskScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.WorkflowTaskAttempt > 0
 
-	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 
@@ -135,13 +135,13 @@ func loadMutableStateForTimerTask(
 	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is decision consistently fail
-	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
+	// the exception is workflow task consistently fail
+	// there will be no event generated, thus making the workflow task schedule ID == next event ID
+	isWorkflowTaskRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
 		executionInfo.WorkflowTaskScheduleID == timerTask.GetEventId() &&
 		executionInfo.WorkflowTaskAttempt > 0
 
-	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 

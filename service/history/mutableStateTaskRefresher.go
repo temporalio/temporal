@@ -104,7 +104,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(
 		return err
 	}
 
-	if err := r.refreshTasksForDecision(
+	if err := r.refreshWorkflowTaskTasks(
 		now,
 		mutableState,
 		taskGenerator,
@@ -236,7 +236,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	return nil
 }
 
-func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
+func (r *mutableStateTaskRefresherImpl) refreshWorkflowTaskTasks(
 	now time.Time,
 	mutableState mutableState,
 	taskGenerator mutableStateTaskGenerator,

@@ -156,8 +156,8 @@ func WorkflowEndingRunID(endingRunID string) Tag {
 	return newStringTag("wf-ending-run-id", endingRunID)
 }
 
-// WorkflowDecisionTimeoutSeconds returns tag for WorkflowDecisionTimeoutSeconds
-func WorkflowDecisionTimeoutSeconds(s int32) Tag {
+// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+func WorkflowTaskTimeoutSeconds(s int32) Tag {
 	return newInt32("wf-decision-timeout", s)
 }
 
@@ -833,8 +833,8 @@ func ActivityInfo(activityInfo interface{}) Tag {
 	return newObjectTag("activity-info", activityInfo)
 }
 
-// DecisionRequestId returns tag for decision RequestId
-func DecisionRequestId(s string) Tag {
+// WorkflowTaskRequestId returns tag for decision RequestId
+func WorkflowTaskRequestId(s string) Tag {
 	return newStringTag("decision-request-id", s)
 }
 

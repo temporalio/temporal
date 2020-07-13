@@ -4329,7 +4329,7 @@ func (e *mutableStateBuilder) canReplicateEvents() bool {
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
 // NOTE: do not apply this check on every batch, since transient
-// decision && workflow finish will be broken (the first batch)
+// workflow task && workflow finish will be broken (the first batch)
 func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	transactionPolicy transactionPolicy,
 	events []*historypb.HistoryEvent,
@@ -4348,7 +4348,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	// workflow close
 	// this will perform check on the last event of last batch
 	// NOTE: do not apply this check on every batch, since transient
-	// decision && workflow finish will be broken (the first batch)
+	// workflow task && workflow finish will be broken (the first batch)
 	lastEvent := events[len(events)-1]
 	switch lastEvent.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
@@ -4384,11 +4384,11 @@ func (e *mutableStateBuilder) startTransactionHandleWorkflowTaskFailover(
 	// the main idea here is to guarantee that once there is a workflow task started
 	// all events ending in the buffer should have the same version
 
-	// Handling mutable state turn from standby to active, while having a decision on the fly
+	// Handling mutable state turn from standby to active, while having a workflow task on the fly
 	workflowTask, ok := e.GetInFlightWorkflowTask()
 	if !ok || workflowTask.Version >= e.GetCurrentVersion() {
-		// no pending decision, no buffered events
-		// or decision has higher / equal version
+		// no pending workflow tasks, no buffered events
+		// or workflow task has higher / equal version
 		return false, nil
 	}
 

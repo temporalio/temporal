@@ -434,7 +434,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -470,7 +470,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
 	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
@@ -493,7 +493,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_DecisionNotSticky_MutableStateSticky() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowTaskNotSticky_MutableStateSticky() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -529,7 +529,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_DecisionN
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
 	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 
@@ -1498,7 +1498,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
-		IsFirstDecision: true,
+		IsFirstWorkflowTask: true,
 	}).Return(nil, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
@@ -1661,7 +1661,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
-		IsFirstDecision: true,
+		IsFirstWorkflowTask: true,
 	}).Return(nil, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)

@@ -42,27 +42,27 @@ import (
 )
 
 type (
-	DecisionHandlerSuite struct {
+	WorkflowTaskHandlerCallbackSuite struct {
 		*require.Assertions
 		suite.Suite
 
 		controller *gomock.Controller
 
-		decisionHandler  *workflowTaskHandlerCallbackImpl
-		queryRegistry    queryRegistry
-		mockMutableState *MockmutableState
+		workflowTaskHandlerCallback *workflowTaskHandlerCallbackImpl
+		queryRegistry               queryRegistry
+		mockMutableState            *MockmutableState
 	}
 )
 
-func TestDecisionHandlerSuite(t *testing.T) {
-	suite.Run(t, new(DecisionHandlerSuite))
+func TestWorkflowTaskHandlerCallbackSuite(t *testing.T) {
+	suite.Run(t, new(WorkflowTaskHandlerCallbackSuite))
 }
 
-func (s *DecisionHandlerSuite) SetupTest() {
+func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.decisionHandler = &workflowTaskHandlerCallbackImpl{
+	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbackImpl{
 		versionChecker: headers.NewVersionChecker(),
 		metricsClient:  metrics.NewClient(tally.NoopScope, metrics.History),
 		config:         NewDynamicConfigForTest(),
@@ -78,32 +78,32 @@ func (s *DecisionHandlerSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(workflowInfo).AnyTimes()
 }
 
-func (s *DecisionHandlerSuite) TearDownTest() {
+func (s *WorkflowTaskHandlerCallbackSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_HeartbeatDecision() {
+func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_HeartbeatWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, true)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, true)
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NewWorkflowTask() {
+func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, true, testGlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, true, testGlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 5, 5, 0, 0)
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NoNewWorkflowTask() {
+func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NoNewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 5, 0)
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
+func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	bufferedIDs := s.queryRegistry.getBufferedIDs()
 	queryResults := s.constructQueryResults(bufferedIDs[0:5], 10)
@@ -111,11 +111,11 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	for k, v := range largeQueryResults {
 		queryResults[k] = v
 	}
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
-func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*querypb.WorkflowQueryResult {
+func (s *WorkflowTaskHandlerCallbackSuite) constructQueryResults(ids []string, resultSize int) map[string]*querypb.WorkflowQueryResult {
 	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
@@ -126,7 +126,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	return results
 }
 
-func (s *DecisionHandlerSuite) constructQueryRegistry(numQueries int) queryRegistry {
+func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int) queryRegistry {
 	queryRegistry := newQueryRegistry()
 	for i := 0; i < numQueries; i++ {
 		queryRegistry.bufferQuery(&querypb.WorkflowQuery{})
@@ -134,7 +134,7 @@ func (s *DecisionHandlerSuite) constructQueryRegistry(numQueries int) queryRegis
 	return queryRegistry
 }
 
-func (s *DecisionHandlerSuite) assertQueryCounts(queryRegistry queryRegistry, buffered, completed, unblocked, failed int) {
+func (s *WorkflowTaskHandlerCallbackSuite) assertQueryCounts(queryRegistry queryRegistry, buffered, completed, unblocked, failed int) {
 	s.Len(queryRegistry.getBufferedIDs(), buffered)
 	s.Len(queryRegistry.getCompletedIDs(), completed)
 	s.Len(queryRegistry.getUnblockedIDs(), unblocked)

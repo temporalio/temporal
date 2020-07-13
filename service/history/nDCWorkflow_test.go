@@ -267,15 +267,15 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
-	inFlightDecision := &workflowTaskInfo{
+	inFlightWorkflowTask := &workflowTaskInfo{
 		Version:    1234,
 		ScheduleID: 5678,
 		StartedID:  9012,
 	}
-	s.mockMutableState.EXPECT().GetInFlightDecision().Return(inFlightDecision, true).Times(1)
+	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true).Times(1)
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		inFlightDecision.ScheduleID,
-		inFlightDecision.StartedID,
+		inFlightWorkflowTask.ScheduleID,
+		inFlightWorkflowTask.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,

@@ -823,7 +823,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.NoError(err)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Fire() {
+func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -872,14 +872,14 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Fire() {
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)
 	s.NoError(err)
 
-	decisionInfo, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
 	s.True(ok)
-	s.True(decisionInfo.ScheduleID != common.EmptyEventID)
-	s.Equal(common.EmptyEventID, decisionInfo.StartedID)
-	s.Equal(int64(1), decisionInfo.Attempt)
+	s.True(workflowTask.ScheduleID != common.EmptyEventID)
+	s.Equal(common.EmptyEventID, workflowTask.StartedID)
+	s.Equal(int64(1), workflowTask.Attempt)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Noop() {
+func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -973,11 +973,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)
 	s.NoError(err)
 
-	decisionInfo, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
 	s.True(ok)
-	s.True(decisionInfo.ScheduleID != common.EmptyEventID)
-	s.Equal(common.EmptyEventID, decisionInfo.StartedID)
-	s.Equal(int64(0), decisionInfo.Attempt)
+	s.True(workflowTask.ScheduleID != common.EmptyEventID)
+	s.Equal(common.EmptyEventID, workflowTask.StartedID)
+	s.Equal(int64(0), workflowTask.Attempt)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {

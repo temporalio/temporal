@@ -865,8 +865,8 @@ const (
 	TransferStandbyQueueProcessorScope
 	// TransferActiveTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferActiveTaskActivityScope
-	// TransferActiveTaskDecisionScope is the scope used for workflow task processing by transfer queue processor
-	TransferActiveTaskDecisionScope
+	// TransferActiveTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferActiveTaskWorkflowTaskScope
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope
 	// TransferActiveTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -885,8 +885,8 @@ const (
 	TransferStandbyTaskResetWorkflowScope
 	// TransferStandbyTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferStandbyTaskActivityScope
-	// TransferStandbyTaskDecisionScope is the scope used for workflow task processing by transfer queue processor
-	TransferStandbyTaskDecisionScope
+	// TransferStandbyTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferStandbyTaskWorkflowTaskScope
 	// TransferStandbyTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferStandbyTaskCloseExecutionScope
 	// TransferStandbyTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -1438,7 +1438,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
 		TransferActiveTaskActivityScope:                        {operation: "TransferActiveTaskActivity"},
-		TransferActiveTaskDecisionScope:                        {operation: "TransferActiveTaskDecision"},
+		TransferActiveTaskWorkflowTaskScope:                    {operation: "TransferActiveTaskDecision"},
 		TransferActiveTaskCloseExecutionScope:                  {operation: "TransferActiveTaskCloseExecution"},
 		TransferActiveTaskCancelExecutionScope:                 {operation: "TransferActiveTaskCancelExecution"},
 		TransferActiveTaskSignalExecutionScope:                 {operation: "TransferActiveTaskSignalExecution"},
@@ -1447,7 +1447,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveTaskResetWorkflowScope:                   {operation: "TransferActiveTaskResetWorkflow"},
 		TransferActiveTaskUpsertWorkflowSearchAttributesScope:  {operation: "TransferActiveTaskUpsertWorkflowSearchAttributes"},
 		TransferStandbyTaskActivityScope:                       {operation: "TransferStandbyTaskActivity"},
-		TransferStandbyTaskDecisionScope:                       {operation: "TransferStandbyTaskDecision"},
+		TransferStandbyTaskWorkflowTaskScope:                   {operation: "TransferStandbyTaskDecision"},
 		TransferStandbyTaskCloseExecutionScope:                 {operation: "TransferStandbyTaskCloseExecution"},
 		TransferStandbyTaskCancelExecutionScope:                {operation: "TransferStandbyTaskCancelExecution"},
 		TransferStandbyTaskSignalExecutionScope:                {operation: "TransferStandbyTaskSignalExecution"},
