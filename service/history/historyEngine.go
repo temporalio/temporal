@@ -131,7 +131,7 @@ type (
 		currentClusterName        string
 		shard                     ShardContext
 		timeSource                clock.TimeSource
-		decisionHandler           workflowTaskHandlerCallback
+		workflowTaskHandler       workflowTaskHandlerCallback
 		clusterMetadata           cluster.Metadata
 		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
@@ -196,8 +196,8 @@ var (
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
-	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first workflow task completed
-	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewQueryFailed("workflow must handle at least one workflow task before it can be queried")
+	// ErrQueryWorkflowBeforeFirstWorkflowTask is error indicating that query was attempted before first workflow task completed
+	ErrQueryWorkflowBeforeFirstWorkflowTask = serviceerror.NewQueryFailed("workflow must handle at least one workflow task before it can be queried")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
@@ -302,7 +302,7 @@ func NewEngineWithShardContext(
 		historyCache,
 		logger,
 	)
-	historyEngImpl.decisionHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
+	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
 		shard.GetNamespaceCache(),
@@ -472,9 +472,9 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				// the fake tasks will not be actually used, we just need to make sure
 				// its length > 0 and has correct timestamp, to trigger a db scan
 				fakeWorkflowTask := []persistence.Task{&persistence.WorkflowTask{}}
-				fakeDecisionTimeoutTask := []persistence.Task{&persistence.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
+				fakeWorkflowTaskTimeoutTask := []persistence.Task{&persistence.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeWorkflowTask)
-				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
+				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeWorkflowTaskTimeoutTask)
 			}
 
 			// nolint:errcheck
@@ -870,7 +870,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
 	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
+	// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
 	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
 		(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
@@ -1420,20 +1420,20 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	return response, err
 }
 
-// ScheduleWorkflowTask schedules a decision if no outstanding decision found
+// ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
 func (e *historyEngineImpl) ScheduleWorkflowTask(
 	ctx context.Context,
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
-	return e.decisionHandler.handleWorkflowTaskScheduled(ctx, req)
+	return e.workflowTaskHandler.handleWorkflowTaskScheduled(ctx, req)
 }
 
-// RecordWorkflowTaskStarted starts a decision
+// RecordWorkflowTaskStarted starts a workflow task
 func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	return e.decisionHandler.handleWorkflowTaskStarted(ctx, request)
+	return e.workflowTaskHandler.handleWorkflowTaskStarted(ctx, request)
 }
 
 // RespondWorkflowTaskCompleted completes a workflow task
@@ -1441,15 +1441,15 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
-	return e.decisionHandler.handleWorkflowTaskCompleted(ctx, req)
+	return e.workflowTaskHandler.handleWorkflowTaskCompleted(ctx, req)
 }
 
-// RespondWorkflowTaskFailed fails a decision
+// RespondWorkflowTaskFailed fails a workflow task
 func (e *historyEngineImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) error {
-	return e.decisionHandler.handleWorkflowTaskFailed(ctx, req)
+	return e.workflowTaskHandler.handleWorkflowTaskFailed(ctx, req)
 }
 
 // RespondActivityTaskCompleted completes an activity task.
@@ -1809,7 +1809,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 					}
 				}
 				// if we consider workflow cancellation idempotent, then this error is redundant
-				// this error maybe useful if this API is invoked by external, not decision from transfer queue
+				// this error maybe useful if this API is invoked by external, not workflow task from transfer queue.
 				return nil, ErrCancellationAlreadyRequested
 			}
 

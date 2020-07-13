@@ -392,7 +392,7 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetDecisionInfo(sched
 }
 
 // CreateTransientWorkflowTaskEvents mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) CreateTransientDecisionEvents(decision *workflowTaskInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
+func (m *MockmutableStateWorkflowTaskManager) CreateTransientWorkflowTaskEvents(decision *workflowTaskInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", decision, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -403,5 +403,5 @@ func (m *MockmutableStateWorkflowTaskManager) CreateTransientDecisionEvents(deci
 // CreateTransientWorkflowTaskEvents indicates an expected call of CreateTransientWorkflowTaskEvents.
 func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) CreateTransientDecisionEvents(decision, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientDecisionEvents), decision, identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientWorkflowTaskEvents), decision, identity)
 }

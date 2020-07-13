@@ -1093,7 +1093,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 
 	if createWorkflowTask {
 		// Create a transfer task to schedule a workflow task
-		err := scheduleDecision(mutableState)
+		err := scheduleWorkflowTask(mutableState)
 		if err != nil {
 			return err
 		}

@@ -572,7 +572,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	var err error
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		err = scheduleDecision(mutableState)
+		err = scheduleWorkflowTask(mutableState)
 		if err != nil {
 			return err
 		}

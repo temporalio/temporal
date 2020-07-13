@@ -106,16 +106,16 @@ func newWorkflowContext(
 	}
 }
 
-func failDecision(
+func failWorkflowTask(
 	mutableState mutableState,
-	decision *workflowTaskInfo,
-	decisionFailureCause enumspb.WorkflowTaskFailedCause,
+	workflowTask *workflowTaskInfo,
+	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
 	if _, err := mutableState.AddWorkflowTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		decisionFailureCause,
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		workflowTaskFailureCause,
 		nil,
 		identityHistoryService,
 		"",
@@ -129,7 +129,7 @@ func failDecision(
 	return mutableState.FlushBufferedEvents()
 }
 
-func scheduleDecision(
+func scheduleWorkflowTask(
 	mutableState mutableState,
 ) error {
 
@@ -139,7 +139,7 @@ func scheduleDecision(
 
 	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 	if err != nil {
-		return serviceerror.NewInternal("Failed to add decision scheduled event.")
+		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}
 	return nil
 }
@@ -151,10 +151,10 @@ func retryWorkflow(
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (mutableState, error) {
 
-	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
+			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return nil, err
@@ -179,10 +179,10 @@ func timeoutWorkflow(
 	retryState enumspb.RetryState,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
+			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err
@@ -204,10 +204,10 @@ func terminateWorkflow(
 	terminateIdentity string,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failDecision(
+	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+		if err := failWorkflowTask(
 			mutableState,
-			decision,
+			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		); err != nil {
 			return err

@@ -256,7 +256,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := scheduleDecision(resetMutableState); err != nil {
+	if err := scheduleWorkflowTask(resetMutableState); err != nil {
 		return nil, err
 	}
 

@@ -808,7 +808,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
+	wh.GetLogger().Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
