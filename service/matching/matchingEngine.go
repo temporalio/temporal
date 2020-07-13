@@ -351,7 +351,7 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForDecisionResponse(), nil
+			return task.pollWorkflowTaskQueueResponse(), nil
 		}
 
 		if task.isQuery() {
@@ -449,7 +449,7 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForActivityResponse(), nil
+			return task.pollActivityTaskQueueResponse(), nil
 		}
 
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)

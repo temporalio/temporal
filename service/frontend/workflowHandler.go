@@ -368,7 +368,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+// first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
 func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -661,7 +661,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					nextEventID,
 					request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -679,7 +679,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					nextEventID,
 					request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -713,7 +713,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					continuationToken.NextEventId,
 					request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 			} else {
@@ -725,7 +725,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					continuationToken.NextEventId,
 					request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientDecision,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 			}
@@ -755,8 +755,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}, nil
 }
 
-// PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific taskQueue.  A
-// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+// PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
+// WorkflowTask is dispatched to callers for active workflow executions, with pending commands.
 // Application is then expected to call 'RespondWorkflowTaskCompleted' API when it is done processing the WorkflowTask.
 // It will also create a 'WorkflowTaskStarted' event in the history for that session before handing off WorkflowTask to
 // application worker.
@@ -858,7 +858,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
 // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+// potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
 // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
 // for completing the WorkflowTask.
 // The response could contain a new workflow task if there is one or if the request asking for one.
@@ -1021,8 +1021,8 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, reques
 	return &workflowservice.RespondWorkflowTaskFailedResponse{}, nil
 }
 
-// PollActivityTaskQueue is called by application worker to process ActivityTask from a specific taskQueue.  ActivityTask
-// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+// PollActivityTaskQueue is called by application worker to process ActivityTask from a specific task queue.  ActivityTask
+// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 // Application is expected to call 'RespondActivityTaskCompleted' or 'RespondActivityTaskFailed' once it is done
 // processing the task.
 // Application also needs to call 'RecordActivityTaskHeartbeat' API within 'heartbeatTimeoutSeconds' interval to
@@ -1329,8 +1329,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
-// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+// created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
+// PollActivityTaskQueue API call for completion. It fails with 'NotFoundFailure' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1419,9 +1419,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 
 // RespondActivityTaskCompletedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-// created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
-// WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
-// if the these IDs are not valid anymore due to activity timeout.
+// created for the workflow so new commands could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
+// WorkflowId and ActivityId instead of 'taskToken' for completion. It fails with 'NotFoundFailure'
+// if the these Ids are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
@@ -1533,7 +1533,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
@@ -1617,7 +1617,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 
 // RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskFailed but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
@@ -1719,7 +1719,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
 // result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
@@ -1812,7 +1812,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 
 // RespondActivityTaskCanceledById is called by application worker when it is successfully canceled an ActivityTask.
 // It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskCanceled but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
@@ -1925,7 +1925,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 // anymore due to completion or doesn't exist.
 func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -3179,7 +3179,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historyspb.TransientWorkflowTaskInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
@@ -3213,8 +3213,8 @@ func (wh *WorkflowHandler) getRawHistory(
 		})
 	}
 
-	if len(nextPageToken) == 0 && transientDecision != nil {
-		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -3223,7 +3223,7 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.Error(err))
 		}
 
-		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientDecision.ScheduledEvent, common.EncodingTypeProto3)
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3232,7 +3232,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			Data:         blob.Data,
 		})
 
-		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientDecision.StartedEvent, common.EncodingTypeProto3)
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3252,7 +3252,7 @@ func (wh *WorkflowHandler) getHistory(
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *historyspb.TransientWorkflowTaskInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) (*historypb.History, []byte, error) {
 
@@ -3293,8 +3293,8 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	if len(nextPageToken) == 0 && transientDecision != nil {
-		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -3302,8 +3302,8 @@ func (wh *WorkflowHandler) getHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
 		}
-		// Append the transient decision events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
+		// Append the transient workflow task events once we are done enumerating everything from the events table
+		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
 	executionHistory := &historypb.History{}
@@ -3311,21 +3311,21 @@ func (wh *WorkflowHandler) getHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandler) validateTransientDecisionEvents(
+func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	expectedNextEventID int64,
-	decision *historyspb.TransientWorkflowTaskInfo,
+	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
 
-	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
-		decision.StartedEvent.GetEventId() == expectedNextEventID+1 {
+	if transientWorkflowTaskInfo.ScheduledEvent.GetEventId() == expectedNextEventID &&
+		transientWorkflowTaskInfo.StartedEvent.GetEventId() == expectedNextEventID+1 {
 		return nil
 	}
 
-	return fmt.Errorf("invalid transient decision: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+	return fmt.Errorf("invalid transient workflow task: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
 		expectedNextEventID,
 		expectedNextEventID+1,
-		decision.ScheduledEvent.GetEventId(),
-		decision.StartedEvent.GetEventId())
+		transientWorkflowTaskInfo.ScheduledEvent.GetEventId(),
+		transientWorkflowTaskInfo.StartedEvent.GetEventId())
 }
 
 // startRequestProfile initiates recording of request metrics
@@ -3470,7 +3470,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 			nextEventID,
 			int32(wh.config.HistoryMaxPageSize(namespace.GetInfo().Name)),
 			nil,
-			matchingResp.GetDecisionInfo(),
+			matchingResp.GetWorkflowTaskInfo(),
 			branchToken,
 		)
 		if err != nil {
@@ -3479,12 +3479,12 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 
 		if len(persistenceToken) != 0 {
 			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:             matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:      firstEventID,
-				NextEventId:       nextEventID,
-				PersistenceToken:  persistenceToken,
-				TransientDecision: matchingResp.GetDecisionInfo(),
-				BranchToken:       branchToken,
+				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:          firstEventID,
+				NextEventId:           nextEventID,
+				PersistenceToken:      persistenceToken,
+				TransientWorkflowTask: matchingResp.GetWorkflowTaskInfo(),
+				BranchToken:           branchToken,
 			})
 			if err != nil {
 				return nil, err

@@ -305,7 +305,7 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 		BacklogCountHint:       1,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
-		DecisionInfo:           nil,
+		WorkflowTaskInfo:       nil,
 		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -963,7 +963,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	return total
 }
 
-func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
+func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1257,7 +1257,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 }
 
-func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
+func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1958,7 +1958,7 @@ func (m *testTaskManager) String() string {
 		if id.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			result += "Activity"
 		} else {
-			result += "Decision"
+			result += "Workflow"
 		}
 		result += " task queue " + id.name
 		result += "\n"

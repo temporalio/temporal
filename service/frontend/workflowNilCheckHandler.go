@@ -106,7 +106,7 @@ func (wh *WorkflowNilCheckHandler) DeprecateNamespace(ctx context.Context, reque
 
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+// first command for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
 func (wh *WorkflowNilCheckHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.StartWorkflowExecution(ctx, request)
@@ -127,7 +127,7 @@ func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionHistory(ctx context.Conte
 }
 
 // PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific taskQueue.  A
-// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+// WorkflowTask is dispatched to callers for active workflow executions, with pending commands.
 // Application is then expected to call 'RespondWorkflowTaskCompleted' API when it is done processing the WorkflowTask.
 // It will also create a 'WorkflowTaskStarted' event in the history for that session before handing off WorkflowTask to
 // application worker.
@@ -141,7 +141,7 @@ func (wh *WorkflowNilCheckHandler) PollWorkflowTaskQueue(ctx context.Context, re
 
 // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
 // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+// potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
 // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
 // for completing the WorkflowTask.
 // The response could contain a new workflow task if there is one or if the request asking for one.
@@ -166,7 +166,7 @@ func (wh *WorkflowNilCheckHandler) RespondWorkflowTaskFailed(ctx context.Context
 }
 
 // PollActivityTaskQueue is called by application worker to process ActivityTask from a specific taskQueue.  ActivityTask
-// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 // Application is expected to call 'RespondActivityTaskCompleted' or 'RespondActivityTaskFailed' once it is done
 // processing the task.
 // Application also needs to call 'RecordActivityTaskHeartbeat' API within 'heartbeatTimeoutSeconds' interval to
@@ -208,7 +208,7 @@ func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatById(ctx context.C
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
+// created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
@@ -221,7 +221,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Cont
 
 // RespondActivityTaskCompletedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-// created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
+// created for the workflow so new commands could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
@@ -234,7 +234,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedById(ctx context.
 
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
@@ -247,7 +247,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context
 
 // RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskFailed but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
@@ -260,7 +260,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedById(ctx context.Con
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
 // result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
@@ -273,7 +273,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Conte
 
 // RespondActivityTaskCanceledById is called by application worker when it is successfully canceled an ActivityTask.
 // It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
+// created for the workflow instance so new commands could be made.  Similar to RespondActivityTaskCanceled but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
@@ -286,7 +286,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledById(ctx context.C
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 // anymore due to completion or doesn't exist.
 func (wh *WorkflowNilCheckHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.RequestCancelWorkflowExecution(ctx, request)
