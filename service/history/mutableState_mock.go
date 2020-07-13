@@ -29,6 +29,9 @@
 package history
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -42,8 +45,6 @@ import (
 	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
 	persistence "go.temporal.io/server/common/persistence"
-	reflect "reflect"
-	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
