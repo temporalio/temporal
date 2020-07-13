@@ -113,20 +113,6 @@ func ensureStoreConsistencyNotNil(c *CassandraStoreConsistency) *CassandraStoreC
 	return c
 }
 
-func mergeConsistencySettings(c *CassandraConsistencySettings, d *CassandraConsistencySettings) *CassandraConsistencySettings {
-	if c == nil {
-		c = d
-	}
-	if c.Consistency == "" {
-		c.Consistency = d.Consistency
-	}
-	if c.SerialConsistency == "" {
-		c.SerialConsistency = d.SerialConsistency
-	}
-
-	return c
-}
-
 func (c *Cassandra) validate() error {
 	return c.Consistency.validate()
 }
