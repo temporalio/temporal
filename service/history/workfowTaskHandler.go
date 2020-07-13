@@ -138,50 +138,50 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command) error {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
-		return handler.handleDecisionScheduleActivity(command.GetScheduleActivityTaskCommandAttributes())
+		return handler.handleCommandScheduleActivity(command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCompleteWorkflow(command.GetCompleteWorkflowExecutionCommandAttributes())
+		return handler.handleCommandCompleteWorkflow(command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionFailWorkflow(command.GetFailWorkflowExecutionCommandAttributes())
+		return handler.handleCommandFailWorkflow(command.GetFailWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionCancelWorkflow(command.GetCancelWorkflowExecutionCommandAttributes())
+		return handler.handleCommandCancelWorkflow(command.GetCancelWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_TIMER:
-		return handler.handleDecisionStartTimer(command.GetStartTimerCommandAttributes())
+		return handler.handleCommandStartTimer(command.GetStartTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		return handler.handleDecisionRequestCancelActivity(command.GetRequestCancelActivityTaskCommandAttributes())
+		return handler.handleCommandRequestCancelActivity(command.GetRequestCancelActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
-		return handler.handleDecisionCancelTimer(command.GetCancelTimerCommandAttributes())
+		return handler.handleCommandCancelTimer(command.GetCancelTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_RECORD_MARKER:
-		return handler.handleDecisionRecordMarker(command.GetRecordMarkerCommandAttributes())
+		return handler.handleCommandRecordMarker(command.GetRecordMarkerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionRequestCancelExternalWorkflow(command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
+		return handler.handleCommandRequestCancelExternalWorkflow(command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleDecisionSignalExternalWorkflow(command.GetSignalExternalWorkflowExecutionCommandAttributes())
+		return handler.handleCommandSignalExternalWorkflow(command.GetSignalExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
 		return handler.handleCommandContinueAsNewWorkflow(command.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-		return handler.handleDecisionStartChildWorkflow(command.GetStartChildWorkflowExecutionCommandAttributes())
+		return handler.handleCommandStartChildWorkflow(command.GetStartChildWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return handler.handleDecisionUpsertWorkflowSearchAttributes(command.GetUpsertWorkflowSearchAttributesCommandAttributes())
+		return handler.handleCommandUpsertWorkflowSearchAttributes(command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
 	default:
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
+func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) error {
 
@@ -201,7 +201,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateActivityScheduleAttributes(
 				namespaceID,
@@ -230,7 +230,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailDecision(
+		return handler.handlerFailWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, "",
 		)
 	default:
@@ -238,7 +238,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionScheduleActivity(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
+func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
@@ -247,7 +247,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		metrics.CommandTypeCancelActivityCounter,
 	)
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateActivityCancelAttributes(attr)
 		},
@@ -281,7 +281,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		}
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailDecision(
+		return handler.handlerFailWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, "",
 		)
 
@@ -290,7 +290,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelActivity(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
+func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
 
@@ -299,7 +299,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
 		metrics.CommandTypeStartTimerCounter,
 	)
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateTimerScheduleAttributes(attr)
 		},
@@ -313,7 +313,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailDecision(
+		return handler.handlerFailWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, "",
 		)
 	default:
@@ -321,7 +321,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartTimer(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -331,10 +331,10 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
 		},
@@ -396,7 +396,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	)
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -406,10 +406,10 @@ func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateFailWorkflowExecutionAttributes(attr)
 		},
@@ -479,7 +479,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionFailWorkflow(
 	)
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
+func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
 
@@ -488,7 +488,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
 		metrics.CommandTypeCancelTimerCounter,
 	)
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateTimerCancelAttributes(attr)
 		},
@@ -521,7 +521,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelTimer(
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -529,10 +529,10 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
 		metrics.CommandTypeCancelWorkflowCounter)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
 		},
@@ -559,7 +559,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionCancelWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkflow(
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -579,7 +579,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
@@ -599,7 +599,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
+func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
@@ -608,7 +608,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
 		metrics.CommandTypeRecordMarkerCounter,
 	)
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateRecordMarkerAttributes(attr)
 		},
@@ -641,12 +641,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
 				attr,
@@ -717,7 +717,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -737,7 +737,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateStartChildExecutionAttributes(
 				namespaceID,
@@ -777,7 +777,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -797,7 +797,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
@@ -827,7 +827,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttributes(
+func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttributes(
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
@@ -846,7 +846,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	namespace := namespaceEntry.GetInfo().Name
 
 	// valid search attributes for upsert
-	if err := handler.validateDecisionAttr(
+	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
 				namespace,
@@ -924,14 +924,14 @@ func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) validateDecisionAttr(
+func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 	validationFn decisionAttrValidationFn,
 	failedCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
 	if err := validationFn(); err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
-			return handler.handlerFailDecision(failedCause, err.Error())
+			return handler.handlerFailWorkflowTask(failedCause, err.Error())
 		}
 		return err
 	}
@@ -939,7 +939,7 @@ func (handler *workflowTaskHandlerImpl) validateDecisionAttr(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handlerFailDecision(
+func (handler *workflowTaskHandlerImpl) handlerFailWorkflowTask(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	failMessage string,
 ) error {

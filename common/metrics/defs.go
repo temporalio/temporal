@@ -1700,7 +1700,7 @@ const (
 	CommandTypeContinueAsNewCounter
 	CommandTypeSignalExternalWorkflowCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
-	EmptyCompletionDecisionsCounter
+	EmptyCompletionCommandsCounter
 	MultipleCompletionDecisionsCounter
 	FailedWorkflowTasksCounter
 	StaleMutableStateCounter
@@ -2115,7 +2115,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeSignalExternalWorkflowCounter:          {metricName: "signal_external_workflow_decision", metricType: Counter},
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
 		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_decision", metricType: Counter},
-		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
+		EmptyCompletionCommandsCounter:                    {metricName: "empty_completion_decisions", metricType: Counter},
 		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
 		FailedWorkflowTasksCounter:                        {metricName: "failed_decisions", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},

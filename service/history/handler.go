@@ -527,7 +527,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 
 	completeRequest := request.CompleteRequest
 	if len(completeRequest.Commands) == 0 {
-		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionDecisionsCounter)
+		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionCommandsCounter)
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
@@ -979,7 +979,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 }
 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
-// used to clean execution info when signal decision finished.
+// used to clean execution info when signal workflow task finished.
 func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
