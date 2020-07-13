@@ -350,7 +350,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
-		if err := m.msb.taskGenerator.generateDecisionScheduleTasks(
+		if err := m.msb.taskGenerator.generateScheduleWorkflowTaskTasks(
 			m.msb.unixNanoToTime(scheduleTime), // schedule time is now
 			scheduleID,
 		); err != nil {
@@ -443,7 +443,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 
 	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime)
 	// TODO merge active & passive task generation
-	if err := m.msb.taskGenerator.generateDecisionStartTasks(
+	if err := m.msb.taskGenerator.generateStartWorkflowTaskTasks(
 		m.msb.unixNanoToTime(startTime), // start time is now
 		scheduleID,
 	); err != nil {

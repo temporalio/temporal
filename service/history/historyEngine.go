@@ -861,10 +861,10 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	// There are two ways in which queries get dispatched to decider. First, queries can be dispatched on workflow tasks.
+	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
-	// The second way in which queries are dispatched to decider is directly through matching; in this approach queries can be
-	// dispatched to decider immediately even if there are outstanding events that came before the query. The following logic
+	// The second way in which queries are dispatched to workflow worker is directly through matching; in this approach queries can be
+	// dispatched to workflow worker immediately even if there are outstanding events that came before the query. The following logic
 	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a workflow task.
 	//
 	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:

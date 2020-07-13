@@ -685,7 +685,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 			metrics.MultipleCompletionCommandsCounter,
 		)
 		handler.logger.Warn(
-			"Multiple completion decisions",
+			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
 			tag.ErrorTypeMultipleCompletionCommands,
 		)

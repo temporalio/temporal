@@ -236,7 +236,7 @@ var keys = map[Key]string{
 	DefaultWorkflowRunTimeout:                              "history.defaultWorkflowRunTimeout",
 	MaxWorkflowExecutionTimeout:                            "history.maximumWorkflowExecutionTimeout",
 	MaxWorkflowRunTimeout:                                  "history.maximumWorkflowRunTimeout",
-	DecisionHeartbeatTimeout:                               "history.decisionHeartbeatTimeout",
+	WorkflowTaskHeartbeatTimeout:                           "history.decisionHeartbeatTimeout",
 	DefaultWorkflowTaskTimeout:                             "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                             "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                    "history.numParentClosePolicySystemWorkflows",
@@ -658,7 +658,7 @@ const (
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	StickyTTL
 	// WorkflowTaskHeartbeatTimeout for decision heartbeat
-	DecisionHeartbeatTimeout
+	WorkflowTaskHeartbeatTimeout
 	// DefaultWorkflowExecutionTimeout for a workflow execution
 	DefaultWorkflowExecutionTimeout
 	// DefaultWorkflowRunTimeout for a workflow run

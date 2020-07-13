@@ -232,7 +232,7 @@ type (
 		GetUpdateCondition() int64
 
 		StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error)
-		StartTransactionSkipDecisionFail(entry *cache.NamespaceCacheEntry) error
+		StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

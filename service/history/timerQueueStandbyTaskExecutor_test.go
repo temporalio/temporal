@@ -717,7 +717,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pending() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -780,14 +780,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_ScheduleToStartTimer() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_ScheduleToStartTimer() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 
-	decisionScheduleID := int64(16384)
+	workflowTaskScheduleID := int64(16384)
 
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
@@ -800,7 +800,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		VisibilityTime: protoTaskTime,
-		EventId:        decisionScheduleID,
+		EventId:        workflowTaskScheduleID,
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
@@ -808,7 +808,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 	s.Equal(nil, err)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Success() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",

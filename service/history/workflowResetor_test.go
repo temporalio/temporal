@@ -735,8 +735,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed :29
-	// 2. activityFailed :30
+	// 1. workflowTaskFailed :29
+	// 2. activityTaskFailed :30
 	// 3. signal 1 :31
 	// 4. signal 2 :32
 	// 5. workflowTaskScheduled :33
@@ -2025,8 +2025,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled
@@ -3330,8 +3330,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled
@@ -4018,8 +4018,8 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Nil(err)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled

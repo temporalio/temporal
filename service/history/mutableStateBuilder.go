@@ -3899,7 +3899,7 @@ func (e *mutableStateBuilder) StartTransaction(
 	return flushBeforeReady, nil
 }
 
-func (e *mutableStateBuilder) StartTransactionSkipDecisionFail(
+func (e *mutableStateBuilder) StartTransactionSkipWorkflowTaskFail(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) error {
 

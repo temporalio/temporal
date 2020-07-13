@@ -501,7 +501,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		s.stateBuilder.unixNanoToTime(newRunStartedEvent.GetTimestamp()),
 		newRunStartedEvent,
 	).Return(nil).Times(1)
-	s.mockTaskGeneratorForNew.EXPECT().generateDecisionScheduleTasks(
+	s.mockTaskGeneratorForNew.EXPECT().generateScheduleWorkflowTaskTasks(
 		s.stateBuilder.unixNanoToTime(newRunWorkflowTaskEvent.GetTimestamp()),
 		newRunWorkflowTaskEvent.GetEventId(),
 	).Return(nil).Times(1)
@@ -715,7 +715,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 		event.GetVersion(), event.GetEventId(), taskqueue, timeoutSecond, workflowTaskAttempt, event.GetTimestamp(), event.GetTimestamp(),
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
+	s.mockTaskGenerator.EXPECT().generateScheduleWorkflowTaskTasks(
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		di.ScheduleID,
 	).Return(nil).Times(1)
@@ -763,7 +763,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
-	s.mockTaskGenerator.EXPECT().generateDecisionStartTasks(
+	s.mockTaskGenerator.EXPECT().generateStartWorkflowTaskTasks(
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		di.ScheduleID,
 	).Return(nil).Times(1)
@@ -810,7 +810,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 		TaskQueue:  taskqueue,
 	}, nil).Times(1)
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
+	s.mockTaskGenerator.EXPECT().generateScheduleWorkflowTaskTasks(
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		newScheduleID,
 	).Return(nil).Times(1)
@@ -856,7 +856,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 		TaskQueue:  taskqueue,
 	}, nil).Times(1)
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().generateDecisionScheduleTasks(
+	s.mockTaskGenerator.EXPECT().generateScheduleWorkflowTaskTasks(
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		newScheduleID,
 	).Return(nil).Times(1)

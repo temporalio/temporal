@@ -247,23 +247,23 @@ func (r *mutableStateTaskRefresherImpl) refreshWorkflowTaskTasks(
 		return nil
 	}
 
-	decision, ok := mutableState.GetPendingWorkflowTask()
+	workflowTask, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
-		return serviceerror.NewInternal("it could be a bug, cannot get pending decision")
+		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 
-	// decision already started
-	if decision.StartedID != common.EmptyEventID {
-		return taskGenerator.generateDecisionStartTasks(
+	// workflowTask already started
+	if workflowTask.StartedID != common.EmptyEventID {
+		return taskGenerator.generateStartWorkflowTaskTasks(
 			now,
-			decision.ScheduleID,
+			workflowTask.ScheduleID,
 		)
 	}
 
-	// decision only scheduled
-	return taskGenerator.generateDecisionScheduleTasks(
+	// workflowTask only scheduled
+	return taskGenerator.generateScheduleWorkflowTaskTasks(
 		now,
-		decision.ScheduleID,
+		workflowTask.ScheduleID,
 	)
 }
 

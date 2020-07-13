@@ -29,9 +29,6 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -45,6 +42,8 @@ import (
 	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
 	persistence "go.temporal.io/server/common/persistence"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -2411,18 +2410,18 @@ func (mr *MockmutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockmutableState)(nil).StartTransaction), entry)
 }
 
-// StartTransactionSkipDecisionFail mocks base method.
-func (m *MockmutableState) StartTransactionSkipDecisionFail(entry *cache.NamespaceCacheEntry) error {
+// StartTransactionSkipWorkflowTaskFail mocks base method.
+func (m *MockmutableState) StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartTransactionSkipDecisionFail", entry)
+	ret := m.ctrl.Call(m, "StartTransactionSkipWorkflowTaskFail", entry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// StartTransactionSkipDecisionFail indicates an expected call of StartTransactionSkipDecisionFail.
-func (mr *MockmutableStateMockRecorder) StartTransactionSkipDecisionFail(entry interface{}) *gomock.Call {
+// StartTransactionSkipWorkflowTaskFail indicates an expected call of StartTransactionSkipWorkflowTaskFail.
+func (mr *MockmutableStateMockRecorder) StartTransactionSkipWorkflowTaskFail(entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipDecisionFail", reflect.TypeOf((*MockmutableState)(nil).StartTransactionSkipDecisionFail), entry)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipWorkflowTaskFail", reflect.TypeOf((*MockmutableState)(nil).StartTransactionSkipWorkflowTaskFail), entry)
 }
 
 // CloseTransactionAsMutation mocks base method.

@@ -212,7 +212,7 @@ func (b *stateBuilderImpl) applyEvents(
 			// since we do not use stickiness on the standby side
 			// there shall be no workflowTask schedule to start timeout
 			// NOTE: at the beginning of the loop, stickyness is cleared
-			if err := taskGenerator.generateDecisionScheduleTasks(
+			if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
 				workflowTask.ScheduleID,
 			); err != nil {
@@ -233,7 +233,7 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.generateDecisionStartTasks(
+			if err := taskGenerator.generateStartWorkflowTaskTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
 				workflowTask.ScheduleID,
 			); err != nil {
@@ -264,7 +264,7 @@ func (b *stateBuilderImpl) applyEvents(
 				// since we do not use stickiness on the standby side
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
-				if err := taskGenerator.generateDecisionScheduleTasks(
+				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 					b.unixNanoToTime(event.GetTimestamp()),
 					workflowTask.ScheduleID,
 				); err != nil {
@@ -287,7 +287,7 @@ func (b *stateBuilderImpl) applyEvents(
 				// since we do not use stickiness on the standby side
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
-				if err := taskGenerator.generateDecisionScheduleTasks(
+				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 					b.unixNanoToTime(event.GetTimestamp()),
 					workflowTask.ScheduleID,
 				); err != nil {

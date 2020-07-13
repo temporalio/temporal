@@ -199,14 +199,14 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// Decision settings
+	// Workflow task settings
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	// TODO https://go.temporal.io/server/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any decisions
-	// So that decision will be scheduled to another worker(by clear stickyness)
+	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any workflow tasks
+	// So that workflow task will be scheduled to another worker(by clear stickyness)
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The execution timeout a workflow execution defaults to if not specified
 	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -379,7 +379,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
-		WorkflowTaskHeartbeatTimeout:                     dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
+		WorkflowTaskHeartbeatTimeout:                     dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
 		DefaultWorkflowExecutionTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, time.Hour*24*365*10),
 		DefaultWorkflowRunTimeout:                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, time.Hour*24*365*10),
 		MaxWorkflowExecutionTimeout:                      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, time.Hour*24*365*10),
