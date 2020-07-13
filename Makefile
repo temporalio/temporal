@@ -21,7 +21,6 @@ update-proto: clean-proto update-proto-submodule buf api-linter protoc fix-proto
 docker-images:
 	docker build --build-arg "TARGET=server" -t temporalio/server:$(DOCKER_IMAGE_TAG) .
 	docker build --build-arg "TARGET=tctl" -t temporalio/tctl:$(DOCKER_IMAGE_TAG) .
-	docker build --build-arg "TARGET=auto-setup" -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) .
 	docker build --build-arg "TARGET=admin-tools" -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) .
 ########################################################################
 

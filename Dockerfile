@@ -77,10 +77,6 @@ EXPOSE 7933 7934 7935 7939 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD /start.sh
 
-# All-in-one Temporal server
-FROM temporal-server AS temporal-auto-setup
-ENV AUTO_SETUP="true"
-
 # Temporal CLI
 FROM alpine AS temporal-tctl
 
