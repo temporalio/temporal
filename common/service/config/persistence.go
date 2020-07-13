@@ -26,6 +26,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/gocql/gocql"
@@ -106,8 +107,10 @@ func (c *CassandraStoreConsistency) GetConsistency(storeType StoreType) gocql.Co
 
 // GetSerialConsistency returns the gosql.SerialConsistency setting from the configuration for the store
 func (c *CassandraStoreConsistency) GetSerialConsistency(storeType StoreType) gocql.SerialConsistency {
-	// Error result can be ignored as validate should have been called
-	res, _ := parseSerialConsistency(c.getConsistencySettings(storeType).SerialConsistency)
+	res, err := parseSerialConsistency(c.getConsistencySettings(storeType).SerialConsistency)
+	if err != nil {
+		panic(fmt.Sprintf("unable to decode cassandra serial consistency: %v", err))
+	}
 	return res
 }
 
@@ -179,19 +182,10 @@ func (c *CassandraStoreConsistency) validate() error {
 		return nil
 	}
 
-	settings := []*CassandraConsistencySettings{
-		c.Default,
-		c.ClusterMetadata,
-		c.History,
-		c.NamespaceMetadata,
-		c.Shard,
-		c.Task,
-		c.Queue,
-		c.Visibility,
-		c.Execution,
-	}
+	v := reflect.ValueOf(*c)
 
-	for _, s := range settings {
+	for i := 0; i < v.NumField(); i++ {
+		s := v.Field(i).Interface().(*CassandraConsistencySettings)
 		if err := s.validate(); err != nil {
 			return err
 		}
