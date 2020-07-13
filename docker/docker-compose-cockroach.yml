@@ -28,7 +28,14 @@ services:
       - cockroach
     links:
     - cockroach:postgres
-    
+  temporal-admin-tools:
+    image: temporalio/admin-tools:0.26.0
+    stdin_open: true
+    tty: true
+    environment:
+      - "TEMPORAL_CLI_ADDRESS=temporal:7233"
+    depends_on:
+      - temporal
   temporal-web:
     image: temporalio/web:0.26.0
     environment:
