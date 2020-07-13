@@ -185,9 +185,11 @@ func (c *CassandraStoreConsistency) validate() error {
 	v := reflect.ValueOf(*c)
 
 	for i := 0; i < v.NumField(); i++ {
-		s := v.Field(i).Interface().(*CassandraConsistencySettings)
-		if err := s.validate(); err != nil {
-			return err
+		s, ok := v.Field(i).Interface().(*CassandraConsistencySettings)
+		if ok {
+			if err := s.validate(); err != nil {
+				return err
+			}
 		}
 	}
 
