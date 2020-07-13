@@ -260,8 +260,7 @@ OtherEventsLoop:
 
 	commandTypes := enumspb.CommandType_name
 	delete(commandTypes, 0) // Remove Unspecified.
-	// +1 is because CommandTypeCancelTimer will be mapped to workflow.EventTypeTimerCanceled.
-	s.Equal(len(commandTypes)+1, len(commandEvents),
+	s.Equal(len(commandTypes), len(commandEvents),
 		"This assertion will be broken a new command is added and no corresponding logic added to shouldBufferEvent()")
 }
 
