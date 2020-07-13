@@ -6,10 +6,11 @@ services:
     ports:
       - "9042:9042"
   temporal:
-    image: temporalio/auto-setup:0.26.0
+    image: temporalio/server:0.26.0
     ports:
      - "7233:7233"
     environment:
+      - "AUTO_SETUP=true"
       - "CASSANDRA_SEEDS=cassandra"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:

@@ -14,10 +14,11 @@ services:
       - "8125:8125"
       - "8126:8126"
   temporal:
-    image: temporalio/auto-setup:0.26.0
+    image: temporalio/server:0.26.0
     ports:
      - "7233:7233"
     environment:
+      - "AUTO_SETUP=true"
       - "DB=mysql"
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"

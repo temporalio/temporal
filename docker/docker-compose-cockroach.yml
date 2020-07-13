@@ -14,10 +14,11 @@ services:
     command: ["start", "--insecure"]
 
   temporal:
-    image: temporalio/auto-setup:0.26.0
+    image: temporalio/server:0.26.0
     ports:
      - "7233:7233"
     environment:
+      - "AUTO_SETUP=true"
       - "DB=postgres"
       - "DB_PORT=26257"
       - "POSTGRES_USER=root"
