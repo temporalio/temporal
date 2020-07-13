@@ -905,10 +905,10 @@ const (
 	TimerActiveQueueProcessorScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerStandbyQueueProcessorScope
-	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
-	TimerActiveTaskActivityTimeoutScope
-	// TimerActiveTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerActiveTaskDecisionTimeoutScope
+	// TimerActiveTaskActivityTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
+	TimerActiveTaskActivityTaskTimeoutScope
+	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
+	TimerActiveTaskWorkflowTaskTimeoutScope
 	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
 	TimerActiveTaskUserTimerScope
 	// TimerActiveTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
@@ -1458,8 +1458,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerQueueProcessorScope:                               {operation: "TimerQueueProcessor"},
 		TimerActiveQueueProcessorScope:                         {operation: "TimerActiveQueueProcessor"},
 		TimerStandbyQueueProcessorScope:                        {operation: "TimerStandbyQueueProcessor"},
-		TimerActiveTaskActivityTimeoutScope:                    {operation: "TimerActiveTaskActivityTimeout"},
-		TimerActiveTaskDecisionTimeoutScope:                    {operation: "TimerActiveTaskDecisionTimeout"},
+		TimerActiveTaskActivityTaskTimeoutScope:                {operation: "TimerActiveTaskActivityTimeout"},
+		TimerActiveTaskWorkflowTaskTimeoutScope:                {operation: "TimerActiveTaskDecisionTimeout"},
 		TimerActiveTaskUserTimerScope:                          {operation: "TimerActiveTaskUserTimer"},
 		TimerActiveTaskWorkflowTimeoutScope:                    {operation: "TimerActiveTaskWorkflowTimeout"},
 		TimerActiveTaskActivityRetryTimerScope:                 {operation: "TimerActiveTaskActivityRetryTimer"},
@@ -1701,7 +1701,7 @@ const (
 	CommandTypeSignalExternalWorkflowCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
 	EmptyCompletionCommandsCounter
-	MultipleCompletionDecisionsCounter
+	MultipleCompletionCommandsCounter
 	FailedWorkflowTasksCounter
 	StaleMutableStateCounter
 	AutoResetPointsLimitExceededCounter
@@ -2116,7 +2116,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
 		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_decision", metricType: Counter},
 		EmptyCompletionCommandsCounter:                    {metricName: "empty_completion_decisions", metricType: Counter},
-		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
+		MultipleCompletionCommandsCounter:                 {metricName: "multiple_completion_decisions", metricType: Counter},
 		FailedWorkflowTasksCounter:                        {metricName: "failed_decisions", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},
 		AutoResetPointsLimitExceededCounter:               {metricName: "auto_reset_points_exceed_limit", metricType: Counter},

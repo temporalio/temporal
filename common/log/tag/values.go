@@ -149,7 +149,7 @@ var (
 	ErrorTypeHistorySerializationError    = errorType("HistorySerializationError")
 	ErrorTypeHistoryDeserializationError  = errorType("HistoryDeserializationError")
 	ErrorTypeDuplicateTask                = errorType("DuplicateTask")
-	ErrorTypeMultipleCompletionDecisions  = errorType("MultipleCompletionDecisions")
+	ErrorTypeMultipleCompletionCommands   = errorType("MultipleCompletionDecisions")
 	ErrorTypeDuplicateTransferTask        = errorType("DuplicateTransferTask")
 	ErrorTypeDecisionFailed               = errorType("DecisionFailed")
 	ErrorTypeInvalidMutableStateAction    = errorType("InvalidMutableStateAction")

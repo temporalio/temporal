@@ -1591,7 +1591,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 					// Unable to add ActivityTaskFailed event to history
 					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
 				}
-				postActions.createDecision = true
+				postActions.createWorkflowTask = true
 			}
 
 			activityStartedTime = ai.StartedTime
@@ -1805,7 +1805,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				if cancelRequest.GetRequestId() != "" {
 					requestID := cancelRequest.GetRequestId()
 					if requestID != "" && cancelRequestID == requestID {
-						return updateWorkflowWithNewDecision, nil
+						return updateWorkflowWithNewWorkflowTask, nil
 					}
 				}
 				// if we consider workflow cancellation idempotent, then this error is redundant
@@ -1817,7 +1817,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				return nil, serviceerror.NewInternal("Unable to cancel workflow execution.")
 			}
 
-			return updateWorkflowWithNewDecision, nil
+			return updateWorkflowWithNewWorkflowTask, nil
 		})
 }
 
@@ -1852,7 +1852,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				createWorkflowTask = false
 			}
 			postActions := &updateWorkflowAction{
-				createDecision: createWorkflowTask,
+				createWorkflowTask: createWorkflowTask,
 			}
 
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1877,7 +1877,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				}
 			}
 
-			// deduplicate by request id for signal decision
+			// deduplicate by request id for signal workflow task
 			if requestID := request.GetRequestId(); requestID != "" {
 				if mutableState.IsSignalRequested(requestID) {
 					return postActions, nil
@@ -1956,7 +1956,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add decision scheduled event.")
+					return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 				}
 			}
 
@@ -2161,7 +2161,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
-			return updateWorkflowWithoutDecision, terminateWorkflow(
+			return updateWorkflowWithoutWorkflowTask, terminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
 				request.GetReason(),
@@ -2305,7 +2305,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument("Decision finish ID must be > 1 && <= workflow next event ID.")
+		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow next event ID.")
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
@@ -2475,12 +2475,12 @@ UpdateHistoryLoop:
 			return nil
 		}
 
-		if postActions.createDecision {
+		if postActions.createWorkflowTask {
 			// Create a transfer task to schedule a workflow task
 			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
-					return serviceerror.NewInternal("Failed to add decision scheduled event.")
+					return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 				}
 			}
 		}
@@ -2528,7 +2528,7 @@ func getUpdateWorkflowActionFunc(
 			return nil, err
 		}
 		postActions := &updateWorkflowAction{
-			createDecision: createWorkflowTask,
+			createWorkflowTask: createWorkflowTask,
 		}
 		return postActions, nil
 	}
@@ -2973,7 +2973,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				baseRebuildLastEventID := mutableState.GetPreviousStartedEventID()
 
 				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-				//  since cannot reapply event to a finished workflow which had no decisions started
+				//  since cannot reapply event to a finished workflow which had no workflow tasks started
 				if baseRebuildLastEventID == common.EmptyEventID {
 					e.logger.Warn("cannot reapply event to a finished workflow",
 						tag.WorkflowNamespaceID(namespaceID),
@@ -3025,11 +3025,11 @@ func (e *historyEngineImpl) ReapplyEvents(
 			}
 
 			postActions := &updateWorkflowAction{
-				createDecision: true,
+				createWorkflowTask: true,
 			}
 			// Do not create workflow task when the workflow is cron and the cron has not been started yet
 			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
-				postActions.createDecision = false
+				postActions.createWorkflowTask = false
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
 				ctx,

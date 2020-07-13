@@ -275,7 +275,7 @@ func (m *MockmutableStateWorkflowTaskManager) FailWorkflowTask(incrementAttempt 
 }
 
 // FailWorkflowTask indicates an expected call of FailWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) FailDecision(incrementAttempt interface{}) *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) FailWorkflowTask(incrementAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).FailWorkflowTask), incrementAttempt)
 }
@@ -287,7 +287,7 @@ func (m *MockmutableStateWorkflowTaskManager) DeleteWorkflowTask() {
 }
 
 // DeleteWorkflowTask indicates an expected call of DeleteWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) DeleteDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) DeleteWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).DeleteWorkflowTask))
 }
@@ -299,7 +299,7 @@ func (m *MockmutableStateWorkflowTaskManager) UpdateWorkflowTask(decision *workf
 }
 
 // UpdateWorkflowTask indicates an expected call of UpdateWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) UpdateDecision(decision interface{}) *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) UpdateWorkflowTask(decision interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).UpdateWorkflowTask), decision)
 }
@@ -313,7 +313,7 @@ func (m *MockmutableStateWorkflowTaskManager) HasPendingWorkflowTask() bool {
 }
 
 // HasPendingWorkflowTask indicates an expected call of HasPendingWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasPendingDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasPendingWorkflowTask))
 }
@@ -328,7 +328,7 @@ func (m *MockmutableStateWorkflowTaskManager) GetPendingWorkflowTask() (*workflo
 }
 
 // GetPendingWorkflowTask indicates an expected call of GetPendingWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetPendingDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetPendingWorkflowTask))
 }
@@ -342,7 +342,7 @@ func (m *MockmutableStateWorkflowTaskManager) HasInFlightWorkflowTask() bool {
 }
 
 // HasInFlightWorkflowTask indicates an expected call of HasInFlightWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasInFlightDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasInFlightWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasInFlightWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasInFlightWorkflowTask))
 }
@@ -357,7 +357,7 @@ func (m *MockmutableStateWorkflowTaskManager) GetInFlightWorkflowTask() (*workfl
 }
 
 // GetInFlightWorkflowTask indicates an expected call of GetInFlightWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetInFlightDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetInFlightWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInFlightWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetInFlightWorkflowTask))
 }
@@ -371,7 +371,7 @@ func (m *MockmutableStateWorkflowTaskManager) HasProcessedOrPendingWorkflowTask(
 }
 
 // HasProcessedOrPendingWorkflowTask indicates an expected call of HasProcessedOrPendingWorkflowTask.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasProcessedOrPendingDecision() *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) HasProcessedOrPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingWorkflowTask", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).HasProcessedOrPendingWorkflowTask))
 }
@@ -386,22 +386,22 @@ func (m *MockmutableStateWorkflowTaskManager) GetWorkflowTaskInfo(scheduleEventI
 }
 
 // GetWorkflowTaskInfo indicates an expected call of GetWorkflowTaskInfo.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetDecisionInfo(scheduleEventID interface{}) *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) GetWorkflowTaskInfo(scheduleEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskInfo", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).GetWorkflowTaskInfo), scheduleEventID)
 }
 
 // CreateTransientWorkflowTaskEvents mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) CreateTransientWorkflowTaskEvents(decision *workflowTaskInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
+func (m *MockmutableStateWorkflowTaskManager) CreateTransientWorkflowTaskEvents(workflowTask *workflowTaskInfo, identity string) (*history.HistoryEvent, *history.HistoryEvent) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", decision, identity)
+	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", workflowTask, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*history.HistoryEvent)
 	return ret0, ret1
 }
 
 // CreateTransientWorkflowTaskEvents indicates an expected call of CreateTransientWorkflowTaskEvents.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) CreateTransientDecisionEvents(decision, identity interface{}) *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) CreateTransientWorkflowTaskEvents(workflowTask, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientWorkflowTaskEvents), decision, identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).CreateTransientWorkflowTaskEvents), workflowTask, identity)
 }

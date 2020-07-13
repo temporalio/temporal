@@ -49,16 +49,16 @@ type workflowContextImpl struct {
 }
 
 type updateWorkflowAction struct {
-	noop           bool
-	createDecision bool
+	noop               bool
+	createWorkflowTask bool
 }
 
 var (
-	updateWorkflowWithNewDecision = &updateWorkflowAction{
-		createDecision: true,
+	updateWorkflowWithNewWorkflowTask = &updateWorkflowAction{
+		createWorkflowTask: true,
 	}
-	updateWorkflowWithoutDecision = &updateWorkflowAction{
-		createDecision: false,
+	updateWorkflowWithoutWorkflowTask = &updateWorkflowAction{
+		createWorkflowTask: false,
 	}
 )
 

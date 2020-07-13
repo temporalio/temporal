@@ -178,7 +178,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		}
 
 		if decisionInfo.StartedID == common.EmptyEventID {
-			return newPushDecisionToMatchingInfo(
+			return newPushWorkflowTaskToMatchingInfo(
 				decisionTimeout,
 				taskqueuepb.TaskQueue{Name: transferTask.TaskQueue},
 			), nil
@@ -522,8 +522,8 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityToMatchingInfo)
-	timeout := common.MinInt32(pushActivityInfo.activityScheduleToStartTimeout, common.MaxTaskTimeout)
+	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	timeout := common.MinInt32(pushActivityInfo.activityTaskScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
 		timeout,
@@ -540,8 +540,8 @@ func (t *transferQueueStandbyTaskExecutor) pushDecision(
 		return nil
 	}
 
-	pushDecisionInfo := postActionInfo.(*pushDecisionToMatchingInfo)
-	timeout := common.MinInt32(pushDecisionInfo.decisionScheduleToStartTimeout, common.MaxTaskTimeout)
+	pushDecisionInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
+	timeout := common.MinInt32(pushDecisionInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueTaskExecutorBase.pushDecision(
 		task.(*persistenceblobs.TransferTaskInfo),
 		&pushDecisionInfo.taskqueue,

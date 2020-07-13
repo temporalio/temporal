@@ -474,12 +474,12 @@ func getTimerTaskMetricScope(
 	switch taskType {
 	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		if isActive {
-			return metrics.TimerActiveTaskDecisionTimeoutScope
+			return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope
 	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
 		if isActive {
-			return metrics.TimerActiveTaskActivityTimeoutScope
+			return metrics.TimerActiveTaskActivityTaskTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
 	case enumsspb.TASK_TYPE_USER_TIMER:

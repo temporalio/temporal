@@ -722,8 +722,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	decisionCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
-	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
+	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 
 	ms1 := createMutableState(msBuilder)
@@ -737,7 +737,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	s.mockEventsCache.EXPECT().getEvent(
 		namespaceID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
-		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
+		workflowTaskCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -825,12 +825,12 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 }
 
 func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
-	startDecision bool) mutableState {
+	startWorkflowTask bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
-	if startDecision {
+	if startWorkflowTask {
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
@@ -842,7 +842,7 @@ func (s *engine2Suite) printHistory(builder mutableState) string {
 	return builder.GetHistoryBuilder().GetHistory().String()
 }
 
-func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerDecision() {
+func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",

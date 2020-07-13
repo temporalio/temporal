@@ -335,7 +335,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -381,7 +381,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstDeci
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstDecision() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -411,7 +411,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstD
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	s.NotNil(event)
 
-	// make another round of decision
+	// make another round of workflow task
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
 

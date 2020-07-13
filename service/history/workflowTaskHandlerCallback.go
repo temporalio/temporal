@@ -446,7 +446,7 @@ Update_History_Loop:
 
 			continueAsNewBuilder = workflowTaskHandler.continueAsNewBuilder
 
-			hasUnhandledEvents = workflowTaskHandler.hasUnhandledEventsBeforeDecisions
+			hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
 		}
 
 		if failWorkflowTask != nil {

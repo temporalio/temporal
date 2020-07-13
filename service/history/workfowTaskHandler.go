@@ -46,7 +46,7 @@ import (
 )
 
 type (
-	decisionAttrValidationFn func() error
+	commandAttrValidationFn func() error
 
 	workflowTaskHandlerImpl struct {
 		identity                string
@@ -54,12 +54,12 @@ type (
 		namespaceEntry          *cache.NamespaceCacheEntry
 
 		// internal state
-		hasUnhandledEventsBeforeDecisions bool
-		failWorkflowTaskInfo              *failWorkflowTaskInfo
-		activityNotStartedCancelled       bool
-		continueAsNewBuilder              mutableState
-		stopProcessing                    bool // should stop processing any more decisions
-		mutableState                      mutableState
+		hasBufferedEvents           bool
+		failWorkflowTaskInfo        *failWorkflowTaskInfo
+		activityNotStartedCancelled bool
+		continueAsNewBuilder        mutableState
+		stopProcessing              bool // should stop processing any more commands
+		mutableState                mutableState
 
 		// validation
 		attrValidator    *commandAttrValidator
@@ -96,12 +96,12 @@ func newWorkflowTaskHandler(
 		namespaceEntry:          namespaceEntry,
 
 		// internal state
-		hasUnhandledEventsBeforeDecisions: mutableState.HasBufferedEvents(),
-		failWorkflowTaskInfo:              nil,
-		activityNotStartedCancelled:       false,
-		continueAsNewBuilder:              nil,
-		stopProcessing:                    false,
-		mutableState:                      mutableState,
+		hasBufferedEvents:           mutableState.HasBufferedEvents(),
+		failWorkflowTaskInfo:        nil,
+		activityNotStartedCancelled: false,
+		continueAsNewBuilder:        nil,
+		stopProcessing:              false,
+		mutableState:                mutableState,
 
 		// validation
 		attrValidator:    attrValidator,
@@ -230,7 +230,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailWorkflowTask(
+		return handler.handlerFailCommand(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, "",
 		)
 	default:
@@ -281,7 +281,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		}
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailWorkflowTask(
+		return handler.handlerFailCommand(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, "",
 		)
 
@@ -313,7 +313,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
-		return handler.handlerFailWorkflowTask(
+		return handler.handlerFailCommand(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, "",
 		)
 	default:
@@ -330,8 +330,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		metrics.CommandTypeCompleteWorkflowCounter,
 	)
 
-	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+	if handler.hasBufferedEvents {
+		return handler.handlerFailCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateCommandAttr(
@@ -353,16 +353,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return err
 	}
 
-	// If the decision has more than one completion event than just pick the first one
+	// If the command has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionDecisionsCounter,
+			metrics.MultipleCompletionCommandsCounter,
 		)
 		handler.logger.Warn(
-			"Multiple completion decisions",
+			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION),
-			tag.ErrorTypeMultipleCompletionDecisions,
+			tag.ErrorTypeMultipleCompletionCommands,
 		)
 		return nil
 	}
@@ -405,8 +405,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		metrics.CommandTypeFailWorkflowCounter,
 	)
 
-	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+	if handler.hasBufferedEvents {
+		return handler.handlerFailCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateCommandAttr(
@@ -428,16 +428,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		return err
 	}
 
-	// If the decision has more than one completion event than just pick the first one
+	// If the command has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionDecisionsCounter,
+			metrics.MultipleCompletionCommandsCounter,
 		)
 		handler.logger.Warn(
-			"Multiple completion decisions",
+			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION),
-			tag.ErrorTypeMultipleCompletionDecisions,
+			tag.ErrorTypeMultipleCompletionCommands,
 		)
 		return nil
 	}
@@ -505,9 +505,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	case nil:
 		// timer deletion is a success, we may have deleted a fired timer in
 		// which case we should reset hasBufferedEvents
-		// TODO deletion of timer fired event refreshing hasUnhandledEventsBeforeDecisions
-		//  is not entirely correct, since during these decisions processing, new event may appear
-		handler.hasUnhandledEventsBeforeDecisions = handler.mutableState.HasBufferedEvents()
+		// TODO deletion of timer fired event refreshing hasBufferedEvents
+		//  is not entirely correct, since during these commands processing, new event may appear
+		handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
 		return nil
 	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddCancelTimerFailedEvent(
@@ -528,8 +528,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCancelWorkflowCounter)
 
-	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+	if handler.hasBufferedEvents {
+		return handler.handlerFailCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	if err := handler.validateCommandAttr(
@@ -541,16 +541,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return err
 	}
 
-	// If the decision has more than one completion event than just pick the first one
+	// If the command has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionDecisionsCounter,
+			metrics.MultipleCompletionCommandsCounter,
 		)
 		handler.logger.Warn(
-			"Multiple completion decisions",
+			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION),
-			tag.ErrorTypeMultipleCompletionDecisions,
+			tag.ErrorTypeMultipleCompletionCommands,
 		)
 		return nil
 	}
@@ -640,8 +640,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		metrics.CommandTypeContinueAsNewCounter,
 	)
 
-	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
+	if handler.hasBufferedEvents {
+		return handler.handlerFailCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, "")
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -678,16 +678,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	handler.logger.Debug("!!!! Continued as new without timeout",
 		tag.WorkflowRunID(executionInfo.RunID))
 
-	// If the decision has more than one completion event than just pick the first one
+	// If the command has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionDecisionsCounter,
+			metrics.MultipleCompletionCommandsCounter,
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
-			tag.ErrorTypeMultipleCompletionDecisions,
+			tag.ErrorTypeMultipleCompletionCommands,
 		)
 		return nil
 	}
@@ -925,13 +925,13 @@ func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
 }
 
 func (handler *workflowTaskHandlerImpl) validateCommandAttr(
-	validationFn decisionAttrValidationFn,
+	validationFn commandAttrValidationFn,
 	failedCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
 	if err := validationFn(); err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
-			return handler.handlerFailWorkflowTask(failedCause, err.Error())
+			return handler.handlerFailCommand(failedCause, err.Error())
 		}
 		return err
 	}
@@ -939,7 +939,7 @@ func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handlerFailWorkflowTask(
+func (handler *workflowTaskHandlerImpl) handlerFailCommand(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	failMessage string,
 ) error {
