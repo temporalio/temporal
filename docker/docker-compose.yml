@@ -6,7 +6,7 @@ services:
     ports:
       - "9042:9042"
   temporal:
-    image: temporalio/server:0.26.0
+    image: temporalio/server:${SERVER_TAG:-0.26.0}
     ports:
      - "7233:7233"
     environment:
@@ -24,7 +24,7 @@ services:
     depends_on:
       - temporal
   temporal-admin-tools:
-    image: temporalio/admin-tools:0.26.0
+    image: temporalio/admin-tools:${SERVER_TAG:-0.26.0}
     stdin_open: true
     tty: true
     environment:

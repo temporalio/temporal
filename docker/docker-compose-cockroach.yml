@@ -14,7 +14,7 @@ services:
     command: ["start", "--insecure"]
 
   temporal:
-    image: temporalio/server:0.26.0
+    image: temporalio/server:${SERVER_TAG:-0.26.0}
     ports:
      - "7233:7233"
     environment:
@@ -30,7 +30,7 @@ services:
     links:
     - cockroach:postgres
   temporal-admin-tools:
-    image: temporalio/admin-tools:0.26.0
+    image: temporalio/admin-tools:${SERVER_TAG:-0.26.0}
     stdin_open: true
     tty: true
     environment:
