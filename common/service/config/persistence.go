@@ -39,28 +39,6 @@ const (
 	StoreTypeCassandra = "cassandra"
 )
 
-// StoreType ndicates the type of persistence sub-store that is involved
-type StoreType int
-
-const (
-	// TaskStoreType represents the Task store type
-	TaskStoreType StoreType = iota
-	// ShardStoreType represents the Shard store type
-	ShardStoreType
-	// HistoryStoreType represents the History store type
-	HistoryStoreType
-	// ExecutionStoreType represents the execution store type
-	ExecutionStoreType
-	// ClusterMetadataStoreType represents the Cluster Membership Metadata store type
-	ClusterMetadataStoreType
-	// NamespaceMetadataStoreType represents the Namespace Metadata store type
-	NamespaceMetadataStoreType
-	// QueueStoreType represents the queue store type
-	QueueStoreType
-	// VisibilityStoreType represents ths visibility store type
-	VisibilityStoreType
-)
-
 // DefaultStoreType returns the storeType for the default persistence store
 func (c *Persistence) DefaultStoreType() string {
 	if c.DataStores[c.DefaultStore].SQL != nil {
@@ -101,45 +79,21 @@ func (c *Persistence) IsAdvancedVisibilityConfigExist() bool {
 }
 
 // GetConsistency returns the gosql.Consistency setting from the configuration for the given store type
-func (c *CassandraStoreConsistency) GetConsistency(storeType StoreType) gocql.Consistency {
-	return gocql.ParseConsistency(c.getConsistencySettings(storeType).Consistency)
+func (c *CassandraStoreConsistency) GetConsistency() gocql.Consistency {
+	return gocql.ParseConsistency(c.getConsistencySettings().Consistency)
 }
 
 // GetSerialConsistency returns the gosql.SerialConsistency setting from the configuration for the store
-func (c *CassandraStoreConsistency) GetSerialConsistency(storeType StoreType) gocql.SerialConsistency {
-	res, err := parseSerialConsistency(c.getConsistencySettings(storeType).SerialConsistency)
+func (c *CassandraStoreConsistency) GetSerialConsistency() gocql.SerialConsistency {
+	res, err := parseSerialConsistency(c.getConsistencySettings().SerialConsistency)
 	if err != nil {
 		panic(fmt.Sprintf("unable to decode cassandra serial consistency: %v", err))
 	}
 	return res
 }
 
-func (c *CassandraStoreConsistency) getConsistencySettings(storeType StoreType) *CassandraConsistencySettings {
-	c = ensureStoreConsistencyNotNil(c)
-	var s *CassandraConsistencySettings
-
-	switch storeType {
-	case TaskStoreType:
-		s = c.Task
-	case ShardStoreType:
-		s = c.Shard
-	case ExecutionStoreType:
-		s = c.Execution
-	case ClusterMetadataStoreType:
-		s = c.ClusterMetadata
-	case NamespaceMetadataStoreType:
-		s = c.NamespaceMetadata
-	case QueueStoreType:
-		s = c.Queue
-	case HistoryStoreType:
-		s = c.History
-	case VisibilityStoreType:
-		s = c.Visibility
-	default:
-		panic(fmt.Sprintf("unknown store type provided: %v", storeType))
-	}
-
-	return mergeConsistencySettings(s, c.Default)
+func (c *CassandraStoreConsistency) getConsistencySettings() *CassandraConsistencySettings {
+	return ensureStoreConsistencyNotNil(c).Default
 }
 
 func ensureStoreConsistencyNotNil(c *CassandraStoreConsistency) *CassandraStoreConsistency {

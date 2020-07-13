@@ -87,8 +87,8 @@ func newHistoryV2Persistence(
 
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency(config.HistoryStoreType)
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.HistoryStoreType)
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {

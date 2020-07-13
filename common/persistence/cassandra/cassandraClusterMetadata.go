@@ -88,8 +88,8 @@ var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency(config.ClusterMetadataStoreType)
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency(config.ClusterMetadataStoreType)
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
