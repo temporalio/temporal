@@ -476,7 +476,7 @@ func getTimerTaskMetricScope(
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 		}
-		return metrics.TimerStandbyTaskDecisionTimeoutScope
+		return metrics.TimerStandbyTaskWorkflowTaskTimeoutScope
 	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTaskTimeoutScope
