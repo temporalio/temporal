@@ -12,7 +12,6 @@ services:
     cap_drop:
     - ALL
     command: ["start", "--insecure"]
-
   temporal:
     image: temporalio/server:${SERVER_TAG:-0.26.0}
     ports:
