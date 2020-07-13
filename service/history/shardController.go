@@ -480,7 +480,7 @@ func (i *historyShardsItem) String() string {
 	return fmt.Sprintf("%p", i)
 }
 
-func isShardOwnershiptLostError(err error) bool {
+func isShardOwnershipLostError(err error) bool {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		return true
