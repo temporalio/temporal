@@ -1702,7 +1702,7 @@ const (
 	CommandTypeUpsertWorkflowSearchAttributesCounter
 	EmptyCompletionDecisionsCounter
 	MultipleCompletionDecisionsCounter
-	FailedDecisionsCounter
+	FailedWorkflowTasksCounter
 	StaleMutableStateCounter
 	AutoResetPointsLimitExceededCounter
 	AutoResetPointCorruptionCounter
@@ -1742,9 +1742,9 @@ const (
 	GetEngineForShardErrorCounter
 	GetEngineForShardLatency
 	RemoveEngineForShardLatency
-	CompleteDecisionWithStickyEnabledCounter
-	CompleteDecisionWithStickyDisabledCounter
-	DecisionHeartbeatTimeoutCounter
+	CompleteWorkflowTaskWithStickyEnabledCounter
+	CompleteWorkflowTaskWithStickyDisabledCounter
+	WorkflowTaskHeartbeatTimeoutCounter
 	HistoryEventNotificationQueueingLatency
 	HistoryEventNotificationFanoutLatency
 	HistoryEventNotificationInFlightMessageGauge
@@ -2117,7 +2117,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_decision", metricType: Counter},
 		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
 		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
-		FailedDecisionsCounter:                            {metricName: "failed_decisions", metricType: Counter},
+		FailedWorkflowTasksCounter:                        {metricName: "failed_decisions", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},
 		AutoResetPointsLimitExceededCounter:               {metricName: "auto_reset_points_exceed_limit", metricType: Counter},
 		AutoResetPointCorruptionCounter:                   {metricName: "auto_reset_point_corruption", metricType: Counter},
@@ -2157,9 +2157,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetEngineForShardErrorCounter:                     {metricName: "get_engine_for_shard_errors", metricType: Counter},
 		GetEngineForShardLatency:                          {metricName: "get_engine_for_shard_latency", metricType: Timer},
 		RemoveEngineForShardLatency:                       {metricName: "remove_engine_for_shard_latency", metricType: Timer},
-		CompleteDecisionWithStickyEnabledCounter:          {metricName: "complete_decision_sticky_enabled_count", metricType: Counter},
-		CompleteDecisionWithStickyDisabledCounter:         {metricName: "complete_decision_sticky_disabled_count", metricType: Counter},
-		DecisionHeartbeatTimeoutCounter:                   {metricName: "decision_heartbeat_timeout_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyEnabledCounter:      {metricName: "complete_decision_sticky_enabled_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyDisabledCounter:     {metricName: "complete_decision_sticky_disabled_count", metricType: Counter},
+		WorkflowTaskHeartbeatTimeoutCounter:               {metricName: "decision_heartbeat_timeout_count", metricType: Counter},
 		HistoryEventNotificationQueueingLatency:           {metricName: "history_event_notification_queueing_latency", metricType: Timer},
 		HistoryEventNotificationFanoutLatency:             {metricName: "history_event_notification_fanout_latency", metricType: Timer},
 		HistoryEventNotificationInFlightMessageGauge:      {metricName: "history_event_notification_inflight_message_gauge", metricType: Gauge},

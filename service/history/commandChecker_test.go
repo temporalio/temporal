@@ -54,7 +54,7 @@ type (
 		controller         *gomock.Controller
 		mockNamespaceCache *cache.MockNamespaceCache
 
-		validator *decisionAttrValidator
+		validator *commandAttrValidator
 
 		testNamespaceID       string
 		testTargetNamespaceID string
@@ -86,7 +86,7 @@ func (s *decisionAttrValidatorSuite) SetupTest() {
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
 	}
-	s.validator = newDecisionAttrValidator(
+	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
 		config,
 		log.NewNoop(),

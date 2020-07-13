@@ -49,7 +49,7 @@ import (
 )
 
 type (
-	decisionAttrValidator struct {
+	commandAttrValidator struct {
 		namespaceCache            cache.NamespaceCache
 		maxIDLengthLimit          int
 		searchAttributesValidator *validator.SearchAttributesValidator
@@ -77,12 +77,12 @@ const (
 	reservedTaskQueuePrefix = "/__temporal_sys/"
 )
 
-func newDecisionAttrValidator(
+func newCommandAttrValidator(
 	namespaceCache cache.NamespaceCache,
 	config *Config,
 	logger log.Logger,
-) *decisionAttrValidator {
-	return &decisionAttrValidator{
+) *commandAttrValidator {
+	return &commandAttrValidator{
 		namespaceCache:   namespaceCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
@@ -193,7 +193,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	return false, nil
 }
 
-func (v *decisionAttrValidator) validateActivityScheduleAttributes(
+func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
@@ -208,7 +208,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on command.")
 	}
 
 	defaultTaskQueueName := ""
@@ -217,11 +217,11 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	if attributes.GetActivityId() == "" {
-		return serviceerror.NewInvalidArgument("ActivityId is not set on decision.")
+		return serviceerror.NewInvalidArgument("ActivityId is not set on command.")
 	}
 
 	if attributes.ActivityType == nil || attributes.ActivityType.GetName() == "" {
-		return serviceerror.NewInvalidArgument("ActivityType is not set on decision.")
+		return serviceerror.NewInvalidArgument("ActivityType is not set on command.")
 	}
 
 	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
@@ -271,7 +271,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on decision.")
+		return serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on command.")
 	}
 	// ensure activity timeout never larger than workflow timeout
 	if runTimeout > 0 {
@@ -294,47 +294,47 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	return nil
 }
 
-func (v *decisionAttrValidator) validateTimerScheduleAttributes(
+func (v *commandAttrValidator) validateTimerScheduleAttributes(
 	attributes *commandpb.StartTimerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("StartTimerCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("StartTimerCommandAttributes is not set on command.")
 	}
 	if attributes.GetTimerId() == "" {
-		return serviceerror.NewInvalidArgument("TimerId is not set on decision.")
+		return serviceerror.NewInvalidArgument("TimerId is not set on command.")
 	}
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
 	}
 	if attributes.GetStartToFireTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("A valid StartToFireTimeoutSeconds is not set on decision.")
+		return serviceerror.NewInvalidArgument("A valid StartToFireTimeoutSeconds is not set on command.")
 	}
 	return nil
 }
 
-func (v *decisionAttrValidator) validateActivityCancelAttributes(
+func (v *commandAttrValidator) validateActivityCancelAttributes(
 	attributes *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RequestCancelActivityTaskCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RequestCancelActivityTaskCommandAttributes is not set on command.")
 	}
 	if attributes.GetScheduledEventId() <= 0 {
-		return serviceerror.NewInvalidArgument("ScheduledEventId is not set on decision.")
+		return serviceerror.NewInvalidArgument("ScheduledEventId is not set on command.")
 	}
 	return nil
 }
 
-func (v *decisionAttrValidator) validateTimerCancelAttributes(
+func (v *commandAttrValidator) validateTimerCancelAttributes(
 	attributes *commandpb.CancelTimerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CancelTimerCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CancelTimerCommandAttributes is not set on command.")
 	}
 	if attributes.GetTimerId() == "" {
-		return serviceerror.NewInvalidArgument("TimerId is not set on decision.")
+		return serviceerror.NewInvalidArgument("TimerId is not set on command.")
 	}
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
@@ -342,15 +342,15 @@ func (v *decisionAttrValidator) validateTimerCancelAttributes(
 	return nil
 }
 
-func (v *decisionAttrValidator) validateRecordMarkerAttributes(
+func (v *commandAttrValidator) validateRecordMarkerAttributes(
 	attributes *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RecordMarkerCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RecordMarkerCommandAttributes is not set on command.")
 	}
 	if attributes.GetMarkerName() == "" {
-		return serviceerror.NewInvalidArgument("MarkerName is not set on decision.")
+		return serviceerror.NewInvalidArgument("MarkerName is not set on command.")
 	}
 	if len(attributes.GetMarkerName()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("MarkerName exceeds length limit.")
@@ -359,40 +359,40 @@ func (v *decisionAttrValidator) validateRecordMarkerAttributes(
 	return nil
 }
 
-func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateCompleteWorkflowExecutionAttributes(
 	attributes *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CompleteWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CompleteWorkflowExecutionCommandAttributes is not set on command.")
 	}
 	return nil
 }
 
-func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateFailWorkflowExecutionAttributes(
 	attributes *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("FailWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("FailWorkflowExecutionCommandAttributes is not set on command.")
 	}
 	if attributes.GetFailure() == nil {
-		return serviceerror.NewInvalidArgument("Failure is not set on decision.")
+		return serviceerror.NewInvalidArgument("Failure is not set on command.")
 	}
 	return nil
 }
 
-func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateCancelWorkflowExecutionAttributes(
 	attributes *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("CancelWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("CancelWorkflowExecutionCommandAttributes is not set on command.")
 	}
 	return nil
 }
 
-func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
@@ -406,10 +406,10 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on command.")
 	}
 	if attributes.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
+		return serviceerror.NewInvalidArgument("WorkflowId is not set on command.")
 	}
 	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
@@ -419,13 +419,13 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 	}
 	runID := attributes.GetRunId()
 	if runID != "" && uuid.Parse(runID) == nil {
-		return serviceerror.NewInvalidArgument("Invalid RunId set on decision.")
+		return serviceerror.NewInvalidArgument("Invalid RunId set on command.")
 	}
 
 	return nil
 }
 
-func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
@@ -439,13 +439,13 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on command.")
 	}
 	if attributes.Execution == nil {
-		return serviceerror.NewInvalidArgument("Execution is nil on decision.")
+		return serviceerror.NewInvalidArgument("Execution is nil on command.")
 	}
 	if attributes.Execution.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
+		return serviceerror.NewInvalidArgument("WorkflowId is not set on command.")
 	}
 	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
@@ -456,45 +456,45 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 
 	targetRunID := attributes.Execution.GetRunId()
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
-		return serviceerror.NewInvalidArgument("Invalid RunId set on decision.")
+		return serviceerror.NewInvalidArgument("Invalid RunId set on command.")
 	}
 	if attributes.GetSignalName() == "" {
-		return serviceerror.NewInvalidArgument("SignalName is not set on decision.")
+		return serviceerror.NewInvalidArgument("SignalName is not set on command.")
 	}
 
 	return nil
 }
 
-func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
+func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace string,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 	}
 
 	if attributes.SearchAttributes == nil {
-		return serviceerror.NewInvalidArgument("SearchAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("SearchAttributes is not set on command.")
 	}
 
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
-		return serviceerror.NewInvalidArgument("IndexedFields is empty on decision.")
+		return serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
 
 	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespace)
 }
 
-func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
+func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionCommandAttributes is not set on command.")
 	}
 
-	// Inherit workflow type from previous execution if not provided on decision
+	// Inherit workflow type from previous execution if not provided on command
 	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
 		attributes.WorkflowType = &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName}
 	}
@@ -503,7 +503,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	// Inherit Taskqueue from previous execution if not provided on decision
+	// Inherit Taskqueue from previous execution if not provided on command
 	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
 	if err != nil {
 		return err
@@ -512,7 +512,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 
 	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
-	// handleDecisionContinueAsNewWorkflow must handle negative runTimeout value
+	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
 	timeoutTime := executionInfo.WorkflowExpirationTime
 	if !timeoutTime.IsZero() {
 		runTimeout := convert.Int32Ceil(timeoutTime.Sub(time.Now()).Seconds())
@@ -526,7 +526,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		attributes.WorkflowRunTimeoutSeconds = executionInfo.WorkflowRunTimeout
 	}
 
-	// Inherit workflow task timeout from previous execution if not provided on decision
+	// Inherit workflow task timeout from previous execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
 		attributes.WorkflowTaskTimeoutSeconds = executionInfo.WorkflowTaskTimeout
 	}
@@ -543,7 +543,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
 }
 
-func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
+func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
@@ -558,15 +558,15 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if attributes == nil {
-		return serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on decision.")
+		return serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on command.")
 	}
 
 	if attributes.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("Required field WorkflowId is not set on decision.")
+		return serviceerror.NewInvalidArgument("Required field WorkflowId is not set on command.")
 	}
 
 	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
-		return serviceerror.NewInvalidArgument("Required field WorkflowType is not set on decision.")
+		return serviceerror.NewInvalidArgument("Required field WorkflowType is not set on command.")
 	}
 
 	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
@@ -589,24 +589,24 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	// Inherit taskqueue from parent workflow execution if not provided on decision
+	// Inherit taskqueue from parent workflow execution if not provided on command
 	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
 		return err
 	}
 	attributes.TaskQueue = taskQueue
 
-	// Inherit workflow timeout from parent workflow execution if not provided on decision
+	// Inherit workflow timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowExecutionTimeoutSeconds() <= 0 {
 		attributes.WorkflowExecutionTimeoutSeconds = parentInfo.WorkflowExecutionTimeout
 	}
 
-	// Inherit workflow timeout from parent workflow execution if not provided on decision
+	// Inherit workflow timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowRunTimeoutSeconds() <= 0 {
 		attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
 	}
 
-	// Inherit workflow task timeout from parent workflow execution if not provided on decision
+	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
 		attributes.WorkflowTaskTimeoutSeconds = parentInfo.WorkflowTaskTimeout
 	}
@@ -614,7 +614,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	return nil
 }
 
-func (v *decisionAttrValidator) validatedTaskQueue(
+func (v *commandAttrValidator) validatedTaskQueue(
 	taskQueue *taskqueuepb.TaskQueue,
 	defaultVal string,
 ) (*taskqueuepb.TaskQueue, error) {
@@ -643,7 +643,7 @@ func (v *decisionAttrValidator) validatedTaskQueue(
 	return taskQueue, nil
 }
 
-func (v *decisionAttrValidator) validateCrossNamespaceCall(
+func (v *commandAttrValidator) validateCrossNamespaceCall(
 	namespaceID string,
 	targetNamespaceID string,
 ) error {
@@ -682,7 +682,7 @@ func (v *decisionAttrValidator) validateCrossNamespaceCall(
 	return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)
 }
 
-func (v *decisionAttrValidator) createCrossNamespaceCallError(
+func (v *commandAttrValidator) createCrossNamespaceCallError(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	targetNamespaceEntry *cache.NamespaceCacheEntry,
 ) error {

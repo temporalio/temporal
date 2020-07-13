@@ -302,7 +302,7 @@ func NewEngineWithShardContext(
 		historyCache,
 		logger,
 	)
-	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
+	historyEngImpl.decisionHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
 		shard.GetNamespaceCache(),
@@ -2534,7 +2534,7 @@ func getUpdateWorkflowActionFunc(
 	}
 }
 
-func (e *historyEngineImpl) failDecision(
+func (e *historyEngineImpl) failWorkflowTask(
 	context workflowExecutionContext,
 	scheduleID int64,
 	startedID int64,

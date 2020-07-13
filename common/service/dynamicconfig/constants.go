@@ -657,7 +657,7 @@ const (
 	HistoryThrottledLogRPS
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	StickyTTL
-	// DecisionHeartbeatTimeout for decision heartbeat
+	// WorkflowTaskHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
 	// DefaultWorkflowExecutionTimeout for a workflow execution
 	DefaultWorkflowExecutionTimeout

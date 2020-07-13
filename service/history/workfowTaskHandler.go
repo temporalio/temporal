@@ -55,14 +55,14 @@ type (
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions bool
-		failDecisionInfo                  *failDecisionInfo
+		failWorkflowTaskInfo              *failWorkflowTaskInfo
 		activityNotStartedCancelled       bool
 		continueAsNewBuilder              mutableState
 		stopProcessing                    bool // should stop processing any more decisions
 		mutableState                      mutableState
 
 		// validation
-		attrValidator    *decisionAttrValidator
+		attrValidator    *commandAttrValidator
 		sizeLimitChecker *workflowSizeChecker
 
 		logger         log.Logger
@@ -71,7 +71,7 @@ type (
 		config         *Config
 	}
 
-	failDecisionInfo struct {
+	failWorkflowTaskInfo struct {
 		cause   enumspb.WorkflowTaskFailedCause
 		message string
 	}
@@ -82,7 +82,7 @@ func newWorkflowTaskHandler(
 	workflowTaskCompletedID int64,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	mutableState mutableState,
-	attrValidator *decisionAttrValidator,
+	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceCache cache.NamespaceCache,
@@ -97,7 +97,7 @@ func newWorkflowTaskHandler(
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions: mutableState.HasBufferedEvents(),
-		failDecisionInfo:                  nil,
+		failWorkflowTaskInfo:              nil,
 		activityNotStartedCancelled:       false,
 		continueAsNewBuilder:              nil,
 		stopProcessing:                    false,
@@ -168,7 +168,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command
 		return handler.handleDecisionSignalExternalWorkflow(command.GetSignalExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-		return handler.handleDecisionContinueAsNewWorkflow(command.GetContinueAsNewWorkflowExecutionCommandAttributes())
+		return handler.handleCommandContinueAsNewWorkflow(command.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 		return handler.handleDecisionStartChildWorkflow(command.GetStartChildWorkflowExecutionCommandAttributes())
@@ -631,7 +631,7 @@ func (handler *workflowTaskHandlerImpl) handleDecisionRecordMarker(
 	return err
 }
 
-func (handler *workflowTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
+func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -943,7 +943,7 @@ func (handler *workflowTaskHandlerImpl) handlerFailDecision(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	failMessage string,
 ) error {
-	handler.failDecisionInfo = &failDecisionInfo{
+	handler.failWorkflowTaskInfo = &failWorkflowTaskInfo{
 		cause:   failedCause,
 		message: failMessage,
 	}

@@ -259,8 +259,8 @@ func WorkflowQueryType(qt string) Tag {
 	return newStringTag("wf-query-type", qt)
 }
 
-// WorkflowDecisionFailCause returns tag for WorkflowDecisionFailCause
-func WorkflowDecisionFailCause(decisionFailCause enumspb.WorkflowTaskFailedCause) Tag {
+// WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
+func WorkflowTaskFailedCause(decisionFailCause enumspb.WorkflowTaskFailedCause) Tag {
 	return newStringTag("wf-decision-fail-cause", decisionFailCause.String())
 }
 

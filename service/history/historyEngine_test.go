@@ -273,7 +273,7 @@ func (s *engineSuite) SetupTest() {
 		workflowResetter:     s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngine(h)
-	h.decisionHandler = newDecisionHandler(h)
+	h.decisionHandler = newWorkflowTaskHandlerCallback(h)
 
 	h.historyEventNotifier.Start()
 
