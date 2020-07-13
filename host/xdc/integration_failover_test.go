@@ -278,7 +278,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -327,27 +327,27 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		QueryHandler:    queryHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		QueryHandler:        queryHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		QueryHandler:    queryHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		QueryHandler:        queryHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1
@@ -525,8 +525,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
-	namespace := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
+func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
+	namespace := "test-sticky-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Name:                                 namespace,
@@ -550,11 +550,11 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-sticky-decision-workflow-failover-test"
-	wt := "integration-sticky-decision-workflow-failover-test-type"
-	tq := "integration-sticky-decision-workflow-failover-test-taskqueue"
-	stq1 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky2"
+	id := "integration-sticky-workflow-task-workflow-failover-test"
+	wt := "integration-sticky-workflow-task-workflow-failover-test-type"
+	tq := "integration-sticky-workflow-task-workflow-failover-test-taskqueue"
+	stq1 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
+	stq2 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
@@ -580,18 +580,18 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	firstDecisionMade := false
-	secondDecisionMade := false
+	firstCommandMade := false
+	secondCommandMade := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if !firstDecisionMade {
-			firstDecisionMade = true
+		if !firstCommandMade {
+			firstCommandMade = true
 			return []*commandpb.Command{}, nil
 		}
 
-		if !secondDecisionMade {
-			secondDecisionMade = true
+		if !secondCommandMade {
+			secondCommandMade = true
 			return []*commandpb.Command{}, nil
 		}
 
@@ -611,7 +611,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyTaskQueue:                     stickyTaskQueue1,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity1,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
@@ -623,7 +623,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyTaskQueue:                     stickyTaskQueue2,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity2,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
@@ -631,7 +631,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	_, err = poller1.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(firstDecisionMade)
+	s.True(firstCommandMade)
 
 	// Send a signal in cluster
 	signalName := "my signal"
@@ -667,7 +667,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(secondDecisionMade)
+	s.True(secondCommandMade)
 
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
@@ -753,7 +753,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		workflowCompleteTimes++
@@ -766,25 +766,25 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Complete the workflow in cluster 1
@@ -886,7 +886,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -923,14 +923,14 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1
@@ -1073,7 +1073,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
@@ -1104,23 +1104,23 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1 and did some continueAsNew
@@ -1209,7 +1209,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
@@ -1229,23 +1229,23 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Send a signal in cluster 1
@@ -1399,7 +1399,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	timerCreated := false
 	timerFired := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !timerCreated {
@@ -1457,23 +1457,23 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 2; i++ {
@@ -1570,7 +1570,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activitySent := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitySent {
 			activitySent = true
@@ -1626,25 +1626,25 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity1,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler1,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity1,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler1,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity2,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler2,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity2,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler2,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -1722,8 +1722,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(activityRetryFound)
 }
 
-func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
-	namespace := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
+func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
+	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Name:                                 namespace,
@@ -1747,9 +1747,9 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-transient-decision-workflow-failover-test"
-	wt := "integration-transient-decision-workflow-failover-test-type"
-	tl := "integration-transient-decision-workflow-failover-test-taskqueue"
+	id := "integration-transient-workflow-task-workflow-failover-test"
+	wt := "integration-transient-workflow-task-workflow-failover-test-type"
+	tl := "integration-transient-workflow-task-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1777,13 +1777,13 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	decisionFailed := false
+	workflowTaskFailed := false
 	workflowFinished := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if !decisionFailed {
-			decisionFailed = true
-			return nil, errors.New("random fail decision reason")
+		if !workflowTaskFailed {
+			workflowTaskFailed = true
+			return nil, errors.New("random fail workflow task reason")
 		}
 
 		workflowFinished = true
@@ -1796,26 +1796,26 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
-	// this will fail the decision
+	// this will fail the workflow task
 	_, err = poller1.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
@@ -1835,7 +1835,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	// for failover transient decision, it is guaranteed that the transient decision
+	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 0
 	// for details see ReplicateTransientWorkflowTaskScheduled
 	_, err = poller2.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 0)
@@ -1890,7 +1890,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{
 			{
@@ -1902,13 +1902,13 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Failover during backoff
@@ -1997,7 +1997,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		return []*commandpb.Command{
@@ -2010,13 +2010,13 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Update namespace to fail over

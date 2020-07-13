@@ -93,7 +93,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
@@ -127,13 +127,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
@@ -182,7 +182,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
@@ -211,16 +211,16 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process the decision and continue as new
+	// process the workflow task and continue as new
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -281,7 +281,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	workflowComplete := false
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		continueAsNewCounter++
 		buf := new(bytes.Buffer)
@@ -299,16 +299,16 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process the decision and continue as new
+	// process the workflow task and continue as new
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -381,7 +381,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	var executions []*commonpb.WorkflowExecution
 
 	continueAsNewed := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		executions = append(executions, execution)
@@ -410,13 +410,13 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	minTaskID := int64(0)
@@ -471,7 +471,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	childComplete := false
 	childExecutionStarted := false
 	childData := int32(1)
@@ -479,11 +479,11 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	continueAsNewCounter := int32(0)
 	var startedEvent *historypb.HistoryEvent
 	var completedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		s.Logger.Info("Processing workflow task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
-		// Child Decider Logic
+		// Child workflow logic
 		if execution.GetWorkflowId() == childID {
 			if continueAsNewCounter < continueAsNewCount {
 				continueAsNewCounter++
@@ -507,7 +507,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 			}}, nil
 		}
 
-		// Parent Decider Logic
+		// Parent workflow logic
 		if execution.GetWorkflowId() == parentID {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution")
@@ -548,16 +548,16 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to start child execution
+	// Make first command to start child execution
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -565,7 +565,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
-		s.Logger.Warn("decision", tag.Counter(i))
+		s.Logger.Warn("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
@@ -574,7 +574,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.False(childComplete)
 	s.NotNil(startedEvent)
 
-	// Process Child Execution final decision to complete it
+	// Process Child Execution final workflow task to complete it
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)

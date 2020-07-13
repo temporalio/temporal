@@ -251,26 +251,26 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2)
 
 	// upsert search attributes
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &commandpb.Command{
+		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*commandpb.Command{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)

@@ -90,12 +90,12 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
 	var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -142,17 +142,17 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// Make first command to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -172,7 +172,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	})
 	s.NoError(err)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -197,7 +197,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	})
 	s.NoError(err)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -263,13 +263,13 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
 	var signalEvent *historypb.HistoryEvent
 	numOfSignaledEvent := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -318,17 +318,17 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// Make first command to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -351,7 +351,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), signalReqest)
 	s.NoError(err)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -367,7 +367,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), signalReqest)
 	s.NoError(err)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -377,7 +377,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Equal(0, numOfSignaledEvent)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
+func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	id := "integration-signal-external-workflow-test"
 	wt := "integration-signal-external-workflow-test-type"
 	tl := "integration-signal-external-workflow-test-taskqueue"
@@ -423,7 +423,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -465,21 +465,21 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
@@ -518,14 +518,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	}
 
 	foreignPoller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.foreignNamespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: foreignDtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.foreignNamespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: foreignwtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
@@ -541,7 +541,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
+	// Signal the foreign workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -581,7 +581,7 @@ CheckHistoryLoopForSignalSent:
 
 	s.True(signalSent)
 
-	// process signal in decider for foreign workflow
+	// Process signal in workflow for foreign workflow
 	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -639,9 +639,9 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	})
 	s.NoError(err)
 
-	// decider logic
+	// workflow logic
 	var workflowTaskDelay time.Duration
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		workflowTaskDelay = time.Now().Sub(now)
 
@@ -654,23 +654,23 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// Make first command to schedule activity
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowTaskDelay > time.Second*2)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	id := "integration-signal-external-workflow-test-without-run-id"
 	wt := "integration-signal-external-workflow-test-without-run-id-type"
 	tl := "integration-signal-external-workflow-test-without-run-id-taskqueue"
@@ -716,7 +716,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -744,7 +744,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 				Namespace: s.foreignNamespace,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
-					// No RunID in decision
+					// No RunID in command
 				},
 				SignalName: signalName,
 				Input:      signalInput,
@@ -758,21 +758,21 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
@@ -811,14 +811,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	}
 
 	foreignPoller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.foreignNamespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: foreignDtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.foreignNamespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: foreignwtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
@@ -834,7 +834,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
+	// Signal the foreign workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -873,7 +873,7 @@ CheckHistoryLoopForSignalSent:
 
 	s.True(signalSent)
 
-	// process signal in decider for foreign workflow
+	// Process signal in workflow for foreign workflow
 	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -885,10 +885,10 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
-	id := "integration-signal-unknown-workflow-decision-test"
-	wt := "integration-signal-unknown-workflow-decision-test-type"
-	tl := "integration-signal-unknown-workflow-decision-test-taskqueue"
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
+	id := "integration-signal-unknown-workflow-command-test"
+	wt := "integration-signal-unknown-workflow-command-test-type"
+	tl := "integration-signal-unknown-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -915,7 +915,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -957,14 +957,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows to make some progress.
@@ -972,7 +972,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
+	// Signal the foreign workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1010,10 +1010,10 @@ CheckHistoryLoopForCancelSent:
 	s.True(signalSentFailed)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
-	id := "integration-signal-self-workflow-decision-test"
-	wt := "integration-signal-self-workflow-decision-test-type"
-	tl := "integration-signal-self-workflow-decision-test-taskqueue"
+func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
+	id := "integration-signal-self-workflow-command-test"
+	wt := "integration-signal-self-workflow-command-test-type"
+	tl := "integration-signal-self-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -1040,7 +1040,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -1082,14 +1082,14 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows to make some progress.
@@ -1097,7 +1097,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this decision request.
+	// Signal the foreign workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1169,13 +1169,13 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
 	newWorkflowStarted := false
 	var signalEvent, startedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -1237,17 +1237,17 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// Make first command to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1275,7 +1275,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.NoError(err)
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1311,7 +1311,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.NotEqual(we.GetRunId(), resp.GetRunId())
 	newWorkflowStarted = true
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1336,7 +1336,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.NotNil(resp.GetRunId())
 	newWorkflowStarted = true
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1433,7 +1433,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	workflowComplete := false
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -1470,14 +1470,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows, make some progress and complete workflow

@@ -75,11 +75,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -118,14 +118,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -159,10 +159,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.namespace, workflowID, token, true)
@@ -177,8 +177,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		events, token = getHistory(s.namespace, workflowID, token, true)
@@ -241,11 +241,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -284,14 +284,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -326,10 +326,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.namespace, workflowID, token, true)
@@ -344,8 +344,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		events, token = getHistory(s.namespace, workflowID, token, true)
@@ -400,11 +400,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -446,14 +446,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.testRawHistoryNamespaceName,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.testRawHistoryNamespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -517,10 +517,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
@@ -536,8 +536,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
@@ -606,11 +606,11 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -649,14 +649,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -748,7 +748,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	s.True(len(blobs) == 5)
 	s.True(len(events) == 8)
 
-	// continue the workflow by processing decision, after this, workflow shall end
+	// continue the workflow by processing command, after this, workflow shall end
 	poller.PollAndProcessWorkflowTask(false, false)
 	// continue to get the history
 	token = nil
@@ -823,11 +823,11 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -866,14 +866,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	getHistory := func(namespace string, execution *commonpb.WorkflowExecution, firstEventID int64, nextEventID int64,

@@ -40,9 +40,9 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
+func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	id := uuid.New()
-	wt := "integration-workflow-decision-heartbeating-local-activities"
+	wt := "integration-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
@@ -79,7 +79,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
-	// start decision
+	// start workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -146,9 +146,9 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	s.assertLastHistoryEvent(we, 41, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
-func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
+func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
 	id := uuid.New()
-	wt := "integration-workflow-decision-heartbeating-local-activities"
+	wt := "integration-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
@@ -185,7 +185,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
-	// start decision
+	// start workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -291,9 +291,9 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionStarted() {
+func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -334,7 +334,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
-	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
+	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -364,9 +364,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStarted() {
+func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -396,7 +396,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
-	// start decision to make signals into bufferedEvents
+	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -437,9 +437,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStartedAndFailDecision() {
+func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -471,7 +471,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
-	// start decision to make signals into bufferedEvents
+	// start workflow task to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -493,7 +493,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
-	// fail this decision to flush buffer, and then another decision will be scheduled
+	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
@@ -522,9 +522,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionStarted() {
+func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -564,10 +564,10 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
-			// first time is regular decision
+			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
 		} else {
-			// the rest is transient decision
+			// the rest is transient workflow task
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
@@ -592,7 +592,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 5, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
-	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
+	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -625,9 +625,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionStarted() {
+func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -667,10 +667,10 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
-			// first time is regular decision
+			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
 		} else {
-			// the rest is transient decision
+			// the rest is transient workflow task
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
@@ -684,7 +684,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 
 	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 
-	// start decision to make signals into bufferedEvents
+	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -725,9 +725,9 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionStartedAndFailDecision() {
+func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -767,10 +767,10 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
-			// first time is regular decision
+			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
 		} else {
-			// the rest is transient decision
+			// the rest is transient workflow task
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
@@ -784,7 +784,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 
 	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 
-	// start decision to make signals into bufferedEvents
+	// start workflow task to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
 		TaskQueue: taskQueue,
@@ -806,7 +806,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 
-	// fail this decision to flush buffer
+	// fail this workflow task to flush buffer
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,

@@ -250,7 +250,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 	expectedActivityID := int32(1)
 	runCounter := 1
 
-	dtHandler := func(
+	wtHandler := func(
 		execution *commonpb.WorkflowExecution,
 		wt *commonpb.WorkflowType,
 		previousStartedEventID int64,
@@ -325,14 +325,14 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {

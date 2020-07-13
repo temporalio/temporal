@@ -73,7 +73,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -109,14 +109,14 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -181,10 +181,10 @@ GetHistoryLoop:
 	s.True(executionCancelled)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
-	id := "integration-cancel-workflow-decision-test"
-	wt := "integration-cancel-workflow-decision-test-type"
-	tl := "integration-cancel-workflow-decision-test-taskqueue"
+func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution() {
+	id := "integration-cancel-workflow-command-test"
+	wt := "integration-cancel-workflow-command-test-type"
+	tl := "integration-cancel-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -224,7 +224,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -262,19 +262,19 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	foreignDtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	foreignwtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
@@ -305,14 +305,14 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 
 	foreignPoller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.foreignNamespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: foreignDtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.foreignNamespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: foreignwtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
@@ -328,7 +328,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Cancel the foreign workflow with this decision request.
+	// Cancel the foreign workflow with this workflow task request.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -416,10 +416,10 @@ GetHistoryLoop:
 	s.True(executionCancelled)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTarget() {
-	id := "integration-cancel-unknown-workflow-decision-test"
-	wt := "integration-cancel-unknown-workflow-decision-test-type"
-	tl := "integration-cancel-unknown-workflow-decision-test-taskqueue"
+func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_UnKnownTarget() {
+	id := "integration-cancel-unknown-workflow-command-test"
+	wt := "integration-cancel-unknown-workflow-command-test-type"
+	tl := "integration-cancel-unknown-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -444,7 +444,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -482,14 +482,14 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// Start workflows to make some progress.
@@ -497,7 +497,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Cancel the foreign workflow with this decision request.
+	// Cancel the foreign workflow with this workflow task request.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)

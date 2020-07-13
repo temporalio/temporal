@@ -166,7 +166,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -203,14 +203,14 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -319,7 +319,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	workflowComplete := false
 	activityCount := int32(10)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -370,14 +370,14 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
@@ -400,9 +400,9 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 }
 
 func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
-	id := "integration-complete-decision-create-new-test"
-	wt := "integration-complete-decision-create-new-test-type"
-	tl := "integration-complete-decision-create-new-test-taskqueue"
+	id := "integration-complete-workflow-task-create-new-test"
+	wt := "integration-complete-workflow-task-create-new-test-type"
+	tl := "integration-complete-workflow-task-create-new-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -422,12 +422,12 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	decisionCount := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	commandCount := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		if decisionCount < 2 {
-			decisionCount++
+		if commandCount < 2 {
+			commandCount++
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -445,17 +445,17 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
@@ -477,7 +477,7 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 }
 
-func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
+func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	id := "integration-timeouts-workflow-test"
 	wt := "integration-timeouts-workflow-test-type"
 	tl := "integration-timeouts-workflow-test-taskqueue"
@@ -505,7 +505,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	activityCount := int32(4)
 	activityCounter := int32(0)
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -547,14 +547,14 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 8; i++ {
@@ -631,7 +631,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 
 	attemptCount := 0
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		attemptCount++
@@ -654,13 +654,13 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -705,7 +705,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {
 		attemptCount := 0
 
-		dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 			previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 			*executions = append(*executions, execution)
 			attemptCount++
@@ -728,7 +728,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 				}}, nil
 		}
 
-		return dtHandler
+		return wtHandler
 	}
 
 	// Fail using attempt
@@ -757,15 +757,15 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	var executions []*commonpb.WorkflowExecution
-	dtHandler := workflowImpl(5, "retryable-error", false, &executions)
+	wtHandler := workflowImpl(5, "retryable-error", false, &executions)
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -812,15 +812,15 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	executions = []*commonpb.WorkflowExecution{}
-	dtHandler = workflowImpl(5, "bad-bug", true, &executions)
+	wtHandler = workflowImpl(5, "bad-bug", true, &executions)
 	poller = &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
@@ -874,7 +874,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	attemptCount := 0
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		attemptCount++
@@ -897,13 +897,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	startFilter := &filterpb.StartTimeFilter{}
@@ -1075,7 +1075,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	var executions []*commonpb.WorkflowExecution
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, h *historypb.History) ([]*commandpb.Command, error) {
 
 		executions = append(executions, execution)
@@ -1091,13 +1091,13 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1162,7 +1162,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	workflowComplete := false
 	timerCount := int32(4)
 	timerCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if timerCounter < timerCount {
 			timerCounter++
@@ -1187,14 +1187,14 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 4; i++ {
@@ -1237,11 +1237,11 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	signalsSent := false
 	signalCount := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, h *historypb.History) ([]*commandpb.Command, error) {
 
 		// Count signals
@@ -1265,7 +1265,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 			s.Nil(signalErr)
 
-			// this decision will be ignored as he workflow task is already failed
+			// this command will be ignored as he workflow task is already failed
 			return []*commandpb.Command{}, nil
 		}
 
@@ -1279,24 +1279,24 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// first decision to send 101 signals, the last signal will force fail decision and flush buffered events.
+	// first workflow task to send 101 signals, the last signal will force fail workflow task and flush buffered events.
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Equal("Workflow task not found.", err.Error())
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1330,11 +1330,11 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	signalSent := false
 	var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !signalSent {
 			signalSent = true
@@ -1382,17 +1382,17 @@ func (s *integrationSuite) TestBufferedEvents() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// first decision, which sends signal and the signal event should be buffered to append after first decision closed
+	// first workflow task, which sends signal and the signal event should be buffered to append after first workflow task closed
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1412,7 +1412,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.Equal(histResp.History.Events[4].GetEventType(), enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	s.Equal(histResp.History.Events[5].GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1458,13 +1458,13 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	dweResponse, err := describeWorkflowExecution()
 	s.NoError(err)
 	s.Nil(dweResponse.WorkflowExecutionInfo.CloseTime)
-	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, DecisionScheduled
+	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime().GetValue(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	signalSent := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !signalSent {
 			signalSent = true
@@ -1500,17 +1500,17 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// first decision to schedule new activity
+	// first workflow task to schedule new activity
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1518,7 +1518,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, dweResponse.WorkflowExecutionInfo.GetStatus())
-	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, ActivityScheduled
+	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, ActivityScheduled
 	s.Equal(1, len(dweResponse.PendingActivities))
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
 	s.Equal(int64(0), dweResponse.PendingActivities[0].GetLastHeartbeatTimestamp())
@@ -1532,7 +1532,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(8), dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, WorkflowTaskScheduled
 	s.Equal(0, len(dweResponse.PendingActivities))
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -1540,7 +1540,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, dweResponse.WorkflowExecutionInfo.GetStatus())
-	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
+	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
 }
 
 func (s *integrationSuite) TestVisibility() {
@@ -1569,7 +1569,7 @@ func (s *integrationSuite) TestVisibility() {
 	s.NoError(err0)
 
 	// Now complete one of the executions
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1580,14 +1580,14 @@ func (s *integrationSuite) TestVisibility() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err1 := poller.PollAndProcessWorkflowTask(false, false)
@@ -1714,7 +1714,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	childComplete := false
 	childExecutionStarted := false
 	var startedEvent *historypb.HistoryEvent
@@ -1732,8 +1732,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		},
 	}
 
-	// Parent Decider Logic
-	dtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	// Parent workflow logic
+	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		s.Logger.Info("Processing workflow task for ", tag.WorkflowID(execution.WorkflowId))
 
@@ -1781,8 +1781,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	}
 
 	var childStartedEvent *historypb.HistoryEvent
-	// Child Decider Logic
-	dtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	// Child workflow logic
+	wtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if previousStartedEventID <= 0 {
 			childStartedEvent = history.Events[0]
@@ -1799,26 +1799,26 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	}
 
 	pollerParent := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueueParent,
-		Identity:        identity,
-		DecisionHandler: dtHandlerParent,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueParent,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerParent,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	pollerChild := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueueChild,
-		Identity:        identity,
-		DecisionHandler: dtHandlerChild,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueChild,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerChild,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to start child execution
+	// Make first workflow task to start child execution
 	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1897,12 +1897,12 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	childExecutionStarted := false
 	var terminatedEvent *historypb.HistoryEvent
 	var startChildWorkflowTS time.Time
-	// Parent Decider Logic
-	dtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	// Parent workflow logic
+	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		s.Logger.Info("Processing workflow task for ", tag.WorkflowID(execution.WorkflowId))
 
@@ -1938,8 +1938,8 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		return nil, nil
 	}
 
-	// Child Decider Logic
-	dtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	// Child workflow logic
+	wtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		s.Logger.Info("Processing workflow task for Child ", tag.WorkflowID(execution.WorkflowId))
@@ -1949,26 +1949,26 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 
 	pollerParent := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueueParent,
-		Identity:        identity,
-		DecisionHandler: dtHandlerParent,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueParent,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerParent,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	pollerChild := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueueChild,
-		Identity:        identity,
-		DecisionHandler: dtHandlerChild,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueChild,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerChild,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to start child execution
+	// Make first workflow task to start child execution
 	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2169,16 +2169,16 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
 	failureCount := 10
 	signalCount := 0
 	sendSignal := false
-	lastDecisionTimestamp := int64(0)
+	lastWorkflowTaskTimestamp := int64(0)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		// Count signals
 		for _, event := range history.Events[previousStartedEventID:] {
@@ -2186,12 +2186,12 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 				signalCount++
 			}
 		}
-		// Some signals received on this decision
+		// Some signals received on this workflow task
 		if signalCount == 1 {
 			return []*commandpb.Command{}, nil
 		}
 
-		// Send signals during decision
+		// Send signals during workflow task
 		if sendSignal {
 			s.sendSignal(s.namespace, workflowExecution, "signalC", nil, identity)
 			s.sendSignal(s.namespace, workflowExecution, "signalD", nil, identity)
@@ -2218,18 +2218,18 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 				}},
 			}}, nil
 		} else if failureCount > 0 {
-			// Otherwise decrement failureCount and keep failing decisions
+			// Otherwise decrement failureCount and keep failing workflow tasks
 			failureCount--
-			return nil, errors.New("Decider Panic")
+			return nil, errors.New("Workflow panic")
 		}
 
 		workflowComplete = true
 		time.Sleep(time.Second)
 		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", previousStartedEventID, startedEventID,
 			len(history.Events)))
-		lastDecisionEvent := history.Events[startedEventID-1]
-		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastDecisionEvent.GetEventType())
-		lastDecisionTimestamp = lastDecisionEvent.GetTimestamp()
+		lastWorkflowTaskEvent := history.Events[startedEventID-1]
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
+		lastWorkflowTaskTimestamp = lastWorkflowTaskEvent.GetTimestamp()
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -2246,17 +2246,17 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// Make first workflow task to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2266,7 +2266,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// fail decision 5 times
+	// fail workflow task 5 times
 	for i := 0; i < 5; i++ {
 		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
 		s.NoError(err)
@@ -2281,31 +2281,31 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.NoError(err)
 	s.Equal(1, signalCount)
 
-	// send another signal to trigger decision
+	// send another signal to trigger workflow task
 	err = s.sendSignal(s.namespace, workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
-	// fail decision 2 more times
+	// fail workflow task 2 more times
 	for i := 0; i < 2; i++ {
 		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
-	// now send a signal during failed decision
+	// now send a signal during failed workflow task
 	sendSignal = true
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(2))
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
-	// fail decision 1 more times
+	// fail workflow task 1 more times
 	for i := 0; i < 2; i++ {
 		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
-	// Make complete workflow decision
+	// Make complete workflow workflow task
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, int64(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2314,27 +2314,27 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	events := s.getHistory(s.namespace, workflowExecution)
 	var lastEvent *historypb.HistoryEvent
-	var lastDecisionStartedEvent *historypb.HistoryEvent
+	var lastWorkflowTaskStartedEvent *historypb.HistoryEvent
 	lastIdx := 0
 	for i, e := range events {
 		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-			lastDecisionStartedEvent = e
+			lastWorkflowTaskStartedEvent = e
 			lastIdx = i
 		}
 		lastEvent = e
 	}
 	s.NotNil(lastEvent)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	s.Logger.Info(fmt.Sprintf("Last Decision Time: %v, Last Decision History Timestamp: %v, Complete Timestamp: %v",
-		time.Unix(0, lastDecisionTimestamp), time.Unix(0, lastDecisionStartedEvent.GetTimestamp()),
+	s.Logger.Info(fmt.Sprintf("Last workflow task time: %v, Last Workflow task history timestamp: %v, Complete timestamp: %v",
+		time.Unix(0, lastWorkflowTaskTimestamp), time.Unix(0, lastWorkflowTaskStartedEvent.GetTimestamp()),
 		time.Unix(0, lastEvent.GetTimestamp())))
-	s.Equal(lastDecisionTimestamp, lastDecisionStartedEvent.GetTimestamp())
-	s.True(time.Duration(lastEvent.GetTimestamp()-lastDecisionTimestamp) >= time.Second)
+	s.Equal(lastWorkflowTaskTimestamp, lastWorkflowTaskStartedEvent.GetTimestamp())
+	s.True(time.Duration(lastEvent.GetTimestamp()-lastWorkflowTaskTimestamp) >= time.Second)
 
 	s.Equal(2, len(events)-lastIdx-1)
-	decisionCompletedEvent := events[lastIdx+1]
+	workflowTaskCompletedEvent := events[lastIdx+1]
 	workflowCompletedEvent := events[lastIdx+2]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, decisionCompletedEvent.GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, workflowTaskCompletedEvent.GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
 }
 
@@ -2363,11 +2363,11 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
@@ -2404,14 +2404,14 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -2428,14 +2428,14 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 
 	before := time.Now()
 
-	// when no one polling on the taskqueue (activity or decision), there shall be no poller information
+	// when no one polling on the taskqueue (activity or workflow), there shall be no poller information
 	pollerInfos := testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
 	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Empty(pollerInfos)
 
-	_, errDecision := poller.PollAndProcessWorkflowTask(false, false)
-	s.NoError(errDecision)
+	_, errWorkflowTask := poller.PollAndProcessWorkflowTask(false, false)
+	s.NoError(errWorkflowTask)
 	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
 	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -2458,10 +2458,10 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 }
 
-func (s *integrationSuite) TestTransientDecisionTimeout() {
-	id := "integration-transient-decision-timeout-test"
-	wt := "integration-transient-decision-timeout-test-type"
-	tl := "integration-transient-decision-timeout-test-taskqueue"
+func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
+	id := "integration-transient-workflow-task-timeout-test"
+	wt := "integration-transient-workflow-task-timeout-test-type"
+	tl := "integration-transient-workflow-task-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2486,16 +2486,16 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
-	failDecision := true
+	failWorkflowTask := true
 	signalCount := 0
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if failDecision {
-			failDecision = false
-			return nil, errors.New("Decider Panic")
+		if failWorkflowTask {
+			failWorkflowTask = false
+			return nil, errors.New("Workflow panic")
 		}
 
 		// Count signals
@@ -2515,26 +2515,26 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// First decision immediately fails and schedules a transient decision
+	// First workflow task immediately fails and schedules a transient workflow task
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Now send a signal when transient decision is scheduled
+	// Now send a signal when transient workflow task is scheduled
 	err = s.sendSignal(s.namespace, workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
-	// Drop workflow task to cause a Decision Timeout
+	// Drop workflow task to cause a workflow task timeout
 	_, err = poller.PollAndProcessWorkflowTask(true, true)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2548,10 +2548,10 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
-	id := "integration-no-transient-decision-after-flush-buffered-events-test"
-	wt := "integration-no-transient-decision-after-flush-buffered-events-test-type"
-	tl := "integration-no-transient-decision-after-flush-buffered-events-test-taskqueue"
+func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
+	id := "integration-no-transient-workflow-task-after-flush-buffered-events-test"
+	wt := "integration-no-transient-workflow-task-after-flush-buffered-events-test-type"
+	tl := "integration-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2572,10 +2572,10 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	continueAsNewAndSignal := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !continueAsNewAndSignal {
@@ -2615,23 +2615,23 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// fist decision, this try to do a continue as new but there is a buffered event,
-	// so it will fail and create a new decision
+	// fist workflow task, this try to do a continue as new but there is a buffered event,
+	// so it will fail and create a new workflow task
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// second decision, which will complete the workflow
-	// this expect the decision to have attempt == 0
+	// second workflow task, which will complete the workflow
+	// this expect the workflow task to have attempt == 0
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 0)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2639,10 +2639,10 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestRelayDecisionTimeout() {
-	id := "integration-relay-decision-timeout-test"
-	wt := "integration-relay-decision-timeout-test-type"
-	tl := "integration-relay-decision-timeout-test-taskqueue"
+func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
+	id := "integration-relay-workflow-task-timeout-test"
+	wt := "integration-relay-workflow-task-timeout-test-type"
+	tl := "integration-relay-workflow-task-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -2668,7 +2668,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	}
 
 	workflowComplete, isFirst := false, true
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if isFirst {
 			isFirst = false
@@ -2686,18 +2686,18 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// First workflow task complete with a marker decision, and request to relay decision (immediately return a new workflow task)
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
+	// First workflow task complete with a marker command, and request to relay workflow task (immediately return a new workflow task)
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		false,
@@ -2711,7 +2711,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
-	time.Sleep(time.Second * 2) // wait 2s for relay decision to timeout
+	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
 		events := s.getHistory(s.namespace, workflowExecution)
@@ -2762,11 +2762,11 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
 	signalCount := 0
 	createUserTimer := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, h *historypb.History) ([]*commandpb.Command, error) {
 
 		if !createUserTimer {
@@ -2798,27 +2798,27 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Process first decision to create user timer
+	// Process first workflow task to create user timer
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Send one signal to create a new decision
+	// Send one signal to create a new workflow task
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 0)
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 
-	// Drop decision to cause all events to be buffered from now on
+	// Drop workflow task to cause all events to be buffered from now on
 	_, err = poller.PollAndProcessWorkflowTask(false, true)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2830,13 +2830,13 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 	}
 
-	// 101 signal, which will fail the decision
+	// 101 signal, which will fail the workflow task
 	buf = new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 101)
 	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 	s.Nil(signalErr)
 
-	// Process signal in decider
+	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 0)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -2845,8 +2845,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	s.Equal(102, signalCount)
 }
 
-func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
-	id := "integration-sticky-timeout-non-transient-decision"
+func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
+	id := "integration-sticky-timeout-non-transient-workflow-task"
 	wt := "integration-sticky-timeout-non-transient-command-type"
 	tl := "integration-sticky-timeout-non-transient-workflow-taskqueue"
 	stl := "integration-sticky-timeout-non-transient-workflow-taskqueue-sticky"
@@ -2878,10 +2878,10 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	localActivityDone := false
 	failureCount := 5
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !localActivityDone {
@@ -2899,7 +2899,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		}
 
 		if failureCount > 0 {
-			// send a signal on third failure to be buffered, forcing a non-transient decision when buffer is flushed
+			// send a signal on third failure to be buffered, forcing a non-transient workflow task when buffer is flushed
 			/*if failureCount == 3 {
 				err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 					Namespace:            s.namespace,
@@ -2928,7 +2928,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		Namespace:                           s.namespace,
 		TaskQueue:                           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:                            identity,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskQueue:                     stickyTaskQueue,
@@ -2948,7 +2948,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		RequestId:         uuid.New(),
 	})
 
-	// Wait for decision timeout
+	// Wait for workflow task timeout
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
@@ -2962,7 +2962,7 @@ WaitForStickyTimeoutLoop:
 		}
 		time.Sleep(time.Second)
 	}
-	s.True(stickyTimeout, "Decision not timed out")
+	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 0; i < 3; i++ {
 		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
@@ -3048,10 +3048,10 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	localActivityDone := false
 	failureCount := 5
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !localActivityDone {
@@ -3086,7 +3086,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		Namespace:                           s.namespace,
 		TaskQueue:                           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:                            identity,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskQueue:                     stickyTaskQueue,
@@ -3112,7 +3112,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		Execution: workflowExecution,
 	})
 
-	// Wait for decision timeout
+	// Wait for workflow task timeout
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
@@ -3126,7 +3126,7 @@ WaitForStickyTimeoutLoop:
 		}
 		time.Sleep(time.Second)
 	}
-	s.True(stickyTimeout, "Decision not timed out")
+	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 0; i < 3; i++ {
 		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
@@ -3207,17 +3207,17 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		RunId:      we.RunId,
 	}
 
-	// decider logic
+	// workflow logic
 	workflowComplete := false
-	firstDecision := false
-	secondDecision := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	firstWorkflowTask := false
+	secondWorkflowTask := false
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		s.Logger.Info(fmt.Sprintf("Decider called: first: %v, second: %v, complete: %v\n", firstDecision, secondDecision, workflowComplete))
+		s.Logger.Info(fmt.Sprintf("Workflow called: first: %v, second: %v, complete: %v\n", firstWorkflowTask, secondWorkflowTask, workflowComplete))
 
-		if !firstDecision {
-			firstDecision = true
+		if !firstWorkflowTask {
+			firstWorkflowTask = true
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -3241,8 +3241,8 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 			}}, nil
 		}
 
-		if !secondDecision {
-			secondDecision = true
+		if !secondWorkflowTask {
+			secondWorkflowTask = true
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -3268,18 +3268,18 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// first decision, which will schedule an activity and add marker
-	_, task, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
+	// first workflow task, which will schedule an activity and add marker
+	_, task, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		true,
 		false,
 		false,
@@ -3296,18 +3296,18 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	s.Logger.Info("pollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// second decision, completes another local activity and forces flush of buffered activity events
+	// second workflow task, completes another local activity and forces flush of buffered activity events
 	newWorkflowTask := task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
-	task, err = poller.HandlePartialDecision(newWorkflowTask)
+	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(task)
 
-	// third decision, which will close workflow
+	// third workflow task, which will close workflow
 	newWorkflowTask = task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
-	task, err = poller.HandlePartialDecision(newWorkflowTask)
+	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Nil(task.WorkflowTask)
@@ -3437,7 +3437,7 @@ func (s *integrationSuite) TestCancelTimer() {
 	timerCancelled := false
 	workflowComplete := false
 	timer := int64(2000)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !timerScheduled {
@@ -3489,14 +3489,14 @@ func (s *integrationSuite) TestCancelTimer() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// schedule the timer
@@ -3568,7 +3568,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	timerCancelled := false
 	workflowComplete := false
 	timer := int64(4)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !timerScheduled {
@@ -3621,14 +3621,14 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       &taskqueuepb.TaskQueue{Name: tl},
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// schedule the timer
@@ -3678,7 +3678,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
+	wtHandler := func(execution *commonpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -3689,13 +3689,13 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// verify open visibility
