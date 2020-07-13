@@ -49,7 +49,7 @@ services:
     depends_on:
       - temporal
   temporal-web:
-    image: temporalio/web:0.26.0
+    image: temporalio/web:${WEB_TAG:-0.26.0}
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:
