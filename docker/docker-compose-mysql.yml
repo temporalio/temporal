@@ -6,13 +6,6 @@ services:
       - "3306:3306"
     environment:
       - "MYSQL_ROOT_PASSWORD=root"
-  statsd:
-    image: graphiteapp/graphite-statsd
-    ports:
-      - "8080:80"
-      - "2003:2003"
-      - "8125:8125"
-      - "8126:8126"
   temporal:
     image: temporalio/server:${SERVER_TAG:-0.26.0}
     ports:
@@ -23,11 +16,9 @@ services:
       - "MYSQL_USER=root"
       - "MYSQL_PWD=root"
       - "MYSQL_SEEDS=mysql"
-      - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - mysql
-      - statsd
   temporal-admin-tools:
     image: temporalio/admin-tools:${SERVER_TAG:-0.26.0}
     stdin_open: true
