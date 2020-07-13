@@ -76,7 +76,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		tag.TaskID(transferTask.GetTaskId()),
 		tag.TaskType(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
-		tag.TimestampProto(transferTask.VisibilityTimestamp),
+		tag.TimestampProto(transferTask.VisibilityTime),
 		tag.WorkflowEventID(transferTask.GetScheduleId()))
 	return ErrTaskDiscarded
 }
@@ -100,7 +100,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.TaskType(timerTask.TaskType),
 		tag.WorkflowTimeoutType(timerTask.TimeoutType),
 		tag.FailoverVersion(timerTask.GetVersion()),
-		tag.TimestampProto(timerTask.VisibilityTimestamp),
+		tag.TimestampProto(timerTask.VisibilityTime),
 		tag.WorkflowEventID(timerTask.GetEventId()))
 	return ErrTaskDiscarded
 }
@@ -198,7 +198,7 @@ func getStandbyPostActionFn(
 
 	// this is for task retry, use machine time
 	now := standbyNow()
-	taskTime, _ := types.TimestampFromProto(taskInfo.GetVisibilityTimestamp())
+	taskTime, _ := types.TimestampFromProto(taskInfo.GetVisibilityTime())
 	resendTime := taskTime.Add(standbyTaskMissingEventsResendDelay)
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 

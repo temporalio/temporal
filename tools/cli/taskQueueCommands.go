@@ -39,7 +39,7 @@ import (
 func DescribeTaskQueue(c *cli.Context) {
 	wfClient := getWorkflowClient(c)
 	taskQueue := getRequiredOption(c, FlagTaskQueue)
-	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is decision
+	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is workflow
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -86,8 +86,8 @@ func ListTaskQueuePartitions(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Operation ListTaskQueuePartitions failed.", err)
 	}
-	if len(response.DecisionTaskQueuePartitions) > 0 {
-		printTaskQueuePartitions("Decision", response.DecisionTaskQueuePartitions)
+	if len(response.WorkflowTaskQueuePartitions) > 0 {
+		printTaskQueuePartitions("Decision", response.WorkflowTaskQueuePartitions)
 	}
 	if len(response.ActivityTaskQueuePartitions) > 0 {
 		printTaskQueuePartitions("Activity", response.ActivityTaskQueuePartitions)

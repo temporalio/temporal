@@ -64,7 +64,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 	}
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := adminClient.ReadDLQMessages(ctx, &adminservice.ReadDLQMessagesRequest{
+		resp, err := adminClient.GetDLQMessages(ctx, &adminservice.GetDLQMessagesRequest{
 			Type:                  toQueueType(dlqType),
 			InclusiveEndMessageId: lastMessageID,
 			MaximumPageSize:       defaultPageSize,

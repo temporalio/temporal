@@ -309,21 +309,21 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	return response, nil
 }
 
-func (c *clientImpl) RecordDecisionTaskStarted(
+func (c *clientImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
-	request *historyservice.RecordDecisionTaskStartedRequest,
-	opts ...grpc.CallOption) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+	request *historyservice.RecordWorkflowTaskStartedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 
-	var response *historyservice.RecordDecisionTaskStartedResponse
+	var response *historyservice.RecordWorkflowTaskStartedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.RecordDecisionTaskStarted(ctx, request, opts...)
+		response, err = client.RecordWorkflowTaskStarted(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
@@ -357,10 +357,10 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	return response, nil
 }
 
-func (c *clientImpl) RespondDecisionTaskCompleted(
+func (c *clientImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *historyservice.RespondDecisionTaskCompletedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskCompletedResponse, error) {
+	request *historyservice.RespondWorkflowTaskCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
 		return nil, err
@@ -370,21 +370,21 @@ func (c *clientImpl) RespondDecisionTaskCompleted(
 		return nil, err
 	}
 
-	var response *historyservice.RespondDecisionTaskCompletedResponse
+	var response *historyservice.RespondWorkflowTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.RespondDecisionTaskCompleted(ctx, request, opts...)
+		response, err = client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
 	return response, err
 }
 
-func (c *clientImpl) RespondDecisionTaskFailed(
+func (c *clientImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *historyservice.RespondDecisionTaskFailedRequest,
-	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskFailedResponse, error) {
+	request *historyservice.RespondWorkflowTaskFailedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondWorkflowTaskFailedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.FailedRequest.TaskToken)
 	if err != nil {
 		return nil, err
@@ -394,12 +394,12 @@ func (c *clientImpl) RespondDecisionTaskFailed(
 		return nil, err
 	}
 
-	var response *historyservice.RespondDecisionTaskFailedResponse
+	var response *historyservice.RespondWorkflowTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.RespondDecisionTaskFailed(ctx, request, opts...)
+		response, err = client.RespondWorkflowTaskFailed(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
@@ -669,21 +669,21 @@ func (c *clientImpl) ResetWorkflowExecution(
 	return response, err
 }
 
-func (c *clientImpl) ScheduleDecisionTask(
+func (c *clientImpl) ScheduleWorkflowTask(
 	ctx context.Context,
-	request *historyservice.ScheduleDecisionTaskRequest,
-	opts ...grpc.CallOption) (*historyservice.ScheduleDecisionTaskResponse, error) {
+	request *historyservice.ScheduleWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
 	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 
-	var response *historyservice.ScheduleDecisionTaskResponse
+	var response *historyservice.ScheduleWorkflowTaskResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.ScheduleDecisionTask(ctx, request, opts...)
+		response, err = client.ScheduleWorkflowTask(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
@@ -971,17 +971,17 @@ func (c *clientImpl) ReapplyEvents(
 
 }
 
-func (c *clientImpl) ReadDLQMessages(
+func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
-	request *historyservice.ReadDLQMessagesRequest,
+	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.ReadDLQMessagesResponse, error) {
+) (*historyservice.GetDLQMessagesResponse, error) {
 
 	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
-	return client.ReadDLQMessages(ctx, request, opts...)
+	return client.GetDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(

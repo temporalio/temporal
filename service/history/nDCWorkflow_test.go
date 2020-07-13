@@ -273,10 +273,10 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		StartedID:  9012,
 	}
 	s.mockMutableState.EXPECT().GetInFlightDecision().Return(inFlightDecision, true).Times(1)
-	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
+	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		inFlightDecision.ScheduleID,
 		inFlightDecision.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil,
 		identityHistoryService,
 		"",

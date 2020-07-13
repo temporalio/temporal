@@ -218,7 +218,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
 		ParentWorkflowNamespace:         testParentNamespace,
 		Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-		FirstDecisionTaskBackoffSeconds: int32(backoff.GetBackoffForNextSchedule(cronSchedule, now, now).Seconds()),
+		FirstWorkflowTaskBackoffSeconds: int32(backoff.GetBackoffForNextSchedule(cronSchedule, now, now).Seconds()),
 	}
 
 	event := &historypb.HistoryEvent{
@@ -241,7 +241,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		event,
 	).Return(nil).Times(1)
-	s.mockTaskGenerator.EXPECT().generateDelayedDecisionTasks(
+	s.mockTaskGenerator.EXPECT().generateDelayedWorkflowTasks(
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 		event,
 	).Return(nil).Times(1)
@@ -465,8 +465,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Version:   version,
 		EventId:   3,
 		Timestamp: now.UnixNano(),
-		EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: taskTimeoutSeconds,
 			Attempt:                    newRunDecisionAttempt,
@@ -674,7 +674,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeMarkerRecorded() {
 
 // decision operations
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 	version := int64(1)
 	requestID := uuid.New()
 
@@ -686,14 +686,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	now := time.Now()
 	taskqueue := "some random taskqueue"
 	timeoutSecond := int32(11)
-	evenType := enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
 	decisionAttempt := int64(111)
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 			StartToCloseTimeoutSeconds: timeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -712,7 +712,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskScheduledEvent(
+	s.mockMutableState.EXPECT().ReplicateWorkflowTaskScheduledEvent(
 		event.GetVersion(), event.GetEventId(), taskqueue, timeoutSecond, decisionAttempt, event.GetTimestamp(), event.GetTimestamp(),
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
@@ -725,7 +725,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	_, err := s.stateBuilder.applyEvents(testNamespaceID, requestID, execution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	version := int64(1)
 	requestID := uuid.New()
 
@@ -739,13 +739,13 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 	timeoutSecond := int32(11)
 	scheduleID := int64(111)
 	decisionRequestID := uuid.New()
-	evenType := enumspb.EVENT_TYPE_DECISION_TASK_STARTED
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: scheduleID,
 			RequestId:        decisionRequestID,
 		}},
@@ -759,7 +759,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 		TaskQueue:       taskqueue,
 		Attempt:         0,
 	}
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskStartedEvent(
+	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
 		(*decisionInfo)(nil), event.GetVersion(), scheduleID, event.GetEventId(), decisionRequestID, event.GetTimestamp(),
 	).Return(di, nil).Times(1)
 	s.mockUpdateVersion(event)
@@ -774,7 +774,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 	s.Nil(err)
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	version := int64(1)
 	requestID := uuid.New()
 
@@ -786,26 +786,26 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &historypb.DecisionTaskTimedOutEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 			TimeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		}},
 	}
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE).Return(nil).Times(1)
 	taskqueue := "some random taskqueue"
 	newScheduleID := int64(233)
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().ReplicateTransientDecisionTaskScheduled().Return(&decisionInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&decisionInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
 		TaskQueue:  taskqueue,
@@ -821,7 +821,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 	s.Nil(err)
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	version := int64(1)
 	requestID := uuid.New()
 
@@ -833,25 +833,25 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := enumspb.EVENT_TYPE_DECISION_TASK_FAILED
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &historypb.DecisionTaskFailedEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 		}},
 	}
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskFailedEvent().Return(nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateWorkflowTaskFailedEvent().Return(nil).Times(1)
 	taskqueue := "some random taskqueue"
 	newScheduleID := int64(233)
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskQueue: taskqueue,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.mockMutableState.EXPECT().ReplicateTransientDecisionTaskScheduled().Return(&decisionInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&decisionInfo{
 		Version:    version,
 		ScheduleID: newScheduleID,
 		TaskQueue:  taskqueue,
@@ -867,7 +867,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 	s.Nil(err)
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskCompleted() {
 	version := int64(1)
 	requestID := uuid.New()
 
@@ -879,18 +879,18 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 	now := time.Now()
 	scheduleID := int64(12)
 	startedID := int64(28)
-	evenType := enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 		}},
 	}
-	s.mockMutableState.EXPECT().ReplicateDecisionTaskCompletedEvent(event).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateWorkflowTaskCompletedEvent(event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)

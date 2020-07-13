@@ -245,7 +245,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		timerKey := timerKeyFromGogoTime(task.GetVisibilityTimestamp(), task.GetTaskId())
+		timerKey := timerKeyFromGogoTime(task.GetVisibilityTime(), task.GetTaskId())
 		_, isLoaded := t.outstandingTasks[*timerKey]
 		if isLoaded {
 			// timer already loaded
@@ -314,7 +314,7 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskI
 }
 
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
-	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTimestamp(), timerTask.GetTaskId())
+	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTime(), timerTask.GetTaskId())
 	t.Lock()
 	defer t.Unlock()
 

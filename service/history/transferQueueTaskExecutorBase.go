@@ -130,11 +130,11 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK {
-		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK {
+		t.logger.Fatal("Cannot process non workflow task", tag.TaskType(task.GetTaskType()))
 	}
 
-	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
+	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
 		NamespaceId: task.GetNamespaceId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
@@ -278,7 +278,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == enumspb.ARCHIVAL_STATUS_ENABLED
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
@@ -348,7 +348,7 @@ func getWorkflowExecutionTimestamp(
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
+	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoffSeconds(); backoffSeconds != 0 {
 		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
 		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
 	}

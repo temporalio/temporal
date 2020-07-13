@@ -92,7 +92,7 @@ func loadMutableStateForTransferTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK &&
+	isDecisionRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
 		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.DecisionAttempt > 0
 
@@ -166,12 +166,12 @@ func initializeLoggerForTask(
 	logger log.Logger,
 ) log.Logger {
 
-	t, _ := types.TimestampFromProto(task.GetVisibilityTimestamp())
+	t, _ := types.TimestampFromProto(task.GetVisibilityTime())
 	taskLogger := logger.WithTags(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
 		tag.TaskVisibilityTimestamp(t.UnixNano()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().GetSeconds()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().GetSeconds()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
 		tag.WorkflowNamespaceID(task.GetNamespaceId()),

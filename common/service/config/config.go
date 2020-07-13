@@ -377,8 +377,8 @@ type (
 
 	// HistoryArchival contains the config for history archival
 	HistoryArchival struct {
-		// Status is the status of history archival either: enabled, disabled, or paused
-		Status string `yaml:"status"`
+		// State is the state of history archival either: enabled, disabled, or paused
+		State string `yaml:"state"`
 		// EnableRead whether history can be read from archival
 		EnableRead bool `yaml:"enableRead"`
 		// Provider contains the config for all history archivers
@@ -394,8 +394,8 @@ type (
 
 	// VisibilityArchival contains the config for visibility archival
 	VisibilityArchival struct {
-		// Status is the status of visibility archival either: enabled, disabled, or paused
-		Status string `yaml:"status"`
+		// State is the state of visibility archival either: enabled, disabled, or paused
+		State string `yaml:"state"`
 		// EnableRead whether visibility can be read from archival
 		EnableRead bool `yaml:"enableRead"`
 		// Provider contains the config for all visibility archivers
@@ -451,16 +451,16 @@ type (
 
 	// HistoryArchivalNamespaceDefaults is the default history archival config for each namespace
 	HistoryArchivalNamespaceDefaults struct {
-		// Status is the namespace default status of history archival: enabled or disabled
-		Status string `yaml:"status"`
+		// State is the namespace default state of history archival: enabled or disabled
+		State string `yaml:"state"`
 		// URI is the namespace default URI for history archiver
 		URI string `yaml:"URI"`
 	}
 
 	// VisibilityArchivalNamespaceDefaults is the default visibility archival config for each namespace
 	VisibilityArchivalNamespaceDefaults struct {
-		// Status is the namespace default status of visibility archival: enabled or disabled
-		Status string `yaml:"status"`
+		// State is the namespace default state of visibility archival: enabled or disabled
+		State string `yaml:"state"`
 		// URI is the namespace default URI for visibility archiver
 		URI string `yaml:"URI"`
 	}

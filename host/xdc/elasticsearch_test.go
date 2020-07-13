@@ -156,11 +156,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Clusters:                               clusterReplicationConfigES,
-		ActiveClusterName:                      clusterNameES[0],
-		IsGlobalNamespace:                      true,
-		WorkflowExecutionRetentionPeriodInDays: 1,
+		Name:                                 namespace,
+		Clusters:                             clusterReplicationConfigES,
+		ActiveClusterName:                    clusterNameES[0],
+		IsGlobalNamespace:                    true,
+		WorkflowExecutionRetentionPeriodDays: 1,
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
@@ -273,8 +273,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		T:               s.T(),
 	}
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)

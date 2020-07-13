@@ -209,7 +209,7 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 		},
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
-			lastUpdated: *info.Data.LastUpdated,
+			lastUpdated: *info.Data.LastUpdateTime,
 		},
 		scvg: s,
 	}

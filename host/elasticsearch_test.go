@@ -224,7 +224,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		Logger:          s.Logger,
 		T:               s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
 		false,
 		false,
 		true,
@@ -235,7 +235,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
+	s.NotNil(newTask.WorkflowTask)
 
 	time.Sleep(waitForESToSettle)
 
@@ -910,7 +910,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	}
 
 	// process 1st decision and assert decision is handled correctly.
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
 		false,
 		false,
 		true,
@@ -921,14 +921,14 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(int64(3), newTask.DecisionTask.GetPreviousStartedEventId())
-	s.Equal(int64(7), newTask.DecisionTask.GetStartedEventId())
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
+	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -960,7 +960,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.True(verified)
 
 	// process 2nd decision and assert decision is handled correctly.
-	_, newTask, err = poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewDecision(
 		false,
 		false,
 		true,
@@ -971,12 +971,12 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -1088,7 +1088,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -1101,9 +1101,9 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.NoError(err)
 	history := historyResponse.History
 	decisionFailedEvent := history.GetEvents()[3]
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_FAILED, decisionFailedEvent.GetEventType())
-	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
-	s.Equal(enumspb.DECISION_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedDecisionAttr.GetCause())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, decisionFailedEvent.GetEventType())
+	failedDecisionAttr := decisionFailedEvent.GetWorkflowTaskFailedEventAttributes()
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedDecisionAttr.GetCause())
 	s.NotNil(failedDecisionAttr.GetFailure())
 }
 

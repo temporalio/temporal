@@ -52,7 +52,7 @@ message StartWorkflowExecutionRequest {
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
-    int32 first_decision_task_backoff_seconds = 9;
+    int32 first_workflow_task_backoff_seconds = 9;
 }
 
 message StartWorkflowExecutionResponse {
@@ -77,16 +77,14 @@ message GetMutableStateResponse {
     string client_library_version = 8;
     string client_feature_version = 9;
     string client_impl = 10;
-    //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
-    bool is_workflow_running = 11;
-    int32 sticky_task_queue_schedule_to_start_timeout = 12;
-    int32 event_store_version = 13;
-    bytes current_branch_token = 14;
-    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 15;
-    temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 16;
-    temporal.api.enums.v1.WorkflowExecutionStatus workflow_status = 17;
-    temporal.server.api.history.v1.VersionHistories version_histories = 18;
-    bool is_sticky_task_queue_enabled = 19;
+    int32 sticky_task_queue_schedule_to_start_timeout = 11;
+    int32 event_store_version = 12;
+    bytes current_branch_token = 13;
+    map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 14;
+    temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 15;
+    temporal.api.enums.v1.WorkflowExecutionStatus workflow_status = 16;
+    temporal.server.api.history.v1.VersionHistories version_histories = 17;
+    bool is_sticky_task_queue_enabled = 18;
 }
 
 message PollMutableStateRequest {
@@ -123,17 +121,17 @@ message ResetStickyTaskQueueRequest {
 message ResetStickyTaskQueueResponse {
 }
 
-message RecordDecisionTaskStartedRequest {
+message RecordWorkflowTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     int64 schedule_id = 3;
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
-    temporal.api.workflowservice.v1.PollForDecisionTaskRequest poll_request = 6;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
 }
 
-message RecordDecisionTaskStartedResponse {
+message RecordWorkflowTaskStartedResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;
     int64 scheduled_event_id = 3;
@@ -157,7 +155,7 @@ message RecordActivityTaskStartedRequest {
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
-    temporal.api.workflowservice.v1.PollForActivityTaskRequest poll_request = 6;
+    temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -170,21 +168,21 @@ message RecordActivityTaskStartedResponse {
     string workflow_namespace = 7;
 }
 
-message RespondDecisionTaskCompletedRequest {
+message RespondWorkflowTaskCompletedRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.RespondDecisionTaskCompletedRequest complete_request = 2;
+    temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest complete_request = 2;
 }
 
-message RespondDecisionTaskCompletedResponse {
-    RecordDecisionTaskStartedResponse started_response = 1;
+message RespondWorkflowTaskCompletedResponse {
+    RecordWorkflowTaskStartedResponse started_response = 1;
 }
 
-message RespondDecisionTaskFailedRequest {
+message RespondWorkflowTaskFailedRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.RespondDecisionTaskFailedRequest failed_request = 2;
+    temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest failed_request = 2;
 }
 
-message RespondDecisionTaskFailedResponse {
+message RespondWorkflowTaskFailedResponse {
 }
 
 message RecordActivityTaskHeartbeatRequest {
@@ -276,13 +274,13 @@ message RequestCancelWorkflowExecutionRequest {
 message RequestCancelWorkflowExecutionResponse {
 }
 
-message ScheduleDecisionTaskRequest {
+message ScheduleWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     bool is_first_decision = 3;
 }
 
-message ScheduleDecisionTaskResponse {
+message ScheduleWorkflowTaskResponse {
 }
 
 /**
@@ -468,7 +466,7 @@ message ReapplyEventsRequest {
 message ReapplyEventsResponse {
 }
 
-message ReadDLQMessagesRequest {
+message GetDLQMessagesRequest {
     temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
     int32 shard_id = 2;
     string source_cluster = 3;
@@ -477,7 +475,7 @@ message ReadDLQMessagesRequest {
     bytes next_page_token = 6;
 }
 
-message ReadDLQMessagesResponse {
+message GetDLQMessagesResponse {
     temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
     repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 2;
     bytes next_page_token = 3;

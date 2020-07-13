@@ -173,8 +173,8 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if attributes.GetFirstDecisionTaskBackoffSeconds() > 0 {
-				if err := taskGenerator.generateDelayedDecisionTasks(
+			if attributes.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+				if err := taskGenerator.generateDelayedWorkflowTasks(
 					b.unixNanoToTime(event.GetTimestamp()),
 					event,
 				); err != nil {
@@ -193,10 +193,10 @@ func (b *stateBuilderImpl) applyEvents(
 				b.mutableState.GetReplicationState().StartVersion = event.GetVersion()
 			}
 
-		case enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED:
-			attributes := event.GetDecisionTaskScheduledEventAttributes()
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
+			attributes := event.GetWorkflowTaskScheduledEventAttributes()
 			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
-			decision, err := b.mutableState.ReplicateDecisionTaskScheduledEvent(
+			decision, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
 				attributes.TaskQueue.GetName(),
@@ -219,9 +219,9 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_DECISION_TASK_STARTED:
-			attributes := event.GetDecisionTaskStartedEventAttributes()
-			decision, err := b.mutableState.ReplicateDecisionTaskStartedEvent(
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+			attributes := event.GetWorkflowTaskStartedEventAttributes()
+			decision, err := b.mutableState.ReplicateWorkflowTaskStartedEvent(
 				nil,
 				event.GetVersion(),
 				attributes.GetScheduledEventId(),
@@ -240,22 +240,22 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED:
-			if err := b.mutableState.ReplicateDecisionTaskCompletedEvent(
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			if err := b.mutableState.ReplicateWorkflowTaskCompletedEvent(
 				event,
 			); err != nil {
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_DECISION_TASK_TIMED_OUT:
-			if err := b.mutableState.ReplicateDecisionTaskTimedOutEvent(
-				event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType(),
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			if err := b.mutableState.ReplicateWorkflowTaskTimedOutEvent(
+				event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType(),
 			); err != nil {
 				return nil, err
 			}
 
 			// this is for transient decision
-			decision, err := b.mutableState.ReplicateTransientDecisionTaskScheduled()
+			decision, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
 			if err != nil {
 				return nil, err
 			}
@@ -272,13 +272,13 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 			}
 
-		case enumspb.EVENT_TYPE_DECISION_TASK_FAILED:
-			if err := b.mutableState.ReplicateDecisionTaskFailedEvent(); err != nil {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
+			if err := b.mutableState.ReplicateWorkflowTaskFailedEvent(); err != nil {
 				return nil, err
 			}
 
 			// this is for transient decision
-			decision, err := b.mutableState.ReplicateTransientDecisionTaskScheduled()
+			decision, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
 			if err != nil {
 				return nil, err
 			}

@@ -66,14 +66,14 @@ func ValidateCreateWorkflowStateStatus(
 		return err
 	}
 
-	// validate workflow state & close status
+	// validate workflow state & status
 	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
+		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or status: %v", state, status))
 	}
 	return nil
 }
 
-// ValidateUpdateWorkflowStateStatus validate workflow state and close status
+// ValidateUpdateWorkflowStateStatus validate workflow state and status
 func ValidateUpdateWorkflowStateStatus(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
@@ -86,10 +86,10 @@ func ValidateUpdateWorkflowStateStatus(
 		return err
 	}
 
-	// validate workflow state & close status
+	// validate workflow state & status
 	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
 		}
 	} else {
 		// enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -99,7 +99,7 @@ func ValidateUpdateWorkflowStateStatus(
 		// enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		// enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
 		if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
 		}
 	}
 	return nil
@@ -117,13 +117,13 @@ func validateWorkflowState(
 	return nil
 }
 
-// validateWorkflowStatus validate workflow close status
+// validateWorkflowStatus validate workflow status
 func validateWorkflowStatus(
 	status enumspb.WorkflowExecutionStatus,
 ) error {
 
 	if _, ok := validWorkflowStatuses[status]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow close status: %v", status))
+		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow status: %v", status))
 	}
 
 	return nil

@@ -262,12 +262,12 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	return &ArchiverBase{
 		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
 			History: config.HistoryArchivalNamespaceDefaults{
-				Status: "enabled",
-				URI:    "testScheme://test/history/archive/path",
+				State: "enabled",
+				URI:   "testScheme://test/history/archive/path",
 			},
 			Visibility: config.VisibilityArchivalNamespaceDefaults{
-				Status: "enabled",
-				URI:    "testScheme://test/visibility/archive/path",
+				State: "enabled",
+				URI:   "testScheme://test/visibility/archive/path",
 			},
 		}),
 		provider:                 provider,

@@ -147,13 +147,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 			EventId:   2,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
-			EventType: enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)

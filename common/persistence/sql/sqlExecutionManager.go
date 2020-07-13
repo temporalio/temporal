@@ -1065,7 +1065,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	}
 
 	if len(resp.Timers) > request.BatchSize {
-		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTimestamp)
+		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTime)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
 		}

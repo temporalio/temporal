@@ -446,7 +446,7 @@ func createExecution(
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
-	executionInfo.LastUpdatedTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {
@@ -558,7 +558,7 @@ func updateExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {
@@ -716,11 +716,11 @@ func createTransferTasks(
 			taskQueue = task.(*p.ActivityTask).TaskQueue
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
-			taskQueue = task.(*p.DecisionTask).TaskQueue
-			scheduleID = task.(*p.DecisionTask).ScheduleID
-			recordVisibility = task.(*p.DecisionTask).RecordVisibility
+		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
+			taskQueue = task.(*p.WorkflowTask).TaskQueue
+			scheduleID = task.(*p.WorkflowTask).ScheduleID
+			recordVisibility = task.(*p.WorkflowTask).RecordVisibility
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
@@ -773,7 +773,7 @@ func createTransferTasks(
 			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
-			VisibilityTimestamp:     taskVisTs,
+			VisibilityTime:          taskVisTs,
 			RecordVisibility:        recordVisibility,
 		}
 
@@ -809,7 +809,7 @@ func createReplicationTasks(
 		// Replication task specific information
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion //nolint:ineffassign
+		version := common.EmptyVersion // nolint:ineffassign
 		var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
@@ -944,7 +944,7 @@ func createTimerTasks(
 			ScheduleAttempt:     attempt,
 			EventId:             eventID,
 			TaskId:              task.GetTaskID(),
-			VisibilityTimestamp: protoTs,
+			VisibilityTime:      protoTs,
 		})
 
 		if err != nil {

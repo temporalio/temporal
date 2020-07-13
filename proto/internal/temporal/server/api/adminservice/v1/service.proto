@@ -78,8 +78,8 @@ service AdminService {
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
-    // ReadDLQMessages returns messages from DLQ.
-    rpc ReadDLQMessages(ReadDLQMessagesRequest) returns (ReadDLQMessagesResponse) {
+    // GetDLQMessages returns messages from DLQ.
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }
 
     // PurgeDLQMessages purges messages from DLQ.

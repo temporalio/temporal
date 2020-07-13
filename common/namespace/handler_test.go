@@ -279,13 +279,13 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		})
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace1,
-		Description:                            description1,
-		OwnerEmail:                             email1,
-		WorkflowExecutionRetentionPeriodInDays: retention1,
-		EmitMetric:                             emitMetric1,
-		Data:                                   data1,
-		IsGlobalNamespace:                      isGlobalNamespace1,
+		Name:                                 namespace1,
+		Description:                          description1,
+		OwnerEmail:                           email1,
+		WorkflowExecutionRetentionPeriodDays: retention1,
+		EmitMetric:                           emitMetric1,
+		Data:                                 data1,
+		IsGlobalNamespace:                    isGlobalNamespace1,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -309,15 +309,15 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	}
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 	registerResp, err = s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace2,
-		Description:                            description2,
-		OwnerEmail:                             email2,
-		WorkflowExecutionRetentionPeriodInDays: retention2,
-		EmitMetric:                             emitMetric2,
-		Clusters:                               cluster2,
-		ActiveClusterName:                      activeClusterName2,
-		Data:                                   data2,
-		IsGlobalNamespace:                      isGlobalNamespace2,
+		Name:                                 namespace2,
+		Description:                          description2,
+		OwnerEmail:                           email2,
+		WorkflowExecutionRetentionPeriodDays: retention2,
+		EmitMetric:                           emitMetric2,
+		Clusters:                             cluster2,
+		ActiveClusterName:                    activeClusterName2,
+		Data:                                 data2,
+		IsGlobalNamespace:                    isGlobalNamespace2,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
@@ -344,7 +344,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace1: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace1,
-				Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
@@ -353,9 +353,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
-				HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+				HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:                     "",
-				VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalUri:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
@@ -369,7 +369,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace2: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace2,
-				Status:      enumspb.NAMESPACE_STATUS_REGISTERED,
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
@@ -378,9 +378,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
-				HistoryArchivalStatus:                  enumspb.ARCHIVAL_STATUS_DISABLED,
+				HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:                     "",
-				VisibilityArchivalStatus:               enumspb.ARCHIVAL_STATUS_DISABLED,
+				VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalUri:                  "",
 				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
@@ -396,10 +396,10 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeriod() {
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   "random namespace name",
-		Description:                            "random namespace name",
-		WorkflowExecutionRetentionPeriodInDays: int32(0),
-		IsGlobalNamespace:                      false,
+		Name:                                 "random namespace name",
+		Description:                          "random namespace name",
+		WorkflowExecutionRetentionPeriodDays: int32(0),
+		IsGlobalNamespace:                    false,
 	}
 	resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
@@ -409,10 +409,10 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
 	namespace := "random namespace name"
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
-		Name:                                   namespace,
-		Description:                            namespace,
-		WorkflowExecutionRetentionPeriodInDays: int32(10),
-		IsGlobalNamespace:                      false,
+		Name:                                 namespace,
+		Description:                          namespace,
+		WorkflowExecutionRetentionPeriodDays: int32(10),
+		IsGlobalNamespace:                    false,
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)

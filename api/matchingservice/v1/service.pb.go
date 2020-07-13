@@ -30,36 +30,36 @@ func init() {
 }
 
 var fileDescriptor_1a5c83076e651916 = []byte{
-	// 464 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x95, 0xb1, 0x8e, 0xd3, 0x30,
-	0x18, 0x80, 0xe3, 0x85, 0xc1, 0x08, 0x9d, 0x30, 0x42, 0x88, 0x1b, 0x3c, 0x30, 0x30, 0x26, 0x3a,
-	0x60, 0xe3, 0x8e, 0xa3, 0xd7, 0x72, 0x80, 0x04, 0xe2, 0x0e, 0x90, 0x90, 0x58, 0x90, 0x2f, 0xf9,
-	0x29, 0x56, 0xd3, 0x38, 0xd8, 0x4e, 0x50, 0x37, 0x9e, 0x00, 0x31, 0x30, 0x31, 0x31, 0x21, 0x06,
-	0x26, 0x9e, 0x80, 0x91, 0xb1, 0x63, 0x47, 0x9a, 0x2e, 0x8c, 0x7d, 0x04, 0x94, 0xa6, 0x0e, 0x4d,
-	0x68, 0x91, 0x49, 0x6e, 0x6b, 0x1d, 0x7f, 0xdf, 0xff, 0xc5, 0x8a, 0x64, 0x7c, 0x43, 0xc3, 0x30,
-	0x16, 0x92, 0x85, 0x9e, 0x02, 0x99, 0x82, 0xf4, 0x58, 0xcc, 0xbd, 0x21, 0xd3, 0xfe, 0x2b, 0x1e,
-	0xf5, 0xf3, 0x25, 0xee, 0x83, 0x97, 0xee, 0x78, 0xcb, 0x9f, 0x6e, 0x2c, 0x85, 0x16, 0xe4, 0xaa,
-	0xa1, 0xdc, 0x82, 0x72, 0x59, 0xcc, 0xdd, 0x1a, 0xe5, 0xa6, 0x3b, 0xdb, 0x7b, 0x96, 0x76, 0x09,
-	0xaf, 0x13, 0x50, 0xfa, 0x85, 0x04, 0x15, 0x8b, 0x48, 0x2d, 0xc7, 0x5c, 0xfb, 0x7e, 0x16, 0x6f,
-	0x3d, 0x5c, 0xee, 0x7e, 0x52, 0xec, 0x26, 0x9f, 0x10, 0xbe, 0x70, 0x24, 0xc2, 0xf0, 0x50, 0xc8,
-	0x1e, 0xf8, 0x5c, 0x71, 0x11, 0x3d, 0x65, 0x6a, 0x40, 0x0e, 0x5c, 0xbb, 0x26, 0x77, 0x0d, 0xfc,
-	0xb8, 0x18, 0xbf, 0xdd, 0x6d, 0xe5, 0x28, 0xd2, 0xaf, 0x38, 0xab, 0x89, 0x1d, 0x5f, 0xf3, 0x94,
-	0xeb, 0x51, 0xa3, 0xc4, 0x55, 0xb8, 0x69, 0x62, 0xd5, 0x51, 0x26, 0x7e, 0x40, 0x78, 0xab, 0x13,
-	0x04, 0x95, 0x13, 0xbc, 0x65, 0xab, 0xae, 0x81, 0x26, 0x6d, 0xbf, 0x31, 0x5f, 0xcf, 0xaa, 0x9c,
-	0xda, 0xff, 0x64, 0xad, 0x3b, 0xb1, 0xfd, 0xc6, 0x7c, 0x99, 0xf5, 0x0e, 0xe1, 0x73, 0xc7, 0x09,
-	0xc8, 0xd1, 0x33, 0x21, 0x07, 0x2f, 0x43, 0xf1, 0x86, 0xec, 0xda, 0x4a, 0x2b, 0x98, 0x49, 0xda,
-	0x6b, 0x48, 0x97, 0x41, 0xdf, 0x10, 0xbe, 0x5c, 0xfc, 0x0d, 0x16, 0x5b, 0xf2, 0xde, 0xae, 0x18,
-	0xc6, 0x21, 0x68, 0x08, 0xc8, 0x3d, 0x5b, 0xfd, 0x46, 0x85, 0x09, 0xbd, 0x7f, 0x0a, 0xa6, 0x32,
-	0xfa, 0x33, 0xc2, 0x17, 0xbb, 0x2c, 0xf2, 0x21, 0x7c, 0x94, 0x68, 0xa5, 0x59, 0x14, 0xf0, 0xa8,
-	0x9f, 0x7f, 0xa6, 0xa4, 0x67, 0x3b, 0x66, 0x2d, 0x6e, 0x62, 0xef, 0xb4, 0xb4, 0x94, 0xa1, 0x1f,
-	0x11, 0x3e, 0xdf, 0x03, 0xe5, 0x4b, 0x7e, 0x02, 0xf9, 0xcb, 0x1c, 0x27, 0x90, 0x00, 0xb9, 0x6d,
-	0xab, 0xff, 0x0b, 0x35, 0x81, 0x9d, 0x16, 0x86, 0x32, 0xee, 0x2b, 0xc2, 0x97, 0x1e, 0x70, 0xa5,
-	0xcb, 0x67, 0x47, 0x4c, 0x6a, 0xae, 0xb9, 0x88, 0x14, 0x39, 0xb4, 0x1d, 0xb0, 0x41, 0x60, 0x42,
-	0xef, 0xb6, 0xf6, 0x98, 0xdc, 0x03, 0x39, 0x9e, 0x52, 0x67, 0x32, 0xa5, 0xce, 0x7c, 0x4a, 0xd1,
-	0xdb, 0x8c, 0xa2, 0x2f, 0x19, 0x45, 0x3f, 0x32, 0x8a, 0xc6, 0x19, 0x45, 0x3f, 0x33, 0x8a, 0x7e,
-	0x65, 0xd4, 0x99, 0x67, 0x14, 0xbd, 0x9f, 0x51, 0x67, 0x3c, 0xa3, 0xce, 0x64, 0x46, 0x9d, 0xe7,
-	0xbb, 0x7d, 0xf1, 0x27, 0x81, 0x8b, 0x7f, 0xdf, 0x1e, 0x37, 0x6b, 0x4b, 0x27, 0x67, 0x16, 0xb7,
-	0xc7, 0xf5, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xaf, 0x3f, 0x69, 0x81, 0xdc, 0x06, 0x00, 0x00,
+	// 456 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x95, 0xbf, 0x6e, 0x1a, 0x31,
+	0x1c, 0x80, 0xcf, 0x4b, 0x07, 0x57, 0x15, 0xea, 0x49, 0x55, 0x55, 0x06, 0x0f, 0x1d, 0x3a, 0xde,
+	0x89, 0xb6, 0x5b, 0xa1, 0x2d, 0x85, 0xfe, 0x93, 0x5a, 0x15, 0xda, 0x4a, 0x95, 0xba, 0x54, 0xe6,
+	0xce, 0xa5, 0x16, 0xc7, 0xf9, 0x6a, 0xfb, 0x2e, 0x62, 0xcb, 0x13, 0x44, 0x19, 0x32, 0xe5, 0x01,
+	0xa2, 0x0c, 0x99, 0xf2, 0x14, 0x19, 0x32, 0x30, 0x32, 0x86, 0x63, 0xc9, 0xc8, 0x23, 0x44, 0x70,
+	0xf8, 0x80, 0x03, 0x22, 0x73, 0x64, 0x03, 0xe3, 0xef, 0xf3, 0x67, 0x89, 0x9f, 0x0c, 0x5f, 0x4a,
+	0xd2, 0x0d, 0x18, 0xc7, 0x9e, 0x2d, 0x08, 0x8f, 0x08, 0xb7, 0x71, 0x40, 0xed, 0x2e, 0x96, 0xce,
+	0x3f, 0xea, 0xb7, 0x27, 0x4b, 0xd4, 0x21, 0x76, 0x54, 0xb2, 0x67, 0x1f, 0xad, 0x80, 0x33, 0xc9,
+	0xcc, 0x67, 0x8a, 0xb2, 0x12, 0xca, 0xc2, 0x01, 0xb5, 0x32, 0x94, 0x15, 0x95, 0x8a, 0x15, 0x4d,
+	0x3b, 0x27, 0xff, 0x43, 0x22, 0xe4, 0x1f, 0x4e, 0x44, 0xc0, 0x7c, 0x31, 0x3b, 0xe6, 0xf9, 0xe5,
+	0x7d, 0x58, 0xf8, 0x3a, 0xdb, 0xfd, 0x23, 0xd9, 0x6d, 0x9e, 0x00, 0xf8, 0xa8, 0xc1, 0x3c, 0xef,
+	0x17, 0xe3, 0x9d, 0xbf, 0x1e, 0xdb, 0xfb, 0x89, 0x45, 0xa7, 0x19, 0x92, 0x90, 0x98, 0x75, 0x4b,
+	0xaf, 0xca, 0x5a, 0x8b, 0x7f, 0x4f, 0x12, 0x8a, 0xef, 0x77, 0xb4, 0x24, 0x17, 0x78, 0x6a, 0xa4,
+	0xa1, 0x55, 0x47, 0xd2, 0x88, 0xca, 0x5e, 0xce, 0xd0, 0x15, 0x3c, 0x57, 0xe8, 0x1a, 0x4b, 0x1a,
+	0x7a, 0x04, 0x60, 0xa1, 0xea, 0xba, 0x8b, 0x77, 0x31, 0x5f, 0xeb, 0xca, 0x33, 0xa0, 0x8a, 0x7b,
+	0x93, 0x9b, 0xcf, 0x66, 0x2d, 0x96, 0x6f, 0x95, 0xb5, 0x08, 0xe6, 0xc9, 0x5a, 0xe6, 0xd3, 0xac,
+	0x03, 0x00, 0x1f, 0x34, 0x43, 0xc2, 0x7b, 0x2a, 0xdb, 0x2c, 0xeb, 0x4a, 0x97, 0x30, 0x95, 0x54,
+	0xc9, 0x49, 0xa7, 0x41, 0xe7, 0x00, 0x3e, 0x49, 0xbe, 0xba, 0xd3, 0x2d, 0x93, 0xde, 0x1a, 0xeb,
+	0x06, 0x1e, 0x91, 0xc4, 0x35, 0x3f, 0xe9, 0xea, 0x37, 0x2a, 0x54, 0xe8, 0xe7, 0x3b, 0x30, 0x2d,
+	0x0d, 0x47, 0x0d, 0xfb, 0x0e, 0xf1, 0xbe, 0x85, 0x52, 0x48, 0xec, 0xbb, 0xd4, 0x6f, 0x4f, 0xfe,
+	0xa8, 0xfa, 0xc3, 0xb1, 0x16, 0xdf, 0x7a, 0x38, 0x36, 0x58, 0xd2, 0xd0, 0x63, 0x00, 0x1f, 0xd6,
+	0x89, 0x70, 0x38, 0x6d, 0x91, 0xf9, 0x04, 0xbf, 0xd5, 0xd5, 0xaf, 0xa0, 0x2a, 0xb0, 0xba, 0x83,
+	0x21, 0x8d, 0x3b, 0x03, 0xf0, 0xf1, 0x17, 0x2a, 0x64, 0xfa, 0x5b, 0x03, 0x73, 0x49, 0x25, 0x65,
+	0xbe, 0x30, 0x3f, 0xe8, 0x1e, 0xb0, 0x41, 0xa0, 0x42, 0x3f, 0xee, 0xec, 0x51, 0xb9, 0xef, 0x78,
+	0x7f, 0x88, 0x8c, 0xc1, 0x10, 0x19, 0xe3, 0x21, 0x02, 0xfb, 0x31, 0x02, 0xa7, 0x31, 0x02, 0x17,
+	0x31, 0x02, 0xfd, 0x18, 0x81, 0xab, 0x18, 0x81, 0xeb, 0x18, 0x19, 0xe3, 0x18, 0x81, 0xc3, 0x11,
+	0x32, 0xfa, 0x23, 0x64, 0x0c, 0x46, 0xc8, 0xf8, 0x5d, 0x6e, 0xb3, 0x79, 0x02, 0x65, 0xb7, 0xbf,
+	0x24, 0xaf, 0x32, 0x4b, 0xad, 0x7b, 0xd3, 0x97, 0xe4, 0xc5, 0x4d, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0x04, 0x9e, 0xce, 0x0a, 0xe8, 0x06, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -74,16 +74,16 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type MatchingServiceClient interface {
-	// PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
-	// DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
-	PollForDecisionTask(ctx context.Context, in *PollForDecisionTaskRequest, opts ...grpc.CallOption) (*PollForDecisionTaskResponse, error)
-	// PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
+	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
+	// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+	PollWorkflowTaskQueue(ctx context.Context, in *PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*PollWorkflowTaskQueueResponse, error)
+	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
-	PollForActivityTask(ctx context.Context, in *PollForActivityTaskRequest, opts ...grpc.CallOption) (*PollForActivityTaskResponse, error)
-	// AddDecisionTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+	PollActivityTaskQueue(ctx context.Context, in *PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*PollActivityTaskQueueResponse, error)
+	// AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
-	AddDecisionTask(ctx context.Context, in *AddDecisionTaskRequest, opts ...grpc.CallOption) (*AddDecisionTaskResponse, error)
-	// AddActivityTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+	AddWorkflowTask(ctx context.Context, in *AddWorkflowTaskRequest, opts ...grpc.CallOption) (*AddWorkflowTaskResponse, error)
+	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(ctx context.Context, in *AddActivityTaskRequest, opts ...grpc.CallOption) (*AddActivityTaskResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
@@ -113,27 +113,27 @@ func NewMatchingServiceClient(cc *grpc.ClientConn) MatchingServiceClient {
 	return &matchingServiceClient{cc}
 }
 
-func (c *matchingServiceClient) PollForDecisionTask(ctx context.Context, in *PollForDecisionTaskRequest, opts ...grpc.CallOption) (*PollForDecisionTaskResponse, error) {
-	out := new(PollForDecisionTaskResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/PollForDecisionTask", in, out, opts...)
+func (c *matchingServiceClient) PollWorkflowTaskQueue(ctx context.Context, in *PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*PollWorkflowTaskQueueResponse, error) {
+	out := new(PollWorkflowTaskQueueResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/PollWorkflowTaskQueue", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *matchingServiceClient) PollForActivityTask(ctx context.Context, in *PollForActivityTaskRequest, opts ...grpc.CallOption) (*PollForActivityTaskResponse, error) {
-	out := new(PollForActivityTaskResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/PollForActivityTask", in, out, opts...)
+func (c *matchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*PollActivityTaskQueueResponse, error) {
+	out := new(PollActivityTaskQueueResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *matchingServiceClient) AddDecisionTask(ctx context.Context, in *AddDecisionTaskRequest, opts ...grpc.CallOption) (*AddDecisionTaskResponse, error) {
-	out := new(AddDecisionTaskResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/AddDecisionTask", in, out, opts...)
+func (c *matchingServiceClient) AddWorkflowTask(ctx context.Context, in *AddWorkflowTaskRequest, opts ...grpc.CallOption) (*AddWorkflowTaskResponse, error) {
+	out := new(AddWorkflowTaskResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -196,16 +196,16 @@ func (c *matchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in 
 
 // MatchingServiceServer is the server API for MatchingService service.
 type MatchingServiceServer interface {
-	// PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
-	// DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
-	PollForDecisionTask(context.Context, *PollForDecisionTaskRequest) (*PollForDecisionTaskResponse, error)
-	// PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
+	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
+	// WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error)
+	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
-	PollForActivityTask(context.Context, *PollForActivityTaskRequest) (*PollForActivityTaskResponse, error)
-	// AddDecisionTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+	PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error)
+	// AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
-	AddDecisionTask(context.Context, *AddDecisionTaskRequest) (*AddDecisionTaskResponse, error)
-	// AddActivityTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+	AddWorkflowTask(context.Context, *AddWorkflowTaskRequest) (*AddWorkflowTaskResponse, error)
+	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(context.Context, *AddActivityTaskRequest) (*AddActivityTaskResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
@@ -231,14 +231,14 @@ type MatchingServiceServer interface {
 type UnimplementedMatchingServiceServer struct {
 }
 
-func (*UnimplementedMatchingServiceServer) PollForDecisionTask(ctx context.Context, req *PollForDecisionTaskRequest) (*PollForDecisionTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PollForDecisionTask not implemented")
+func (*UnimplementedMatchingServiceServer) PollWorkflowTaskQueue(ctx context.Context, req *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTaskQueue not implemented")
 }
-func (*UnimplementedMatchingServiceServer) PollForActivityTask(ctx context.Context, req *PollForActivityTaskRequest) (*PollForActivityTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PollForActivityTask not implemented")
+func (*UnimplementedMatchingServiceServer) PollActivityTaskQueue(ctx context.Context, req *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollActivityTaskQueue not implemented")
 }
-func (*UnimplementedMatchingServiceServer) AddDecisionTask(ctx context.Context, req *AddDecisionTaskRequest) (*AddDecisionTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddDecisionTask not implemented")
+func (*UnimplementedMatchingServiceServer) AddWorkflowTask(ctx context.Context, req *AddWorkflowTaskRequest) (*AddWorkflowTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddWorkflowTask not implemented")
 }
 func (*UnimplementedMatchingServiceServer) AddActivityTask(ctx context.Context, req *AddActivityTaskRequest) (*AddActivityTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddActivityTask not implemented")
@@ -263,56 +263,56 @@ func RegisterMatchingServiceServer(s *grpc.Server, srv MatchingServiceServer) {
 	s.RegisterService(&_MatchingService_serviceDesc, srv)
 }
 
-func _MatchingService_PollForDecisionTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PollForDecisionTaskRequest)
+func _MatchingService_PollWorkflowTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollWorkflowTaskQueueRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).PollForDecisionTask(ctx, in)
+		return srv.(MatchingServiceServer).PollWorkflowTaskQueue(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/PollForDecisionTask",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/PollWorkflowTaskQueue",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).PollForDecisionTask(ctx, req.(*PollForDecisionTaskRequest))
+		return srv.(MatchingServiceServer).PollWorkflowTaskQueue(ctx, req.(*PollWorkflowTaskQueueRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_PollForActivityTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PollForActivityTaskRequest)
+func _MatchingService_PollActivityTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollActivityTaskQueueRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).PollForActivityTask(ctx, in)
+		return srv.(MatchingServiceServer).PollActivityTaskQueue(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/PollForActivityTask",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).PollForActivityTask(ctx, req.(*PollForActivityTaskRequest))
+		return srv.(MatchingServiceServer).PollActivityTaskQueue(ctx, req.(*PollActivityTaskQueueRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_AddDecisionTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddDecisionTaskRequest)
+func _MatchingService_AddWorkflowTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddWorkflowTaskRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).AddDecisionTask(ctx, in)
+		return srv.(MatchingServiceServer).AddWorkflowTask(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/AddDecisionTask",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).AddDecisionTask(ctx, req.(*AddDecisionTaskRequest))
+		return srv.(MatchingServiceServer).AddWorkflowTask(ctx, req.(*AddWorkflowTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -430,16 +430,16 @@ var _MatchingService_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*MatchingServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "PollForDecisionTask",
-			Handler:    _MatchingService_PollForDecisionTask_Handler,
+			MethodName: "PollWorkflowTaskQueue",
+			Handler:    _MatchingService_PollWorkflowTaskQueue_Handler,
 		},
 		{
-			MethodName: "PollForActivityTask",
-			Handler:    _MatchingService_PollForActivityTask_Handler,
+			MethodName: "PollActivityTaskQueue",
+			Handler:    _MatchingService_PollActivityTaskQueue_Handler,
 		},
 		{
-			MethodName: "AddDecisionTask",
-			Handler:    _MatchingService_AddDecisionTask_Handler,
+			MethodName: "AddWorkflowTask",
+			Handler:    _MatchingService_AddWorkflowTask_Handler,
 		},
 		{
 			MethodName: "AddActivityTask",

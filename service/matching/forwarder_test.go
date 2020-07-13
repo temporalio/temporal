@@ -67,7 +67,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
 	}
-	t.taskQueue = newTestTaskQueueID("fwdr", "tl0", enumspb.TASK_QUEUE_TYPE_DECISION)
+	t.taskQueue = newTestTaskQueueID("fwdr", "tl0", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	t.fwdr = newForwarder(t.cfg, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
 }
 
@@ -84,15 +84,15 @@ func (t *ForwarderTestSuite) TestForwardTaskError() {
 	t.Equal(errTaskQueueKind, t.fwdr.ForwardTask(context.Background(), task))
 }
 
-func (t *ForwarderTestSuite) TestForwardDecisionTask() {
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_DECISION)
+func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
-	var request *matchingservice.AddDecisionTaskRequest
-	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddDecisionTaskRequest) {
+	var request *matchingservice.AddWorkflowTaskRequest
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			request = arg1
 		},
-	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
@@ -106,7 +106,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
 	schedToStart := request.GetScheduleToStartTimeoutSeconds()
-	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())
+	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds())
 	t.Equal(schedToStart, rewritten)
 	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
 }
@@ -132,7 +132,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
-	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
+	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.ExpiryTime).ToTime()).Seconds()),
 		request.GetScheduleToStartTimeoutSeconds())
 	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
 }
@@ -155,14 +155,14 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
 	_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.Equal(errNoParent, err)
 
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_DECISION)
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	t.fwdr.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
 	_, err = t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.Equal(errTaskQueueKind, err)
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTask() {
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_DECISION)
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	task := newInternalQueryTask("id1", &matchingservice.QueryWorkflowRequest{})
 	resp := &matchingservice.QueryWorkflowResponse{}
 	var request *matchingservice.QueryWorkflowRequest
@@ -206,16 +206,16 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 }
 
 func (t *ForwarderTestSuite) TestForwardPollForDecision() {
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_DECISION)
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollForDecisionTaskResponse{}
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
 
-	var request *matchingservice.PollForDecisionTaskRequest
-	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollForDecisionTaskRequest) {
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) {
 			request = arg1
 		},
 	).Return(resp, nil).Times(1)
@@ -239,11 +239,11 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollForActivityTaskResponse{}
+	resp := &matchingservice.PollActivityTaskQueueResponse{}
 
-	var request *matchingservice.PollForActivityTaskRequest
-	t.client.EXPECT().PollForActivityTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollForActivityTaskRequest) {
+	var request *matchingservice.PollActivityTaskQueueRequest
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) {
 			request = arg1
 		},
 	).Return(resp, nil).Times(1)

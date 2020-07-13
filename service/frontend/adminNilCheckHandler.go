@@ -162,11 +162,11 @@ func (adh *AdminNilCheckHandler) ReapplyEvents(ctx context.Context, request *adm
 	return resp, err
 }
 
-// ReadDLQMessages returns messages from DLQ
-func (adh *AdminNilCheckHandler) ReadDLQMessages(ctx context.Context, request *adminservice.ReadDLQMessagesRequest) (*adminservice.ReadDLQMessagesResponse, error) {
-	resp, err := adh.parentHandler.ReadDLQMessages(ctx, request)
+// GetDLQMessages returns messages from DLQ
+func (adh *AdminNilCheckHandler) GetDLQMessages(ctx context.Context, request *adminservice.GetDLQMessagesRequest) (*adminservice.GetDLQMessagesResponse, error) {
+	resp, err := adh.parentHandler.GetDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		resp = &adminservice.ReadDLQMessagesResponse{}
+		resp = &adminservice.GetDLQMessagesResponse{}
 	}
 	return resp, err
 }

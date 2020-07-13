@@ -709,10 +709,10 @@ func createTransferTasks(
 			info.TaskQueue = task.(*p.ActivityTask).TaskQueue
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-			info.TargetNamespaceId = task.(*p.DecisionTask).NamespaceID
-			info.TaskQueue = task.(*p.DecisionTask).TaskQueue
-			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
+		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+			info.TargetNamespaceId = task.(*p.WorkflowTask).NamespaceID
+			info.TaskQueue = task.(*p.WorkflowTask).TaskQueue
+			info.ScheduleId = task.(*p.WorkflowTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			info.TargetNamespaceId = task.(*p.CancelExecutionTask).TargetNamespaceID
@@ -755,7 +755,7 @@ func createTransferTasks(
 			return err
 		}
 
-		info.VisibilityTimestamp = t
+		info.VisibilityTime = t
 
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
@@ -935,7 +935,7 @@ func createTimerTasks(
 				return err
 			}
 
-			info.VisibilityTimestamp = protoVisTs
+			info.VisibilityTime = protoVisTs
 			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
@@ -1202,7 +1202,7 @@ func (m *sqlExecutionManager) createExecution(
 
 	// TODO we should set the start time and last update time on business logic layer
 	executionInfo.StartTimestamp = time.Now()
-	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
+	executionInfo.LastUpdateTimestamp = executionInfo.StartTimestamp
 
 	row, err := buildExecutionRow(
 		executionInfo,
@@ -1260,7 +1260,7 @@ func updateExecution(
 	}
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdatedTimestamp = time.Now()
+	executionInfo.LastUpdateTimestamp = time.Now()
 
 	row, err := buildExecutionRow(
 		executionInfo,

@@ -352,16 +352,16 @@ func (a *AccessControlledWorkflowHandler) ListWorkflowExecutions(
 	return a.frontendHandler.ListWorkflowExecutions(ctx, request)
 }
 
-// PollForActivityTask API call
-func (a *AccessControlledWorkflowHandler) PollForActivityTask(
+// PollActivityTaskQueue API call
+func (a *AccessControlledWorkflowHandler) PollActivityTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForActivityTaskRequest,
-) (*workflowservice.PollForActivityTaskResponse, error) {
+	request *workflowservice.PollActivityTaskQueueRequest,
+) (*workflowservice.PollActivityTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForActivityTaskScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollActivityTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "PollForActivityTask",
+		APIName:   "PollActivityTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -372,19 +372,19 @@ func (a *AccessControlledWorkflowHandler) PollForActivityTask(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.PollForActivityTask(ctx, request)
+	return a.frontendHandler.PollActivityTaskQueue(ctx, request)
 }
 
-// PollForDecisionTask API call
-func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
+// PollWorkflowTaskQueue API call
+func (a *AccessControlledWorkflowHandler) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *workflowservice.PollForDecisionTaskRequest,
-) (*workflowservice.PollForDecisionTaskResponse, error) {
+	request *workflowservice.PollWorkflowTaskQueueRequest,
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 
-	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForDecisionTaskScope, request.GetNamespace())
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollWorkflowTaskQueueScope, request.GetNamespace())
 
 	attr := &authorization.Attributes{
-		APIName:   "PollForDecisionTask",
+		APIName:   "PollWorkflowTaskQueue",
 		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
@@ -395,7 +395,7 @@ func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.PollForDecisionTask(ctx, request)
+	return a.frontendHandler.PollWorkflowTaskQueue(ctx, request)
 }
 
 // QueryWorkflow API call
@@ -586,20 +586,20 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedById(
 	return a.frontendHandler.RespondActivityTaskFailedById(ctx, request)
 }
 
-// RespondDecisionTaskCompleted API call
-func (a *AccessControlledWorkflowHandler) RespondDecisionTaskCompleted(
+// RespondWorkflowTaskCompleted API call
+func (a *AccessControlledWorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskCompletedRequest,
-) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
-	return a.frontendHandler.RespondDecisionTaskCompleted(ctx, request)
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	return a.frontendHandler.RespondWorkflowTaskCompleted(ctx, request)
 }
 
-// RespondDecisionTaskFailed API call
-func (a *AccessControlledWorkflowHandler) RespondDecisionTaskFailed(
+// RespondWorkflowTaskFailed API call
+func (a *AccessControlledWorkflowHandler) RespondWorkflowTaskFailed(
 	ctx context.Context,
-	request *workflowservice.RespondDecisionTaskFailedRequest,
-) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
-	return a.frontendHandler.RespondDecisionTaskFailed(ctx, request)
+	request *workflowservice.RespondWorkflowTaskFailedRequest,
+) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
+	return a.frontendHandler.RespondWorkflowTaskFailed(ctx, request)
 }
 
 // RespondQueryTaskCompleted API call

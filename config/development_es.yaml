@@ -85,14 +85,14 @@ dcRedirectionPolicy:
 
 archival:
   history:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
   visibility:
-    status: "enabled"
+    state: "enabled"
     enableRead: true
     provider:
       filestore:
@@ -102,10 +102,10 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      status: "enabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      status: "enabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:

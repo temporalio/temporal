@@ -80,7 +80,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	namespaceID := primitives.MustValidateUUID("11adbd1b-f164-4ea7-b2f3-2e857a5048f1")
 	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "create-task-test",
 		RunId: "c949447a-691a-4132-8b2a-a5b38106793c"}
-	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, "a5b38106793c", 5)
+	task0, err0 := s.CreateWorkflowTask(namespaceID, workflowExecution, "a5b38106793c", 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -112,9 +112,9 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.GetWorkflowId())
 		s.EqualValues(workflowExecution.RunId, resp.Tasks[0].Data.GetRunId())
 		s.Equal(sid, resp.Tasks[0].Data.GetScheduleId())
-		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreatedTime)
+		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreateTime)
 		s.NoError(err)
-		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.Expiry)
+		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.ExpiryTime)
 		s.NoError(err)
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
@@ -125,20 +125,20 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	}
 }
 
-// TestGetDecisionTasks test
-func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
+// TestGetWorkflowTasks test
+func (s *MatchingPersistenceSuite) TestGetWorkflowTasks() {
 	namespaceID := primitives.MustValidateUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "get-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "get-workflow-task-test",
 		RunId: "db20f7e2-1a1e-40d9-9278-d8b886738e05"}
 	taskQueue := "d8b886738e05"
-	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, taskQueue, 5)
+	task0, err0 := s.CreateWorkflowTask(namespaceID, workflowExecution, taskQueue, 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_DECISION, 1)
+	tasks1Response, err1 := s.GetTasks(namespaceID, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
-	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
+	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 workflow task.")
 	s.Equal(int64(5), tasks1Response.Tasks[0].Data.GetScheduleId())
 }
 
@@ -148,7 +148,7 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 		s.T().Skip("this test is not applicable for cassandra persistence")
 	}
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-workflow-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskQueue := "48b07ec1915d"
 	_, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
@@ -191,10 +191,10 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	}
 }
 
-// TestCompleteDecisionTask test
-func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
+// TestCompleteWorkflowTask test
+func (s *MatchingPersistenceSuite) TestCompleteWorkflowTask() {
 	namespaceID := primitives.MustValidateUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+	workflowExecution := commonpb.WorkflowExecution{WorkflowId: "complete-workflow-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskQueue := "48b07ec1915d"
 	tasks0, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
@@ -313,7 +313,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	tli := response.TaskQueueInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu, err := types.TimestampFromProto(tli.Data.LastUpdated)
+	lu, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
@@ -328,7 +328,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	lu2, err := types.TimestampFromProto(tli.Data.LastUpdated)
+	lu2, err := types.TimestampFromProto(tli.Data.LastUpdateTime)
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
@@ -370,7 +370,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID:   namespaceID,
 		TaskQueue:     taskQueue,
-		TaskType:      enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskType:      enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		TaskQueueKind: enumspb.TASK_QUEUE_KIND_STICKY,
 	})
 	s.NoError(err)
@@ -382,7 +382,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueueSticky() {
 	taskQueueInfo := &persistenceblobs.TaskQueueInfo{
 		NamespaceId: namespaceID,
 		Name:        taskQueue,
-		TaskType:    enumspb.TASK_QUEUE_TYPE_DECISION,
+		TaskType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		AckLevel:    0,
 		Kind:        enumspb.TASK_QUEUE_KIND_STICKY,
 	}
@@ -452,7 +452,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		s.EqualValues(enumspb.TASK_QUEUE_KIND_STICKY, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
-		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
+		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 
@@ -469,7 +469,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		resp, err = s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
-		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
+		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdateTime)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}

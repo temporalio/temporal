@@ -1,8 +1,10 @@
 build:
   roots:
-    - proto/internal
-    - proto/temporal-proto
+    - internal
+    - api
 lint:
+  ignore:
+    - temporal/api # do not lint public api
   use:
     - DEFAULT
   except:

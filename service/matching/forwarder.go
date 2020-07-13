@@ -118,7 +118,7 @@ func newForwarder(
 	return fwdr
 }
 
-// ForwardTask forwards an activity or decision task to the parent task queue partition if it exist
+// ForwardTask forwards an activity or workflow task to the parent task queue partition if it exist
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
 	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return errTaskQueueKind
@@ -136,7 +136,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo, err := types.TimestampFromProto(task.event.Data.Expiry)
+	expiryGo, err := types.TimestampFromProto(task.event.Data.ExpiryTime)
 	if err != nil {
 		return err
 	}
@@ -149,8 +149,8 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	}*/
 
 	switch fwdr.taskQueueID.taskType {
-	case enumspb.TASK_QUEUE_TYPE_DECISION:
-		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -226,11 +226,11 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	identity, _ := ctx.Value(identityKey).(string)
 
 	switch fwdr.taskQueueID.taskType {
-	case enumspb.TASK_QUEUE_TYPE_DECISION:
-		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		resp, err := fwdr.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: fwdr.taskQueueID.namespaceID,
 			PollerId:    pollerID,
-			PollRequest: &workflowservice.PollForDecisionTaskRequest{
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
 					Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),
@@ -242,12 +242,12 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
+		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: fwdr.taskQueueID.namespaceID,
 			PollerId:    pollerID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
 					Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),

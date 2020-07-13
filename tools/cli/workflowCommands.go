@@ -110,7 +110,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	if printFully { // dump everything
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_DECISION_TASK_STARTED {
+				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -131,7 +131,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		table.SetColumnSeparator("")
 		for _, e := range history.Events {
 			if resetPointsOnly {
-				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_DECISION_TASK_STARTED {
+				if prevEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 					prevEvent = *e
 					continue
 				}
@@ -919,11 +919,9 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastFailure:            pa.GetLastFailure().String(),
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
+
 		if pa.HeartbeatDetails != nil {
-			err := payloads.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
-			if err != nil {
-				ErrorAndExit("Unable to decode heartbeat details.", err)
-			}
+			tmpAct.HeartbeatDetails = payloads.ToString(pa.HeartbeatDetails)
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
@@ -1099,7 +1097,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryStatus())
+		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string
@@ -1632,12 +1630,12 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	}
 
 	if params.nonDeterministicOnly {
-		isLDN, err := isLastEventDecisionTaskFailedWithNonDeterminism(ctx, namespace, wid, rid, frontendClient)
+		isLDN, err := isLastEventWorkflowTaskFailedWithNonDeterminism(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
-			return printErrorAndReturn("check isLastEventDecisionTaskFailedWithNonDeterminism failed", err)
+			return printErrorAndReturn("check isLastEventWorkflowTaskFailedWithNonDeterminism failed", err)
 		}
 		if !isLDN {
-			fmt.Println("skip because last event is not DecisionTaskFailedWithNonDeterminism")
+			fmt.Println("skip because last event is not WorkflowTaskFailedWithNonDeterminism")
 			return nil
 		}
 	}
@@ -1671,7 +1669,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	return nil
 }
 
-func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
+func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -1692,9 +1690,9 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 			if firstEvent == nil {
 				firstEvent = e
 			}
-			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_FAILED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
 				decisionFailed = e
-			} else if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED {
+			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				decisionFailed = nil
 			}
 		}
@@ -1706,9 +1704,9 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 	}
 
 	if decisionFailed != nil {
-		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
+		attr := decisionFailed.GetWorkflowTaskFailedEventAttributes()
 
-		if attr.GetCause() == enumspb.DECISION_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
+		if attr.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
 			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
 			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
 			return true, nil
@@ -1766,7 +1764,7 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 			}
 		}
@@ -1828,7 +1826,7 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 				return resetBaseRunID, decisionFinishID, nil
 			}
@@ -1881,7 +1879,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				decisionFinishID = e.GetEventId()
 			}
 		}

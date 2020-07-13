@@ -44,19 +44,19 @@ func getBackoffInterval(
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
-) (time.Duration, enumspb.RetryStatus) {
+) (time.Duration, enumspb.RetryState) {
 	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE
+		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return backoff.NoBackoff, enumspb.RETRY_STATUS_RETRY_POLICY_NOT_SET
+		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return backoff.NoBackoff, enumspb.RETRY_STATUS_MAXIMUM_ATTEMPTS_REACHED
+		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
 	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
@@ -65,7 +65,7 @@ func getBackoffInterval(
 		if maxInterval > 0 {
 			nextInterval = int64(maxInterval)
 		} else {
-			return backoff.NoBackoff, enumspb.RETRY_STATUS_TIMEOUT
+			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 		}
 	}
 
@@ -77,10 +77,10 @@ func getBackoffInterval(
 	backoffInterval := time.Duration(nextInterval) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return backoff.NoBackoff, enumspb.RETRY_STATUS_TIMEOUT
+		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 
-	return backoffInterval, enumspb.RETRY_STATUS_IN_PROGRESS
+	return backoffInterval, enumspb.RETRY_STATE_IN_PROGRESS
 }
 
 func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {

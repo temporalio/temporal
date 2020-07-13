@@ -137,13 +137,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
@@ -221,8 +221,8 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	// process the decision and continue as new
-	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -309,8 +309,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	}
 
 	// process the decision and continue as new
-	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -335,8 +335,8 @@ GetHistoryLoop:
 			}
 			s.Logger.Warn(fmt.Sprintf("Execution not timed out yet. Last event is %v", lastEvent))
 			time.Sleep(200 * time.Millisecond)
-			_, err := poller.PollAndProcessDecisionTask(true, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			if err != matching.ErrNoTasks {
 				s.NoError(err)
 			}
@@ -420,7 +420,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	minTaskID := int64(0)
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
 	s.True(len(events) != 0)
@@ -429,7 +429,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		minTaskID = event.GetTaskId()
 	}
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
 	s.True(len(events) != 0)
@@ -481,7 +481,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	var completedEvent *historypb.HistoryEvent
 	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
-		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
+		s.Logger.Info("Processing workflow task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
 		// Child Decider Logic
 		if execution.GetWorkflowId() == childID {
@@ -558,16 +558,16 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	}
 
 	// Make first decision to start child execution
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.Logger.Warn("decision", tag.Counter(i))
-		_, err = poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
@@ -575,14 +575,14 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(startedEvent)
 
 	// Process Child Execution final decision to complete it
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()

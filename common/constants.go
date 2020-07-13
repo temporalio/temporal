@@ -131,11 +131,11 @@ const (
 )
 
 const (
-	// ArchivalEnabled is the status for enabling archival
+	// ArchivalEnabled is the state for enabling archival
 	ArchivalEnabled = "enabled"
-	// ArchivalDisabled is the status for disabling archival
+	// ArchivalDisabled is the state for disabling archival
 	ArchivalDisabled = "disabled"
-	// ArchivalPaused is the status for pausing archival
+	// ArchivalPaused is the state for pausing archival
 	ArchivalPaused = "paused"
 )
 

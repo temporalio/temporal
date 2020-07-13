@@ -55,13 +55,13 @@ import (
 type (
 	// decision business logic handler
 	decisionHandler interface {
-		handleDecisionTaskScheduled(context.Context, *historyservice.ScheduleDecisionTaskRequest) error
-		handleDecisionTaskStarted(context.Context,
-			*historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error)
-		handleDecisionTaskFailed(context.Context,
-			*historyservice.RespondDecisionTaskFailedRequest) error
-		handleDecisionTaskCompleted(context.Context,
-			*historyservice.RespondDecisionTaskCompletedRequest) (*historyservice.RespondDecisionTaskCompletedResponse, error)
+		handleWorkflowTaskScheduled(context.Context, *historyservice.ScheduleWorkflowTaskRequest) error
+		handleWorkflowTaskStarted(context.Context,
+			*historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error)
+		handleWorkflowTaskFailed(context.Context,
+			*historyservice.RespondWorkflowTaskFailedRequest) error
+		handleWorkflowTaskCompleted(context.Context,
+			*historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
 		// TODO also include the handle of decision timeout here
 	}
 
@@ -108,9 +108,9 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 	}
 }
 
-func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
+func (handler *decisionHandlerImpl) handleWorkflowTaskScheduled(
 	ctx context.Context,
-	req *historyservice.ScheduleDecisionTaskRequest,
+	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
 
 	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
@@ -140,7 +140,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 			if err != nil {
 				return nil, err
 			}
-			if err := mutableState.AddFirstDecisionTaskScheduled(
+			if err := mutableState.AddFirstWorkflowTaskScheduled(
 				startEvent,
 			); err != nil {
 				return nil, err
@@ -150,10 +150,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 		})
 }
 
-func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
+func (handler *decisionHandlerImpl) handleWorkflowTaskStarted(
 	ctx context.Context,
-	req *historyservice.RecordDecisionTaskStartedRequest,
-) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+	req *historyservice.RecordWorkflowTaskStartedRequest,
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
 	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
@@ -169,7 +169,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	scheduleID := req.GetScheduleId()
 	requestID := req.GetRequestId()
 
-	var resp *historyservice.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordWorkflowTaskStartedResponse
 	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -181,7 +181,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				handler.metricsClient.IncCounter(metrics.HistoryRecordDecisionTaskStartedScope, metrics.StaleMutableStateCounter)
+				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecutionWithAction function to reload the mutable state
 				return nil, ErrStaleState
@@ -190,9 +190,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 			// task is not outstanding than it is most probably a duplicate and complete the task.
 			if !isRunning {
-				// Looks like DecisionTask already completed as a result of another call.
+				// Looks like WorkflowTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewNotFound("Decision task not found.")
+				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
 			updateAction := &updateWorkflowAction{}
@@ -200,7 +200,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -208,18 +208,18 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 					return updateAction, nil
 				}
 
-				// Looks like DecisionTask already started as a result of another call.
+				// Looks like WorkflowTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewEventAlreadyStarted("Decision task already started.")
+				return nil, serviceerror.NewEventAlreadyStarted("Workflow task already started.")
 			}
 
-			_, decision, err = mutableState.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
+			_, decision, err = mutableState.AddWorkflowTaskStartedEvent(scheduleID, requestID, req.PollRequest)
 			if err != nil {
-				// Unable to add DecisionTaskStarted event to history
-				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
+				// Unable to add WorkflowTaskStarted event to history
+				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -232,9 +232,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	return resp, nil
 }
 
-func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
+func (handler *decisionHandlerImpl) handleWorkflowTaskFailed(
 	ctx context.Context,
-	req *historyservice.RespondDecisionTaskFailedRequest,
+	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) (retError error) {
 
 	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
@@ -263,19 +263,19 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 			scheduleID := token.GetScheduleId()
 			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
 			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
-				return serviceerror.NewNotFound("Decision task not found.")
+				return serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			_, err := mutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.GetFailure(),
+			_, err := mutableState.AddWorkflowTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.GetFailure(),
 				request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0)
 			return err
 		})
 }
 
-func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
+func (handler *decisionHandlerImpl) handleWorkflowTaskCompleted(
 	ctx context.Context,
-	req *historyservice.RespondDecisionTaskCompletedRequest,
-) (resp *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
+	req *historyservice.RespondWorkflowTaskCompletedRequest,
+) (resp *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
 	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
@@ -327,7 +327,7 @@ Update_History_Loop:
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
 		if !isRunning && scheduleID >= msBuilder.GetNextEventID() {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.StaleMutableStateCounter)
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.StaleMutableStateCounter)
 			// Reload workflow execution history
 			weContext.clear()
 			continue Update_History_Loop
@@ -335,16 +335,16 @@ Update_History_Loop:
 
 		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || currentDecision.Attempt != token.ScheduleAttempt ||
 			currentDecision.StartedID == common.EmptyEventID {
-			return nil, serviceerror.NewNotFound("Decision task not found.")
+			return nil, serviceerror.NewNotFound("Workflow task not found.")
 		}
 
 		startedID := currentDecision.StartedID
 		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.GetInfo().Name)
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
 
-		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
+		decisionHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Decisions) == 0
 		var decisionHeartbeatTimeout bool
 		var completedEvent *historypb.HistoryEvent
 		if decisionHeartbeating {
@@ -352,23 +352,23 @@ Update_History_Loop:
 			timeout := handler.config.DecisionHeartbeatTimeout(namespace)
 			if currentDecision.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
 				decisionHeartbeatTimeout = true
-				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.NamespaceTag(namespace))
+				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace))
 				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
-				completedEvent, err = msBuilder.AddDecisionTaskTimedOutEvent(currentDecision.ScheduleID, currentDecision.StartedID)
+				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentDecision.ScheduleID, currentDecision.StartedID)
 				if err != nil {
 					return nil, serviceerror.NewInternal("Failed to add decision timeout event.")
 				}
 				msBuilder.ClearStickyness()
 			} else {
-				completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
+				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Unable to add DecisionTaskCompleted event to history.")
+					return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
 				}
 			}
 		} else {
-			completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
+			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, serviceerror.NewInternal("Unable to add DecisionTaskCompleted event to history.")
+				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
 			}
 		}
 
@@ -382,11 +382,11 @@ Update_History_Loop:
 		hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyDisabledCounter)
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteDecisionWithStickyDisabledCounter)
 			executionInfo.StickyTaskQueue = ""
 			executionInfo.StickyScheduleToStartTimeout = 0
 		} else {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyEnabledCounter)
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteDecisionWithStickyEnabledCounter)
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
 			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeoutSeconds()
 		}
@@ -397,7 +397,7 @@ Update_History_Loop:
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
-				cause:   enumspb.DECISION_TASK_FAILED_CAUSE_BAD_BINARY,
+				cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
@@ -413,11 +413,11 @@ Update_History_Loop:
 				completedEvent.GetEventId(),
 				msBuilder,
 				executionStats,
-				handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.NamespaceTag(namespace)),
+				handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace)),
 				handler.throttledLogger,
 			)
 
-			decisionTaskHandler := newDecisionTaskHandler(
+			workflowTaskHandler := newWorkflowTaskHandler(
 				request.GetIdentity(),
 				completedEvent.GetEventId(),
 				namespaceEntry,
@@ -430,7 +430,7 @@ Update_History_Loop:
 				handler.config,
 			)
 
-			if err := decisionTaskHandler.handleDecisions(
+			if err := workflowTaskHandler.handleDecisions(
 				request.Decisions,
 			); err != nil {
 				return nil, err
@@ -438,19 +438,19 @@ Update_History_Loop:
 
 			// set the vars used by following logic
 			// further refactor should also clean up the vars used below
-			failDecision = decisionTaskHandler.failDecisionInfo
+			failDecision = workflowTaskHandler.failDecisionInfo
 
-			// failMessage is not used by decisionTaskHandler
-			activityNotStartedCancelled = decisionTaskHandler.activityNotStartedCancelled
-			// continueAsNewTimerTasks is not used by decisionTaskHandler
+			// failMessage is not used by workflowTaskHandler
+			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
+			// continueAsNewTimerTasks is not used by workflowTaskHandler
 
-			continueAsNewBuilder = decisionTaskHandler.continueAsNewBuilder
+			continueAsNewBuilder = workflowTaskHandler.continueAsNewBuilder
 
-			hasUnhandledEvents = decisionTaskHandler.hasUnhandledEventsBeforeDecisions
+			hasUnhandledEvents = workflowTaskHandler.hasUnhandledEventsBeforeDecisions
 		}
 
 		if failDecision != nil {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedDecisionsCounter)
 			handler.logger.Info("Failing the decision.",
 				tag.WorkflowDecisionFailCause(failDecision.cause),
 				tag.Error(errors.New(failDecision.message)),
@@ -465,31 +465,31 @@ Update_History_Loop:
 			continueAsNewBuilder = nil
 		}
 
-		createNewDecisionTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
-		var newDecisionTaskScheduledID int64
-		if createNewDecisionTask {
+		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
+		var newWorkflowTaskScheduledID int64
+		if createNewWorkflowTask {
 			var newDecision *decisionInfo
 			var err error
 			if decisionHeartbeating && !decisionHeartbeatTimeout {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEventAsHeartbeat(
-					request.GetReturnNewDecisionTask(),
+				newDecision, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
+					request.GetReturnNewWorkflowTask(),
 					currentDecision.OriginalScheduledTimestamp,
 				)
 			} else {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEvent(
-					request.GetReturnNewDecisionTask(),
+				newDecision, err = msBuilder.AddWorkflowTaskScheduledEvent(
+					request.GetReturnNewWorkflowTask(),
 				)
 			}
 			if err != nil {
 				return nil, serviceerror.NewInternal("Failed to add decision scheduled event.")
 			}
 
-			newDecisionTaskScheduledID = newDecision.ScheduleID
-			// skip transfer task for decision if request asking to return new decision task
-			if request.GetReturnNewDecisionTask() {
-				// start the new decision task if request asked to do so
+			newWorkflowTaskScheduledID = newDecision.ScheduleID
+			// skip transfer task for decision if request asking to return new workflow task
+			if request.GetReturnNewWorkflowTask() {
+				// start the new workflow task if request asked to do so
 				// TODO: replace the poll request
-				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflowservice.PollForDecisionTaskRequest{
+				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondWorkflowTaskCompleted", &workflowservice.PollWorkflowTaskQueueRequest{
 					TaskQueue: &taskqueuepb.TaskQueue{Name: newDecision.TaskQueue},
 					Identity:  request.Identity,
 				})
@@ -524,7 +524,7 @@ Update_History_Loop:
 
 		if updateErr != nil {
 			if updateErr == ErrConflict {
-				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
+				handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
 				continue Update_History_Loop
 			}
 
@@ -558,21 +558,21 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, namespaceEntry, decisionHeartbeating)
+		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, decisionHeartbeating)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("decision heartbeat timeout"))
 		}
 
-		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
-		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
-			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
+		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
+		if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
+			decision, _ := msBuilder.GetDecisionInfo(newWorkflowTaskScheduledID)
+			resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
-			// sticky is always enabled when worker request for new decision task from RespondDecisionTaskCompleted
+			// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 			resp.StartedResponse.StickyExecutionEnabled = true
 		}
 
@@ -582,14 +582,14 @@ Update_History_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
+func (handler *decisionHandlerImpl) createRecordWorkflowTaskStartedResponse(
 	namespaceID string,
 	msBuilder mutableState,
 	decision *decisionInfo,
 	identity string,
-) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
-	response := &historyservice.RecordDecisionTaskStartedResponse{}
+	response := &historyservice.RecordWorkflowTaskStartedResponse{}
 	response.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo := msBuilder.GetExecutionInfo()
 	if executionInfo.LastProcessedEvent != common.EmptyEventID {
@@ -638,7 +638,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
@@ -650,7 +650,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 	runID := msBuilder.GetExecutionInfo().RunID
 
 	scope := handler.metricsClient.Scope(
-		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.NamespaceTag(namespaceEntry.GetInfo().Name),
 		metrics.DecisionTypeTag("ConsistentQuery"))
 
@@ -714,9 +714,9 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 		}
 	}
 
-	// If no decision task was created then it means no buffered events came in during this decision task's handling.
+	// If no workflow task was created then it means no buffered events came in during this workflow task's handling.
 	// This means all unanswered buffered queries can be dispatched directly through matching at this point.
-	if !createNewDecisionTask {
+	if !createNewWorkflowTask {
 		buffered := queryRegistry.getBufferedIDs()
 		for _, id := range buffered {
 			unblockTerminationState := &queryTerminationState{

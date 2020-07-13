@@ -127,7 +127,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
 	updatedTimerAckLevel := time.Now()
-	updatedInfo.TimerAckLevel, _ = types.TimestampProto(updatedTimerAckLevel)
+	updatedInfo.TimerAckLevelTime, _ = types.TimestampProto(updatedTimerAckLevel)
 	err2 := s.UpdateShard(updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
@@ -139,7 +139,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
-	info1timerAckLevelTime, _ := types.TimestampFromProto(info1.TimerAckLevel)
+	info1timerAckLevelTime, _ := types.TimestampFromProto(info1.TimerAckLevelTime)
 	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
@@ -160,7 +160,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
 
-	info1timerAckLevelTime, _ = types.TimestampFromProto(info1.TimerAckLevel)
+	info1timerAckLevelTime, _ = types.TimestampFromProto(info1.TimerAckLevelTime)
 	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
 }
 
@@ -172,6 +172,6 @@ func copyShardInfo(sourceInfo *persistenceblobs.ShardInfo) *persistenceblobs.Sha
 		TransferAckLevel:    sourceInfo.TransferAckLevel,
 		ReplicationAckLevel: sourceInfo.ReplicationAckLevel,
 		StolenSinceRenew:    sourceInfo.StolenSinceRenew,
-		TimerAckLevel:       sourceInfo.TimerAckLevel,
+		TimerAckLevelTime:   sourceInfo.TimerAckLevelTime,
 	}
 }

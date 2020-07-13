@@ -30,7 +30,7 @@ import "temporal/server/api/historyservice/v1/request_response.proto";
 service HistoryService {
 
     // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-    // 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
+    // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
     // first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
     // exists with same workflowId.
     rpc StartWorkflowExecution (StartWorkflowExecutionRequest) returns (StartWorkflowExecutionResponse) {
@@ -58,72 +58,74 @@ service HistoryService {
     rpc ResetStickyTaskQueue (ResetStickyTaskQueueRequest) returns (ResetStickyTaskQueueResponse) {
     }
 
-    // RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-    // a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+    // RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+    // a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
     // if the workflow's execution history already includes a record of the event starting.
-    rpc RecordDecisionTaskStarted (RecordDecisionTaskStartedRequest) returns (RecordDecisionTaskStartedResponse) {
+    rpc RecordWorkflowTaskStarted (RecordWorkflowTaskStartedRequest) returns (RecordWorkflowTaskStartedResponse) {
     }
 
-    // RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
-    // a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
+    // RecordActivityTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
+    // a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
     // if the workflow's execution history already includes a record of the event starting.
     rpc RecordActivityTaskStarted (RecordActivityTaskStartedRequest) returns (RecordActivityTaskStartedResponse) {
     }
 
-    // RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of
-    // 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and
-    // potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted
-    // event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
-    // for completing the DecisionTask.
-    rpc RespondDecisionTaskCompleted (RespondDecisionTaskCompletedRequest) returns (RespondDecisionTaskCompletedResponse) {
+    // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
+    // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
+    // potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
+    // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
+    // for completing the WorkflowTask.
+    rpc RespondWorkflowTaskCompleted (RespondWorkflowTaskCompletedRequest) returns (RespondWorkflowTaskCompletedResponse) {
     }
 
-    // RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
-    // DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-    // either clear sticky task queue or report ny panics during DecisionTask processing.
-    rpc RespondDecisionTaskFailed (RespondDecisionTaskFailedRequest) returns (RespondDecisionTaskFailedResponse) {
+    // RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
+    // WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
+    // either clear sticky task queue or report ny panics during WorkflowTask processing.
+    rpc RespondWorkflowTaskFailed (RespondWorkflowTaskFailedRequest) returns (RespondWorkflowTaskFailedResponse) {
     }
 
     // RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
     // to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
     // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will
     // fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
-    // PollForActivityTask API call for heartbeating.
+    // PollActivityTaskQueue API call for heartbeating.
     rpc RecordActivityTaskHeartbeat (RecordActivityTaskHeartbeatRequest) returns (RecordActivityTaskHeartbeatResponse) {
     }
 
     // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
-    // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
+    // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
     // created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
-    // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+    // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskCompleted (RespondActivityTaskCompletedRequest) returns (RespondActivityTaskCompletedResponse) {
     }
 
     // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
-    // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
+    // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
     // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-    // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+    // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskFailed (RespondActivityTaskFailedRequest) returns (RespondActivityTaskFailedResponse) {
     }
 
     // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
-    // result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+    // result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
     // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
-    // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+    // PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
     // anymore due to activity timeout.
     rpc RespondActivityTaskCanceled (RespondActivityTaskCanceledRequest) returns (RespondActivityTaskCanceledResponse) {
     }
 
     // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-    // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+    // WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
     rpc SignalWorkflowExecution (SignalWorkflowExecutionRequest) returns (SignalWorkflowExecutionResponse) {
     }
 
+    // (-- api-linter: core::0136::prepositions=disabled
+    //     aip.dev/not-precedent: "With" is needed here. --)
     // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
     // If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-    // and a decision task being created for the execution.
+    // and a workflow task being created for the execution.
     // If workflow is not running or not found, it will first try start workflow with given WorkflowIdResuePolicy,
     // and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
     // It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
@@ -147,17 +149,17 @@ service HistoryService {
     }
 
     // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
-    // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
+    // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
     // created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
     // anymore due to completion or doesn't exist.
     rpc RequestCancelWorkflowExecution (RequestCancelWorkflowExecutionRequest) returns (RequestCancelWorkflowExecutionResponse) {
     }
 
-    // ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+    // ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
     // used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
-    // child execution without creating the decision task and then calls this API after updating the mutable state of
+    // child execution without creating the workflow task and then calls this API after updating the mutable state of
     // parent execution.
-    rpc ScheduleDecisionTask (ScheduleDecisionTaskRequest) returns (ScheduleDecisionTaskResponse) {
+    rpc ScheduleWorkflowTask (ScheduleWorkflowTaskRequest) returns (ScheduleWorkflowTaskResponse) {
     }
 
     // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
@@ -218,19 +220,19 @@ service HistoryService {
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 
-    // ReadDLQMessages returns messages from DLQ
-    rpc ReadDLQMessages(ReadDLQMessagesRequest) returns (ReadDLQMessagesResponse) {
+    // GetDLQMessages returns messages from DLQ.
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }
 
-    // PurgeDLQMessages purges messages from DLQ
+    // PurgeDLQMessages purges messages from DLQ.
     rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
     }
 
-    // MergeDLQMessages merges messages from DLQ
+    // MergeDLQMessages merges messages from DLQ.
     rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
     }
 
-    // RefreshWorkflowTasks refreshes all tasks of a workflow
+    // RefreshWorkflowTasks refreshes all tasks of a workflow.
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 }

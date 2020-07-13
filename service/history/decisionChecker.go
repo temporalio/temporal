@@ -149,7 +149,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
 		return false, err
 	}
 
@@ -173,7 +173,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			Failure: failure.NewServerFailure(common.FailureReasonSizeExceedsLimit, true),
 		}
 
-		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATUS_NON_RETRYABLE_FAILURE, attributes); err != nil {
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -526,12 +526,12 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		attributes.WorkflowRunTimeoutSeconds = executionInfo.WorkflowRunTimeout
 	}
 
-	// Inherit decision task timeout from previous execution if not provided on decision
+	// Inherit workflow task timeout from previous execution if not provided on decision
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
 		attributes.WorkflowTaskTimeoutSeconds = executionInfo.WorkflowTaskTimeout
 	}
 
-	// Check next run decision task delay
+	// Check next run workflow task delay
 	if attributes.GetBackoffStartIntervalInSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
 	}
@@ -606,7 +606,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
 	}
 
-	// Inherit decision task timeout from parent workflow execution if not provided on decision
+	// Inherit workflow task timeout from parent workflow execution if not provided on decision
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
 		attributes.WorkflowTaskTimeoutSeconds = parentInfo.WorkflowTaskTimeout
 	}

@@ -1120,10 +1120,10 @@ func (r *historyReplicator) flushEventsBuffer(
 	if !ok {
 		return ErrCorruptedMutableStateDecision
 	}
-	if _, err = msBuilder.AddDecisionTaskFailedEvent(
+	if _, err = msBuilder.AddWorkflowTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
 		nil, identityHistoryService,
 		"",
 		"",
@@ -1216,9 +1216,9 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 
 	resetRequestID := uuid.New()
 	// workflow event buffer guarantee that the event immediately
-	// after the decision task started is decision task finished event
-	lastDecisionTaskStartEventID := msBuilder.GetPreviousStartedEventID()
-	if lastDecisionTaskStartEventID == common.EmptyEventID {
+	// after the workflow task started is workflow task finished event
+	lastWorkflowTaskStartEventID := msBuilder.GetPreviousStartedEventID()
+	if lastWorkflowTaskStartEventID == common.EmptyEventID {
 		// TODO when https://go.temporal.io/server/issues/2420 is finished
 		//  reset to workflow finish event
 		errStr := "cannot reapply signal due to workflow missing decision"
@@ -1227,7 +1227,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 
 	}
 
-	resetDecisionFinishID := lastDecisionTaskStartEventID + 1
+	resetDecisionFinishID := lastWorkflowTaskStartEventID + 1
 
 	baseContext := context
 	baseMutableState := msBuilder
@@ -1330,7 +1330,7 @@ func (r *historyReplicator) persistWorkflowMutation(
 ) error {
 
 	if !msBuilder.HasPendingDecision() {
-		_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
+		_, err := msBuilder.AddWorkflowTaskScheduledEvent(false)
 		if err != nil {
 			return ErrWorkflowMutationDecision
 		}

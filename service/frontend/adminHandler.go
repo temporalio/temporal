@@ -773,11 +773,11 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	return nil, nil
 }
 
-// ReadDLQMessages reads messages from DLQ
-func (adh *AdminHandler) ReadDLQMessages(
+// GetDLQMessages reads messages from DLQ
+func (adh *AdminHandler) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.ReadDLQMessagesRequest,
-) (resp *adminservice.ReadDLQMessagesResponse, retErr error) {
+	request *adminservice.GetDLQMessagesRequest,
+) (resp *adminservice.GetDLQMessagesResponse, retErr error) {
 
 	defer log.CapturePanic(adh.GetLogger(), &retErr)
 	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
@@ -800,7 +800,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 	var op func() error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
-		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
+		resp, err := adh.GetHistoryClient().GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
@@ -813,7 +813,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			return nil, err
 		}
 
-		return &adminservice.ReadDLQMessagesResponse{
+		return &adminservice.GetDLQMessagesResponse{
 			Type:             resp.GetType(),
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
@@ -840,7 +840,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 		return nil, adh.error(retErr, scope)
 	}
 
-	return &adminservice.ReadDLQMessagesResponse{
+	return &adminservice.GetDLQMessagesResponse{
 		ReplicationTasks: tasks,
 		NextPageToken:    token,
 	}, nil
