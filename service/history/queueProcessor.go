@@ -310,10 +310,6 @@ redispatchTaskLoop:
 			}
 
 			p.redispatchTasks()
-
-			if !p.redispatchQueue.IsEmpty() {
-				p.notifyRedispatch()
-			}
 		}
 	}
 
@@ -407,6 +403,10 @@ func (p *queueProcessorBase) redispatchTasks() {
 		p.metricsScope,
 		p.shutdownCh,
 	)
+
+	if !p.redispatchQueue.IsEmpty() {
+		p.notifyRedispatch()
+	}
 }
 
 func (p *queueProcessorBase) retryTasks() {

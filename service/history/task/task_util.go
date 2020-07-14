@@ -23,6 +23,8 @@ package task
 import (
 	"fmt"
 
+	gomock "github.com/golang/mock/gomock"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -31,6 +33,12 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+)
+
+type (
+	mockTaskMatcher struct {
+		task *MockTask
+	}
 )
 
 // InitializeLoggerForTask creates a new logger with additional tags for task info
@@ -344,4 +352,23 @@ func retryWorkflow(
 		return nil, err
 	}
 	return newMutableState, nil
+}
+
+// NewMockTaskMatcher creates a gomock matcher for mock Task
+func NewMockTaskMatcher(mockTask *MockTask) gomock.Matcher {
+	return &mockTaskMatcher{
+		task: mockTask,
+	}
+}
+
+func (m *mockTaskMatcher) Matches(x interface{}) bool {
+	taskPtr, ok := x.(*MockTask)
+	if !ok {
+		return false
+	}
+	return taskPtr == m.task
+}
+
+func (m *mockTaskMatcher) String() string {
+	return fmt.Sprintf("is equal to %v", m.task)
 }

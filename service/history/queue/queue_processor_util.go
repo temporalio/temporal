@@ -102,7 +102,12 @@ func RedispatchTasks(
 	queueLength := redispatchQueue.Len()
 	metricsScope.RecordTimer(metrics.TaskRedispatchQueuePendingTasksTimer, time.Duration(queueLength))
 	for i := 0; i != queueLength; i++ {
-		queueTask := redispatchQueue.Remove().(task.Task)
+		element := redispatchQueue.Remove()
+		if element == nil {
+			// queue is empty, may due to concurrent redispatch on the same queue
+			return
+		}
+		queueTask := element.(task.Task)
 		submitted, err := taskProcessor.TrySubmit(queueTask)
 		if err != nil {
 			select {

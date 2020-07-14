@@ -249,10 +249,6 @@ redispatchTaskLoop:
 			}
 
 			t.redispatchTasks()
-
-			if !t.redispatchQueue.IsEmpty() {
-				t.notifyRedispatch()
-			}
 		}
 	}
 
@@ -475,6 +471,10 @@ func (t *timerQueueProcessorBase) redispatchTasks() {
 		t.metricsScope,
 		t.shutdownCh,
 	)
+
+	if !t.redispatchQueue.IsEmpty() {
+		t.notifyRedispatch()
+	}
 }
 
 func (t *timerQueueProcessorBase) retryTasks() {
