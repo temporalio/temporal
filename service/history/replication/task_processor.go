@@ -419,6 +419,7 @@ func (p *taskProcessorImpl) putReplicationTaskToDLQ(replicationTask *r.Replicati
 		tag.WorkflowID(request.TaskInfo.GetWorkflowID()),
 		tag.WorkflowRunID(request.TaskInfo.GetRunID()),
 		tag.TaskID(request.TaskInfo.GetTaskID()),
+		tag.ShardID(p.shard.GetShardID()),
 	)
 
 	p.metricsClient.Scope(

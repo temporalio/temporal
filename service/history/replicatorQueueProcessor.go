@@ -762,7 +762,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
-		PageSize:      1,
+		PageSize:      p.shard.GetConfig().ReplicationTaskProcessorReadHistoryBatchSize(),
 		NextPageToken: pageToken,
 		ShardID:       common.IntPtr(p.shard.GetShardID()),
 	}

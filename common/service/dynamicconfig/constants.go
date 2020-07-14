@@ -263,6 +263,7 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorNoTaskInitialWait:              "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:                "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
+	ReplicationTaskProcessorReadHistoryBatchSize:           "history.ReplicationTaskProcessorReadHistoryBatchSize",
 	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
 	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
 	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
@@ -841,6 +842,8 @@ const (
 	ReplicationTaskProcessorCleanupInterval
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient
+	// ReplicationTaskProcessorReadHistoryBatchSize is the batch size to read history events
+	ReplicationTaskProcessorReadHistoryBatchSize
 	// HistoryEnableRPCReplication is the feature flag for RPC replication
 	HistoryEnableRPCReplication
 	// HistoryEnableKafkaReplication is the migration flag for Kafka replication

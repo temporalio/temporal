@@ -172,7 +172,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	query := h.session.Query(v2templateReadData, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
-	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		return nil, &workflow.InternalServiceError{
 			Message: "ReadHistoryBranch operation failed.  Not able to create query iterator.",
