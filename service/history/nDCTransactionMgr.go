@@ -318,7 +318,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
 
 		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-		//  since cannot reapply event to a finished workflow which had no decisions started
+		//  since cannot reapply event to a finished workflow which had no workflow task started
 		if baseRebuildLastEventID == common.EmptyEventID {
 			r.logger.Warn("cannot reapply event to a finished workflow",
 				tag.WorkflowNamespaceID(namespaceID),

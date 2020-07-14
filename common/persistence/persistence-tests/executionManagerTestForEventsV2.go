@@ -119,22 +119,22 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:     uuid.New(),
-				NamespaceID:         namespaceID,
-				WorkflowID:          workflowExecution.GetWorkflowId(),
-				RunID:               workflowExecution.GetRunId(),
-				TaskQueue:           "taskQueue",
-				WorkflowTypeName:    "wType",
-				WorkflowRunTimeout:  20,
-				WorkflowTaskTimeout: 13,
-				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				NextEventID:         3,
-				LastProcessedEvent:  0,
-				DecisionScheduleID:  2,
-				DecisionStartedID:   common.EmptyEventID,
-				DecisionTimeout:     1,
-				BranchToken:         []byte("branchToken1"),
+				CreateRequestID:            uuid.New(),
+				NamespaceID:                namespaceID,
+				WorkflowID:                 workflowExecution.GetWorkflowId(),
+				RunID:                      workflowExecution.GetRunId(),
+				TaskQueue:                  "taskQueue",
+				WorkflowTypeName:           "wType",
+				WorkflowRunTimeout:         20,
+				WorkflowTaskTimeout:        13,
+				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NextEventID:                3,
+				LastProcessedEvent:         0,
+				WorkflowTaskScheduleID:     2,
+				WorkflowTaskStartedID:      common.EmptyEventID,
+				CurrentWorkflowTaskTimeout: 1,
+				BranchToken:                []byte("branchToken1"),
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -231,14 +231,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowRunTimeout:  20,
 				WorkflowTaskTimeout: 13,
 
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				NextEventID:        common.EmptyEventID,
-				LastProcessedEvent: 0,
-				DecisionScheduleID: 2,
-				DecisionStartedID:  common.EmptyEventID,
-				DecisionTimeout:    1,
-				BranchToken:        nil,
+				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NextEventID:                common.EmptyEventID,
+				LastProcessedEvent:         0,
+				WorkflowTaskScheduleID:     2,
+				WorkflowTaskStartedID:      common.EmptyEventID,
+				CurrentWorkflowTaskTimeout: 1,
+				BranchToken:                nil,
 			},
 			ExecutionStats:   &p.ExecutionStats{},
 			VersionHistories: versionHistories,
@@ -354,14 +354,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowRunTimeout:  updatedInfo.WorkflowRunTimeout,
 				WorkflowTaskTimeout: updatedInfo.WorkflowTaskTimeout,
 
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				NextEventID:        info0.NextEventID,
-				LastProcessedEvent: common.EmptyEventID,
-				DecisionScheduleID: int64(2),
-				DecisionStartedID:  common.EmptyEventID,
-				DecisionTimeout:    1,
-				BranchToken:        []byte("branchToken1"),
+				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NextEventID:                info0.NextEventID,
+				LastProcessedEvent:         common.EmptyEventID,
+				WorkflowTaskScheduleID:     int64(2),
+				WorkflowTaskStartedID:      common.EmptyEventID,
+				CurrentWorkflowTaskTimeout: 1,
+				BranchToken:                []byte("branchToken1"),
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks:  nil,
@@ -387,7 +387,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionInfo.Status)
 	s.Equal(int64(3), newExecutionInfo.NextEventID)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
-	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleID)
 	s.Equal([]byte("branchToken1"), newExecutionInfo.BranchToken)
 
 	newRunID, err5 := s.GetCurrentWorkflowRunID(namespaceID, workflowExecution.WorkflowId)
@@ -491,7 +491,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int32(13), info0.WorkflowTaskTimeout)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(int64(2), info0.DecisionScheduleID)
+	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
@@ -590,7 +590,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int64(5), info1.NextEventID)
 	s.Equal([]byte("branchToken3"), info1.BranchToken)
 	s.Equal(int64(2), info1.LastProcessedEvent)
-	s.Equal(int64(2), info1.DecisionScheduleID)
+	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 	s.Equal(int64(10), replicationState1.CurrentVersion)
 	s.Equal(int64(11), replicationState1.StartVersion)
 	s.Equal(int64(12), replicationState1.LastWriteVersion)
@@ -613,8 +613,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 }
 
 func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskQueue, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
-	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
+	taskQueue, wType string, wTimeout int32, workflowTaskTimeout int32, nextEventID int64,
+	lastProcessedEventID int64, workflowTaskScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
 	var timerTasks []p.Task
@@ -635,27 +635,27 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
-		ScheduleID:  decisionScheduleID,
+		ScheduleID:  workflowTaskScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:     uuid.New(),
-				NamespaceID:         namespaceID,
-				WorkflowID:          workflowExecution.GetWorkflowId(),
-				RunID:               workflowExecution.GetRunId(),
-				TaskQueue:           taskQueue,
-				WorkflowTypeName:    wType,
-				WorkflowRunTimeout:  wTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
-				State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				NextEventID:         nextEventID,
-				LastProcessedEvent:  lastProcessedEventID,
-				DecisionScheduleID:  decisionScheduleID,
-				DecisionStartedID:   common.EmptyEventID,
-				DecisionTimeout:     1,
-				BranchToken:         brToken,
+				CreateRequestID:            uuid.New(),
+				NamespaceID:                namespaceID,
+				WorkflowID:                 workflowExecution.GetWorkflowId(),
+				RunID:                      workflowExecution.GetRunId(),
+				TaskQueue:                  taskQueue,
+				WorkflowTypeName:           wType,
+				WorkflowRunTimeout:         wTimeout,
+				WorkflowTaskTimeout:        workflowTaskTimeout,
+				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         lastProcessedEventID,
+				WorkflowTaskScheduleID:     workflowTaskScheduleID,
+				WorkflowTaskStartedID:      common.EmptyEventID,
+				CurrentWorkflowTaskTimeout: 1,
+				BranchToken:                brToken,
 			},
 			ExecutionStats:   &p.ExecutionStats{},
 			ReplicationState: state,
@@ -785,7 +785,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int32(13), info0.WorkflowTaskTimeout)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(int64(2), info0.DecisionScheduleID)
+	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
@@ -1022,7 +1022,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal("wType", info1.WorkflowTypeName)
 	s.Equal(int32(20), info1.WorkflowRunTimeout)
 	s.Equal(int32(13), info1.WorkflowTaskTimeout)
-	s.Equal(int64(2), info1.DecisionScheduleID)
+	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 
 	s.NotNil(replicationState1, "Valid replication state expected.")
 	s.Equal(int64(10), replicationState1.CurrentVersion)
@@ -1059,7 +1059,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal("wType", info2.WorkflowTypeName)
 	s.Equal(int32(20), info2.WorkflowRunTimeout)
 	s.Equal(int32(13), info2.WorkflowTaskTimeout)
-	s.Equal(int64(2), info2.DecisionScheduleID)
+	s.Equal(int64(2), info2.WorkflowTaskScheduleID)
 
 	s.NotNil(replicationState2, "Valid replication state expected.")
 	s.Equal(int64(100), replicationState2.CurrentVersion)
@@ -1218,7 +1218,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int32(13), info0.WorkflowTaskTimeout)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(int64(2), info0.DecisionScheduleID)
+	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, info0.State)
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info0.Status)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
@@ -1429,7 +1429,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal("wType", info1.WorkflowTypeName)
 	s.Equal(int32(20), info1.WorkflowRunTimeout)
 	s.Equal(int32(13), info1.WorkflowTaskTimeout)
-	s.Equal(int64(2), info1.DecisionScheduleID)
+	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 
 	s.NotNil(replicationState1, "Valid replication state expected.")
 	s.Equal(int64(9), replicationState1.CurrentVersion)
@@ -1466,7 +1466,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal("wType", info2.WorkflowTypeName)
 	s.Equal(int32(20), info2.WorkflowRunTimeout)
 	s.Equal(int32(13), info2.WorkflowTaskTimeout)
-	s.Equal(int64(2), info2.DecisionScheduleID)
+	s.Equal(int64(2), info2.WorkflowTaskScheduleID)
 
 	s.NotNil(replicationState2, "Valid replication state expected.")
 	s.Equal(int64(100), replicationState2.CurrentVersion)
@@ -1556,7 +1556,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(int32(13), info0.WorkflowTaskTimeout)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(int64(2), info0.DecisionScheduleID)
+	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
@@ -1660,7 +1660,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal("wType", info1.WorkflowTypeName)
 	s.Equal(int32(20), info1.WorkflowRunTimeout)
 	s.Equal(int32(13), info1.WorkflowTaskTimeout)
-	s.Equal(int64(2), info1.DecisionScheduleID)
+	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 
 	// the current execution
 	state2, err2 := s.GetWorkflowExecutionInfo(namespaceID, newExecution)
@@ -1676,7 +1676,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal("wType", info2.WorkflowTypeName)
 	s.Equal(int32(20), info2.WorkflowRunTimeout)
 	s.Equal(int32(13), info2.WorkflowTaskTimeout)
-	s.Equal(int64(2), info2.DecisionScheduleID)
+	s.Equal(int64(2), info2.WorkflowTaskScheduleID)
 
 	timerInfos2 := state2.TimerInfos
 	actInfos2 := state2.ActivityInfos

@@ -205,7 +205,7 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 
 }
 
-func (t *ForwarderTestSuite) TestForwardPollForDecision() {
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	pollerID := uuid.New()
@@ -229,8 +229,8 @@ func (t *ForwarderTestSuite) TestForwardPollForDecision() {
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(t.taskQueue.Parent(20), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
-	t.Equal(resp, task.pollForDecisionResponse())
-	t.Nil(task.pollForActivityResponse())
+	t.Equal(resp, task.pollWorkflowTaskQueueResponse())
+	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
@@ -257,8 +257,8 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(t.taskQueue.Parent(20), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
-	t.Equal(resp, task.pollForActivityResponse())
-	t.Nil(task.pollForDecisionResponse())
+	t.Equal(resp, task.pollActivityTaskQueueResponse())
+	t.Nil(task.pollWorkflowTaskQueueResponse())
 }
 
 func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {

@@ -121,10 +121,10 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) pushDecision(
+func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
 	taskqueue *taskqueuepb.TaskQueue,
-	decisionScheduleToStartTimeout int32,
+	workflowTaskScheduleToStartTimeout int32,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -142,7 +142,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 		},
 		TaskQueue:                     taskqueue,
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
+		ScheduleToStartTimeoutSeconds: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }

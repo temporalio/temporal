@@ -60,10 +60,10 @@ const (
 	defaultContextTimeoutForLongPoll             = 2 * time.Minute
 	defaultContextTimeoutForListArchivedWorkflow = 3 * time.Minute
 
-	defaultDecisionTimeoutInSeconds = 10
-	defaultPageSizeForList          = 500
-	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	defaultWorkflowTaskTimeoutInSeconds = 10
+	defaultPageSizeForList              = 500
+	defaultPageSizeForScan              = 2000
+	defaultWorkflowIDReusePolicy        = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
@@ -81,10 +81,10 @@ var envKeysForUserName = []string{
 }
 
 var resetTypesMap = map[string]string{
-	"FirstDecisionCompleted": "",
-	"LastDecisionCompleted":  "",
-	"LastContinuedAsNew":     "",
-	"BadBinary":              FlagResetBadBinaryChecksum,
+	"FirstWorkflowTaskCompleted": "",
+	"LastWorkflowTaskCompleted":  "",
+	"LastContinuedAsNew":         "",
+	"BadBinary":                  FlagResetBadBinaryChecksum,
 }
 
 type jsonType int

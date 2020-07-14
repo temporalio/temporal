@@ -94,8 +94,8 @@ var (
 	ErrRetryExecutionAlreadyStarted = serviceerror.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
 	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
 	ErrCorruptedReplicationInfo = serviceerror.NewInvalidArgument("replication task is has corrupted cluster replication info")
-	// ErrCorruptedMutableStateDecision is returned when mutable state decision is corrupted
-	ErrCorruptedMutableStateDecision = serviceerror.NewInvalidArgument("mutable state decision is corrupted")
+	// ErrCorruptedMutableStateWorkflowTask is returned when mutable state workflow task is corrupted
+	ErrCorruptedMutableStateWorkflowTask = serviceerror.NewInvalidArgument("mutable state workflow task is corrupted")
 	// ErrMoreThan2DC is returned when there are more than 2 data center
 	ErrMoreThan2DC = serviceerror.NewInvalidArgument("more than 2 data center")
 	// ErrImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
@@ -110,8 +110,8 @@ var (
 	ErrUnknownEncodingType = serviceerror.NewInvalidArgument("unknown encoding type")
 	// ErrUnreappliableEvent indicate that the event is not reappliable
 	ErrUnreappliableEvent = serviceerror.NewInvalidArgument("event is not reappliable")
-	// ErrWorkflowMutationDecision indicate that something is wrong with mutating workflow, i.e. adding decision to workflow
-	ErrWorkflowMutationDecision = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding decision")
+	// ErrWorkflowMutationWorkflowTask indicate that something is wrong with mutating workflow, i.e. adding workflow task to workflow
+	ErrWorkflowMutationWorkflowTask = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding workflow task")
 	// ErrWorkflowMutationSignal indicate that something is wrong with mutating workflow, i.e. adding signal to workflow
 	ErrWorkflowMutationSignal = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding signal")
 )
@@ -292,7 +292,7 @@ func (r *historyReplicator) ApplyEvents(
 		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.GetInfo().Name) {
 			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
 			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
-			// if the incoming version equals last write version, skip to fail in-flight decision.
+			// if the incoming version equals last write version, skip to fail in-flight workflow task.
 			mutableState, err = weContext.loadWorkflowExecutionForReplication(request.GetVersion())
 		} else {
 			mutableState, err = weContext.loadWorkflowExecution()
@@ -1116,14 +1116,14 @@ func (r *historyReplicator) flushEventsBuffer(
 		return err
 	}
 
-	decision, ok := msBuilder.GetInFlightDecision()
+	workflowTask, ok := msBuilder.GetInFlightWorkflowTask()
 	if !ok {
-		return ErrCorruptedMutableStateDecision
+		return ErrCorruptedMutableStateWorkflowTask
 	}
 	if _, err = msBuilder.AddWorkflowTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil, identityHistoryService,
 		"",
 		"",
@@ -1221,13 +1221,13 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	if lastWorkflowTaskStartEventID == common.EmptyEventID {
 		// TODO when https://go.temporal.io/server/issues/2420 is finished
 		//  reset to workflow finish event
-		errStr := "cannot reapply signal due to workflow missing decision"
+		errStr := "cannot reapply signal due to workflow missing workflow task"
 		logger.Error(errStr)
 		return serviceerror.NewInvalidArgument(errStr)
 
 	}
 
-	resetDecisionFinishID := lastWorkflowTaskStartEventID + 1
+	resetWorkflowTaskFinishID := lastWorkflowTaskStartEventID + 1
 
 	baseContext := context
 	baseMutableState := msBuilder
@@ -1236,11 +1236,11 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resp, err := r.resetor.ResetWorkflowExecution(
 		ctx,
 		&workflowservice.ResetWorkflowExecutionRequest{
-			Namespace:             namespaceEntry.GetInfo().Name,
-			WorkflowExecution:     context.getExecution(),
-			Reason:                workflowResetReason,
-			DecisionFinishEventId: resetDecisionFinishID,
-			RequestId:             resetRequestID,
+			Namespace:                 namespaceEntry.GetInfo().Name,
+			WorkflowExecution:         context.getExecution(),
+			Reason:                    workflowResetReason,
+			WorkflowTaskFinishEventId: resetWorkflowTaskFinishID,
+			RequestId:                 resetRequestID,
 		},
 		baseContext,
 		baseMutableState,
@@ -1329,10 +1329,10 @@ func (r *historyReplicator) persistWorkflowMutation(
 	timerTasks []persistence.Task,
 ) error {
 
-	if !msBuilder.HasPendingDecision() {
+	if !msBuilder.HasPendingWorkflowTask() {
 		_, err := msBuilder.AddWorkflowTaskScheduledEvent(false)
 		if err != nil {
-			return ErrWorkflowMutationDecision
+			return ErrWorkflowMutationWorkflowTask
 		}
 	}
 

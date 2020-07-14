@@ -116,13 +116,13 @@ type (
 		lastEventVersion int64
 	}
 
-	pushActivityToMatchingInfo struct {
-		activityScheduleToStartTimeout int32
+	pushActivityTaskToMatchingInfo struct {
+		activityTaskScheduleToStartTimeout int32
 	}
 
-	pushDecisionToMatchingInfo struct {
-		decisionScheduleToStartTimeout int32
-		taskqueue                      taskqueuepb.TaskQueue
+	pushWorkflowTaskToMatchingInfo struct {
+		workflowTaskScheduleToStartTimeout int32
+		taskqueue                          taskqueuepb.TaskQueue
 	}
 )
 
@@ -149,21 +149,21 @@ func newHistoryResendInfoFor2DC(
 
 func newPushActivityToMatchingInfo(
 	activityScheduleToStartTimeout int32,
-) *pushActivityToMatchingInfo {
+) *pushActivityTaskToMatchingInfo {
 
-	return &pushActivityToMatchingInfo{
-		activityScheduleToStartTimeout: activityScheduleToStartTimeout,
+	return &pushActivityTaskToMatchingInfo{
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 	}
 }
 
-func newPushDecisionToMatchingInfo(
-	decisionScheduleToStartTimeout int32,
+func newPushWorkflowTaskToMatchingInfo(
+	workflowTaskScheduleToStartTimeout int32,
 	taskqueue taskqueuepb.TaskQueue,
-) *pushDecisionToMatchingInfo {
+) *pushWorkflowTaskToMatchingInfo {
 
-	return &pushDecisionToMatchingInfo{
-		decisionScheduleToStartTimeout: decisionScheduleToStartTimeout,
-		taskqueue:                      taskqueue,
+	return &pushWorkflowTaskToMatchingInfo{
+		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
+		taskqueue:                          taskqueue,
 	}
 }
 

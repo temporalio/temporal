@@ -41,8 +41,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -305,7 +305,7 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 		BacklogCountHint:       1,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
-		DecisionInfo:           nil,
+		WorkflowTaskInfo:       nil,
 		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -549,7 +549,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -661,7 +661,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -883,7 +883,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -963,7 +963,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	return total
 }
 
-func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
+func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1185,7 +1185,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			startedTasks[taskRequest.TaskId] = true
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -1257,7 +1257,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 }
 
-func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
+func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1657,7 +1657,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tlName},
 						ActivityType:                  activityType,
@@ -1683,7 +1683,7 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 }
 
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
-	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *historypb.HistoryEvent {
+	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes) *historypb.HistoryEvent {
 
 	historyEvent := newHistoryEvent(eventID, enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1958,7 +1958,7 @@ func (m *testTaskManager) String() string {
 		if id.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			result += "Activity"
 		} else {
-			result += "Decision"
+			result += "Workflow"
 		}
 		result += " task queue " + id.name
 		result += "\n"

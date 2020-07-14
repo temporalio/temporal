@@ -384,7 +384,7 @@ func (c *taskQueueManagerImpl) String() string {
 	if c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
 	} else {
-		buf.WriteString("Decision")
+		buf.WriteString("Workflow")
 	}
 	rangeID := c.db.RangeID()
 	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)

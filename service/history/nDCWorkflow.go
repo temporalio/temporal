@@ -138,7 +138,7 @@ func (r *nDCWorkflowImpl) revive() error {
 
 	// workflow is in zombie state, need to set the state correctly accordingly
 	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if r.mutableState.HasProcessedOrPendingDecision() {
+	if r.mutableState.HasProcessedOrPendingWorkflowTask() {
 		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
@@ -211,10 +211,10 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 		return serviceerror.NewInternal("nDCWorkflow encounter workflow with buffered events but last write not from current cluster")
 	}
 
-	return r.failDecision(lastWriteVersion)
+	return r.failWorkflowTask(lastWriteVersion)
 }
 
-func (r *nDCWorkflowImpl) failDecision(
+func (r *nDCWorkflowImpl) failWorkflowTask(
 	lastWriteVersion int64,
 ) error {
 
@@ -223,15 +223,15 @@ func (r *nDCWorkflowImpl) failDecision(
 		return err
 	}
 
-	decision, ok := r.mutableState.GetInFlightDecision()
+	workflowTask, ok := r.mutableState.GetInFlightWorkflowTask()
 	if !ok {
 		return nil
 	}
 
 	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION,
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",
@@ -251,7 +251,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 ) error {
 
 	eventBatchFirstEventID := r.getMutableState().GetNextEventID()
-	if err := r.failDecision(lastWriteVersion); err != nil {
+	if err := r.failWorkflowTask(lastWriteVersion); err != nil {
 		return err
 	}
 

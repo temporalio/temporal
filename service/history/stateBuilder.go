@@ -195,8 +195,8 @@ func (b *stateBuilderImpl) applyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
-			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
-			decision, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
+			// use event.GetTimestamp() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
 				attributes.TaskQueue.GetName(),
@@ -210,18 +210,18 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			// since we do not use stickiness on the standby side
-			// there shall be no decision schedule to start timeout
+			// there shall be no workflowTask schedule to start timeout
 			// NOTE: at the beginning of the loop, stickyness is cleared
-			if err := taskGenerator.generateDecisionScheduleTasks(
+			if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
-				decision.ScheduleID,
+				workflowTask.ScheduleID,
 			); err != nil {
 				return nil, err
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
 			attributes := event.GetWorkflowTaskStartedEventAttributes()
-			decision, err := b.mutableState.ReplicateWorkflowTaskStartedEvent(
+			workflowTask, err := b.mutableState.ReplicateWorkflowTaskStartedEvent(
 				nil,
 				event.GetVersion(),
 				attributes.GetScheduledEventId(),
@@ -233,9 +233,9 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.generateDecisionStartTasks(
+			if err := taskGenerator.generateStartWorkflowTaskTasks(
 				b.unixNanoToTime(event.GetTimestamp()),
-				decision.ScheduleID,
+				workflowTask.ScheduleID,
 			); err != nil {
 				return nil, err
 			}
@@ -254,19 +254,19 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			// this is for transient decision
-			decision, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
+			// this is for transient workflowTask
+			workflowTask, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
 			if err != nil {
 				return nil, err
 			}
 
-			if decision != nil {
+			if workflowTask != nil {
 				// since we do not use stickiness on the standby side
-				// there shall be no decision schedule to start timeout
+				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
-				if err := taskGenerator.generateDecisionScheduleTasks(
+				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 					b.unixNanoToTime(event.GetTimestamp()),
-					decision.ScheduleID,
+					workflowTask.ScheduleID,
 				); err != nil {
 					return nil, err
 				}
@@ -277,19 +277,19 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			// this is for transient decision
-			decision, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
+			// this is for transient workflowTask
+			workflowTask, err := b.mutableState.ReplicateTransientWorkflowTaskScheduled()
 			if err != nil {
 				return nil, err
 			}
 
-			if decision != nil {
+			if workflowTask != nil {
 				// since we do not use stickiness on the standby side
-				// there shall be no decision schedule to start timeout
+				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
-				if err := taskGenerator.generateDecisionScheduleTasks(
+				if err := taskGenerator.generateScheduleWorkflowTaskTasks(
 					b.unixNanoToTime(event.GetTimestamp()),
-					decision.ScheduleID,
+					workflowTask.ScheduleID,
 				); err != nil {
 					return nil, err
 				}

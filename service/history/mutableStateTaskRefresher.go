@@ -104,7 +104,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(
 		return err
 	}
 
-	if err := r.refreshTasksForDecision(
+	if err := r.refreshWorkflowTaskTasks(
 		now,
 		mutableState,
 		taskGenerator,
@@ -184,7 +184,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
+	if !mutableState.HasProcessedOrPendingWorkflowTask() && startAttr.GetFirstWorkflowTaskBackoffSeconds() > 0 {
 		if err := taskGenerator.generateDelayedWorkflowTasks(
 			now,
 			startEvent,
@@ -236,34 +236,34 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	return nil
 }
 
-func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
+func (r *mutableStateTaskRefresherImpl) refreshWorkflowTaskTasks(
 	now time.Time,
 	mutableState mutableState,
 	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	if !mutableState.HasPendingDecision() {
+	if !mutableState.HasPendingWorkflowTask() {
 		// no workflow task at all
 		return nil
 	}
 
-	decision, ok := mutableState.GetPendingDecision()
+	workflowTask, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
-		return serviceerror.NewInternal("it could be a bug, cannot get pending decision")
+		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 
-	// decision already started
-	if decision.StartedID != common.EmptyEventID {
-		return taskGenerator.generateDecisionStartTasks(
+	// workflowTask already started
+	if workflowTask.StartedID != common.EmptyEventID {
+		return taskGenerator.generateStartWorkflowTaskTasks(
 			now,
-			decision.ScheduleID,
+			workflowTask.ScheduleID,
 		)
 	}
 
-	// decision only scheduled
-	return taskGenerator.generateDecisionScheduleTasks(
+	// workflowTask only scheduled
+	return taskGenerator.generateScheduleWorkflowTaskTasks(
 		now,
-		decision.ScheduleID,
+		workflowTask.ScheduleID,
 	)
 }
 

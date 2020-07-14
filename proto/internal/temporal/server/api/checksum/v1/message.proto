@@ -41,10 +41,10 @@ message MutableStateChecksumPayload {
     int64 last_processed_event_id = 8;
     int64 signal_count = 9;
 
-    int32 decision_attempt = 10;
-    int64 decision_version = 11;
-    int64 decision_scheduled_id = 12;
-    int64 decision_started_id = 13;
+    int32 workflow_task_attempt = 10;
+    int64 workflow_task_version = 11;
+    int64 workflow_task_scheduled_id = 12;
+    int64 workflow_task_started_id = 13;
 
     repeated int64 pending_timer_started_ids = 14;
     repeated int64 pending_activity_scheduled_ids = 15;

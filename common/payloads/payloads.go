@@ -65,7 +65,7 @@ func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
 func ToString(ps *commonpb.Payloads) string {
 	str, err := toString(ps)
 	if err != nil {
-		return fmt.Sprintf("Unable to decode heartbeat details. %+v", err)
+		return fmt.Sprintf("Unable to decode payloads. %+v", err)
 	}
 	return str
 }

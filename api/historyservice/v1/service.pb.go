@@ -113,8 +113,8 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HistoryServiceClient interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-	// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
+	// initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(ctx context.Context, in *StartWorkflowExecutionRequest, opts ...grpc.CallOption) (*StartWorkflowExecutionResponse, error)
 	// Returns the information from mutable state of workflow execution.
@@ -142,10 +142,10 @@ type HistoryServiceClient interface {
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(ctx context.Context, in *RecordActivityTaskStartedRequest, opts ...grpc.CallOption) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
-	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
-	// for completing the WorkflowTask.
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new result in new commands for the
+	// workflow execution and potentially new ActivityTasks created for correspondent commands. It will also create a
+	// WorkflowTaskCompleted event in the history for that session.  Use the 'taskToken' provided as response of
+	// PollWorkflowTaskQueue API call for completing the WorkflowTask.
 	RespondWorkflowTaskCompleted(ctx context.Context, in *RespondWorkflowTaskCompletedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskCompletedResponse, error)
 	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
 	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
@@ -159,19 +159,19 @@ type HistoryServiceClient interface {
 	RecordActivityTaskHeartbeat(ctx context.Context, in *RecordActivityTaskHeartbeatRequest, opts ...grpc.CallOption) (*RecordActivityTaskHeartbeatResponse, error)
 	// RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
 	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCompleted(ctx context.Context, in *RespondActivityTaskCompletedRequest, opts ...grpc.CallOption) (*RespondActivityTaskCompletedResponse, error)
 	// RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskFailed(ctx context.Context, in *RespondActivityTaskFailedRequest, opts ...grpc.CallOption) (*RespondActivityTaskFailedResponse, error)
 	// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
 	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(ctx context.Context, in *RespondActivityTaskCanceledRequest, opts ...grpc.CallOption) (*RespondActivityTaskCanceledResponse, error)
@@ -188,7 +188,7 @@ type HistoryServiceClient interface {
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
-	// used to clean execution info when signal decision finished.
+	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(ctx context.Context, in *RemoveSignalMutableStateRequest, opts ...grpc.CallOption) (*RemoveSignalMutableStateResponse, error)
 	// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 	// in the history and immediately terminating the execution instance.
@@ -199,7 +199,7 @@ type HistoryServiceClient interface {
 	ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 	// anymore due to completion or doesn't exist.
 	RequestCancelWorkflowExecution(ctx context.Context, in *RequestCancelWorkflowExecutionRequest, opts ...grpc.CallOption) (*RequestCancelWorkflowExecutionResponse, error)
 	// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
@@ -598,8 +598,8 @@ func (c *historyServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Ref
 // HistoryServiceServer is the server API for HistoryService service.
 type HistoryServiceServer interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-	// first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
+	// initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(context.Context, *StartWorkflowExecutionRequest) (*StartWorkflowExecutionResponse, error)
 	// Returns the information from mutable state of workflow execution.
@@ -627,10 +627,10 @@ type HistoryServiceServer interface {
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(context.Context, *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
-	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding decisions.  It will also create a WorkflowTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
-	// for completing the WorkflowTask.
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new result in new commands for the
+	// workflow execution and potentially new ActivityTasks created for correspondent commands. It will also create a
+	// WorkflowTaskCompleted event in the history for that session.  Use the 'taskToken' provided as response of
+	// PollWorkflowTaskQueue API call for completing the WorkflowTask.
 	RespondWorkflowTaskCompleted(context.Context, *RespondWorkflowTaskCompletedRequest) (*RespondWorkflowTaskCompletedResponse, error)
 	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
 	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
@@ -644,19 +644,19 @@ type HistoryServiceServer interface {
 	RecordActivityTaskHeartbeat(context.Context, *RecordActivityTaskHeartbeatRequest) (*RecordActivityTaskHeartbeatResponse, error)
 	// RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
 	// result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCompleted(context.Context, *RespondActivityTaskCompletedRequest) (*RespondActivityTaskCompletedResponse, error)
 	// RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 	// result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskFailed(context.Context, *RespondActivityTaskFailedRequest) (*RespondActivityTaskFailedResponse, error)
 	// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
 	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+	// created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(context.Context, *RespondActivityTaskCanceledRequest) (*RespondActivityTaskCanceledResponse, error)
@@ -673,7 +673,7 @@ type HistoryServiceServer interface {
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
-	// used to clean execution info when signal decision finished.
+	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(context.Context, *RemoveSignalMutableStateRequest) (*RemoveSignalMutableStateResponse, error)
 	// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 	// in the history and immediately terminating the execution instance.
@@ -684,7 +684,7 @@ type HistoryServiceServer interface {
 	ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-	// created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 	// anymore due to completion or doesn't exist.
 	RequestCancelWorkflowExecution(context.Context, *RequestCancelWorkflowExecutionRequest) (*RequestCancelWorkflowExecutionResponse, error)
 	// ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly

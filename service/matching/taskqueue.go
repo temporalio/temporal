@@ -152,7 +152,7 @@ func (tid *taskQueueID) String() string {
 	if tid.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		b.WriteString("activity")
 	} else {
-		b.WriteString("decision")
+		b.WriteString("workflow")
 	}
 	b.WriteString("]")
 	return b.String()

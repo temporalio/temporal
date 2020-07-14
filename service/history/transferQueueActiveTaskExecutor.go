@@ -181,12 +181,12 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
+	workflowTask, found := mutableState.GetWorkflowTaskInfo(task.GetScheduleId())
 	if !found {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), workflowTask.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -196,15 +196,15 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	taskTimeout := common.MinInt32(runTimeout, common.MaxTaskTimeout)
 
 	// NOTE: previously this section check whether mutable state has enabled
-	// sticky decision, if so convert the decision to a sticky decision.
-	// that logic has a bug which timer task for that sticky decision is not generated
-	// the correct logic should check whether the workflow task is a sticky decision
+	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
+	// that logic has a bug which timer task for that sticky workflowTask is not generated
+	// the correct logic should check whether the workflow task is a sticky workflowTask
 	// task or not.
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
 	}
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
-		// this decision is an sticky decision
+		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 		taskTimeout = executionInfo.StickyScheduleToStartTimeout
@@ -213,7 +213,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushDecision(task, taskQueue, taskTimeout)
+	return t.pushWorkflowTask(task, taskQueue, taskTimeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
@@ -789,7 +789,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	logger = logger.WithTags(
 		tag.WorkflowResetBaseRunID(resetPoint.GetRunId()),
 		tag.WorkflowBinaryChecksum(resetPoint.GetBinaryChecksum()),
-		tag.WorkflowEventID(resetPoint.GetFirstDecisionCompletedId()),
+		tag.WorkflowEventID(resetPoint.GetFirstWorkflowTaskCompletedId()),
 	)
 
 	var baseContext workflowExecutionContext
@@ -904,9 +904,9 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
-		NamespaceId:       namespaceID,
-		WorkflowExecution: execution,
-		IsFirstDecision:   true,
+		NamespaceId:         namespaceID,
+		WorkflowExecution:   execution,
+		IsFirstWorkflowTask: true,
 	})
 
 	if err != nil {
@@ -1093,7 +1093,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 
 	if createWorkflowTask {
 		// Create a transfer task to schedule a workflow task
-		err := scheduleDecision(mutableState)
+		err := scheduleWorkflowTask(mutableState)
 		if err != nil {
 			return err
 		}
@@ -1227,7 +1227,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			now,
 			now,
 		),
-		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -1276,9 +1276,9 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 					WorkflowId: workflowID,
 					RunId:      baseRunID,
 				},
-				Reason:                fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPoint.GetBinaryChecksum()),
-				DecisionFinishEventId: resetPoint.GetFirstDecisionCompletedId(),
-				RequestId:             uuid.New(),
+				Reason:                    fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPoint.GetBinaryChecksum()),
+				WorkflowTaskFinishEventId: resetPoint.GetFirstWorkflowTaskCompletedId(),
+				RequestId:                 uuid.New(),
 			},
 			baseContext,
 			baseMutableState,
@@ -1288,7 +1288,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	} else {
 		resetRunID := uuid.New()
 		baseRunID := baseMutableState.GetExecutionInfo().RunID
-		baseRebuildLastEventID := resetPoint.GetFirstDecisionCompletedId() - 1
+		baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
 		baseVersionHistories := baseMutableState.GetVersionHistories()
 		baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
 		if err != nil {

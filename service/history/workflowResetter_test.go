@@ -322,7 +322,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
-	decision := &decisionInfo{
+	workflowTask := &workflowTaskInfo{
 		Version:    123,
 		ScheduleID: 1234,
 		StartedID:  5678,
@@ -333,11 +333,11 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := NewMockmutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightDecision().Return(decision, true).Times(1)
+	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",
