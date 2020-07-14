@@ -30,8 +30,8 @@ import "temporal/server/api/historyservice/v1/request_response.proto";
 service HistoryService {
 
     // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-    // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-    // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+    // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
+    // initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
     // exists with same workflowId.
     rpc StartWorkflowExecution (StartWorkflowExecutionRequest) returns (StartWorkflowExecutionResponse) {
     }
@@ -71,10 +71,10 @@ service HistoryService {
     }
 
     // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
-    // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-    // potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
-    // event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
-    // for completing the WorkflowTask.
+    // 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new result in new commands for the
+    // workflow execution and potentially new ActivityTasks created for correspondent commands. It will also create a
+    // WorkflowTaskCompleted event in the history for that session.  Use the 'taskToken' provided as response of
+    // PollWorkflowTaskQueue API call for completing the WorkflowTask.
     rpc RespondWorkflowTaskCompleted (RespondWorkflowTaskCompletedRequest) returns (RespondWorkflowTaskCompletedResponse) {
     }
 
