@@ -111,8 +111,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
 	event1 := &historypb.HistoryEvent{
 		EventId:    11,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    12,

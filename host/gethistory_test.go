@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -75,21 +75,21 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -102,9 +102,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -118,14 +118,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -159,10 +159,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.namespace, workflowID, token, true)
@@ -174,11 +174,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		events, token = getHistory(s.namespace, workflowID, token, true)
@@ -187,15 +187,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// there are total 11 events
 	//  1. WorkflowExecutionStarted
-	//  2. DecisionTaskScheduled
-	//  3. DecisionTaskStarted
-	//  4. DecisionTaskCompleted
+	//  2. WorkflowTaskScheduled
+	//  3. WorkflowTaskStarted
+	//  4. WorkflowTaskCompleted
 	//  5. ActivityTaskScheduled
 	//  6. ActivityTaskStarted
 	//  7. ActivityTaskCompleted
-	//  8. DecisionTaskScheduled
-	//  9. DecisionTaskStarted
-	// 10. DecisionTaskCompleted
+	//  8. WorkflowTaskScheduled
+	//  9. WorkflowTaskStarted
+	// 10. WorkflowTaskCompleted
 	// 11. WorkflowExecutionCompleted
 	s.Equal(11, len(allEvents))
 
@@ -241,21 +241,21 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -268,9 +268,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -284,14 +284,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -326,10 +326,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.namespace, workflowID, token, true)
@@ -341,11 +341,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		events, token = getHistory(s.namespace, workflowID, token, true)
@@ -400,22 +400,22 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{
-					ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    "1",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskQueue:                     taskQueue,
@@ -429,10 +429,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
-				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
 		}}, nil
@@ -446,14 +446,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.testRawHistoryNamespaceName,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.testRawHistoryNamespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -517,10 +517,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	s.NotNil(token)
 
 	// here do a long pull and check # of events and time elapsed
-	// make first decision to schedule activity, this should affect the long poll above
+	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now()
 	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
@@ -533,11 +533,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
 		blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
@@ -547,15 +547,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// there are total 11 events
 	//  1. WorkflowExecutionStarted
-	//  2. DecisionTaskScheduled
-	//  3. DecisionTaskStarted
-	//  4. DecisionTaskCompleted
+	//  2. WorkflowTaskScheduled
+	//  3. WorkflowTaskStarted
+	//  4. WorkflowTaskCompleted
 	//  5. ActivityTaskScheduled
 	//  6. ActivityTaskStarted
 	//  7. ActivityTaskCompleted
-	//  8. DecisionTaskScheduled
-	//  9. DecisionTaskStarted
-	// 10. DecisionTaskCompleted
+	//  8. WorkflowTaskScheduled
+	//  9. WorkflowTaskStarted
+	// 10. WorkflowTaskCompleted
 	// 11. WorkflowExecutionCompleted
 	s.Equal(11, len(allEvents))
 
@@ -606,21 +606,21 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -633,9 +633,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -649,14 +649,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	// this function poll events from history side
@@ -703,12 +703,12 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		s.Equal(0, len(resp.HistoryBatches))
 		s.Nil(resp.NextPageToken)
 	}
-	// until now, only start event and decision task scheduled should be in the history
+	// until now, only start event and workflow task scheduled should be in the history
 	events := convertBlob(blobs)
 	s.True(len(events) == 2)
 
 	// poll so workflow will make progress, and get history from the very begining
-	poller.PollAndProcessDecisionTask(false, false)
+	poller.PollAndProcessWorkflowTask(false, false)
 	blobs = nil
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
@@ -719,9 +719,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		token = resp.NextPageToken
 	}
 	// now, there shall be 3 batches of events:
-	// 1. start event and decision task scheduled;
-	// 2. decision task started
-	// 3. decision task completed and activity task scheduled
+	// 1. start event and workflow task scheduled;
+	// 2. workflow task started
+	// 3. workflow task completed and activity task scheduled
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 3)
 	s.True(len(events) == 5)
@@ -739,17 +739,17 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		token = resp.NextPageToken
 	}
 	// now, there shall be 5 batches of events:
-	// 1. start event and decision task scheduled;
-	// 2. decision task started
-	// 3. decision task completed and activity task scheduled
+	// 1. start event and workflow task scheduled;
+	// 2. workflow task started
+	// 3. workflow task completed and activity task scheduled
 	// 4. activity task started
-	// 5. activity task completed and decision task scheduled
+	// 5. activity task completed and workflow task scheduled
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 5)
 	s.True(len(events) == 8)
 
-	// continue the workflow by processing decision, after this, workflow shall end
-	poller.PollAndProcessDecisionTask(false, false)
+	// continue the workflow by processing command, after this, workflow shall end
+	poller.PollAndProcessWorkflowTask(false, false)
 	// continue to get the history
 	token = nil
 	beginingEventID = events[len(events)-1].GetEventId() + 1
@@ -761,13 +761,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		token = resp.NextPageToken
 	}
 	// now, there shall be 7 batches of events:
-	// 1. start event and decision task scheduled;
-	// 2. decision task started
-	// 3. decision task completed and activity task scheduled
+	// 1. start event and workflow task scheduled;
+	// 2. workflow task started
+	// 3. workflow task completed and activity task scheduled
 	// 4. activity task started
-	// 5. activity task completed and decision task scheduled
-	// 6. decision task started
-	// 7. decision task completed and workflow execution completed
+	// 5. activity task completed and workflow task scheduled
+	// 6. workflow task started
+	// 7. workflow task completed and workflow execution completed
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 7)
 	s.True(len(events) == 11)
@@ -783,7 +783,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		token = resp.NextPageToken
 	}
 	// should get the following events
-	// 1. decision task completed and activity task scheduled
+	// 1. workflow task completed and activity task scheduled
 	// 2. activity task started
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 2)
@@ -823,21 +823,21 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     taskQueue,
@@ -850,9 +850,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -866,14 +866,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	getHistory := func(namespace string, execution *commonpb.WorkflowExecution, firstEventID int64, nextEventID int64,
@@ -890,20 +890,20 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	// poll so workflow will make progress
-	poller.PollAndProcessDecisionTask(false, false)
+	poller.PollAndProcessWorkflowTask(false, false)
 	// continue the workflow by processing activity
 	poller.PollAndProcessActivityTask(false)
 	// poll so workflow will make progress
-	poller.PollAndProcessDecisionTask(false, false)
+	poller.PollAndProcessWorkflowTask(false, false)
 
 	// now, there shall be 5 batches of events:
-	// 1. start event and decision task scheduled;
-	// 2. decision task started
-	// 3. decision task completed and activity task scheduled
+	// 1. start event and workflow task scheduled;
+	// 2. workflow task started
+	// 3. workflow task completed and activity task scheduled
 	// 4. activity task started
-	// 5. activity task completed and decision task scheduled
-	// 6. decision task started
-	// 7. decision task completed and workflow execution completed
+	// 5. activity task completed and workflow task scheduled
+	// 6. workflow task started
+	// 7. workflow task completed and workflow execution completed
 
 	// trying getting history from the middle to the end
 	firstEventID := int64(5)
@@ -915,21 +915,21 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #5 batch, activity task completed and decision task scheduled
+	// this should get the #5 batch, activity task completed and workflow task scheduled
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #6 batch, decision task started
+	// this should get the #6 batch, workflow task started
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #7 batch, decision task completed and workflow execution completed
+	// this should get the #7 batch, workflow task completed and workflow execution completed
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))

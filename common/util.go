@@ -279,9 +279,9 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-// CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
-func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
-	matchingResp := &matchingservice.PollForDecisionTaskResponse{
+// CreateMatchingPollWorkflowTaskQueueResponse create response for matching's PollWorkflowTaskQueue
+func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponse {
+	matchingResp := &matchingservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  token,
 		WorkflowExecution:          workflowExecution,
 		WorkflowType:               historyResponse.WorkflowType,
@@ -290,7 +290,7 @@ func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.R
 		Attempt:                    historyResponse.GetAttempt(),
 		NextEventId:                historyResponse.NextEventId,
 		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
-		DecisionInfo:               historyResponse.DecisionInfo,
+		WorkflowTaskInfo:           historyResponse.WorkflowTaskInfo,
 		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
 		EventStoreVersion:          historyResponse.EventStoreVersion,
 		BranchToken:                historyResponse.BranchToken,
@@ -399,7 +399,7 @@ func CreateHistoryStartWorkflowRequest(
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID,
 		StartRequest:           startRequest,
-		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		Attempt:                1,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
@@ -408,7 +408,7 @@ func CreateHistoryStartWorkflowRequest(
 		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
 
-	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
+	histRequest.FirstWorkflowTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
 

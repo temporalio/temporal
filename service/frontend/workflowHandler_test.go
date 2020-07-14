@@ -219,22 +219,22 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	wh := s.getWorkflowHandler(config)
 
 	bgCtx := context.Background()
-	_, err := wh.PollForDecisionTask(bgCtx, &workflowservice.PollForDecisionTaskRequest{})
+	_, err := wh.PollWorkflowTaskQueue(bgCtx, &workflowservice.PollWorkflowTaskQueueRequest{})
 	s.Error(err)
 	s.Equal(common.ErrContextTimeoutNotSet, err)
 
-	_, err = wh.PollForActivityTask(bgCtx, &workflowservice.PollForActivityTaskRequest{})
+	_, err = wh.PollActivityTaskQueue(bgCtx, &workflowservice.PollActivityTaskQueueRequest{})
 	s.Error(err)
 	s.Equal(common.ErrContextTimeoutNotSet, err)
 
 	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
 	defer cancel()
 
-	_, err = wh.PollForDecisionTask(shortCtx, &workflowservice.PollForDecisionTaskRequest{})
+	_, err = wh.PollWorkflowTaskQueue(shortCtx, &workflowservice.PollWorkflowTaskQueueRequest{})
 	s.Error(err)
 	s.Equal(common.ErrContextTimeoutTooShort, err)
 
-	_, err = wh.PollForActivityTask(shortCtx, &workflowservice.PollForActivityTaskRequest{})
+	_, err = wh.PollActivityTaskQueue(shortCtx, &workflowservice.PollActivityTaskQueueRequest{})
 	s.Error(err)
 	s.Equal(common.ErrContextTimeoutTooShort, err)
 }

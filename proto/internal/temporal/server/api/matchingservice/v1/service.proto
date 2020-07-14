@@ -26,32 +26,28 @@ option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservic
 import "temporal/server/api/matchingservice/v1/request_response.proto";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
-// Such applications are expected to have a worker which regularly polls for DecisionTask and ActivityTask.  For each
-// DecisionTask, application is expected to process the history of events for that session and respond back with next
-// decisions.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
+// Such applications are expected to have a worker which regularly polls for WorkflowTask and ActivityTask.  For each
+// WorkflowTask, application is expected to process the history of events for that session and respond back with next
+// commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
 // with completion or failure.
 service MatchingService {
 
-    // (-- api-linter: core::0136::prepositions=disabled
-    //     aip.dev/not-precedent: TODO: Rename to PollWorkflowTaskQueue. --)
-    // PollForDecisionTask is called by frontend to process DecisionTask from a specific task queue.  A
-    // DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
-    rpc PollForDecisionTask (PollForDecisionTaskRequest) returns (PollForDecisionTaskResponse) {
+    // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
+    // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
+    rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
     }
 
-    // (-- api-linter: core::0136::prepositions=disabled
-    //     aip.dev/not-precedent: TODO: Rename to PollActivityTaskQueue. --)
-    // PollForActivityTask is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
-    // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
-    rpc PollForActivityTask (PollForActivityTaskRequest) returns (PollForActivityTaskResponse) {
+    // PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
+    // is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
+    rpc PollActivityTaskQueue (PollActivityTaskQueueRequest) returns (PollActivityTaskQueueResponse) {
     }
 
-    // AddDecisionTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+    // AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
     // by the MatchingEngine.
-    rpc AddDecisionTask (AddDecisionTaskRequest) returns (AddDecisionTaskResponse) {
+    rpc AddWorkflowTask (AddWorkflowTaskRequest) returns (AddWorkflowTaskResponse) {
     }
 
-    // AddActivityTask is called by the history service when a decision task is scheduled, so that it can be dispatched
+    // AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
     // by the MatchingEngine.
     rpc AddActivityTask (AddActivityTaskRequest) returns (AddActivityTaskResponse) {
     }

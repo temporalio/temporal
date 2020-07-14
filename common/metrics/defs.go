@@ -290,10 +290,10 @@ const (
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
 	HistoryClientRecordActivityTaskHeartbeatScope
-	// HistoryClientRespondDecisionTaskCompletedScope tracks RPC calls to history service
-	HistoryClientRespondDecisionTaskCompletedScope
-	// HistoryClientRespondDecisionTaskFailedScope tracks RPC calls to history service
-	HistoryClientRespondDecisionTaskFailedScope
+	// HistoryClientRespondWorkflowTaskCompletedScope tracks RPC calls to history service
+	HistoryClientRespondWorkflowTaskCompletedScope
+	// HistoryClientRespondWorkflowTaskFailedScope tracks RPC calls to history service
+	HistoryClientRespondWorkflowTaskFailedScope
 	// HistoryClientRespondActivityTaskCompletedScope tracks RPC calls to history service
 	HistoryClientRespondActivityTaskCompletedScope
 	// HistoryClientRespondActivityTaskFailedScope tracks RPC calls to history service
@@ -308,8 +308,8 @@ const (
 	HistoryClientResetStickyTaskQueueScope
 	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDescribeWorkflowExecutionScope
-	// HistoryClientRecordDecisionTaskStartedScope tracks RPC calls to history service
-	HistoryClientRecordDecisionTaskStartedScope
+	// HistoryClientRecordWorkflowTaskStartedScope tracks RPC calls to history service
+	HistoryClientRecordWorkflowTaskStartedScope
 	// HistoryClientRecordActivityTaskStartedScope tracks RPC calls to history service
 	HistoryClientRecordActivityTaskStartedScope
 	// HistoryClientRequestCancelWorkflowExecutionScope tracks RPC calls to history service
@@ -324,8 +324,8 @@ const (
 	HistoryClientTerminateWorkflowExecutionScope
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientResetWorkflowExecutionScope
-	// HistoryClientScheduleDecisionTaskScope tracks RPC calls to history service
-	HistoryClientScheduleDecisionTaskScope
+	// HistoryClientScheduleWorkflowTaskScope tracks RPC calls to history service
+	HistoryClientScheduleWorkflowTaskScope
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope
 	// HistoryClientReplicateEventsScope tracks RPC calls to history service
@@ -354,14 +354,14 @@ const (
 	HistoryClientMergeDLQMessagesScope
 	// HistoryClientRefreshWorkflowTasksScope tracks RPC calls to history service
 	HistoryClientRefreshWorkflowTasksScope
-	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
-	MatchingClientPollForDecisionTaskScope
-	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
-	MatchingClientPollForActivityTaskScope
+	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
+	MatchingClientPollWorkflowTaskQueueScope
+	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
+	MatchingClientPollActivityTaskQueueScope
 	// MatchingClientAddActivityTaskScope tracks RPC calls to matching service
 	MatchingClientAddActivityTaskScope
-	// MatchingClientAddDecisionTaskScope tracks RPC calls to matching service
-	MatchingClientAddDecisionTaskScope
+	// MatchingClientAddWorkflowTaskScope tracks RPC calls to matching service
+	MatchingClientAddWorkflowTaskScope
 	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
 	MatchingClientQueryWorkflowScope
 	// MatchingClientRespondQueryTaskCompletedScope tracks RPC calls to matching service
@@ -394,10 +394,10 @@ const (
 	FrontendClientListNamespacesScope
 	// FrontendClientListOpenWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListOpenWorkflowExecutionsScope
-	// FrontendClientPollForActivityTaskScope tracks RPC calls to frontend service
-	FrontendClientPollForActivityTaskScope
-	// FrontendClientPollForDecisionTaskScope tracks RPC calls to frontend service
-	FrontendClientPollForDecisionTaskScope
+	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
+	FrontendClientPollActivityTaskQueueScope
+	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
+	FrontendClientPollWorkflowTaskQueueScope
 	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service
 	FrontendClientQueryWorkflowScope
 	// FrontendClientRecordActivityTaskHeartbeatScope tracks RPC calls to frontend service
@@ -424,10 +424,10 @@ const (
 	FrontendClientRespondActivityTaskFailedScope
 	// FrontendClientRespondActivityTaskFailedByIdScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskFailedByIdScope
-	// FrontendClientRespondDecisionTaskCompletedScope tracks RPC calls to frontend service
-	FrontendClientRespondDecisionTaskCompletedScope
-	// FrontendClientRespondDecisionTaskFailedScope tracks RPC calls to frontend service
-	FrontendClientRespondDecisionTaskFailedScope
+	// FrontendClientRespondWorkflowTaskCompletedScope tracks RPC calls to frontend service
+	FrontendClientRespondWorkflowTaskCompletedScope
+	// FrontendClientRespondWorkflowTaskFailedScope tracks RPC calls to frontend service
+	FrontendClientRespondWorkflowTaskFailedScope
 	// FrontendClientRespondQueryTaskCompletedScope tracks RPC calls to frontend service
 	FrontendClientRespondQueryTaskCompletedScope
 	// FrontendClientSignalWithStartWorkflowExecutionScope tracks RPC calls to frontend service
@@ -514,10 +514,10 @@ const (
 	DCRedirectionCountWorkflowExecutionsScope
 	// DCRedirectionGetSearchAttributesScope tracks RPC calls for dc redirection
 	DCRedirectionGetSearchAttributesScope
-	// DCRedirectionPollForActivityTaskScope tracks RPC calls for dc redirection
-	DCRedirectionPollForActivityTaskScope
-	// DCRedirectionPollForDecisionTaskScope tracks RPC calls for dc redirection
-	DCRedirectionPollForDecisionTaskScope
+	// DCRedirectionPollActivityTaskQueueScope tracks RPC calls for dc redirection
+	DCRedirectionPollActivityTaskQueueScope
+	// DCRedirectionPollWorkflowTaskQueueScope tracks RPC calls for dc redirection
+	DCRedirectionPollWorkflowTaskQueueScope
 	// DCRedirectionQueryWorkflowScope tracks RPC calls for dc redirection
 	DCRedirectionQueryWorkflowScope
 	// DCRedirectionRecordActivityTaskHeartbeatScope tracks RPC calls for dc redirection
@@ -544,10 +544,10 @@ const (
 	DCRedirectionRespondActivityTaskFailedScope
 	// DCRedirectionRespondActivityTaskFailedByIdScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskFailedByIdScope
-	// DCRedirectionRespondDecisionTaskCompletedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondDecisionTaskCompletedScope
-	// DCRedirectionRespondDecisionTaskFailedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondDecisionTaskFailedScope
+	// DCRedirectionRespondWorkflowTaskCompletedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondWorkflowTaskCompletedScope
+	// DCRedirectionRespondWorkflowTaskFailedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondWorkflowTaskFailedScope
 	// DCRedirectionRespondQueryTaskCompletedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondQueryTaskCompletedScope
 	// DCRedirectionSignalWithStartWorkflowExecutionScope tracks RPC calls for dc redirection
@@ -705,18 +705,18 @@ const (
 const (
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
 	FrontendStartWorkflowExecutionScope = iota + NumAdminScopes
-	// PollForDecisionTaskScope is the metric scope for frontend.PollForDecisionTask
-	FrontendPollForDecisionTaskScope
-	// FrontendPollForActivityTaskScope is the metric scope for frontend.PollForActivityTask
-	FrontendPollForActivityTaskScope
+	// PollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
+	FrontendPollWorkflowTaskQueueScope
+	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
+	FrontendPollActivityTaskQueueScope
 	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
 	FrontendRecordActivityTaskHeartbeatScope
-	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RespondDecisionTaskCompleted
+	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RespondWorkflowTaskCompleted
 	FrontendRecordActivityTaskHeartbeatByIdScope
-	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
-	FrontendRespondDecisionTaskCompletedScope
-	// FrontendRespondDecisionTaskFailedScope is the metric scope for frontend.RespondDecisionTaskFailed
-	FrontendRespondDecisionTaskFailedScope
+	// FrontendRespondWorkflowTaskCompletedScope is the metric scope for frontend.RespondWorkflowTaskCompleted
+	FrontendRespondWorkflowTaskCompletedScope
+	// FrontendRespondWorkflowTaskFailedScope is the metric scope for frontend.RespondWorkflowTaskFailed
+	FrontendRespondWorkflowTaskFailedScope
 	// FrontendRespondQueryTaskCompletedScope is the metric scope for frontend.RespondQueryTaskCompleted
 	FrontendRespondQueryTaskCompletedScope
 	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompleted
@@ -791,10 +791,10 @@ const (
 	HistoryStartWorkflowExecutionScope = iota + NumCommonScopes
 	// HistoryRecordActivityTaskHeartbeatScope tracks RecordActivityTaskHeartbeat API calls received by service
 	HistoryRecordActivityTaskHeartbeatScope
-	// HistoryRespondDecisionTaskCompletedScope tracks RespondDecisionTaskCompleted API calls received by service
-	HistoryRespondDecisionTaskCompletedScope
-	// HistoryRespondDecisionTaskFailedScope tracks RespondDecisionTaskFailed API calls received by service
-	HistoryRespondDecisionTaskFailedScope
+	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
+	HistoryRespondWorkflowTaskCompletedScope
+	// HistoryRespondWorkflowTaskFailedScope tracks RespondWorkflowTaskFailed API calls received by service
+	HistoryRespondWorkflowTaskFailedScope
 	// HistoryRespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
 	HistoryRespondActivityTaskCompletedScope
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
@@ -809,8 +809,8 @@ const (
 	HistoryResetStickyTaskQueueScope
 	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
 	HistoryDescribeWorkflowExecutionScope
-	// HistoryRecordDecisionTaskStartedScope tracks RecordDecisionTaskStarted API calls received by service
-	HistoryRecordDecisionTaskStartedScope
+	// HistoryRecordWorkflowTaskStartedScope tracks RecordWorkflowTaskStarted API calls received by service
+	HistoryRecordWorkflowTaskStartedScope
 	// HistoryRecordActivityTaskStartedScope tracks RecordActivityTaskStarted API calls received by service
 	HistoryRecordActivityTaskStartedScope
 	// HistorySignalWorkflowExecutionScope tracks SignalWorkflowExecution API calls received by service
@@ -821,8 +821,8 @@ const (
 	HistoryRemoveSignalMutableStateScope
 	// HistoryTerminateWorkflowExecutionScope tracks TerminateWorkflowExecution API calls received by service
 	HistoryTerminateWorkflowExecutionScope
-	// HistoryScheduleDecisionTaskScope tracks ScheduleDecisionTask API calls received by service
-	HistoryScheduleDecisionTaskScope
+	// HistoryScheduleWorkflowTaskScope tracks ScheduleWorkflowTask API calls received by service
+	HistoryScheduleWorkflowTaskScope
 	// HistoryRecordChildExecutionCompletedScope tracks CompleteChildExecution API calls received by service
 	HistoryRecordChildExecutionCompletedScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
@@ -865,8 +865,8 @@ const (
 	TransferStandbyQueueProcessorScope
 	// TransferActiveTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferActiveTaskActivityScope
-	// TransferActiveTaskDecisionScope is the scope used for decision task processing by transfer queue processor
-	TransferActiveTaskDecisionScope
+	// TransferActiveTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferActiveTaskWorkflowTaskScope
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope
 	// TransferActiveTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -885,8 +885,8 @@ const (
 	TransferStandbyTaskResetWorkflowScope
 	// TransferStandbyTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferStandbyTaskActivityScope
-	// TransferStandbyTaskDecisionScope is the scope used for decision task processing by transfer queue processor
-	TransferStandbyTaskDecisionScope
+	// TransferStandbyTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferStandbyTaskWorkflowTaskScope
 	// TransferStandbyTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferStandbyTaskCloseExecutionScope
 	// TransferStandbyTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -907,8 +907,8 @@ const (
 	TimerStandbyQueueProcessorScope
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope
-	// TimerActiveTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerActiveTaskDecisionTimeoutScope
+	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
+	TimerActiveTaskWorkflowTaskTimeoutScope
 	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
 	TimerActiveTaskUserTimerScope
 	// TimerActiveTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
@@ -921,8 +921,8 @@ const (
 	TimerActiveTaskDeleteHistoryEventScope
 	// TimerStandbyTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerStandbyTaskActivityTimeoutScope
-	// TimerStandbyTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerStandbyTaskDecisionTimeoutScope
+	// TimerStandbyTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
+	TimerStandbyTaskWorkflowTaskTimeoutScope
 	// TimerStandbyTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
 	TimerStandbyTaskUserTimerScope
 	// TimerStandbyTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
@@ -993,19 +993,19 @@ const (
 
 // -- Operation scopes for Matching service --
 const (
-	// PollForDecisionTaskScope tracks PollForDecisionTask API calls received by service
-	MatchingPollForDecisionTaskScope = iota + NumCommonScopes
-	// PollForActivityTaskScope tracks PollForActivityTask API calls received by service
-	MatchingPollForActivityTaskScope
+	// PollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
+	MatchingPollWorkflowTaskQueueScope = iota + NumCommonScopes
+	// PollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
+	MatchingPollActivityTaskQueueScope
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
 	MatchingAddActivityTaskScope
-	// MatchingAddDecisionTaskScope tracks AddDecisionTask API calls received by service
-	MatchingAddDecisionTaskScope
+	// MatchingAddWorkflowTaskScope tracks AddWorkflowTask API calls received by service
+	MatchingAddWorkflowTaskScope
 	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
 	MatchingTaskQueueMgrScope
-	// MatchingQueryWorkflowScope tracks AddDecisionTask API calls received by service
+	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
 	MatchingQueryWorkflowScope
-	// MatchingRespondQueryTaskCompletedScope tracks AddDecisionTask API calls received by service
+	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
 	MatchingRespondQueryTaskCompletedScope
 	// MatchingCancelOutstandingPollScope tracks CancelOutstandingPoll API calls received by service
 	MatchingCancelOutstandingPollScope
@@ -1158,8 +1158,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 		HistoryClientStartWorkflowExecutionScope:              {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordActivityTaskHeartbeatScope:         {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondDecisionTaskCompletedScope:        {operation: "HistoryClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondDecisionTaskFailedScope:           {operation: "HistoryClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondWorkflowTaskCompletedScope:        {operation: "HistoryClientRespondWorkflowTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondWorkflowTaskFailedScope:           {operation: "HistoryClientRespondWorkflowTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskCompletedScope:        {operation: "HistoryClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskFailedScope:           {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskCanceledScope:         {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1167,7 +1167,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientPollMutableStateScope:                    {operation: "HistoryClientPollMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetStickyTaskQueueScope:                {operation: "HistoryClientResetStickyTaskQueueScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDescribeWorkflowExecutionScope:           {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRecordDecisionTaskStartedScope:           {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordWorkflowTaskStartedScope:           {operation: "HistoryClientRecordWorkflowTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordActivityTaskStartedScope:           {operation: "HistoryClientRecordActivityTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRequestCancelWorkflowExecutionScope:      {operation: "HistoryClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSignalWorkflowExecutionScope:             {operation: "HistoryClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1175,7 +1175,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRemoveSignalMutableStateScope:            {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientTerminateWorkflowExecutionScope:          {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetWorkflowExecutionScope:              {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientScheduleDecisionTaskScope:                {operation: "HistoryClientScheduleDecisionTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientScheduleWorkflowTaskScope:                {operation: "HistoryClientScheduleWorkflowTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordChildExecutionCompletedScope:       {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateEventsScope:                     {operation: "HistoryClientReplicateEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateRawEventsScope:                  {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1190,10 +1190,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientPurgeDLQMessagesScope:                    {operation: "HistoryClientPurgeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientMergeDLQMessagesScope:                    {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRefreshWorkflowTasksScope:                {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		MatchingClientPollForDecisionTaskScope:                {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientPollForActivityTaskScope:                {operation: "MatchingClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollWorkflowTaskQueueScope:              {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollActivityTaskQueueScope:              {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                    {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddDecisionTaskScope:                    {operation: "MatchingClientAddDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddWorkflowTaskScope:                    {operation: "MatchingClientAddWorkflowTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientQueryWorkflowScope:                      {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientRespondQueryTaskCompletedScope:          {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientCancelOutstandingPollScope:              {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1210,8 +1210,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListNamespacesScope:                     {operation: "FrontendClientListNamespaces", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientPollForActivityTaskScope:                {operation: "FrontendClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientPollForDecisionTaskScope:                {operation: "FrontendClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPollActivityTaskQueueScope:              {operation: "FrontendClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPollWorkflowTaskQueueScope:              {operation: "FrontendClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientQueryWorkflowScope:                      {operation: "FrontendClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRecordActivityTaskHeartbeatScope:        {operation: "FrontendClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRecordActivityTaskHeartbeatByIdScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1225,8 +1225,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRespondActivityTaskCompletedByIdScope:   {operation: "FrontendClientRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskFailedScope:          {operation: "FrontendClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskFailedByIdScope:      {operation: "FrontendClientRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondDecisionTaskCompletedScope:       {operation: "FrontendClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondDecisionTaskFailedScope:          {operation: "FrontendClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondWorkflowTaskCompletedScope:       {operation: "FrontendClientRespondWorkflowTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondWorkflowTaskFailedScope:          {operation: "FrontendClientRespondWorkflowTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWithStartWorkflowExecutionScope:   {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1270,8 +1270,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionScanWorkflowExecutionsScope:              {operation: "DCRedirectionScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionCountWorkflowExecutionsScope:             {operation: "DCRedirectionCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetSearchAttributesScope:                 {operation: "DCRedirectionGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionPollForActivityTaskScope:                 {operation: "DCRedirectionPollForActivityTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionPollForDecisionTaskScope:                 {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollActivityTaskQueueScope:               {operation: "DCRedirectionPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollWorkflowTaskQueueScope:               {operation: "DCRedirectionPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionQueryWorkflowScope:                       {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRecordActivityTaskHeartbeatScope:         {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRecordActivityTaskHeartbeatByIdScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1285,8 +1285,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionRespondActivityTaskCompletedByIdScope:    {operation: "DCRedirectionRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskFailedScope:           {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskFailedByIdScope:       {operation: "DCRedirectionRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondDecisionTaskCompletedScope:        {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondDecisionTaskFailedScope:           {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondWorkflowTaskCompletedScope:        {operation: "DCRedirectionRespondWorkflowTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondWorkflowTaskFailedScope:           {operation: "DCRedirectionRespondWorkflowTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondQueryTaskCompletedScope:           {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionSignalWithStartWorkflowExecutionScope:    {operation: "DCRedirectionSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionSignalWorkflowExecutionScope:             {operation: "DCRedirectionSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1355,12 +1355,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminResendReplicationTasksScope:           {operation: "ResendReplicationTasks"},
 
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
-		FrontendPollForDecisionTaskScope:                {operation: "PollForDecisionTask"},
-		FrontendPollForActivityTaskScope:                {operation: "PollForActivityTask"},
+		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
+		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},
 		FrontendRecordActivityTaskHeartbeatScope:        {operation: "RecordActivityTaskHeartbeat"},
 		FrontendRecordActivityTaskHeartbeatByIdScope:    {operation: "RecordActivityTaskHeartbeatById"},
-		FrontendRespondDecisionTaskCompletedScope:       {operation: "RespondDecisionTaskCompleted"},
-		FrontendRespondDecisionTaskFailedScope:          {operation: "RespondDecisionTaskFailed"},
+		FrontendRespondWorkflowTaskCompletedScope:       {operation: "RespondWorkflowTaskCompleted"},
+		FrontendRespondWorkflowTaskFailedScope:          {operation: "RespondWorkflowTaskFailed"},
 		FrontendRespondQueryTaskCompletedScope:          {operation: "RespondQueryTaskCompleted"},
 		FrontendRespondActivityTaskCompletedScope:       {operation: "RespondActivityTaskCompleted"},
 		FrontendRespondActivityTaskFailedScope:          {operation: "RespondActivityTaskFailed"},
@@ -1398,8 +1398,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	History: {
 		HistoryStartWorkflowExecutionScope:                     {operation: "StartWorkflowExecution"},
 		HistoryRecordActivityTaskHeartbeatScope:                {operation: "RecordActivityTaskHeartbeat"},
-		HistoryRespondDecisionTaskCompletedScope:               {operation: "RespondDecisionTaskCompleted"},
-		HistoryRespondDecisionTaskFailedScope:                  {operation: "RespondDecisionTaskFailed"},
+		HistoryRespondWorkflowTaskCompletedScope:               {operation: "RespondWorkflowTaskCompleted"},
+		HistoryRespondWorkflowTaskFailedScope:                  {operation: "RespondWorkflowTaskFailed"},
 		HistoryRespondActivityTaskCompletedScope:               {operation: "RespondActivityTaskCompleted"},
 		HistoryRespondActivityTaskFailedScope:                  {operation: "RespondActivityTaskFailed"},
 		HistoryRespondActivityTaskCanceledScope:                {operation: "RespondActivityTaskCanceled"},
@@ -1407,7 +1407,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryPollMutableStateScope:                           {operation: "PollMutableState"},
 		HistoryResetStickyTaskQueueScope:                       {operation: "ResetStickyTaskQueueScope"},
 		HistoryDescribeWorkflowExecutionScope:                  {operation: "DescribeWorkflowExecution"},
-		HistoryRecordDecisionTaskStartedScope:                  {operation: "RecordDecisionTaskStarted"},
+		HistoryRecordWorkflowTaskStartedScope:                  {operation: "RecordWorkflowTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:                  {operation: "RecordActivityTaskStarted"},
 		HistorySignalWorkflowExecutionScope:                    {operation: "SignalWorkflowExecution"},
 		HistorySignalWithStartWorkflowExecutionScope:           {operation: "SignalWithStartWorkflowExecution"},
@@ -1416,7 +1416,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetWorkflowExecutionScope:                     {operation: "ResetWorkflowExecution"},
 		HistoryQueryWorkflowScope:                              {operation: "QueryWorkflow"},
 		HistoryProcessDeleteHistoryEventScope:                  {operation: "ProcessDeleteHistoryEvent"},
-		HistoryScheduleDecisionTaskScope:                       {operation: "ScheduleDecisionTask"},
+		HistoryScheduleWorkflowTaskScope:                       {operation: "ScheduleWorkflowTask"},
 		HistoryRecordChildExecutionCompletedScope:              {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:             {operation: "RequestCancelWorkflowExecution"},
 		HistoryReplicateEventsScope:                            {operation: "ReplicateEvents"},
@@ -1438,7 +1438,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
 		TransferActiveTaskActivityScope:                        {operation: "TransferActiveTaskActivity"},
-		TransferActiveTaskDecisionScope:                        {operation: "TransferActiveTaskDecision"},
+		TransferActiveTaskWorkflowTaskScope:                    {operation: "TransferActiveTaskWorkflowTask"},
 		TransferActiveTaskCloseExecutionScope:                  {operation: "TransferActiveTaskCloseExecution"},
 		TransferActiveTaskCancelExecutionScope:                 {operation: "TransferActiveTaskCancelExecution"},
 		TransferActiveTaskSignalExecutionScope:                 {operation: "TransferActiveTaskSignalExecution"},
@@ -1447,7 +1447,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveTaskResetWorkflowScope:                   {operation: "TransferActiveTaskResetWorkflow"},
 		TransferActiveTaskUpsertWorkflowSearchAttributesScope:  {operation: "TransferActiveTaskUpsertWorkflowSearchAttributes"},
 		TransferStandbyTaskActivityScope:                       {operation: "TransferStandbyTaskActivity"},
-		TransferStandbyTaskDecisionScope:                       {operation: "TransferStandbyTaskDecision"},
+		TransferStandbyTaskWorkflowTaskScope:                   {operation: "TransferStandbyTaskWorkflowTask"},
 		TransferStandbyTaskCloseExecutionScope:                 {operation: "TransferStandbyTaskCloseExecution"},
 		TransferStandbyTaskCancelExecutionScope:                {operation: "TransferStandbyTaskCancelExecution"},
 		TransferStandbyTaskSignalExecutionScope:                {operation: "TransferStandbyTaskSignalExecution"},
@@ -1459,14 +1459,14 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerActiveQueueProcessorScope:                         {operation: "TimerActiveQueueProcessor"},
 		TimerStandbyQueueProcessorScope:                        {operation: "TimerStandbyQueueProcessor"},
 		TimerActiveTaskActivityTimeoutScope:                    {operation: "TimerActiveTaskActivityTimeout"},
-		TimerActiveTaskDecisionTimeoutScope:                    {operation: "TimerActiveTaskDecisionTimeout"},
+		TimerActiveTaskWorkflowTaskTimeoutScope:                {operation: "TimerActiveTaskWorkflowTaskTimeout"},
 		TimerActiveTaskUserTimerScope:                          {operation: "TimerActiveTaskUserTimer"},
 		TimerActiveTaskWorkflowTimeoutScope:                    {operation: "TimerActiveTaskWorkflowTimeout"},
 		TimerActiveTaskActivityRetryTimerScope:                 {operation: "TimerActiveTaskActivityRetryTimer"},
 		TimerActiveTaskWorkflowBackoffTimerScope:               {operation: "TimerActiveTaskWorkflowBackoffTimer"},
 		TimerActiveTaskDeleteHistoryEventScope:                 {operation: "TimerActiveTaskDeleteHistoryEvent"},
 		TimerStandbyTaskActivityTimeoutScope:                   {operation: "TimerStandbyTaskActivityTimeout"},
-		TimerStandbyTaskDecisionTimeoutScope:                   {operation: "TimerStandbyTaskDecisionTimeout"},
+		TimerStandbyTaskWorkflowTaskTimeoutScope:               {operation: "TimerStandbyTaskWorkflowTaskTimeout"},
 		TimerStandbyTaskUserTimerScope:                         {operation: "TimerStandbyTaskUserTimer"},
 		TimerStandbyTaskWorkflowTimeoutScope:                   {operation: "TimerStandbyTaskWorkflowTimeout"},
 		TimerStandbyTaskActivityRetryTimerScope:                {operation: "TimerStandbyTaskActivityRetryTimer"},
@@ -1499,10 +1499,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Matching Scope Names
 	Matching: {
-		MatchingPollForDecisionTaskScope:       {operation: "PollForDecisionTask"},
-		MatchingPollForActivityTaskScope:       {operation: "PollForActivityTask"},
+		MatchingPollWorkflowTaskQueueScope:     {operation: "PollWorkflowTaskQueue"},
+		MatchingPollActivityTaskQueueScope:     {operation: "PollActivityTaskQueue"},
 		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
-		MatchingAddDecisionTaskScope:           {operation: "AddDecisionTask"},
+		MatchingAddWorkflowTaskScope:           {operation: "AddWorkflowTask"},
 		MatchingTaskQueueMgrScope:              {operation: "TaskQueueMgr"},
 		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
 		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
@@ -1687,22 +1687,22 @@ const (
 	ActivityE2ELatency
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
-	DecisionTypeScheduleActivityCounter
-	DecisionTypeCompleteWorkflowCounter
-	DecisionTypeFailWorkflowCounter
-	DecisionTypeCancelWorkflowCounter
-	DecisionTypeStartTimerCounter
-	DecisionTypeCancelActivityCounter
-	DecisionTypeCancelTimerCounter
-	DecisionTypeRecordMarkerCounter
-	DecisionTypeCancelExternalWorkflowCounter
-	DecisionTypeChildWorkflowCounter
-	DecisionTypeContinueAsNewCounter
-	DecisionTypeSignalExternalWorkflowCounter
-	DecisionTypeUpsertWorkflowSearchAttributesCounter
-	EmptyCompletionDecisionsCounter
-	MultipleCompletionDecisionsCounter
-	FailedDecisionsCounter
+	CommandTypeScheduleActivityCounter
+	CommandTypeCompleteWorkflowCounter
+	CommandTypeFailWorkflowCounter
+	CommandTypeCancelWorkflowCounter
+	CommandTypeStartTimerCounter
+	CommandTypeCancelActivityCounter
+	CommandTypeCancelTimerCounter
+	CommandTypeRecordMarkerCounter
+	CommandTypeCancelExternalWorkflowCounter
+	CommandTypeChildWorkflowCounter
+	CommandTypeContinueAsNewCounter
+	CommandTypeSignalExternalWorkflowCounter
+	CommandTypeUpsertWorkflowSearchAttributesCounter
+	EmptyCompletionCommandsCounter
+	MultipleCompletionCommandsCounter
+	FailedWorkflowTasksCounter
 	StaleMutableStateCounter
 	AutoResetPointsLimitExceededCounter
 	AutoResetPointCorruptionCounter
@@ -1742,9 +1742,9 @@ const (
 	GetEngineForShardErrorCounter
 	GetEngineForShardLatency
 	RemoveEngineForShardLatency
-	CompleteDecisionWithStickyEnabledCounter
-	CompleteDecisionWithStickyDisabledCounter
-	DecisionHeartbeatTimeoutCounter
+	CompleteWorkflowTaskWithStickyEnabledCounter
+	CompleteWorkflowTaskWithStickyDisabledCounter
+	WorkflowTaskHeartbeatTimeoutCounter
 	HistoryEventNotificationQueueingLatency
 	HistoryEventNotificationFanoutLatency
 	HistoryEventNotificationInFlightMessageGauge
@@ -1821,9 +1821,9 @@ const (
 	DirectQueryDispatchClearStickinessLatency
 	DirectQueryDispatchClearStickinessSuccessCount
 	DirectQueryDispatchTimeoutBeforeNonStickyCount
-	DecisionTaskQueryLatency
+	WorkflowTaskQueryLatency
 	ConsistentQueryTimeoutCount
-	QueryBeforeFirstDecisionCount
+	QueryBeforeFirstWorkflowTaskCount
 	QueryBufferExceededCount
 	QueryRegistryInvalidStateCount
 	WorkerNotSupportsConsistentQueryCount
@@ -2102,22 +2102,22 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},
-		DecisionTypeScheduleActivityCounter:               {metricName: "schedule_activity_decision", metricType: Counter},
-		DecisionTypeCompleteWorkflowCounter:               {metricName: "complete_workflow_decision", metricType: Counter},
-		DecisionTypeFailWorkflowCounter:                   {metricName: "fail_workflow_decision", metricType: Counter},
-		DecisionTypeCancelWorkflowCounter:                 {metricName: "cancel_workflow_decision", metricType: Counter},
-		DecisionTypeStartTimerCounter:                     {metricName: "start_timer_decision", metricType: Counter},
-		DecisionTypeCancelActivityCounter:                 {metricName: "cancel_activity_decision", metricType: Counter},
-		DecisionTypeCancelTimerCounter:                    {metricName: "cancel_timer_decision", metricType: Counter},
-		DecisionTypeRecordMarkerCounter:                   {metricName: "record_marker_decision", metricType: Counter},
-		DecisionTypeCancelExternalWorkflowCounter:         {metricName: "cancel_external_workflow_decision", metricType: Counter},
-		DecisionTypeContinueAsNewCounter:                  {metricName: "continue_as_new_decision", metricType: Counter},
-		DecisionTypeSignalExternalWorkflowCounter:         {metricName: "signal_external_workflow_decision", metricType: Counter},
-		DecisionTypeUpsertWorkflowSearchAttributesCounter: {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
-		DecisionTypeChildWorkflowCounter:                  {metricName: "child_workflow_decision", metricType: Counter},
-		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
-		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
-		FailedDecisionsCounter:                            {metricName: "failed_decisions", metricType: Counter},
+		CommandTypeScheduleActivityCounter:                {metricName: "schedule_activity_command", metricType: Counter},
+		CommandTypeCompleteWorkflowCounter:                {metricName: "complete_workflow_command", metricType: Counter},
+		CommandTypeFailWorkflowCounter:                    {metricName: "fail_workflow_command", metricType: Counter},
+		CommandTypeCancelWorkflowCounter:                  {metricName: "cancel_workflow_command", metricType: Counter},
+		CommandTypeStartTimerCounter:                      {metricName: "start_timer_command", metricType: Counter},
+		CommandTypeCancelActivityCounter:                  {metricName: "cancel_activity_command", metricType: Counter},
+		CommandTypeCancelTimerCounter:                     {metricName: "cancel_timer_command", metricType: Counter},
+		CommandTypeRecordMarkerCounter:                    {metricName: "record_marker_command", metricType: Counter},
+		CommandTypeCancelExternalWorkflowCounter:          {metricName: "cancel_external_workflow_command", metricType: Counter},
+		CommandTypeContinueAsNewCounter:                   {metricName: "continue_as_new_command", metricType: Counter},
+		CommandTypeSignalExternalWorkflowCounter:          {metricName: "signal_external_workflow_command", metricType: Counter},
+		CommandTypeUpsertWorkflowSearchAttributesCounter:  {metricName: "upsert_workflow_search_attributes_command", metricType: Counter},
+		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_command", metricType: Counter},
+		EmptyCompletionCommandsCounter:                    {metricName: "empty_completion_commands", metricType: Counter},
+		MultipleCompletionCommandsCounter:                 {metricName: "multiple_completion_commands", metricType: Counter},
+		FailedWorkflowTasksCounter:                        {metricName: "failed_workflow_tasks", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},
 		AutoResetPointsLimitExceededCounter:               {metricName: "auto_reset_points_exceed_limit", metricType: Counter},
 		AutoResetPointCorruptionCounter:                   {metricName: "auto_reset_point_corruption", metricType: Counter},
@@ -2157,9 +2157,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetEngineForShardErrorCounter:                     {metricName: "get_engine_for_shard_errors", metricType: Counter},
 		GetEngineForShardLatency:                          {metricName: "get_engine_for_shard_latency", metricType: Timer},
 		RemoveEngineForShardLatency:                       {metricName: "remove_engine_for_shard_latency", metricType: Timer},
-		CompleteDecisionWithStickyEnabledCounter:          {metricName: "complete_decision_sticky_enabled_count", metricType: Counter},
-		CompleteDecisionWithStickyDisabledCounter:         {metricName: "complete_decision_sticky_disabled_count", metricType: Counter},
-		DecisionHeartbeatTimeoutCounter:                   {metricName: "decision_heartbeat_timeout_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyEnabledCounter:      {metricName: "complete_workflow_task_sticky_enabled_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyDisabledCounter:     {metricName: "complete_workflow_task_sticky_disabled_count", metricType: Counter},
+		WorkflowTaskHeartbeatTimeoutCounter:               {metricName: "workflow_task_heartbeat_timeout_count", metricType: Counter},
 		HistoryEventNotificationQueueingLatency:           {metricName: "history_event_notification_queueing_latency", metricType: Timer},
 		HistoryEventNotificationFanoutLatency:             {metricName: "history_event_notification_fanout_latency", metricType: Timer},
 		HistoryEventNotificationInFlightMessageGauge:      {metricName: "history_event_notification_inflight_message_gauge", metricType: Gauge},
@@ -2236,9 +2236,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DirectQueryDispatchClearStickinessLatency:         {metricName: "direct_query_dispatch_clear_stickiness_latency", metricType: Timer},
 		DirectQueryDispatchClearStickinessSuccessCount:    {metricName: "direct_query_dispatch_clear_stickiness_success", metricType: Counter},
 		DirectQueryDispatchTimeoutBeforeNonStickyCount:    {metricName: "direct_query_dispatch_timeout_before_non_sticky", metricType: Counter},
-		DecisionTaskQueryLatency:                          {metricName: "decision_task_query_latency", metricType: Timer},
+		WorkflowTaskQueryLatency:                          {metricName: "workflow_task_query_latency", metricType: Timer},
 		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
-		QueryBeforeFirstDecisionCount:                     {metricName: "query_before_first_decision", metricType: Counter},
+		QueryBeforeFirstWorkflowTaskCount:                 {metricName: "query_before_first_workflow_task", metricType: Counter},
 		QueryBufferExceededCount:                          {metricName: "query_buffer_exceeded", metricType: Counter},
 		QueryRegistryInvalidStateCount:                    {metricName: "query_registry_invalid_state", metricType: Counter},
 		WorkerNotSupportsConsistentQueryCount:             {metricName: "worker_not_supports_consistent_query", metricType: Counter},

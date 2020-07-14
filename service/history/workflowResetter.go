@@ -211,19 +211,19 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	// TODO add checking of reset until event ID == decision task started ID + 1
-	decision, ok := resetMutableState.GetInFlightDecision()
-	if !ok || decision.StartedID+1 != resetMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to DecisionTaskStarted + 1: %v", baseRebuildLastEventID+1))
+	// TODO add checking of reset until event ID == workflow task started ID + 1
+	workflowTask, ok := resetMutableState.GetInFlightWorkflowTask()
+	if !ok || workflowTask.StartedID+1 != resetMutableState.GetNextEventID() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to WorkflowTaskStarted + 1: %v", baseRebuildLastEventID+1))
 	}
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
 	}
 
 	resetFailure := failure.NewResetWorkflowFailure(resetReason, nil)
-	_, err = resetMutableState.AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID, enumspb.DECISION_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		resetFailure,
 		identityHistoryService,
 		"",
@@ -256,7 +256,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := scheduleDecision(resetMutableState); err != nil {
+	if err := scheduleWorkflowTask(resetMutableState); err != nil {
 		return nil, err
 	}
 

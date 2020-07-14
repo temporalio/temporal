@@ -322,7 +322,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
-	decision := &decisionInfo{
+	workflowTask := &workflowTaskInfo{
 		Version:    123,
 		ScheduleID: 1234,
 		StartedID:  5678,
@@ -333,11 +333,11 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := NewMockmutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightDecision().Return(decision, true).Times(1)
-	mutableState.EXPECT().AddDecisionTaskFailedEvent(
-		decision.ScheduleID,
-		decision.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FORCE_CLOSE_DECISION,
+	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
+	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		identityHistoryService,
 		"",
@@ -370,18 +370,18 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 
 	baseEvent1 := &historypb.HistoryEvent{
 		EventId:    124,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	baseEvent2 := &historypb.HistoryEvent{
 		EventId:    125,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
 	baseEvent3 := &historypb.HistoryEvent{
 		EventId:    126,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	baseEvent4 := &historypb.HistoryEvent{
 		EventId:   127,
@@ -398,18 +398,18 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}
 	newEvent2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	newEvent3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
 	newEvent4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	newEvent5 := &historypb.HistoryEvent{
 		EventId:    5,
@@ -482,18 +482,18 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	event3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
 	event4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	event5 := &historypb.HistoryEvent{
 		EventId:   5,
@@ -541,8 +541,8 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    102,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	event3 := &historypb.HistoryEvent{
 		EventId:   103,
@@ -584,18 +584,18 @@ func (s *workflowResetterSuite) TestPagination() {
 	}
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
 	}
 	event3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &historypb.DecisionTaskStartedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
 	}
 	event4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &historypb.DecisionTaskCompletedEventAttributes{}},
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
 	}
 	event5 := &historypb.HistoryEvent{
 		EventId:    5,

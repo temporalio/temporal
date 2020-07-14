@@ -109,7 +109,7 @@ CREATE TABLE events (
 CREATE TABLE tasks (
   namespace_id        uuid,
   task_queue_name   text,
-  task_queue_type   int, -- enum TaskQueueType {ActivityTask, DecisionTask}
+  task_queue_type   int, -- enum TaskQueueType {ActivityTask, WorkflowTask}
   type             int, -- enum rowType {Task, TaskQueue}
   task_id          bigint,  -- unique identifier for tasks, monotonically increasing
   range_id         bigint static, -- Used to ensure that only one process can write to the table

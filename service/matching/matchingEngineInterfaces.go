@@ -29,13 +29,13 @@ import (
 )
 
 type (
-	// Engine exposes interfaces for clients to poll for activity and decision tasks.
+	// Engine exposes interfaces for clients to poll for activity and workflow tasks.
 	Engine interface {
 		Stop()
-		AddDecisionTask(hCtx *handlerContext, addRequest *matchingservice.AddDecisionTaskRequest) (syncMatch bool, err error)
+		AddWorkflowTask(hCtx *handlerContext, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
 		AddActivityTask(hCtx *handlerContext, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)
-		PollForDecisionTask(hCtx *handlerContext, request *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error)
-		PollForActivityTask(hCtx *handlerContext, request *matchingservice.PollForActivityTaskRequest) (*matchingservice.PollForActivityTaskResponse, error)
+		PollWorkflowTaskQueue(hCtx *handlerContext, request *matchingservice.PollWorkflowTaskQueueRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error)
+		PollActivityTaskQueue(hCtx *handlerContext, request *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error)
 		QueryWorkflow(hCtx *handlerContext, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		RespondQueryTaskCompleted(hCtx *handlerContext, request *matchingservice.RespondQueryTaskCompletedRequest) error
 		CancelOutstandingPoll(hCtx *handlerContext, request *matchingservice.CancelOutstandingPollRequest) error

@@ -30,8 +30,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -47,34 +47,34 @@ import (
 )
 
 type (
-	decisionAttrValidatorSuite struct {
+	commandAttrValidatorSuite struct {
 		suite.Suite
 		*require.Assertions
 
 		controller         *gomock.Controller
 		mockNamespaceCache *cache.MockNamespaceCache
 
-		validator *decisionAttrValidator
+		validator *commandAttrValidator
 
 		testNamespaceID       string
 		testTargetNamespaceID string
 	}
 )
 
-func TestDecisionAttrValidatorSuite(t *testing.T) {
-	s := new(decisionAttrValidatorSuite)
+func TestCommandAttrValidatorSuite(t *testing.T) {
+	s := new(commandAttrValidatorSuite)
 	suite.Run(t, s)
 }
 
-func (s *decisionAttrValidatorSuite) SetupSuite() {
+func (s *commandAttrValidatorSuite) SetupSuite() {
 	s.testNamespaceID = "test namespace ID"
 	s.testTargetNamespaceID = "test target namespace ID"
 }
 
-func (s *decisionAttrValidatorSuite) TearDownSuite() {
+func (s *commandAttrValidatorSuite) TearDownSuite() {
 }
 
-func (s *decisionAttrValidatorSuite) SetupTest() {
+func (s *commandAttrValidatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -86,18 +86,18 @@ func (s *decisionAttrValidatorSuite) SetupTest() {
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
 	}
-	s.validator = newDecisionAttrValidator(
+	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
 		config,
 		log.NewNoop(),
 	)
 }
 
-func (s *decisionAttrValidatorSuite) TearDownTest() {
+func (s *commandAttrValidatorSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
+func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -114,23 +114,23 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
 
-	var attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes
+	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
+	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on command.")
 
-	attributes = &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{}
+	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Execution is nil on decision.")
+	s.EqualError(err, "Execution is nil on command.")
 
 	attributes.Execution = &commonpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalName is not set on decision.")
+	s.EqualError(err, "SignalName is not set on command.")
 
 	attributes.Execution.RunId = "run-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Invalid RunId set on decision.")
+	s.EqualError(err, "Invalid RunId set on command.")
 	attributes.Execution.RunId = testRunID
 
 	attributes.SignalName = "my signal name"
@@ -142,27 +142,27 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.NoError(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
+func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
 	namespace := "testNamespace"
-	var attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes
+	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
+	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 
-	attributes = &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "SearchAttributes is not set on decision.")
+	s.EqualError(err, "SearchAttributes is not set on command.")
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "IndexedFields is empty on decision.")
+	s.EqualError(err, "IndexedFields is empty on command.")
 
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("bytes")}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -183,7 +183,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -208,7 +208,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -233,7 +233,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -261,7 +261,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGloba
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -286,7 +286,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -311,7 +311,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -340,7 +340,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -369,7 +369,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -403,7 +403,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -431,7 +431,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLoca
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -465,7 +465,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffe
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
@@ -500,14 +500,14 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_SameNamespace() {
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_SameNamespace() {
 	targetNamespaceID := s.testNamespaceID
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, targetNamespaceID)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateTaskQueueName() {
+func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
 	taskQueue := func(name string) *taskqueuepb.TaskQueue {
 		return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	}

@@ -218,9 +218,9 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 
 func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
 	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_DECISION_TASK_FAILED:
-		decisionTaskFailedEvent := t.getFirstEvent()
-		attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
+		workflowTaskFailedEvent := t.getFirstEvent()
+		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 		baseRunID := attr.GetBaseRunId()
 		baseEventVersion := attr.GetForkEventVersion()
 		newRunID := attr.GetNewRunId()

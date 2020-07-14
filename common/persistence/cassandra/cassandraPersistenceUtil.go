@@ -716,11 +716,11 @@ func createTransferTasks(
 			taskQueue = task.(*p.ActivityTask).TaskQueue
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
-			taskQueue = task.(*p.DecisionTask).TaskQueue
-			scheduleID = task.(*p.DecisionTask).ScheduleID
-			recordVisibility = task.(*p.DecisionTask).RecordVisibility
+		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
+			taskQueue = task.(*p.WorkflowTask).TaskQueue
+			scheduleID = task.(*p.WorkflowTask).ScheduleID
+			recordVisibility = task.(*p.WorkflowTask).RecordVisibility
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
@@ -893,7 +893,7 @@ func createTimerTasks(
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
 
 		switch t := task.(type) {
-		case *p.DecisionTimeoutTask:
+		case *p.WorkflowTaskTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
 			attempt = t.ScheduleAttempt

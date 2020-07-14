@@ -119,11 +119,11 @@ func getTransferTaskMetricsScope(
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
 		if isActive {
-			return metrics.TransferActiveTaskDecisionScope
+			return metrics.TransferActiveTaskWorkflowTaskScope
 		}
-		return metrics.TransferStandbyTaskDecisionScope
+		return metrics.TransferStandbyTaskWorkflowTaskScope
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope

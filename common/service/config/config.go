@@ -238,6 +238,23 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
+		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
+		Consistency *CassandraStoreConsistency `yaml:"consistency"`
+	}
+
+	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal
+	CassandraStoreConsistency struct {
+		// Default defines the consistency level for ALL stores.
+		// Defaults to LOCAL_QUORUM and LOCAL_SERIAL if not set
+		Default *CassandraConsistencySettings `yaml:"default"`
+	}
+
+	// CassandraConsistencySettings sets the default consistency level for regular & serial queries to Cassandra.
+	CassandraConsistencySettings struct {
+		// Consistency sets the default consistency level. Values identical to gocql Consistency values. (defaults to LOCAL_QUORUM if not set).
+		Consistency string `yaml:"consistency"`
+		// SerialConsistency sets the consistency for the serial prtion of queries. Values identical to gocql SerialConsistency values. (defaults to LOCAL_SERIAL if not set)
+		SerialConsistency string `yaml:"serialConsistency"`
 	}
 
 	// SQL is the configuration for connecting to a SQL backed datastore

@@ -274,7 +274,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                decisionTaskQueue,
+		TaskQueue:                workflowTaskQueue,
 		WorkflowExecutionTimeout: workflowRunTimeout,
 		WorkflowTaskTimeout:      workflowTaskTimeout,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,

@@ -48,7 +48,7 @@ const (
 	scannerContextKey = contextKey(0)
 
 	maxConcurrentActivityExecutionSize     = 10
-	maxConcurrentDecisionTaskExecutionSize = 10
+	maxConcurrentWorkflowTaskExecutionSize = 10
 	infiniteDuration                       = 20 * 365 * 24 * time.Hour
 
 	tqScannerWFID                  = "temporal-sys-tq-scanner"

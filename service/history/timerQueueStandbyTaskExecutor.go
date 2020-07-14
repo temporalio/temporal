@@ -98,8 +98,8 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 		return t.executeUserTimerTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
-		return t.executeDecisionTimeoutTask(timerTask)
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
+		return t.executeWorkflowTaskTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
@@ -265,12 +265,12 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
+func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
-	// decision schedule to start timer task is a special snowflake.
-	// the schedule to start timer is for sticky decision, which is
+	// workflow task schedule to start timer task is a special snowflake.
+	// the schedule to start timer is for sticky workflow task, which is
 	// not applicable on the passive cluster
 	if timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		return nil
@@ -278,12 +278,12 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decision, isPending := mutableState.GetDecisionInfo(timerTask.GetEventId())
+		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.GetEventId())
 		if !isPending {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -311,9 +311,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		if mutableState.HasProcessedOrPendingDecision() {
-			// if there is one decision already been processed
-			// or has pending decision, meaning workflow has already running
+		if mutableState.HasProcessedOrPendingWorkflowTask() {
+			// if there is one workflow task already been processed
+			// or has pending workflow task, meaning workflow has already running
 			return nil, nil
 		}
 
@@ -323,9 +323,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 		// we can do the checking of task version vs workflow started version
 		// however, workflow started version is immutable
 
-		// active cluster will add first decision task after backoff timeout.
+		// active cluster will add first workflow task after backoff timeout.
 		// standby cluster should just call ack manager to retry this task
-		// since we are stilling waiting for the first DecisionScheduledEvent to be replicated from active side.
+		// since we are stilling waiting for the first WorkflowTaskScheduledEvent to be replicated from active side.
 
 		return getHistoryResendInfo(mutableState)
 	}

@@ -178,7 +178,7 @@ func (s *conflictResolverSuite) TestReset() {
 	event2 := &historypb.HistoryEvent{
 		EventId:    2,
 		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &historypb.DecisionTaskScheduledEventAttributes{}}}
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
 	shardId := s.mockShard.GetShardID()
@@ -200,34 +200,34 @@ func (s *conflictResolverSuite) TestReset() {
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:              namespaceID,
-		WorkflowID:               execution.GetWorkflowId(),
-		RunID:                    execution.GetRunId(),
-		ParentNamespaceID:        "",
-		ParentWorkflowID:         "",
-		ParentRunID:              "",
-		InitiatedID:              common.EmptyEventID,
-		TaskQueue:                event1.GetWorkflowExecutionStartedEventAttributes().TaskQueue.GetName(),
-		WorkflowTypeName:         event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
-		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
-		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
-		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastFirstEventID:         event1.GetEventId(),
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		StartTimestamp:           startTime,
-		LastUpdatedTimestamp:     startTime,
-		DecisionVersion:          common.EmptyVersion,
-		DecisionScheduleID:       common.EmptyEventID,
-		DecisionStartedID:        common.EmptyEventID,
-		DecisionRequestID:        emptyUUID,
-		DecisionTimeout:          0,
-		DecisionAttempt:          0,
-		DecisionStartedTimestamp: 0,
-		CreateRequestID:          createRequestID,
-		BranchToken:              branchToken,
+		NamespaceID:                  namespaceID,
+		WorkflowID:                   execution.GetWorkflowId(),
+		RunID:                        execution.GetRunId(),
+		ParentNamespaceID:            "",
+		ParentWorkflowID:             "",
+		ParentRunID:                  "",
+		InitiatedID:                  common.EmptyEventID,
+		TaskQueue:                    event1.GetWorkflowExecutionStartedEventAttributes().TaskQueue.GetName(),
+		WorkflowTypeName:             event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
+		WorkflowExecutionTimeout:     event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
+		WorkflowRunTimeout:           event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeout:          event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
+		State:                        enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:                       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastFirstEventID:             event1.GetEventId(),
+		NextEventID:                  nextEventID,
+		LastProcessedEvent:           common.EmptyEventID,
+		StartTimestamp:               startTime,
+		LastUpdatedTimestamp:         startTime,
+		WorkflowTaskVersion:          common.EmptyVersion,
+		WorkflowTaskScheduleID:       common.EmptyEventID,
+		WorkflowTaskStartedID:        common.EmptyEventID,
+		WorkflowTaskRequestID:        emptyUUID,
+		CurrentWorkflowTaskTimeout:   0,
+		WorkflowTaskAttempt:          0,
+		WorkflowTaskStartedTimestamp: 0,
+		CreateRequestID:              createRequestID,
+		BranchToken:                  branchToken,
 	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information

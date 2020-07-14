@@ -44,8 +44,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -202,29 +202,29 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
 	// test upsert
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		StickyTaskQueue: taskQueue,
-		Identity:        "worker1",
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            "worker1",
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
@@ -235,7 +235,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
+	s.NotNil(newTask.WorkflowTask)
 
 	time.Sleep(waitForESToSettle)
 
@@ -862,17 +862,17 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	decisionCount := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	commandCount := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes:   &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}}}
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes:  &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}}}
 
 		// handle first upsert
-		if decisionCount == 0 {
-			decisionCount++
+		if commandCount == 0 {
+			commandCount++
 
 			attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 			upsertSearchAttr := &commonpb.SearchAttributes{
@@ -880,37 +880,37 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 					s.testSearchAttributeKey: attrValBytes,
 				},
 			}
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = upsertSearchAttr
-			return []*decisionpb.Decision{upsertDecision}, nil
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
+			return []*commandpb.Command{upsertCommand}, nil
 		}
 		// handle second upsert, which update existing field and add new field
-		if decisionCount == 1 {
-			decisionCount++
-			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = getUpsertSearchAttributes()
-			return []*decisionpb.Decision{upsertDecision}, nil
+		if commandCount == 1 {
+			commandCount++
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = getUpsertSearchAttributes()
+			return []*commandpb.Command{upsertCommand}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		StickyTaskQueue: taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process 1st decision and assert decision is handled correctly.
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	// process 1st workflow task and assert workflow task is handled correctly.
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
@@ -921,14 +921,14 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(int64(3), newTask.DecisionTask.GetPreviousStartedEventId())
-	s.Equal(int64(7), newTask.DecisionTask.GetStartedEventId())
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
+	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -959,8 +959,8 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	}
 	s.True(verified)
 
-	// process 2nd decision and assert decision is handled correctly.
-	_, newTask, err = poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	// process 2nd workflow task and assert workflow task is handled correctly.
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 		false,
 		false,
 		true,
@@ -971,12 +971,12 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		nil)
 	s.NoError(err)
 	s.NotNil(newTask)
-	s.NotNil(newTask.DecisionTask)
-	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_COMPLETED, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_SCHEDULED, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_STARTED, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
 	time.Sleep(waitForESToSettle)
 
@@ -1062,33 +1062,33 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
 						"INVALIDKEY": payload.EncodeBytes([]byte("1")),
 					},
 				},
 			}}}
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		StickyTaskQueue: taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -1100,11 +1100,11 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	})
 	s.NoError(err)
 	history := historyResponse.History
-	decisionFailedEvent := history.GetEvents()[3]
-	s.Equal(enumspb.EVENT_TYPE_DECISION_TASK_FAILED, decisionFailedEvent.GetEventType())
-	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
-	s.Equal(enumspb.DECISION_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedDecisionAttr.GetCause())
-	s.NotNil(failedDecisionAttr.GetFailure())
+	workflowTaskFailedEvent := history.GetEvents()[3]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, workflowTaskFailedEvent.GetEventType())
+	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
+	s.NotNil(failedEventAttr.GetFailure())
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {

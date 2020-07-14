@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -156,7 +156,7 @@ func (s *engine2Suite) SetupTest() {
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
-	h.decisionHandler = newDecisionHandler(h)
+	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h
 }
@@ -166,7 +166,7 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockShard.Finish(s.T())
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -182,7 +182,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
 
@@ -194,13 +194,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	request := historyservice.RecordDecisionTaskStartedRequest{
+	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
@@ -208,7 +208,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordDecisionTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
 	if executionInfo.LastProcessedEvent != common.EmptyEventID {
@@ -225,7 +225,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	}
 	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
@@ -234,7 +234,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	s.Equal(&expectedResponse, response)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -251,7 +251,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
 
@@ -263,13 +263,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	request := historyservice.RecordDecisionTaskStartedRequest{
+	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
@@ -277,7 +277,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordDecisionTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
 	if executionInfo.LastProcessedEvent != common.EmptyEventID {
@@ -296,7 +296,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
@@ -305,7 +305,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.Equal(&expectedResponse, response)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 	namespaceID := testNamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -317,13 +317,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -335,7 +335,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 	namespaceID := testNamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -347,13 +347,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -365,7 +365,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	s.EqualError(err, "FAILED")
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -380,13 +380,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -396,10 +396,10 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	s.Nil(response)
 	s.NotNil(err)
 	s.IsType(&serviceerror.EventAlreadyStarted{}, err)
-	s.logger.Error("RecordDecisionTaskStarted failed with", tag.Error(err))
+	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -410,20 +410,20 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
+	addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -433,10 +433,10 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	s.Nil(response)
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
-	s.logger.Error("RecordDecisionTaskStarted failed with", tag.Error(err))
+	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -464,13 +464,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -484,7 +484,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	s.Equal(int64(3), response.StartedEventId)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
+func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -493,7 +493,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 
 	tl := "testTaskQueue"
 	identity := "testIdentity"
-	requestID := "testRecordDecisionTaskRetrySameRequestID"
+	requestID := "testRecordWorkflowTaskRetrySameRequestID"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	ms := createMutableState(msBuilder)
@@ -503,18 +503,18 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, &p.ConditionFailedError{}).Once()
 
-	startedEventID := addDecisionTaskStartedEventWithRequestID(msBuilder, int64(2), requestID, tl, identity)
+	startedEventID := addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), requestID, tl, identity)
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &p.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         requestID,
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -529,7 +529,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	s.Equal(startedEventID.EventId, response.StartedEventId)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
+func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -538,7 +538,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 
 	tl := "testTaskQueue"
 	identity := "testIdentity"
-	requestID := "testRecordDecisionTaskRetrySameRequestID"
+	requestID := "testRecordWorkflowTaskRetrySameRequestID"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	ms := createMutableState(msBuilder)
@@ -548,18 +548,18 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, &p.ConditionFailedError{}).Once()
 
 	// Add event.
-	addDecisionTaskStartedEventWithRequestID(msBuilder, int64(2), "some_other_req", tl, identity)
+	addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), "some_other_req", tl, identity)
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &p.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         requestID,
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -573,7 +573,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	s.logger.Info("Failed with error", tag.Error(err))
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -596,13 +596,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil,
 		&p.ConditionFailedError{}).Times(conditionalRetryCount)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -615,7 +615,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 	s.Equal(ErrMaxAttemptsExceeded, err)
 }
 
-func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
+func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 	namespaceID := testNamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -634,7 +634,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	// load mutable state such that it already exists in memory when respond decision task is called
+	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
 	ctx, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testNamespaceID, workflowExecution)
 	s.NoError(err)
@@ -647,13 +647,13 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	loadedMS.(*mutableStateBuilder).queryRegistry = qr
 	release(nil)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -692,7 +692,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		ScheduleId:        5,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForActivityTaskRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -722,8 +722,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
-	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
+	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 
 	ms1 := createMutableState(msBuilder)
@@ -737,7 +737,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	s.mockEventsCache.EXPECT().getEvent(
 		namespaceID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
-		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
+		workflowTaskCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -745,7 +745,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		ScheduleId:        5,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForActivityTaskRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tl,
 			},
@@ -825,13 +825,13 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 }
 
 func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
-	startDecision bool) mutableState {
+	startWorkflowTask bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
-	if startDecision {
-		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	if startWorkflowTask {
+		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
 
@@ -842,7 +842,7 @@ func (s *engine2Suite) printHistory(builder mutableState) string {
 	return builder.GetHistoryBuilder().GetHistory().String()
 }
 
-func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
+func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
@@ -862,12 +862,12 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*decisionpb.Decision{{
-		DecisionType: enumspb.DECISION_TYPE_RECORD_MARKER,
-		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
+	commands := []*commandpb.Command{{
+		CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
 			MarkerName: markerName,
 			Details: map[string]*commonpb.Payloads{
 				"data": markerDetails,
@@ -884,11 +884,11 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	_, err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
+	_, err := s.historyEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: namespaceID,
-		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: serializedTaskToken,
-			Decisions: decisions,
+			Commands:  commands,
 			Identity:  identity,
 		},
 	})
@@ -897,7 +897,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecision())
+	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {

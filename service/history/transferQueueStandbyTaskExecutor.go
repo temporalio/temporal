@@ -92,8 +92,8 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	switch transferTask.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
 		return t.processActivityTask(transferTask)
-	case enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK:
-		return t.processDecisionTask(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+		return t.processWorkflowTask(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		return t.processCloseExecution(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
@@ -156,30 +156,30 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
+func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	transferTask *persistenceblobs.TransferTaskInfo,
 ) error {
 
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.GetScheduleId())
+		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowRunTimeout
-		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
+		wtTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), decisionInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
 
-		if decisionInfo.StartedID == common.EmptyEventID {
-			return newPushDecisionToMatchingInfo(
-				decisionTimeout,
+		if wtInfo.StartedID == common.EmptyEventID {
+			return newPushWorkflowTaskToMatchingInfo(
+				wtTimeout,
 				taskqueuepb.TaskQueue{Name: transferTask.TaskQueue},
 			), nil
 		}
@@ -196,8 +196,8 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushDecision,
-			t.pushDecision,
+			t.pushWorkflowTask,
+			t.pushWorkflowTask,
 		),
 	)
 }
@@ -522,15 +522,15 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityToMatchingInfo)
-	timeout := common.MinInt32(pushActivityInfo.activityScheduleToStartTimeout, common.MaxTaskTimeout)
+	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	timeout := common.MinInt32(pushActivityInfo.activityTaskScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
 		timeout,
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) pushDecision(
+func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	task queueTaskInfo,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -540,11 +540,11 @@ func (t *transferQueueStandbyTaskExecutor) pushDecision(
 		return nil
 	}
 
-	pushDecisionInfo := postActionInfo.(*pushDecisionToMatchingInfo)
-	timeout := common.MinInt32(pushDecisionInfo.decisionScheduleToStartTimeout, common.MaxTaskTimeout)
-	return t.transferQueueTaskExecutorBase.pushDecision(
+	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
+	timeout := common.MinInt32(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeout)
+	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		task.(*persistenceblobs.TransferTaskInfo),
-		&pushDecisionInfo.taskqueue,
+		&pushwtInfo.taskqueue,
 		timeout,
 	)
 }

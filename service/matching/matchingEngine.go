@@ -91,10 +91,10 @@ type (
 )
 
 var (
-	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
-	emptyPollForDecisionTaskResponse = &matchingservice.PollForDecisionTaskResponse{}
-	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
-	emptyPollForActivityTaskResponse   = &matchingservice.PollForActivityTaskResponse{}
+	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
+	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
+	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 	persistenceOperationRetryPolicy    = common.CreatePersistanceRetryPolicy()
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
@@ -218,10 +218,10 @@ func (e *matchingEngineImpl) removeTaskQueueManager(id *taskQueueID) {
 	delete(e.taskQueues, *id)
 }
 
-// AddDecisionTask either delivers task directly to waiting poller or save it into task queue persistence.
-func (e *matchingEngineImpl) AddDecisionTask(
+// AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
+func (e *matchingEngineImpl) AddWorkflowTask(
 	hCtx *handlerContext,
-	addRequest *matchingservice.AddDecisionTaskRequest,
+	addRequest *matchingservice.AddWorkflowTaskRequest,
 ) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
 	taskQueueName := addRequest.TaskQueue.GetName()
@@ -229,13 +229,13 @@ func (e *matchingEngineImpl) AddDecisionTask(
 
 	// TODO: use tags
 	e.logger.Debug(
-		fmt.Sprintf("Received AddDecisionTask for taskQueue=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
+		fmt.Sprintf("Received AddWorkflowTask for taskQueue=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
 			addRequest.TaskQueue.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
 			addRequest.GetScheduleToStartTimeoutSeconds()))
 
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return false, err
 	}
@@ -313,16 +313,16 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-// PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *matchingEngineImpl) PollForDecisionTask(
+// PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
+func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	hCtx *handlerContext,
-	req *matchingservice.PollForDecisionTaskRequest,
-) (*matchingservice.PollForDecisionTaskResponse, error) {
+	req *matchingservice.PollWorkflowTaskQueueRequest,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollForDecisionTask for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
+	e.logger.Debug("Received PollWorkflowTaskQueue for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
@@ -333,7 +333,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
+		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
 			return nil, err
 		}
@@ -342,7 +342,7 @@ pollLoop:
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
-				return emptyPollForDecisionTaskResponse, nil
+				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
 		}
@@ -351,14 +351,14 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForDecisionResponse(), nil
+			return task.pollWorkflowTaskQueueResponse(), nil
 		}
 
 		if task.isQuery() {
 			task.finish(nil) // this only means query task sync match succeed.
 
-			// for query task, we don't need to update history to record decision task started. but we need to know
-			// the NextEventID so front end knows what are the history events to load for this decision task.
+			// for query task, we don't need to update history to record workflow task started. but we need to know
+			// the NextEventID so front end knows what are the history events to load for this workflow task.
 			mutableStateResp, err := e.historyService.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
@@ -366,14 +366,14 @@ pollLoop:
 			if err != nil {
 				// will notify query client that the query task failed
 				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) // nolint:errcheck
-				return emptyPollForDecisionTaskResponse, nil
+				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
 			isStickyEnabled := false
 			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
 				isStickyEnabled = true
 			}
-			resp := &historyservice.RecordDecisionTaskStartedResponse{
+			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
 				WorkflowType:               mutableStateResp.WorkflowType,
@@ -382,14 +382,14 @@ pollLoop:
 				BranchToken:                mutableStateResp.CurrentBranchToken,
 				StartedEventId:             common.EmptyEventID,
 			}
-			return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 		}
 
-		resp, err := e.recordDecisionTaskStarted(hCtx.Context, request, task)
+		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskQueue=%v, taskID=%v",
+				e.logger.Debug(fmt.Sprintf("Duplicated workflow task taskQueue=%v, taskID=%v",
 					taskQueueName, task.event.GetTaskId()))
 				task.finish(nil)
 			default:
@@ -399,22 +399,22 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 	}
 }
 
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *matchingEngineImpl) PollForActivityTask(
+func (e *matchingEngineImpl) PollActivityTaskQueue(
 	hCtx *handlerContext,
-	req *matchingservice.PollForActivityTaskRequest,
-) (*matchingservice.PollForActivityTaskResponse, error) {
+	req *matchingservice.PollActivityTaskQueueRequest,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollForActivityTask for taskQueue", tag.Name(taskQueueName))
+	e.logger.Debug("Received PollActivityTaskQueue for taskQueue", tag.Name(taskQueueName))
 pollLoop:
 	for {
 		err := common.IsValidContext(hCtx.Context)
@@ -440,7 +440,7 @@ pollLoop:
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
-				return emptyPollForActivityTaskResponse, nil
+				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
 		}
@@ -449,7 +449,7 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollForActivityResponse(), nil
+			return task.pollActivityTaskQueueResponse(), nil
 		}
 
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
@@ -465,7 +465,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForActivityTaskResponse(task, resp, hCtx.scope), nil
+		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.scope), nil
 	}
 }
 
@@ -474,7 +474,7 @@ type queryResult struct {
 	internalError  error
 }
 
-// QueryWorkflow creates a DecisionTask with query data, send it through sync match channel, wait for that DecisionTask
+// QueryWorkflow creates a WorkflowTask with query data, send it through sync match channel, wait for that WorkflowTask
 // to be processed by worker, and then return the query result.
 func (e *matchingEngineImpl) QueryWorkflow(
 	hCtx *handlerContext,
@@ -483,7 +483,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	namespaceID := queryRequest.GetNamespaceId()
 	taskQueueName := queryRequest.TaskQueue.GetName()
 	taskQueueKind := queryRequest.TaskQueue.GetKind()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_DECISION)
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -598,13 +598,13 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_DECISION)
+	workflowTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
 	resp := matchingservice.ListTaskQueuePartitionsResponse{
 		ActivityTaskQueuePartitions: activityTaskQueueInfo,
-		DecisionTaskQueuePartitions: decisionTaskQueueInfo,
+		WorkflowTaskQueuePartitions: workflowTaskQueueInfo,
 	}
 	return &resp, nil
 }
@@ -653,7 +653,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_DECISION)
+	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	rootPartition := taskQueueID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)
@@ -694,12 +694,12 @@ func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
 	}
 }
 
-// Populate the decision task response based on context and scheduled/started events.
-func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
+// Populate the workflow task response based on context and scheduled/started events.
+func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
-	historyResponse *historyservice.RecordDecisionTaskStartedResponse,
+	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
 	scope metrics.Scope,
-) *matchingservice.PollForDecisionTaskResponse {
+) *matchingservice.PollWorkflowTaskQueueResponse {
 
 	var serializedToken []byte
 	if task.isQuery() {
@@ -726,7 +726,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 	}
 
-	response := common.CreateMatchingPollForDecisionTaskResponse(
+	response := common.CreateMatchingPollWorkflowTaskQueueResponse(
 		historyResponse,
 		task.workflowExecution(),
 		serializedToken)
@@ -738,11 +738,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 }
 
 // Populate the activity task response based on context and scheduled/started events.
-func (e *matchingEngineImpl) createPollForActivityTaskResponse(
+func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	scope metrics.Scope,
-) *matchingservice.PollForActivityTaskResponse {
+) *matchingservice.PollActivityTaskQueueResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
@@ -769,7 +769,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
-	return &matchingservice.PollForActivityTaskResponse{
+	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                      attributes.ActivityId,
 		ActivityType:                    attributes.ActivityType,
 		Header:                          attributes.Header,
@@ -789,12 +789,12 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 }
 
-func (e *matchingEngineImpl) recordDecisionTaskStarted(
+func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx context.Context,
-	pollReq *workflowservice.PollForDecisionTaskRequest,
+	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
-) (*historyservice.RecordDecisionTaskStartedResponse, error) {
-	request := &historyservice.RecordDecisionTaskStartedRequest{
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	request := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
@@ -802,10 +802,10 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}
-	var resp *historyservice.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordWorkflowTaskStartedResponse
 	op := func() error {
 		var err error
-		resp, err = e.historyService.RecordDecisionTaskStarted(ctx, request)
+		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
@@ -820,7 +820,7 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx context.Context,
-	pollReq *workflowservice.PollForActivityTaskRequest,
+	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{

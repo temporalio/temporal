@@ -86,14 +86,14 @@ func (c *clientImpl) AddActivityTask(
 	return client.AddActivityTask(ctx, request, opts...)
 }
 
-func (c *clientImpl) AddDecisionTask(
+func (c *clientImpl) AddWorkflowTask(
 	ctx context.Context,
-	request *matchingservice.AddDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetNamespaceId(),
 		*request.GetTaskQueue(),
-		enumspb.TASK_QUEUE_TYPE_DECISION,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedFrom(),
 	)
 	request.TaskQueue.Name = partition
@@ -103,13 +103,13 @@ func (c *clientImpl) AddDecisionTask(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddDecisionTask(ctx, request, opts...)
+	return client.AddWorkflowTask(ctx, request, opts...)
 }
 
-func (c *clientImpl) PollForActivityTask(
+func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskQueue(),
@@ -123,17 +123,17 @@ func (c *clientImpl) PollForActivityTask(
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForActivityTask(ctx, request, opts...)
+	return client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) PollForDecisionTask(
+func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
-	request *matchingservice.PollForDecisionTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskQueue(),
-		enumspb.TASK_QUEUE_TYPE_DECISION,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedFrom(),
 	)
 	request.PollRequest.TaskQueue.Name = partition
@@ -143,14 +143,14 @@ func (c *clientImpl) PollForDecisionTask(
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForDecisionTask(ctx, request, opts...)
+	return client.PollWorkflowTaskQueue(ctx, request, opts...)
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetNamespaceId(),
 		*request.GetTaskQueue(),
-		enumspb.TASK_QUEUE_TYPE_DECISION,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedFrom(),
 	)
 	request.TaskQueue.Name = partition

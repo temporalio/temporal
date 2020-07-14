@@ -67,8 +67,8 @@ const (
 	FlagWorkflowStatusWithAlias          = FlagWorkflowStatus + ", s"
 	FlagExecutionTimeout                 = "execution_timeout"
 	FlagExecutionTimeoutWithAlias        = FlagExecutionTimeout + ", et"
-	FlagDecisionTimeout                  = "decision_timeout"
-	FlagDecisionTimeoutWithAlias         = FlagDecisionTimeout + ", dt"
+	FlagWorkflowTaskTimeout              = "workflow_task_timeout"
+	FlagWorkflowTaskTimeoutWithAlias     = FlagWorkflowTaskTimeout + ", wtt"
 	FlagContextTimeout                   = "context_timeout"
 	FlagContextTimeoutWithAlias          = FlagContextTimeout + ", ct"
 	FlagInput                            = "input"
@@ -315,9 +315,9 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Execution start to close timeout in seconds",
 		},
 		cli.IntFlag{
-			Name:  FlagDecisionTimeoutWithAlias,
-			Value: defaultDecisionTimeoutInSeconds,
-			Usage: "Decision task start to close timeout in seconds",
+			Name:  FlagWorkflowTaskTimeoutWithAlias,
+			Value: defaultWorkflowTaskTimeoutInSeconds,
+			Usage: "Workflow task start to close timeout in seconds",
 		},
 		cli.StringFlag{
 			Name: FlagCronSchedule,

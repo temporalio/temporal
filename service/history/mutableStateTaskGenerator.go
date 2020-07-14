@@ -54,17 +54,17 @@ type (
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
-		generateDelayedDecisionTasks(
+		generateDelayedWorkflowTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
-		generateDecisionScheduleTasks(
+		generateScheduleWorkflowTaskTasks(
 			now time.Time,
-			decisionScheduleID int64,
+			workflowTaskScheduleID int64,
 		) error
-		generateDecisionStartTasks(
+		generateStartWorkflowTaskTasks(
 			now time.Time,
-			decisionScheduleID int64,
+			workflowTaskScheduleID int64,
 		) error
 		generateActivityTransferTasks(
 			now time.Time,
@@ -133,13 +133,13 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 ) error {
 
 	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
+	firstWorkflowTaskDelayDuration := time.Duration(attr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
 
 	runTimeoutDuration := time.Duration(executionInfo.WorkflowRunTimeout) * time.Second
-	runTimeoutDuration = runTimeoutDuration + firstDecisionDelayDuration
+	runTimeoutDuration = runTimeoutDuration + firstWorkflowTaskDelayDuration
 	workflowExpirationTimestamp := now.Add(runTimeoutDuration)
 	if !executionInfo.WorkflowExpirationTime.IsZero() && workflowExpirationTimestamp.After(executionInfo.WorkflowExpirationTime) {
 		workflowExpirationTimestamp = executionInfo.WorkflowExpirationTime
@@ -187,7 +187,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
+func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 	now time.Time,
 	startEvent *historypb.HistoryEvent,
 ) error {
@@ -195,15 +195,15 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	startVersion := startEvent.GetVersion()
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
-	executionTimestamp := now.Add(decisionBackoffDuration)
+	workflowTaskBackoffDuration := time.Duration(startAttr.GetFirstWorkflowTaskBackoffSeconds()) * time.Second
+	executionTimestamp := now.Add(workflowTaskBackoffDuration)
 
 	var workflowBackoffType enumsspb.WorkflowBackoffType
 	switch startAttr.GetInitiator() {
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-		enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER:
+		enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
@@ -236,71 +236,71 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
+func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	now time.Time,
-	decisionScheduleID int64,
+	workflowTaskScheduleID int64,
 ) error {
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	decision, ok := r.mutableState.GetDecisionInfo(
-		decisionScheduleID,
+	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+		workflowTaskScheduleID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduleID))
 	}
 
-	r.mutableState.AddTransferTasks(&persistence.DecisionTask{
+	r.mutableState.AddTransferTasks(&persistence.WorkflowTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		NamespaceID:         executionInfo.NamespaceID,
-		TaskQueue:           decision.TaskQueue,
-		ScheduleID:          decision.ScheduleID,
-		Version:             decision.Version,
+		TaskQueue:           workflowTask.TaskQueue,
+		ScheduleID:          workflowTask.ScheduleID,
+		Version:             workflowTask.Version,
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := time.Unix(0, decision.ScheduledTimestamp)
+		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp)
 		scheduleToStartTimeout := time.Duration(
 			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
 		) * time.Second
 
-		r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+		r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-			EventID:             decision.ScheduleID,
-			ScheduleAttempt:     decision.Attempt,
-			Version:             decision.Version,
+			EventID:             workflowTask.ScheduleID,
+			ScheduleAttempt:     workflowTask.Attempt,
+			Version:             workflowTask.Version,
 		})
 	}
 
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
+func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 	_ time.Time,
-	decisionScheduleID int64,
+	workflowTaskScheduleID int64,
 ) error {
 
-	decision, ok := r.mutableState.GetDecisionInfo(
-		decisionScheduleID,
+	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+		workflowTaskScheduleID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := time.Unix(0, decision.StartedTimestamp)
-	startToCloseTimeout := time.Duration(
-		decision.DecisionTimeout,
+	startedTime := time.Unix(0, workflowTask.StartedTimestamp)
+	workflowTaskTimeout := time.Duration(
+		workflowTask.WorkflowTaskTimeout,
 	) * time.Second
 
-	r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+	r.mutableState.AddTimerTasks(&persistence.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: startedTime.Add(startToCloseTimeout),
+		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		EventID:             decision.ScheduleID,
-		ScheduleAttempt:     decision.Attempt,
-		Version:             decision.Version,
+		EventID:             workflowTask.ScheduleID,
+		ScheduleAttempt:     workflowTask.Attempt,
+		Version:             workflowTask.Version,
 	})
 
 	return nil

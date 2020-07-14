@@ -283,7 +283,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 	}
 
 	if lastWriteVersion == incomingVersion {
-		err = c.mutableState.StartTransactionSkipDecisionFail(namespaceEntry)
+		err = c.mutableState.StartTransactionSkipWorkflowTaskFail(namespaceEntry)
 		if err != nil {
 			return nil, err
 		}
@@ -1072,7 +1072,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	setTaskInfo(currMutableState.GetCurrentVersion(), now, currTransferTasks, currTimerTasks)
 	setTaskInfo(newMutableState.GetCurrentVersion(), now, newTransferTasks, newTimerTasks)
 
-	// Since we always reset to decision task, there shouldn't be any buffered events.
+	// Since we always reset to workflow task, there shouldn't be any buffered events.
 	// Therefore currently ResetWorkflowExecution persistence API doesn't implement setting buffered events.
 	if newMutableState.HasBufferedEvents() {
 		retError = serviceerror.NewInternal(fmt.Sprintf("reset workflow execution shouldn't have buffered events"))

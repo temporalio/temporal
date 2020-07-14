@@ -235,11 +235,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		RunID:              currentRunID,
-		NextEventID:        currentNextEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		RunID:                  currentRunID,
+		NextEventID:            currentNextEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
@@ -249,7 +249,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_PendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -303,11 +303,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		RunID:              currentRunID,
-		NextEventID:        currentNextEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		RunID:                  currentRunID,
+		NextEventID:            currentNextEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
@@ -322,7 +322,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(true).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -332,7 +332,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_NoPendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -346,10 +346,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version + 1
 	currentNextEventID := int64(2333)
-	currentDecisionTimeout := int32(100)
-	currentDecisionStickyTimeout := int32(10)
-	currentDecisionTaskqueue := "some random decision taskqueue"
-	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
+	currentworkflowTaskTimeout := int32(100)
+	currentWorkflowTaskStickyTimeout := int32(10)
+	currentWorkflowTaskQueue := "some random workflow task queue"
+	currentStickyWorkflowTaskQueue := "some random sticky workflow task queue"
 
 	req := &historyservice.ReplicateEventsRequest{
 		History: &historypb.History{
@@ -394,13 +394,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		NamespaceID:                  namespaceID,
 		RunID:                        currentRunID,
 		NextEventID:                  currentNextEventID,
-		TaskQueue:                    currentDecisionTaskqueue,
-		StickyTaskQueue:              currentDecisionStickyTaskqueue,
-		DecisionTimeout:              currentDecisionTimeout,
-		StickyScheduleToStartTimeout: currentDecisionStickyTimeout,
-		DecisionVersion:              common.EmptyVersion,
-		DecisionScheduleID:           common.EmptyEventID,
-		DecisionStartedID:            common.EmptyEventID,
+		TaskQueue:                    currentWorkflowTaskQueue,
+		StickyTaskQueue:              currentStickyWorkflowTaskQueue,
+		CurrentWorkflowTaskTimeout:   currentworkflowTaskTimeout,
+		StickyScheduleToStartTimeout: currentWorkflowTaskStickyTimeout,
+		WorkflowTaskVersion:          common.EmptyVersion,
+		WorkflowTaskScheduleID:       common.EmptyEventID,
+		WorkflowTaskStartedID:        common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
@@ -415,15 +415,15 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
-	newDecision := &decisionInfo{
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(false).Times(1)
+	newWorkflowTask := &workflowTaskInfo{
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskQueue:  currentDecisionStickyTaskqueue,
+		TaskQueue:  currentStickyWorkflowTaskQueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -487,12 +487,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				RunID:              currentRunID,
-				NextEventID:        currentNextEventID,
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				DecisionVersion:    common.EmptyVersion,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
+				RunID:                  currentRunID,
+				NextEventID:            currentNextEventID,
+				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				WorkflowTaskVersion:    common.EmptyVersion,
+				WorkflowTaskScheduleID: common.EmptyEventID,
+				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -559,13 +559,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				RunID:              currentRunID,
-				NextEventID:        currentNextEventID,
-				LastEventTaskID:    currentLastEventTaskID,
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-				DecisionVersion:    common.EmptyVersion,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
+				RunID:                  currentRunID,
+				NextEventID:            currentNextEventID,
+				LastEventTaskID:        currentLastEventTaskID,
+				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				WorkflowTaskVersion:    common.EmptyVersion,
+				WorkflowTaskScheduleID: common.EmptyEventID,
+				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -624,10 +624,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		RunID:              currentRunID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		RunID:                  currentRunID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
@@ -704,12 +704,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				RunID:              currentRunID,
-				NextEventID:        currentNextEventID,
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				DecisionVersion:    common.EmptyVersion,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
+				RunID:                  currentRunID,
+				NextEventID:            currentNextEventID,
+				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				WorkflowTaskVersion:    common.EmptyVersion,
+				WorkflowTaskScheduleID: common.EmptyEventID,
+				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -774,12 +774,12 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				RunID:              currentRunID,
-				NextEventID:        currentNextEventID,
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				DecisionVersion:    common.EmptyVersion,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
+				RunID:                  currentRunID,
+				NextEventID:            currentNextEventID,
+				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				WorkflowTaskVersion:    common.EmptyVersion,
+				WorkflowTaskScheduleID: common.EmptyEventID,
+				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -848,11 +848,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				RunID:              currentRunID,
-				DecisionVersion:    common.EmptyVersion,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
-				State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+				RunID:                  currentRunID,
+				WorkflowTaskVersion:    common.EmptyVersion,
+				WorkflowTaskScheduleID: common.EmptyEventID,
+				WorkflowTaskStartedID:  common.EmptyEventID,
+				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			},
 			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
@@ -964,7 +964,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_PendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_PendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -1035,7 +1035,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(true).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1048,7 +1048,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_NoPendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_NoPendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -1061,7 +1061,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	decisionStickyTaskqueue := "some random decision sticky taskqueue"
+	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
@@ -1121,16 +1121,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newWorkflowTask := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskQueue:  decisionStickyTaskqueue,
+		TaskQueue:  stickyWorkflowTaskQueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1170,7 +1170,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowRunning_EventsReapplication_PendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowRunning_EventsReapplication_PendingWorkflowTask() {
 	incomingVersion := int64(110)
 	currentLastWriteVersion := int64(123)
 
@@ -1207,7 +1207,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderIn.EXPECT().HasPendingDecision().Return(true).Times(1)
+	msBuilderIn.EXPECT().HasPendingWorkflowTask().Return(true).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1219,7 +1219,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowRunning_EventsReapplication_NoPendingDecision() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowRunning_EventsReapplication_NoPendingWorkflowTask() {
 	incomingVersion := int64(110)
 	currentLastWriteVersion := int64(123)
 
@@ -1227,7 +1227,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	decisionStickyTaskqueue := "some random decision sticky taskqueue"
+	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
@@ -1258,16 +1258,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   signalIdentity,
 		}},
 	}, nil).Times(1)
-	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
+	msBuilderIn.EXPECT().HasPendingWorkflowTask().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newWorkflowTask := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskQueue:  decisionStickyTaskqueue,
+		TaskQueue:  stickyWorkflowTaskQueue,
 		Attempt:    0,
 	}
-	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1389,13 +1389,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}).AnyTimes()
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
-		StartTimestamp:     startTimeStamp,
-		RunID:              runID,
-		State:              currentState,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		StartTimestamp:         startTimeStamp,
+		RunID:                  runID,
+		State:                  currentState,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
@@ -1460,13 +1460,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}).AnyTimes()
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
-		StartTimestamp:     startTimeStamp,
-		RunID:              runID,
-		State:              currentState,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		StartTimestamp:         startTimeStamp,
+		RunID:                  runID,
+		State:                  currentState,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
@@ -1557,13 +1557,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(false).Times(1)
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	exeInfo := &persistence.WorkflowExecutionInfo{
-		StartTimestamp:     startTimeStamp,
-		RunID:              runID,
-		State:              currentState,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		StartTimestamp:         startTimeStamp,
+		RunID:                  runID,
+		State:                  currentState,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
@@ -1670,10 +1670,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	incomingVersion := currentLastWriteVersion + 10
 	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
 	incomingReplicationInfoLastEventID := currentLastEventID
-	decisionTimeout := int32(100)
-	decisionStickyTimeout := int32(10)
-	decisionTaskqueue := "some random decision taskqueue"
-	decisionStickyTaskqueue := "some random decision sticky taskqueue"
+	workflowTaskTimeout := int32(100)
+	workflowTaskStickyTimeout := int32(10)
+	workflowTaskqueue := "some random workflow taskqueue"
+	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
 
 	updateCondition := int64(1394)
 
@@ -1694,7 +1694,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		}},
 	}
 	startTimeStamp := time.Now()
-	pendingDecisionInfo := &decisionInfo{
+	pendingWorkflowTaskInfo := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: 56,
 		StartedID:  57,
@@ -1705,36 +1705,36 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	}).Times(1)
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(true).Times(1)
-	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
+	msBuilderIn.EXPECT().GetInFlightWorkflowTask().Return(pendingWorkflowTaskInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		enumspb.DECISION_TASK_FAILED_CAUSE_FAILOVER_CLOSE_DECISION, nil, identityHistoryService, "", "", "", int64(0),
+	msBuilderIn.EXPECT().AddWorkflowTaskFailedEvent(pendingWorkflowTaskInfo.ScheduleID, pendingWorkflowTaskInfo.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
-	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
+	msBuilderIn.EXPECT().HasPendingWorkflowTask().Return(false).Times(1)
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:               startTimeStamp,
 		NamespaceID:                  namespaceID,
 		RunID:                        runID,
-		TaskQueue:                    decisionTaskqueue,
-		StickyTaskQueue:              decisionStickyTaskqueue,
-		DecisionTimeout:              decisionTimeout,
-		StickyScheduleToStartTimeout: decisionStickyTimeout,
+		TaskQueue:                    workflowTaskqueue,
+		StickyTaskQueue:              stickyWorkflowTaskQueue,
+		CurrentWorkflowTaskTimeout:   workflowTaskTimeout,
+		StickyScheduleToStartTimeout: workflowTaskStickyTimeout,
 		State:                        currentState,
 		Status:                       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		DecisionVersion:              common.EmptyVersion,
-		DecisionScheduleID:           common.EmptyEventID,
-		DecisionStartedID:            common.EmptyEventID,
+		WorkflowTaskVersion:          common.EmptyVersion,
+		WorkflowTaskScheduleID:       common.EmptyEventID,
+		WorkflowTaskStartedID:        common.EmptyEventID,
 	}
 	msBuilderIn.EXPECT().GetExecutionInfo().Return(exeInfo).AnyTimes()
-	newDecision := &decisionInfo{
+	newWorkflowTask := &workflowTaskInfo{
 		Version:    currentLastWriteVersion,
 		ScheduleID: currentLastEventID + 2,
 		StartedID:  common.EmptyEventID,
-		TaskQueue:  decisionStickyTaskqueue,
+		TaskQueue:  stickyWorkflowTaskQueue,
 		Attempt:    0,
 	}
-	msBuilderIn.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
 	weContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -1860,7 +1860,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -1873,12 +1873,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -1902,28 +1902,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       runTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         runTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -1980,7 +1980,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -1993,12 +1993,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2022,28 +2022,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       runTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         runTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2096,7 +2096,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2109,12 +2109,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2138,28 +2138,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       runTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         runTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2217,7 +2217,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 	cronSchedule := "some random cron scredule"
 	retryPolicy := &commonpb.RetryPolicy{
 		InitialIntervalInSeconds: 1,
@@ -2238,12 +2238,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2267,35 +2267,35 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		CronSchedule:             cronSchedule,
-		HasRetryPolicy:           true,
-		InitialInterval:          retryPolicy.GetInitialIntervalInSeconds(),
-		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
-		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
-		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
-		NonRetryableErrorTypes:   retryPolicy.GetNonRetryableErrorTypes(),
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CronSchedule:               cronSchedule,
+		HasRetryPolicy:             true,
+		InitialInterval:            retryPolicy.GetInitialIntervalInSeconds(),
+		BackoffCoefficient:         retryPolicy.GetBackoffCoefficient(),
+		MaximumAttempts:            retryPolicy.GetMaximumAttempts(),
+		MaximumInterval:            retryPolicy.GetMaximumIntervalInSeconds(),
+		NonRetryableErrorTypes:     retryPolicy.GetNonRetryableErrorTypes(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2369,7 +2369,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2382,12 +2382,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	wti := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2398,7 +2398,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
-	nextEventID := di.ScheduleID + 1
+	nextEventID := wti.ScheduleID + 1
 	replicationState := &persistence.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
@@ -2411,28 +2411,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        wti.Version,
+		WorkflowTaskScheduleID:     wti.ScheduleID,
+		WorkflowTaskStartedID:      wti.StartedID,
+		CurrentWorkflowTaskTimeout: wti.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2506,7 +2506,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2519,12 +2519,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2548,28 +2548,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -2643,7 +2643,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2656,12 +2656,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2685,28 +2685,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2785,7 +2785,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
+func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_PendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -2793,7 +2793,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2810,12 +2810,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -2849,28 +2849,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2952,7 +2952,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(true).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -2962,7 +2962,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
+func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_NoPendingWorkflowTask() {
 	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -2970,7 +2970,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2987,12 +2987,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3026,28 +3026,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetCurrentBranchToken().Return(executionInfo.BranchToken, nil).AnyTimes()
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -3071,7 +3071,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version + 1
 	currentRunID := uuid.New()
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	currentDecisionStickyTaskqueue := "some random decision sticky taskqueue"
+	currentStickyWorkflowTaskQueue := "some random sticky workflow task queue"
 
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
@@ -3131,16 +3131,16 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
+	msBuilderCurrent.EXPECT().HasPendingWorkflowTask().Return(false).Times(1)
 
-	newDecision := &decisionInfo{
+	newWorkflowTask := &workflowTaskInfo{
 		Version:    currentVersion,
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
-		TaskQueue:  currentDecisionStickyTaskqueue,
+		TaskQueue:  currentStickyWorkflowTaskQueue,
 		Attempt:    0,
 	}
-	msBuilderCurrent.EXPECT().AddDecisionTaskScheduledEvent(false).Return(newDecision, nil).Times(1)
+	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -3159,7 +3159,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -3172,12 +3172,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3201,28 +3201,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3277,12 +3277,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         workflowID,
-		RunID:              currentRunID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             workflowID,
+		RunID:                  currentRunID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
@@ -3314,7 +3314,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -3328,12 +3328,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3357,28 +3357,28 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3433,13 +3433,13 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         workflowID,
-		RunID:              currentRunID,
-		LastEventTaskID:    lastEventTaskID + 10,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             workflowID,
+		RunID:                  currentRunID,
+		LastEventTaskID:        lastEventTaskID + 10,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
@@ -3471,7 +3471,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	taskqueue := "some random taskqueue"
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
-	decisionTimeout := int32(4411)
+	workflowTaskTimeout := int32(4411)
 	cronSchedule := "some random cron scredule"
 	retryPolicy := &commonpb.RetryPolicy{
 		InitialIntervalInSeconds: 1,
@@ -3492,12 +3492,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
-	di := &decisionInfo{
-		Version:         version,
-		ScheduleID:      common.FirstEventID + 1,
-		StartedID:       common.EmptyEventID,
-		DecisionTimeout: decisionTimeout,
-		TaskQueue:       taskqueue,
+	di := &workflowTaskInfo{
+		Version:             version,
+		ScheduleID:          common.FirstEventID + 1,
+		StartedID:           common.EmptyEventID,
+		WorkflowTaskTimeout: workflowTaskTimeout,
+		TaskQueue:           taskqueue,
 	}
 
 	requestID := uuid.New()
@@ -3521,35 +3521,35 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(version).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		CreateRequestID:          requestID,
-		NamespaceID:              namespaceID,
-		WorkflowID:               workflowID,
-		RunID:                    runID,
-		ParentNamespaceID:        parentNamespaceID,
-		ParentWorkflowID:         parentWorkflowID,
-		ParentRunID:              parentRunID,
-		InitiatedID:              initiatedID,
-		TaskQueue:                taskqueue,
-		WorkflowTypeName:         workflowType,
-		WorkflowExecutionTimeout: workflowTimeout,
-		WorkflowRunTimeout:       workflowTimeout,
-		WorkflowTaskTimeout:      decisionTimeout,
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		BranchToken:              []byte("some random branch token"),
-		DecisionVersion:          di.Version,
-		DecisionScheduleID:       di.ScheduleID,
-		DecisionStartedID:        di.StartedID,
-		DecisionTimeout:          di.DecisionTimeout,
-		State:                    enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:                   enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		CronSchedule:             cronSchedule,
-		HasRetryPolicy:           true,
-		InitialInterval:          retryPolicy.GetInitialIntervalInSeconds(),
-		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
-		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
-		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
-		NonRetryableErrorTypes:   retryPolicy.GetNonRetryableErrorTypes(),
+		CreateRequestID:            requestID,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 workflowID,
+		RunID:                      runID,
+		ParentNamespaceID:          parentNamespaceID,
+		ParentWorkflowID:           parentWorkflowID,
+		ParentRunID:                parentRunID,
+		InitiatedID:                initiatedID,
+		TaskQueue:                  taskqueue,
+		WorkflowTypeName:           workflowType,
+		WorkflowExecutionTimeout:   workflowTimeout,
+		WorkflowRunTimeout:         workflowTimeout,
+		WorkflowTaskTimeout:        workflowTaskTimeout,
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		BranchToken:                []byte("some random branch token"),
+		WorkflowTaskVersion:        di.Version,
+		WorkflowTaskScheduleID:     di.ScheduleID,
+		WorkflowTaskStartedID:      di.StartedID,
+		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		CronSchedule:               cronSchedule,
+		HasRetryPolicy:             true,
+		InitialInterval:            retryPolicy.GetInitialIntervalInSeconds(),
+		BackoffCoefficient:         retryPolicy.GetBackoffCoefficient(),
+		MaximumInterval:            retryPolicy.GetMaximumIntervalInSeconds(),
+		MaximumAttempts:            retryPolicy.GetMaximumAttempts(),
+		NonRetryableErrorTypes:     retryPolicy.GetNonRetryableErrorTypes(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3658,11 +3658,11 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		RunID:              runID,
-		State:              state,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		RunID:                  runID,
+		State:                  state,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderTarget.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(
@@ -3686,14 +3686,14 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         workflowID,
-		RunID:              targetRunID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             workflowID,
+		RunID:                  targetRunID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 
 	currentRunID := uuid.New()
@@ -3731,14 +3731,14 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	msBuilderTarget := NewMockmutableState(s.controller)
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         workflowID,
-		RunID:              targetRunID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             workflowID,
+		RunID:                  targetRunID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 
 	currentRunID := uuid.New()
@@ -3801,13 +3801,13 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	msBuilderTarget := NewMockmutableState(s.controller)
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         workflowID,
-		RunID:              targetRunID,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             workflowID,
+		RunID:                  targetRunID,
+		Status:                 enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 
 	currentRunID := uuid.New()

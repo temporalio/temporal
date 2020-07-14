@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -250,21 +250,21 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 	expectedActivityID := int32(1)
 	runCounter := 1
 
-	dtHandler := func(
+	wtHandler := func(
 		execution *commonpb.WorkflowExecution,
 		wt *commonpb.WorkflowType,
 		previousStartedEventID int64,
 		startedEventID int64,
 		history *historypb.History,
-	) ([]*decisionpb.Decision, error) {
+	) ([]*commandpb.Command, error) {
 		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
@@ -281,9 +281,9 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:               workflowType,
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tq},
 					Input:                      nil,
@@ -294,9 +294,9 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -325,19 +325,19 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
-			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
@@ -348,7 +348,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessDecisionTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(true, false)
 		s.NoError(err)
 	}
 

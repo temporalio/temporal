@@ -80,8 +80,8 @@ func newQueue(
 ) (persistence.Queue, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -200,7 +200,7 @@ func (q *cassandraQueue) ReadMessages(
 	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := q.session.Query(templateGetMessagesQuery,
 		q.queueType,
 		lastMessageID,
@@ -234,7 +234,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateGetMessagesFromDLQQuery,
 		q.getDLQTypeFromQueueType(),

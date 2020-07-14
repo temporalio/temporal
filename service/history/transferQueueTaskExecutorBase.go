@@ -121,20 +121,20 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) pushDecision(
+func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
 	taskqueue *taskqueuepb.TaskQueue,
-	decisionScheduleToStartTimeout int32,
+	workflowTaskScheduleToStartTimeout int32,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_DECISION_TASK {
-		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
+	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK {
+		t.logger.Fatal("Cannot process non workflow task", tag.TaskType(task.GetTaskType()))
 	}
 
-	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
+	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
 		NamespaceId: task.GetNamespaceId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
@@ -142,7 +142,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 		},
 		TaskQueue:                     taskqueue,
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
+		ScheduleToStartTimeoutSeconds: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }
@@ -348,7 +348,7 @@ func getWorkflowExecutionTimestamp(
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
+	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoffSeconds(); backoffSeconds != 0 {
 		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
 		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
 	}

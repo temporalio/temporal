@@ -41,8 +41,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -215,33 +215,33 @@ func (s *matchingEngineSuite) TestAckManager() {
 	s.EqualValues(t5, m.getReadLevel())
 }
 
-func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResult() {
+func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
 	s.PollForTasksEmptyResultTest(context.Background(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
 
-func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(context.Background(), enumspb.TASK_QUEUE_TYPE_DECISION)
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResult() {
+	s.PollForTasksEmptyResultTest(context.Background(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 }
 
-func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResultWithShortContext() {
+func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
 
-func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResultWithShortContext() {
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
-	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_DECISION)
+	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 }
 
-func (s *matchingEngineSuite) TestPollForDecisionTasks() {
-	s.PollForDecisionTasksResultTest()
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
+	s.PollWorkflowTaskQueuesResultTest()
 }
 
-func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
+func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
@@ -262,10 +262,10 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	scheduleID := int64(0)
 
 	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
-			response := &historyservice.RecordDecisionTaskStartedResponse{
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
+			response := &historyservice.RecordWorkflowTaskStartedResponse{
 				WorkflowType:               workflowType,
 				PreviousStartedEventId:     scheduleID,
 				ScheduledEventId:           scheduleID + 1,
@@ -276,7 +276,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 			return response, nil
 		}).AnyTimes()
 
-	addRequest := matchingservice.AddDecisionTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:                   namespaceID,
 		Execution:                     execution,
 		ScheduleId:                    scheduleID,
@@ -284,17 +284,17 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		ScheduleToStartTimeoutSeconds: 1,
 	}
 
-	_, err := s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
+	_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
 	s.NoError(err)
 
-	resp, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: stickyTaskQueue,
 			Identity:  identity},
 	})
 
-	expectedResp := &matchingservice.PollForDecisionTaskResponse{
+	expectedResp := &matchingservice.PollWorkflowTaskQueueResponse{
 		TaskToken:              resp.TaskToken,
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
@@ -305,7 +305,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		BacklogCountHint:       1,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
-		DecisionInfo:           nil,
+		WorkflowTaskInfo:       nil,
 		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -338,28 +338,28 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-			pollResp, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+			pollResp, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
-				PollRequest: &workflowservice.PollForActivityTaskRequest{
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 					TaskQueue: taskQueue,
 					Identity:  identity,
 				},
 			})
 			s.NoError(err)
-			s.Equal(emptyPollForActivityTaskResponse, pollResp)
+			s.Equal(emptyPollActivityTaskQueueResponse, pollResp)
 
 			taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 		} else {
-			resp, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
+			resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: namespaceID,
-				PollRequest: &workflowservice.PollForDecisionTaskRequest{
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 					TaskQueue: taskQueue,
 					Identity:  identity},
 			})
 			s.NoError(err)
-			s.Equal(emptyPollForDecisionTaskResponse, resp)
+			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
 
-			taskQueueType = enumspb.TASK_QUEUE_TYPE_DECISION
+			taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 		}
 		select {
 		case <-callContext.Done():
@@ -389,12 +389,12 @@ func (s *matchingEngineSuite) TestAddActivityTasks() {
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 }
 
-func (s *matchingEngineSuite) TestAddDecisionTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_DECISION, false)
+func (s *matchingEngineSuite) TestAddWorkflowTasks() {
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false)
 }
 
-func (s *matchingEngineSuite) TestAddDecisionTasksForwarded() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_DECISION, true)
+func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
@@ -429,7 +429,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			}
 			_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		} else {
-			addRequest := matchingservice.AddDecisionTaskRequest{
+			addRequest := matchingservice.AddWorkflowTaskRequest{
 				NamespaceId:                   namespaceID,
 				Execution:                     execution,
 				ScheduleId:                    scheduleID,
@@ -439,7 +439,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			if isForwarded {
 				addRequest.ForwardedFrom = forwardedFrom
 			}
-			_, err = s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
+			_, err = s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
 		}
 
 		switch isForwarded {
@@ -549,7 +549,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -567,9 +567,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; {
 		scheduleID := i * 3
 
-		result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+		result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: taskQueue,
 				Identity:  identity},
 		})
@@ -661,7 +661,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -674,10 +674,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			}, nil
 		}).AnyTimes()
 
-	pollFunc := func(maxDispatch float64) (*matchingservice.PollForActivityTaskResponse, error) {
-		return s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+	pollFunc := func(maxDispatch float64) (*matchingservice.PollActivityTaskQueueResponse, error) {
+		return s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue:         taskQueue,
 				Identity:          identity,
 				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &types.DoubleValue{Value: maxDispatch}},
@@ -689,7 +689,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		scheduleID := i * 3
 
 		var wg sync.WaitGroup
-		var result *matchingservice.PollForActivityTaskResponse
+		var result *matchingservice.PollActivityTaskQueueResponse
 		var pollErr error
 		maxDispatch := _defaultTaskDispatchRPS
 		if i == taskCount/2 {
@@ -883,7 +883,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -902,9 +902,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; {
 				maxDispatch := dispatchLimitFn(wNum, i)
-				result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+				result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollForActivityTaskRequest{
+					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 						TaskQueue:         taskQueue,
 						Identity:          identity,
 						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &types.DoubleValue{Value: maxDispatch}},
@@ -963,7 +963,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	return total
 }
 
-func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
+func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -977,7 +977,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_DECISION)
+	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -989,7 +989,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddDecisionTaskRequest{
+				addRequest := matchingservice.AddWorkflowTaskRequest{
 					NamespaceId:                   namespaceID,
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
@@ -997,7 +997,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 					ScheduleToStartTimeoutSeconds: 1,
 				}
 
-				_, err := s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
+				_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
 				if err != nil {
 					panic(err)
 				}
@@ -1011,10 +1011,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
-			return &historyservice.RecordDecisionTaskStartedResponse{
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
+			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       scheduleID,
@@ -1024,9 +1024,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
+				result, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollForDecisionTaskRequest{
+					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 						TaskQueue: taskQueue,
 						Identity:  identity},
 				})
@@ -1085,9 +1085,9 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
 	s.handlerContext.Context = ctx
-	_, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+	_, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollForActivityTaskRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: taskQueue,
 			Identity:  identity},
 	})
@@ -1098,14 +1098,14 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s.handlerContext.Context = ctx
-	resp, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+	resp, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollForActivityTaskRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: taskQueue,
 			Identity:  identity},
 	})
 	s.Nil(err)
-	s.Equal(emptyPollForActivityTaskResponse, resp)
+	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
@@ -1185,7 +1185,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			startedTasks[taskRequest.TaskId] = true
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
 						ActivityType:                  activityType,
@@ -1201,9 +1201,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+				result, err := engine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollForActivityTaskRequest{
+					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 						TaskQueue: taskQueue,
 						Identity:  identity},
 				})
@@ -1257,7 +1257,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 }
 
-func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
+func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1271,7 +1271,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_DECISION)
+	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1290,7 +1290,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddDecisionTaskRequest{
+				addRequest := matchingservice.AddWorkflowTaskRequest{
 					NamespaceId:                   namespaceID,
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
@@ -1298,7 +1298,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 					ScheduleToStartTimeoutSeconds: 600,
 				}
 
-				_, err := engine.AddDecisionTask(s.handlerContext, &addRequest)
+				_, err := engine.AddWorkflowTask(s.handlerContext, &addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1318,16 +1318,16 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.TaskId]; ok {
-				s.logger.Debug("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
 				return nil, serviceerror.NewEventAlreadyStarted("already started")
 			}
-			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
-			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
 			startedTasks[taskRequest.TaskId] = true
-			return &historyservice.RecordDecisionTaskStartedResponse{
+			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       scheduleID,
@@ -1338,9 +1338,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
+				result, err := engine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollForDecisionTaskRequest{
+					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 						TaskQueue: taskQueue,
 						Identity:  identity},
 				})
@@ -1510,9 +1510,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
 		identity := "nobody"
-		result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
+		result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: taskQueue,
 				Identity:  identity},
 		})
@@ -1624,16 +1624,16 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 		s.setupRecordActivityTaskStartedMock(tl)
 
-		pollReq := &matchingservice.PollForActivityTaskRequest{
+		pollReq := &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollForActivityTaskRequest{TaskQueue: taskQueue, Identity: "test"},
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: taskQueue, Identity: "test"},
 		}
 
 		remaining := taskCount
 		for i := 0; i < 2; i++ {
 			// verify that (1) expired tasks are not returned in poll result (2) taskCleaner deletes tasks correctly
 			for i := int64(0); i < taskCount/4; i++ {
-				result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, pollReq)
+				result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, pollReq)
 				s.NoError(err)
 				s.NotNil(result)
 			}
@@ -1657,7 +1657,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
-					&decisionpb.ScheduleActivityTaskDecisionAttributes{
+					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tlName},
 						ActivityType:                  activityType,
@@ -1682,8 +1682,8 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 	return true
 }
 
-func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
-	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *historypb.HistoryEvent {
+func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
+	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes) *historypb.HistoryEvent {
 
 	historyEvent := newHistoryEvent(eventID, enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1696,7 +1696,7 @@ func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID i
 		ScheduleToStartTimeoutSeconds: scheduleAttributes.ScheduleToStartTimeoutSeconds,
 		StartToCloseTimeoutSeconds:    scheduleAttributes.StartToCloseTimeoutSeconds,
 		HeartbeatTimeoutSeconds:       scheduleAttributes.HeartbeatTimeoutSeconds,
-		DecisionTaskCompletedEventId:  decisionTaskCompletedEventID,
+		WorkflowTaskCompletedEventId:  workflowTaskCompletedEventID,
 	}}
 	return historyEvent
 }
@@ -1958,7 +1958,7 @@ func (m *testTaskManager) String() string {
 		if id.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			result += "Activity"
 		} else {
-			result += "Decision"
+			result += "Workflow"
 		}
 		result += " task queue " + id.name
 		result += "\n"

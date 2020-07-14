@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
@@ -85,12 +84,12 @@ type (
 
 var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 
-// newMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
+// newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
 func newClusterMetadataInstance(cfg config.Cassandra, logger log.Logger) (p.ClusterMetadataStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()

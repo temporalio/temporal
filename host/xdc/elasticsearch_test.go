@@ -46,8 +46,8 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -251,30 +251,30 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2)
 
 	// upsert search attributes
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		upsertDecision := &decisionpb.Decision{
-			DecisionType: enumspb.DECISION_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return []*decisionpb.Decision{upsertDecision}, nil
+		return []*commandpb.Command{upsertCommand}, nil
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)

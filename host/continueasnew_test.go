@@ -38,8 +38,8 @@ import (
 
 	"github.com/pborman/uuid"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -93,17 +93,17 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:               workflowType,
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
@@ -118,32 +118,32 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
@@ -182,16 +182,16 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:               workflowType,
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
@@ -202,27 +202,27 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process the decision and continue as new
-	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// process the workflow task and continue as new
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -281,14 +281,14 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	workflowComplete := false
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		continueAsNewCounter++
 		buf := new(bytes.Buffer)
 		s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 				WorkflowType:               workflowType,
 				TaskQueue:                  taskQueue,
 				Input:                      nil,
@@ -299,18 +299,18 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// process the decision and continue as new
-	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// process the workflow task and continue as new
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -335,8 +335,8 @@ GetHistoryLoop:
 			}
 			s.Logger.Warn(fmt.Sprintf("Execution not timed out yet. Last event is %v", lastEvent))
 			time.Sleep(200 * time.Millisecond)
-			_, err := poller.PollAndProcessDecisionTask(true, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			if err != matching.ErrNoTasks {
 				s.NoError(err)
 			}
@@ -381,16 +381,16 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	var executions []*commonpb.WorkflowExecution
 
 	continueAsNewed := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		executions = append(executions, execution)
 
 		if !continueAsNewed {
 			continueAsNewed = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:               workflowType,
 					TaskQueue:                  taskQueue,
 					Input:                      nil,
@@ -400,9 +400,9 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("succeed"),
 			}},
 		}}, nil
@@ -410,17 +410,17 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	minTaskID := int64(0)
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
 	s.True(len(events) != 0)
@@ -429,7 +429,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		minTaskID = event.GetTaskId()
 	}
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
 	s.True(len(events) != 0)
@@ -471,7 +471,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	// decider logic
+	// workflow logic
 	childComplete := false
 	childExecutionStarted := false
 	childData := int32(1)
@@ -479,35 +479,35 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	continueAsNewCounter := int32(0)
 	var startedEvent *historypb.HistoryEvent
 	var completedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
-		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		s.Logger.Info("Processing workflow task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
-		// Child Decider Logic
+		// Child workflow logic
 		if execution.GetWorkflowId() == childID {
 			if continueAsNewCounter < continueAsNewCount {
 				continueAsNewCounter++
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-				return []*decisionpb.Decision{{
-					DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-					Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 						Input: payloads.EncodeBytes(buf.Bytes()),
 					}},
 				}}, nil
 			}
 
 			childComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Child Done"),
 				}},
 			}}, nil
 		}
 
-		// Parent Decider Logic
+		// Parent workflow logic
 		if execution.GetWorkflowId() == parentID {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution")
@@ -515,9 +515,9 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
 
-				return []*decisionpb.Decision{{
-					DecisionType: enumspb.DECISION_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
 						Namespace:    s.namespace,
 						WorkflowId:   childID,
 						WorkflowType: childWorkflowType,
@@ -528,14 +528,14 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				for _, event := range history.Events[previousStartedEventID:] {
 					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 						startedEvent = event
-						return []*decisionpb.Decision{}, nil
+						return []*commandpb.Command{}, nil
 					}
 
 					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
 						completedEvent = event
-						return []*decisionpb.Decision{{
-							DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+						return []*commandpb.Command{{
+							CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 								Result: payloads.EncodeString("Done"),
 							}},
 						}}, nil
@@ -548,41 +548,41 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
-	// Make first decision to start child execution
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Make first command to start child execution
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
-		s.Logger.Warn("decision", tag.Counter(i))
-		_, err = poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Warn("workflow task", tag.Counter(i))
+		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
 	s.False(childComplete)
 	s.NotNil(startedEvent)
 
-	// Process Child Execution final decision to complete it
-	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	// Process Child Execution final workflow task to complete it
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()

@@ -145,7 +145,7 @@ func (s *engine3Suite) SetupTest() {
 		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngine(h)
-	h.decisionHandler = newDecisionHandler(h)
+	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h
 }
@@ -155,7 +155,7 @@ func (s *engine3Suite) TearDownTest() {
 	s.mockShard.Finish(s.T())
 }
 
-func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
+func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
@@ -178,7 +178,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
 
@@ -190,13 +190,13 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
-	request := historyservice.RecordDecisionTaskStartedRequest{
+	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
 		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollForDecisionTaskRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: stickyTl,
 			},
@@ -204,7 +204,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordDecisionTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
 	if executionInfo.LastProcessedEvent != common.EmptyEventID {
@@ -221,7 +221,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	}
 	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp

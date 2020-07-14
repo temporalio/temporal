@@ -52,7 +52,7 @@ message StartWorkflowExecutionRequest {
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
-    int32 first_decision_task_backoff_seconds = 9;
+    int32 first_workflow_task_backoff_seconds = 9;
 }
 
 message StartWorkflowExecutionResponse {
@@ -121,17 +121,17 @@ message ResetStickyTaskQueueRequest {
 message ResetStickyTaskQueueResponse {
 }
 
-message RecordDecisionTaskStartedRequest {
+message RecordWorkflowTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     int64 schedule_id = 3;
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
-    temporal.api.workflowservice.v1.PollForDecisionTaskRequest poll_request = 6;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
 }
 
-message RecordDecisionTaskStartedResponse {
+message RecordWorkflowTaskStartedResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;
     int64 scheduled_event_id = 3;
@@ -139,7 +139,7 @@ message RecordDecisionTaskStartedResponse {
     int64 next_event_id = 5;
     int64 attempt = 6;
     bool sticky_execution_enabled = 7;
-    temporal.server.api.history.v1.TransientDecisionInfo decision_info = 8;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     int32 event_store_version = 10;
     bytes branch_token = 11;
@@ -155,7 +155,7 @@ message RecordActivityTaskStartedRequest {
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
-    temporal.api.workflowservice.v1.PollForActivityTaskRequest poll_request = 6;
+    temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -168,21 +168,21 @@ message RecordActivityTaskStartedResponse {
     string workflow_namespace = 7;
 }
 
-message RespondDecisionTaskCompletedRequest {
+message RespondWorkflowTaskCompletedRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.RespondDecisionTaskCompletedRequest complete_request = 2;
+    temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest complete_request = 2;
 }
 
-message RespondDecisionTaskCompletedResponse {
-    RecordDecisionTaskStartedResponse started_response = 1;
+message RespondWorkflowTaskCompletedResponse {
+    RecordWorkflowTaskStartedResponse started_response = 1;
 }
 
-message RespondDecisionTaskFailedRequest {
+message RespondWorkflowTaskFailedRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.RespondDecisionTaskFailedRequest failed_request = 2;
+    temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest failed_request = 2;
 }
 
-message RespondDecisionTaskFailedResponse {
+message RespondWorkflowTaskFailedResponse {
 }
 
 message RecordActivityTaskHeartbeatRequest {
@@ -274,13 +274,13 @@ message RequestCancelWorkflowExecutionRequest {
 message RequestCancelWorkflowExecutionResponse {
 }
 
-message ScheduleDecisionTaskRequest {
+message ScheduleWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    bool is_first_decision = 3;
+    bool is_first_workflow_task = 3;
 }
 
-message ScheduleDecisionTaskResponse {
+message ScheduleWorkflowTaskResponse {
 }
 
 /**
