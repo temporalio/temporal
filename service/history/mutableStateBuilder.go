@@ -1897,7 +1897,7 @@ func (e *mutableStateBuilder) AddWorkflowTaskScheduledEvent(
 	return e.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration)
 }
 
-// originalScheduledTimestamp is to record the first scheduled workflow task during workflow task heartbeat.
+// originalScheduledTimestamp is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (e *mutableStateBuilder) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp int64,

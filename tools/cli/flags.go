@@ -67,7 +67,7 @@ const (
 	FlagWorkflowStatusWithAlias          = FlagWorkflowStatus + ", s"
 	FlagExecutionTimeout                 = "execution_timeout"
 	FlagExecutionTimeoutWithAlias        = FlagExecutionTimeout + ", et"
-	FlagWorkflowTaskTimeout              = "workflow_tas_timeout"
+	FlagWorkflowTaskTimeout              = "workflow_task_timeout"
 	FlagWorkflowTaskTimeoutWithAlias     = FlagWorkflowTaskTimeout + ", wtt"
 	FlagContextTimeout                   = "context_timeout"
 	FlagContextTimeoutWithAlias          = FlagContextTimeout + ", ct"

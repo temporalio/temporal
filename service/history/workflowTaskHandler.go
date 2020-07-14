@@ -353,7 +353,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return err
 	}
 
-	// If the command has more than one completion event than just pick the first one
+	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
@@ -428,7 +428,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		return err
 	}
 
-	// If the command has more than one completion event than just pick the first one
+	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
@@ -541,7 +541,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return err
 	}
 
-	// If the command has more than one completion event than just pick the first one
+	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
@@ -678,7 +678,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	handler.logger.Debug("!!!! Continued as new without timeout",
 		tag.WorkflowRunID(executionInfo.RunID))
 
-	// If the command has more than one completion event than just pick the first one
+	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,

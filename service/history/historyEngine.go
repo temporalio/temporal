@@ -131,7 +131,7 @@ type (
 		currentClusterName        string
 		shard                     ShardContext
 		timeSource                clock.TimeSource
-		workflowTaskHandler       workflowTaskHandlerCallback
+		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
 		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager

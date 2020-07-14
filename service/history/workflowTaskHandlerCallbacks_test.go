@@ -48,7 +48,7 @@ type (
 
 		controller *gomock.Controller
 
-		workflowTaskHandlerCallback *workflowTaskHandlerCallbackImpl
+		workflowTaskHandlerCallback *workflowTaskHandlerCallbacksImpl
 		queryRegistry               queryRegistry
 		mockMutableState            *MockmutableState
 	}
@@ -62,7 +62,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbackImpl{
+	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
 		versionChecker: headers.NewVersionChecker(),
 		metricsClient:  metrics.NewClient(tally.NoopScope, metrics.History),
 		config:         NewDynamicConfigForTest(),

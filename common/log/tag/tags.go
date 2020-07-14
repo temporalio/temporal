@@ -158,7 +158,7 @@ func WorkflowEndingRunID(endingRunID string) Tag {
 
 // WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
 func WorkflowTaskTimeoutSeconds(s int32) Tag {
-	return newInt32("wf-workflow-task-timeout", s)
+	return newInt32("workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
@@ -251,7 +251,7 @@ func WorkflowBranchID(branchID string) Tag {
 
 // WorkflowCommandType returns tag for WorkflowCommandType
 func WorkflowCommandType(commandType enumspb.CommandType) Tag {
-	return newStringTag("wf-command-type", commandType.String())
+	return newStringTag("command-type", commandType.String())
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType
@@ -261,7 +261,7 @@ func WorkflowQueryType(qt string) Tag {
 
 // WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
 func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCause) Tag {
-	return newStringTag("wf-workflow-task-fail-cause", workflowTaskFailCause.String())
+	return newStringTag("workflow-task-fail-cause", workflowTaskFailCause.String())
 }
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
