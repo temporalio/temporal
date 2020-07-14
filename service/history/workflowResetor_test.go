@@ -801,7 +801,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
 	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -2090,7 +2090,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
 	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -3384,7 +3384,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
 	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -4073,7 +4073,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
 	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(enumsspb.TASK_TYPE_USER_TIMER, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)

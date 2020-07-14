@@ -905,8 +905,8 @@ const (
 	TimerActiveQueueProcessorScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerStandbyQueueProcessorScope
-	// TimerActiveTaskActivityTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
-	TimerActiveTaskActivityTaskTimeoutScope
+	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
+	TimerActiveTaskActivityTimeoutScope
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
 	TimerActiveTaskWorkflowTaskTimeoutScope
 	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
@@ -1458,7 +1458,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerQueueProcessorScope:                               {operation: "TimerQueueProcessor"},
 		TimerActiveQueueProcessorScope:                         {operation: "TimerActiveQueueProcessor"},
 		TimerStandbyQueueProcessorScope:                        {operation: "TimerStandbyQueueProcessor"},
-		TimerActiveTaskActivityTaskTimeoutScope:                {operation: "TimerActiveTaskActivityTimeout"},
+		TimerActiveTaskActivityTimeoutScope:                    {operation: "TimerActiveTaskActivityTimeout"},
 		TimerActiveTaskWorkflowTaskTimeoutScope:                {operation: "TimerActiveTaskWorkflowTaskTimeout"},
 		TimerActiveTaskUserTimerScope:                          {operation: "TimerActiveTaskUserTimer"},
 		TimerActiveTaskWorkflowTimeoutScope:                    {operation: "TimerActiveTaskWorkflowTimeout"},

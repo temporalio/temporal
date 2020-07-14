@@ -90,8 +90,8 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	switch timerTask.TaskType {
 	case enumsspb.TASK_TYPE_USER_TIMER:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT:
-		return t.executeActivityTaskTimeoutTask(timerTask)
+	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
+		return t.executeActivityTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		return t.executeWorkflowTaskTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
@@ -159,7 +159,7 @@ Loop:
 	return t.updateWorkflowExecution(weContext, mutableState, timerFired)
 }
 
-func (t *timerQueueActiveTaskExecutor) executeActivityTaskTimeoutTask(
+func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
@@ -240,7 +240,7 @@ Loop:
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
-			metrics.TimerActiveTaskActivityTaskTimeoutScope,
+			metrics.TimerActiveTaskActivityTimeoutScope,
 			timerSequenceID.timerType,
 		)
 		if _, err := mutableState.AddActivityTaskTimedOutEvent(
@@ -581,7 +581,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	now := t.shard.GetTimeSource().Now()
 	err = context.updateWorkflowExecutionAsActive(now)
 	if err != nil {
-		if isShardOwnershipLostError(err) {
+		if isShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates
 			t.queueProcessor.Stop()
 			return err

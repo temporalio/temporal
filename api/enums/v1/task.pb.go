@@ -95,7 +95,7 @@ const (
 	TASK_TYPE_TRANSFER_RESET_WORKFLOW                    TaskType = 10
 	TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES TaskType = 11
 	TASK_TYPE_WORKFLOW_TASK_TIMEOUT                      TaskType = 12
-	TASK_TYPE_ACTIVITY_TASK_TIMEOUT                      TaskType = 13
+	TASK_TYPE_ACTIVITY_TIMEOUT                           TaskType = 13
 	TASK_TYPE_USER_TIMER                                 TaskType = 14
 	TASK_TYPE_WORKFLOW_RUN_TIMEOUT                       TaskType = 15
 	TASK_TYPE_DELETE_HISTORY_EVENT                       TaskType = 16

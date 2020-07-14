@@ -1762,7 +1762,7 @@ func (d *WorkflowTaskTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 
 // GetType returns the type of the timer task
 func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_ACTIVITY_TASK_TIMEOUT
+	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
