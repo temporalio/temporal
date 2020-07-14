@@ -28,17 +28,17 @@ import "temporal/server/api/matchingservice/v1/request_response.proto";
 // MatchingService API is exposed to provide support for polling from long running applications.
 // Such applications are expected to have a worker which regularly polls for WorkflowTask and ActivityTask.  For each
 // WorkflowTask, application is expected to process the history of events for that session and respond back with next
-// decisions.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
+// commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
 // with completion or failure.
 service MatchingService {
 
     // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
-    // WorkflowTask is dispatched to callers for active workflow executions, with pending decisions.
+    // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
     rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
     }
 
     // PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
-    // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
+    // is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
     rpc PollActivityTaskQueue (PollActivityTaskQueueRequest) returns (PollActivityTaskQueueResponse) {
     }
 

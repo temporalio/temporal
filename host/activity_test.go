@@ -37,8 +37,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -87,16 +87,16 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -113,9 +113,9 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Logger.Info("Completing Workflow")
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -138,14 +138,14 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -205,14 +205,14 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	workflowComplete := false
 	activitiesScheduled := false
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return []*decisionpb.Decision{
+			return []*commandpb.Command{
 				{
-					DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    "0",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -234,9 +234,9 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 		workflowComplete = true
 		s.Logger.Info("Completing Workflow")
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -267,14 +267,14 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -379,15 +379,15 @@ func (s *integrationSuite) TestActivityRetry() {
 	activitiesScheduled := false
 	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *historypb.HistoryEvent
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
-			return []*decisionpb.Decision{
+			return []*commandpb.Command{
 				{
-					DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    "A",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -405,8 +405,8 @@ func (s *integrationSuite) TestActivityRetry() {
 						},
 					}}},
 				{
-					DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    "B",
 						ActivityType:                  &commonpb.ActivityType{Name: timeoutActivityName},
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue"},
@@ -444,15 +444,15 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityAFailed != nil && activityBTimeout != nil {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{}, nil
+		return []*commandpb.Command{}, nil
 	}
 
 	activityExecutedCount := 0
@@ -471,25 +471,25 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -590,8 +590,8 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -600,9 +600,9 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -616,9 +616,9 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -636,14 +636,14 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -693,13 +693,13 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	failWorkflow := false
 	failReason := ""
 	var activityATimedout, activityBTimedout, activityCTimedout, activityDTimedout bool
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "A",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: "NoWorker"},
@@ -710,8 +710,8 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					HeartbeatTimeoutSeconds:       0,
 				},
 				}}, {
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "B",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -722,8 +722,8 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					HeartbeatTimeoutSeconds:       0,
 				},
 				}}, {
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "C",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -734,8 +734,8 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					HeartbeatTimeoutSeconds:       0,
 				},
 				}}, {
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    "D",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -756,9 +756,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					timeoutEvent := event.GetActivityTaskTimedOutEventAttributes()
 					scheduledEvent, ok := activitiesMap[timeoutEvent.GetScheduledEventId()]
 					if !ok {
-						return []*decisionpb.Decision{{
-							DecisionType: enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION,
-							Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
+						return []*commandpb.Command{{
+							CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 								Failure: failure.NewServerFailure("ScheduledEvent not found", false),
 							}},
 						}}, nil
@@ -801,9 +801,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow")
 			workflowComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 					Failure: failure.NewServerFailure(failReason, false),
 				}},
 			}}, nil
@@ -812,15 +812,15 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if activityATimedout && activityBTimedout && activityCTimedout && activityDTimedout {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{}, nil
+		return []*commandpb.Command{}, nil
 	}
 
 	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
@@ -859,14 +859,14 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -928,16 +928,16 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	failReason := ""
 	activityCount := 10
 	activitiesTimedout := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			var decisions []*decisionpb.Decision
+			var commands []*commandpb.Command
 			for i := 0; i < activityCount; i++ {
 				aID := fmt.Sprintf("activity_%v", i)
-				d := &decisionpb.Decision{
-					DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+				d := &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    aID,
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -949,10 +949,10 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 					}},
 				}
 
-				decisions = append(decisions, d)
+				commands = append(commands, d)
 			}
 
-			return decisions, nil
+			return commands, nil
 		} else if previousStartedEventID > 0 {
 		ProcessLoop:
 			for _, event := range history.Events[previousStartedEventID:] {
@@ -996,9 +996,9 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow", tag.Value(failReason))
 			workflowComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 					Failure: failure.NewServerFailure(failReason, false),
 				}},
 			}}, nil
@@ -1007,15 +1007,15 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if activitiesTimedout == activityCount {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{}, nil
+		return []*commandpb.Command{}, nil
 	}
 
 	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
@@ -1044,14 +1044,14 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1118,17 +1118,17 @@ func (s *integrationSuite) TestActivityCancellation() {
 	requestCancellation := false
 	activityScheduleID := int64(0)
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			activityScheduleID = startedEventID + 2
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1142,9 +1142,9 @@ func (s *integrationSuite) TestActivityCancellation() {
 		}
 
 		if requestCancellation {
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 					ScheduledEventId: activityScheduleID,
 				}},
 			}}, nil
@@ -1152,9 +1152,9 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 		s.Logger.Info("Completing Workflow")
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1181,14 +1181,14 @@ func (s *integrationSuite) TestActivityCancellation() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1245,17 +1245,17 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	requestCancellation := false
 	activityScheduleID := int64(0)
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
 			activityScheduleID = startedEventID + 2
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1270,18 +1270,18 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 		if requestCancellation {
 			s.Logger.Info("Requesting cancellation")
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
 					ScheduledEventId: activityScheduleID,
 				}},
 			}}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1295,14 +1295,14 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engine,
-		Namespace:       s.namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.Logger,
-		T:               s.T(),
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1323,7 +1323,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	})
 	s.NoError(err)
 
-	// Process signal in decider and send request cancellation
+	// Process signal in workflow and send request cancellation
 	scheduleActivity = false
 	requestCancellation = true
 	_, err = poller.PollAndProcessWorkflowTask(true, false)

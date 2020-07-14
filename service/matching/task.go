@@ -49,7 +49,7 @@ type (
 		workflowTaskInfo *matchingservice.PollWorkflowTaskQueueResponse
 		activityTaskInfo *matchingservice.PollActivityTaskQueueResponse
 	}
-	// internalTask represents an activity, decision, query or started (received from another host).
+	// internalTask represents an activity, workflow, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
 	internalTask struct {
@@ -133,18 +133,18 @@ func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 	return &commonpb.WorkflowExecution{}
 }
 
-// pollForDecisionResponse returns the poll response for a workflow task that is
+// pollWorkflowTaskQueueResponse returns the poll response for a workflow task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForDecisionResponse() *matchingservice.PollWorkflowTaskQueueResponse {
+func (task *internalTask) pollWorkflowTaskQueueResponse() *matchingservice.PollWorkflowTaskQueueResponse {
 	if task.isStarted() {
 		return task.started.workflowTaskInfo
 	}
 	return nil
 }
 
-// pollForActivityResponse returns the poll response for an activity task that is
+// pollActivityTaskQueueResponse returns the poll response for an activity task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForActivityResponse() *matchingservice.PollActivityTaskQueueResponse {
+func (task *internalTask) pollActivityTaskQueueResponse() *matchingservice.PollActivityTaskQueueResponse {
 	if task.isStarted() {
 		return task.started.activityTaskInfo
 	}

@@ -283,7 +283,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 	}
 
 	if lastWriteVersion == incomingVersion {
-		err = c.mutableState.StartTransactionSkipDecisionFail(namespaceEntry)
+		err = c.mutableState.StartTransactionSkipWorkflowTaskFail(namespaceEntry)
 		if err != nil {
 			return nil, err
 		}

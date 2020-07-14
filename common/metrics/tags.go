@@ -37,7 +37,7 @@ const (
 	taskQueue     = "taskqueue"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
-	decisionType  = "decisionType"
+	commandType   = "commandType"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -78,7 +78,7 @@ type (
 		value string
 	}
 
-	decisionTypeTag struct {
+	commandTypeTag struct {
 		value string
 	}
 )
@@ -220,20 +220,20 @@ func (d activityTypeTag) Value() string {
 	return d.value
 }
 
-// DecisionTypeTag returns a new decision type tag.
-func DecisionTypeTag(value string) Tag {
+// CommandTypeTag returns a new command type tag.
+func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return decisionTypeTag{value}
+	return commandTypeTag{value}
 }
 
-// Key returns the key of the decision type tag
-func (d decisionTypeTag) Key() string {
-	return decisionType
+// Key returns the key of the command type tag
+func (d commandTypeTag) Key() string {
+	return commandType
 }
 
-// Value returns the value of the decision type tag
-func (d decisionTypeTag) Value() string {
+// Value returns the value of the command type tag
+func (d commandTypeTag) Value() string {
 	return d.value
 }

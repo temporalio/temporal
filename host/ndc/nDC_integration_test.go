@@ -404,7 +404,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstWorkflowTaskBackoffSeconds: 100,
-					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{
@@ -715,7 +715,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstWorkflowTaskBackoffSeconds: 100,
-					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{
@@ -912,7 +912,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					WorkflowRunTimeoutSeconds:    1000,
 					WorkflowTaskTimeoutSeconds:   1000,
 					WorkflowTaskCompletedEventId: 19,
-					Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+					Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 		}},
@@ -1185,7 +1185,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 					WorkflowRunTimeoutSeconds:       1000,
 					WorkflowTaskTimeoutSeconds:      1000,
 					FirstWorkflowTaskBackoffSeconds: 100,
-					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+					Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{

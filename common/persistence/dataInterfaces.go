@@ -201,49 +201,49 @@ type (
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
-		NamespaceID                        string
-		WorkflowID                         string
-		RunID                              string
-		ParentNamespaceID                  string
-		ParentWorkflowID                   string
-		ParentRunID                        string
-		InitiatedID                        int64
-		CompletionEventBatchID             int64
-		CompletionEvent                    *historypb.HistoryEvent
-		TaskQueue                          string
-		WorkflowTypeName                   string
-		WorkflowRunTimeout                 int32
-		WorkflowExecutionTimeout           int32
-		WorkflowTaskTimeout                int32
-		State                              enumsspb.WorkflowExecutionState
-		Status                             enumspb.WorkflowExecutionStatus
-		LastFirstEventID                   int64
-		LastEventTaskID                    int64
-		NextEventID                        int64
-		LastProcessedEvent                 int64
-		StartTimestamp                     time.Time
-		LastUpdatedTimestamp               time.Time
-		CreateRequestID                    string
-		SignalCount                        int32
-		DecisionVersion                    int64
-		DecisionScheduleID                 int64
-		DecisionStartedID                  int64
-		DecisionRequestID                  string
-		DecisionTimeout                    int32
-		DecisionAttempt                    int64
-		DecisionStartedTimestamp           int64
-		DecisionScheduledTimestamp         int64
-		DecisionOriginalScheduledTimestamp int64
-		CancelRequested                    bool
-		CancelRequestID                    string
-		StickyTaskQueue                    string
-		StickyScheduleToStartTimeout       int32
-		ClientLibraryVersion               string
-		ClientFeatureVersion               string
-		ClientImpl                         string
-		AutoResetPoints                    *workflowpb.ResetPoints
-		Memo                               map[string]*commonpb.Payload
-		SearchAttributes                   map[string]*commonpb.Payload
+		NamespaceID                            string
+		WorkflowID                             string
+		RunID                                  string
+		ParentNamespaceID                      string
+		ParentWorkflowID                       string
+		ParentRunID                            string
+		InitiatedID                            int64
+		CompletionEventBatchID                 int64
+		CompletionEvent                        *historypb.HistoryEvent
+		TaskQueue                              string
+		WorkflowTypeName                       string
+		WorkflowRunTimeout                     int32
+		WorkflowExecutionTimeout               int32
+		WorkflowTaskTimeout                    int32
+		State                                  enumsspb.WorkflowExecutionState
+		Status                                 enumspb.WorkflowExecutionStatus
+		LastFirstEventID                       int64
+		LastEventTaskID                        int64
+		NextEventID                            int64
+		LastProcessedEvent                     int64
+		StartTimestamp                         time.Time
+		LastUpdatedTimestamp                   time.Time
+		CreateRequestID                        string
+		SignalCount                            int32
+		WorkflowTaskVersion                    int64
+		WorkflowTaskScheduleID                 int64
+		WorkflowTaskStartedID                  int64
+		WorkflowTaskRequestID                  string
+		CurrentWorkflowTaskTimeout             int32
+		WorkflowTaskAttempt                    int64
+		WorkflowTaskStartedTimestamp           int64
+		WorkflowTaskScheduledTimestamp         int64
+		WorkflowTaskOriginalScheduledTimestamp int64
+		CancelRequested                        bool
+		CancelRequestID                        string
+		StickyTaskQueue                        string
+		StickyScheduleToStartTimeout           int32
+		ClientLibraryVersion                   string
+		ClientFeatureVersion                   string
+		ClientImpl                             string
+		AutoResetPoints                        *workflowpb.ResetPoints
+		Memo                                   map[string]*commonpb.Payload
+		SearchAttributes                       map[string]*commonpb.Payload
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
@@ -306,7 +306,7 @@ type (
 		Version             int64
 	}
 
-	// WorkflowTask identifies a transfer task for decision
+	// WorkflowTask identifies a transfer task for workflow task
 	WorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -345,8 +345,8 @@ type (
 		Version             int64
 	}
 
-	// DecisionTimeoutTask identifies a timeout task.
-	DecisionTimeoutTask struct {
+	// WorkflowTaskTimeoutTask identifies a timeout task.
+	WorkflowTaskTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
@@ -1726,37 +1726,37 @@ func (a *DeleteHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (d *DecisionTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_DECISION_TIMEOUT
+func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
 }
 
 // GetVersion returns the version of the timer task
-func (d *DecisionTimeoutTask) GetVersion() int64 {
+func (d *WorkflowTaskTimeoutTask) GetVersion() int64 {
 	return d.Version
 }
 
 // SetVersion returns the version of the timer task
-func (d *DecisionTimeoutTask) SetVersion(version int64) {
+func (d *WorkflowTaskTimeoutTask) SetVersion(version int64) {
 	d.Version = version
 }
 
 // GetTaskID returns the sequence ID.
-func (d *DecisionTimeoutTask) GetTaskID() int64 {
+func (d *WorkflowTaskTimeoutTask) GetTaskID() int64 {
 	return d.TaskID
 }
 
 // SetTaskID sets the sequence ID.
-func (d *DecisionTimeoutTask) SetTaskID(id int64) {
+func (d *WorkflowTaskTimeoutTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
 // GetVisibilityTime gets the visibility time stamp
-func (d *DecisionTimeoutTask) GetVisibilityTimestamp() time.Time {
+func (d *WorkflowTaskTimeoutTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp gets the visibility time stamp
-func (d *DecisionTimeoutTask) SetVisibilityTimestamp(t time.Time) {
+func (d *WorkflowTaskTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 	d.VisibilityTimestamp = t
 }
 

@@ -41,8 +41,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -278,16 +278,16 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
@@ -301,9 +301,9 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		}
 
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -327,27 +327,27 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		QueryHandler:    queryHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		QueryHandler:        queryHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		QueryHandler:    queryHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		QueryHandler:        queryHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1
@@ -525,8 +525,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
-	namespace := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
+func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
+	namespace := "test-sticky-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Name:                                 namespace,
@@ -550,11 +550,11 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-sticky-decision-workflow-failover-test"
-	wt := "integration-sticky-decision-workflow-failover-test-type"
-	tq := "integration-sticky-decision-workflow-failover-test-taskqueue"
-	stq1 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "integration-sticky-decision-workflow-failover-test-taskqueue-sticky2"
+	id := "integration-sticky-workflow-task-workflow-failover-test"
+	wt := "integration-sticky-workflow-task-workflow-failover-test-type"
+	tq := "integration-sticky-workflow-task-workflow-failover-test-taskqueue"
+	stq1 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
+	stq2 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
@@ -580,25 +580,25 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	firstDecisionMade := false
-	secondDecisionMade := false
+	firstCommandMade := false
+	secondCommandMade := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
-		if !firstDecisionMade {
-			firstDecisionMade = true
-			return []*decisionpb.Decision{}, nil
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if !firstCommandMade {
+			firstCommandMade = true
+			return []*commandpb.Command{}, nil
 		}
 
-		if !secondDecisionMade {
-			secondDecisionMade = true
-			return []*decisionpb.Decision{}, nil
+		if !secondCommandMade {
+			secondCommandMade = true
+			return []*commandpb.Command{}, nil
 		}
 
 		workflowCompleted = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -611,7 +611,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyTaskQueue:                     stickyTaskQueue1,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity1,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
@@ -623,7 +623,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyTaskQueue:                     stickyTaskQueue2,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
 		Identity:                            identity2,
-		DecisionHandler:                     dtHandler,
+		WorkflowTaskHandler:                 wtHandler,
 		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
@@ -631,7 +631,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	_, err = poller1.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(firstDecisionMade)
+	s.True(firstCommandMade)
 
 	// Send a signal in cluster
 	signalName := "my signal"
@@ -667,7 +667,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(secondDecisionMade)
+	s.True(secondCommandMade)
 
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
@@ -753,38 +753,38 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		workflowCompleteTimes++
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: nil,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Complete the workflow in cluster 1
@@ -886,16 +886,16 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -908,9 +908,9 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -923,14 +923,14 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1
@@ -1073,17 +1073,17 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:               workflowType,
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tl},
 					Input:                      payloads.EncodeBytes(buf.Bytes()),
@@ -1095,32 +1095,32 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// make some progress in cluster 1 and did some continueAsNew
@@ -1209,43 +1209,43 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					eventSignaled = true
-					return []*decisionpb.Decision{}, nil
+					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Send a signal in cluster 1
@@ -1399,8 +1399,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	timerCreated := false
 	timerFired := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		if !timerCreated {
 			timerCreated = true
@@ -1419,9 +1419,9 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 				Identity:   "",
 			})
 			s.NoError(err)
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_START_TIMER,
-				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:                   "timer-id",
 					StartToFireTimeoutSeconds: 2,
 				}},
@@ -1443,37 +1443,37 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 				}
 			}
 			if !timerFired {
-				return []*decisionpb.Decision{}, nil
+				return []*commandpb.Command{}, nil
 			}
 		}
 
 		workflowCompleted = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	for i := 0; i < 2; i++ {
@@ -1570,13 +1570,13 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activitySent := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if !activitySent {
 			activitySent = true
-			return []*decisionpb.Decision{{
-				DecisionType: enumspb.DECISION_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: "some random activity type"},
 					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
@@ -1596,9 +1596,9 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			}}, nil
 		}
 
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
@@ -1626,25 +1626,25 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity1,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler1,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity1,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler1,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity2,
-		DecisionHandler: dtHandler,
-		ActivityHandler: atHandler2,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity2,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler2,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -1722,8 +1722,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(activityRetryFound)
 }
 
-func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
-	namespace := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
+func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
+	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Name:                                 namespace,
@@ -1747,9 +1747,9 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-transient-decision-workflow-failover-test"
-	wt := "integration-transient-decision-workflow-failover-test-type"
-	tl := "integration-transient-decision-workflow-failover-test-taskqueue"
+	id := "integration-transient-workflow-task-workflow-failover-test"
+	wt := "integration-transient-workflow-task-workflow-failover-test-type"
+	tl := "integration-transient-workflow-task-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1777,45 +1777,45 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	decisionFailed := false
+	workflowTaskFailed := false
 	workflowFinished := false
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
-		if !decisionFailed {
-			decisionFailed = true
-			return nil, errors.New("random fail decision reason")
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if !workflowTaskFailed {
+			workflowTaskFailed = true
+			return nil, errors.New("random fail workflow task reason")
 		}
 
 		workflowFinished = true
-		return []*decisionpb.Decision{{
-			DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	poller1 := &host.TaskPoller{
-		Engine:          client1,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client1,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	poller2 := &host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
-	// this will fail the decision
+	// this will fail the workflow task
 	_, err = poller1.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
@@ -1835,7 +1835,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	// for failover transient decision, it is guaranteed that the transient decision
+	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 0
 	// for details see ReplicateTransientWorkflowTaskScheduled
 	_, err = poller2.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 0)
@@ -1890,25 +1890,25 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
-		return []*decisionpb.Decision{
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: payloads.EncodeString("cron-test-result"),
 				}},
 			}}, nil
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Failover during backoff
@@ -1997,26 +1997,26 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
-	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*decisionpb.Decision, error) {
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
-		return []*decisionpb.Decision{
+		return []*commandpb.Command{
 			{
-				DecisionType: enumspb.DECISION_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 					Failure: failure.NewServerFailure("retryable-error", false),
 				}},
 			}}, nil
 	}
 
 	poller2 := host.TaskPoller{
-		Engine:          client2,
-		Namespace:       namespace,
-		TaskQueue:       taskQueue,
-		Identity:        identity,
-		DecisionHandler: dtHandler,
-		Logger:          s.logger,
-		T:               s.T(),
+		Engine:              client2,
+		Namespace:           namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
 	}
 
 	// Update namespace to fail over

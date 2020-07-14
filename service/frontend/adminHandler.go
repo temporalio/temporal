@@ -354,7 +354,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		// for the rest variables in the token, since we do not do hmac,
 		// the only thing can be done is to trust the token:
 		// IsWorkflowRunning: not used
-		// TransientDecision: not used
+		// TransientWorkflowTask: not used
 		// PersistenceToken: trust
 		// ReplicationInfo: trust
 
@@ -396,7 +396,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		}, nil
 	}
 
-	// TODO need to deal with transient decision if to be used by client getting history
+	// TODO need to deal with transient workflow task if to be used by client getting history
 	var historyBatches []*historypb.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(

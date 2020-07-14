@@ -29,8 +29,8 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	decisionpb "go.temporal.io/api/decision/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -92,8 +92,8 @@ func (t *timerQueueActiveTaskExecutor) execute(
 		return t.executeUserTimerTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
 		return t.executeActivityTimeoutTask(timerTask)
-	case enumsspb.TASK_TYPE_DECISION_TIMEOUT:
-		return t.executeDecisionTimeoutTask(timerTask)
+	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
+		return t.executeWorkflowTaskTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return t.executeWorkflowTimeoutTask(timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
@@ -182,7 +182,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shard.GetTimeSource().Now()
 	updateMutableState := false
-	scheduleDecision := false
+	scheduleWorkflowTask := false
 
 	// need to clear activity heartbeat timer task mask for new activity timer task creation
 	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
@@ -252,16 +252,16 @@ Loop:
 			return err
 		}
 		updateMutableState = true
-		scheduleDecision = true
+		scheduleWorkflowTask = true
 	}
 
 	if !updateMutableState {
 		return nil
 	}
-	return t.updateWorkflowExecution(weContext, mutableState, scheduleDecision)
+	return t.updateWorkflowExecution(weContext, mutableState, scheduleWorkflowTask)
 }
 
-func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
+func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
@@ -282,55 +282,55 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleID := task.GetEventId()
-	decision, ok := mutableState.GetDecisionInfo(scheduleID)
+	workflowTask, ok := mutableState.GetWorkflowTaskInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_DECISION_TIMEOUT))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), workflowTask.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	if decision.Attempt != task.ScheduleAttempt {
+	if workflowTask.Attempt != task.ScheduleAttempt {
 		return nil
 	}
 
-	scheduleDecision := false
+	scheduleWorkflowTask := false
 	switch task.TimeoutType {
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
-			metrics.TimerActiveTaskDecisionTimeoutScope,
+			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
-			decision.ScheduleID,
-			decision.StartedID,
+			workflowTask.ScheduleID,
+			workflowTask.StartedID,
 		); err != nil {
 			return err
 		}
-		scheduleDecision = true
+		scheduleWorkflowTask = true
 
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		if decision.StartedID != common.EmptyEventID {
-			// decision has already started
+		if workflowTask.StartedID != common.EmptyEventID {
+			// workflowTask has already started
 			return nil
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
-			metrics.TimerActiveTaskDecisionTimeoutScope,
+			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
 		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduleID)
 		if err != nil {
 			return err
 		}
-		scheduleDecision = true
+		scheduleWorkflowTask = true
 	}
 
-	return t.updateWorkflowExecution(weContext, mutableState, scheduleDecision)
+	return t.updateWorkflowExecution(weContext, mutableState, scheduleWorkflowTask)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
@@ -359,7 +359,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
 	}
 
-	if mutableState.HasProcessedOrPendingDecision() {
+	if mutableState.HasProcessedOrPendingWorkflowTask() {
 		// already has workflow task
 		return nil
 	}
@@ -513,7 +513,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 		WorkflowType:                  startAttributes.WorkflowType,
 		TaskQueue:                     startAttributes.TaskQueue,
 		Input:                         startAttributes.Input,
@@ -566,13 +566,13 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	context workflowExecutionContext,
 	mutableState mutableState,
-	scheduleNewDecision bool,
+	scheduleNewWorkflowTask bool,
 ) error {
 
 	var err error
-	if scheduleNewDecision {
-		// Schedule a new decision.
-		err = scheduleDecision(mutableState)
+	if scheduleNewWorkflowTask {
+		// Schedule a new workflow task.
+		err = scheduleWorkflowTask(mutableState)
 		if err != nil {
 			return err
 		}

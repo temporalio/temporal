@@ -865,8 +865,8 @@ const (
 	TransferStandbyQueueProcessorScope
 	// TransferActiveTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferActiveTaskActivityScope
-	// TransferActiveTaskDecisionScope is the scope used for workflow task processing by transfer queue processor
-	TransferActiveTaskDecisionScope
+	// TransferActiveTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferActiveTaskWorkflowTaskScope
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope
 	// TransferActiveTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -885,8 +885,8 @@ const (
 	TransferStandbyTaskResetWorkflowScope
 	// TransferStandbyTaskActivityScope is the scope used for activity task processing by transfer queue processor
 	TransferStandbyTaskActivityScope
-	// TransferStandbyTaskDecisionScope is the scope used for workflow task processing by transfer queue processor
-	TransferStandbyTaskDecisionScope
+	// TransferStandbyTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
+	TransferStandbyTaskWorkflowTaskScope
 	// TransferStandbyTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferStandbyTaskCloseExecutionScope
 	// TransferStandbyTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
@@ -907,8 +907,8 @@ const (
 	TimerStandbyQueueProcessorScope
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope
-	// TimerActiveTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerActiveTaskDecisionTimeoutScope
+	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
+	TimerActiveTaskWorkflowTaskTimeoutScope
 	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
 	TimerActiveTaskUserTimerScope
 	// TimerActiveTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
@@ -921,8 +921,8 @@ const (
 	TimerActiveTaskDeleteHistoryEventScope
 	// TimerStandbyTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerStandbyTaskActivityTimeoutScope
-	// TimerStandbyTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerStandbyTaskDecisionTimeoutScope
+	// TimerStandbyTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
+	TimerStandbyTaskWorkflowTaskTimeoutScope
 	// TimerStandbyTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
 	TimerStandbyTaskUserTimerScope
 	// TimerStandbyTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
@@ -1438,7 +1438,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
 		TransferActiveTaskActivityScope:                        {operation: "TransferActiveTaskActivity"},
-		TransferActiveTaskDecisionScope:                        {operation: "TransferActiveTaskDecision"},
+		TransferActiveTaskWorkflowTaskScope:                    {operation: "TransferActiveTaskWorkflowTask"},
 		TransferActiveTaskCloseExecutionScope:                  {operation: "TransferActiveTaskCloseExecution"},
 		TransferActiveTaskCancelExecutionScope:                 {operation: "TransferActiveTaskCancelExecution"},
 		TransferActiveTaskSignalExecutionScope:                 {operation: "TransferActiveTaskSignalExecution"},
@@ -1447,7 +1447,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferActiveTaskResetWorkflowScope:                   {operation: "TransferActiveTaskResetWorkflow"},
 		TransferActiveTaskUpsertWorkflowSearchAttributesScope:  {operation: "TransferActiveTaskUpsertWorkflowSearchAttributes"},
 		TransferStandbyTaskActivityScope:                       {operation: "TransferStandbyTaskActivity"},
-		TransferStandbyTaskDecisionScope:                       {operation: "TransferStandbyTaskDecision"},
+		TransferStandbyTaskWorkflowTaskScope:                   {operation: "TransferStandbyTaskWorkflowTask"},
 		TransferStandbyTaskCloseExecutionScope:                 {operation: "TransferStandbyTaskCloseExecution"},
 		TransferStandbyTaskCancelExecutionScope:                {operation: "TransferStandbyTaskCancelExecution"},
 		TransferStandbyTaskSignalExecutionScope:                {operation: "TransferStandbyTaskSignalExecution"},
@@ -1459,14 +1459,14 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerActiveQueueProcessorScope:                         {operation: "TimerActiveQueueProcessor"},
 		TimerStandbyQueueProcessorScope:                        {operation: "TimerStandbyQueueProcessor"},
 		TimerActiveTaskActivityTimeoutScope:                    {operation: "TimerActiveTaskActivityTimeout"},
-		TimerActiveTaskDecisionTimeoutScope:                    {operation: "TimerActiveTaskDecisionTimeout"},
+		TimerActiveTaskWorkflowTaskTimeoutScope:                {operation: "TimerActiveTaskWorkflowTaskTimeout"},
 		TimerActiveTaskUserTimerScope:                          {operation: "TimerActiveTaskUserTimer"},
 		TimerActiveTaskWorkflowTimeoutScope:                    {operation: "TimerActiveTaskWorkflowTimeout"},
 		TimerActiveTaskActivityRetryTimerScope:                 {operation: "TimerActiveTaskActivityRetryTimer"},
 		TimerActiveTaskWorkflowBackoffTimerScope:               {operation: "TimerActiveTaskWorkflowBackoffTimer"},
 		TimerActiveTaskDeleteHistoryEventScope:                 {operation: "TimerActiveTaskDeleteHistoryEvent"},
 		TimerStandbyTaskActivityTimeoutScope:                   {operation: "TimerStandbyTaskActivityTimeout"},
-		TimerStandbyTaskDecisionTimeoutScope:                   {operation: "TimerStandbyTaskDecisionTimeout"},
+		TimerStandbyTaskWorkflowTaskTimeoutScope:               {operation: "TimerStandbyTaskWorkflowTaskTimeout"},
 		TimerStandbyTaskUserTimerScope:                         {operation: "TimerStandbyTaskUserTimer"},
 		TimerStandbyTaskWorkflowTimeoutScope:                   {operation: "TimerStandbyTaskWorkflowTimeout"},
 		TimerStandbyTaskActivityRetryTimerScope:                {operation: "TimerStandbyTaskActivityRetryTimer"},
@@ -1687,22 +1687,22 @@ const (
 	ActivityE2ELatency
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
-	DecisionTypeScheduleActivityCounter
-	DecisionTypeCompleteWorkflowCounter
-	DecisionTypeFailWorkflowCounter
-	DecisionTypeCancelWorkflowCounter
-	DecisionTypeStartTimerCounter
-	DecisionTypeCancelActivityCounter
-	DecisionTypeCancelTimerCounter
-	DecisionTypeRecordMarkerCounter
-	DecisionTypeCancelExternalWorkflowCounter
-	DecisionTypeChildWorkflowCounter
-	DecisionTypeContinueAsNewCounter
-	DecisionTypeSignalExternalWorkflowCounter
-	DecisionTypeUpsertWorkflowSearchAttributesCounter
-	EmptyCompletionDecisionsCounter
-	MultipleCompletionDecisionsCounter
-	FailedDecisionsCounter
+	CommandTypeScheduleActivityCounter
+	CommandTypeCompleteWorkflowCounter
+	CommandTypeFailWorkflowCounter
+	CommandTypeCancelWorkflowCounter
+	CommandTypeStartTimerCounter
+	CommandTypeCancelActivityCounter
+	CommandTypeCancelTimerCounter
+	CommandTypeRecordMarkerCounter
+	CommandTypeCancelExternalWorkflowCounter
+	CommandTypeChildWorkflowCounter
+	CommandTypeContinueAsNewCounter
+	CommandTypeSignalExternalWorkflowCounter
+	CommandTypeUpsertWorkflowSearchAttributesCounter
+	EmptyCompletionCommandsCounter
+	MultipleCompletionCommandsCounter
+	FailedWorkflowTasksCounter
 	StaleMutableStateCounter
 	AutoResetPointsLimitExceededCounter
 	AutoResetPointCorruptionCounter
@@ -1742,9 +1742,9 @@ const (
 	GetEngineForShardErrorCounter
 	GetEngineForShardLatency
 	RemoveEngineForShardLatency
-	CompleteDecisionWithStickyEnabledCounter
-	CompleteDecisionWithStickyDisabledCounter
-	DecisionHeartbeatTimeoutCounter
+	CompleteWorkflowTaskWithStickyEnabledCounter
+	CompleteWorkflowTaskWithStickyDisabledCounter
+	WorkflowTaskHeartbeatTimeoutCounter
 	HistoryEventNotificationQueueingLatency
 	HistoryEventNotificationFanoutLatency
 	HistoryEventNotificationInFlightMessageGauge
@@ -1823,7 +1823,7 @@ const (
 	DirectQueryDispatchTimeoutBeforeNonStickyCount
 	WorkflowTaskQueryLatency
 	ConsistentQueryTimeoutCount
-	QueryBeforeFirstDecisionCount
+	QueryBeforeFirstWorkflowTaskCount
 	QueryBufferExceededCount
 	QueryRegistryInvalidStateCount
 	WorkerNotSupportsConsistentQueryCount
@@ -2102,22 +2102,22 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},
-		DecisionTypeScheduleActivityCounter:               {metricName: "schedule_activity_decision", metricType: Counter},
-		DecisionTypeCompleteWorkflowCounter:               {metricName: "complete_workflow_decision", metricType: Counter},
-		DecisionTypeFailWorkflowCounter:                   {metricName: "fail_workflow_decision", metricType: Counter},
-		DecisionTypeCancelWorkflowCounter:                 {metricName: "cancel_workflow_decision", metricType: Counter},
-		DecisionTypeStartTimerCounter:                     {metricName: "start_timer_decision", metricType: Counter},
-		DecisionTypeCancelActivityCounter:                 {metricName: "cancel_activity_decision", metricType: Counter},
-		DecisionTypeCancelTimerCounter:                    {metricName: "cancel_timer_decision", metricType: Counter},
-		DecisionTypeRecordMarkerCounter:                   {metricName: "record_marker_decision", metricType: Counter},
-		DecisionTypeCancelExternalWorkflowCounter:         {metricName: "cancel_external_workflow_decision", metricType: Counter},
-		DecisionTypeContinueAsNewCounter:                  {metricName: "continue_as_new_decision", metricType: Counter},
-		DecisionTypeSignalExternalWorkflowCounter:         {metricName: "signal_external_workflow_decision", metricType: Counter},
-		DecisionTypeUpsertWorkflowSearchAttributesCounter: {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
-		DecisionTypeChildWorkflowCounter:                  {metricName: "child_workflow_decision", metricType: Counter},
-		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
-		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
-		FailedDecisionsCounter:                            {metricName: "failed_decisions", metricType: Counter},
+		CommandTypeScheduleActivityCounter:                {metricName: "schedule_activity_command", metricType: Counter},
+		CommandTypeCompleteWorkflowCounter:                {metricName: "complete_workflow_command", metricType: Counter},
+		CommandTypeFailWorkflowCounter:                    {metricName: "fail_workflow_command", metricType: Counter},
+		CommandTypeCancelWorkflowCounter:                  {metricName: "cancel_workflow_command", metricType: Counter},
+		CommandTypeStartTimerCounter:                      {metricName: "start_timer_command", metricType: Counter},
+		CommandTypeCancelActivityCounter:                  {metricName: "cancel_activity_command", metricType: Counter},
+		CommandTypeCancelTimerCounter:                     {metricName: "cancel_timer_command", metricType: Counter},
+		CommandTypeRecordMarkerCounter:                    {metricName: "record_marker_command", metricType: Counter},
+		CommandTypeCancelExternalWorkflowCounter:          {metricName: "cancel_external_workflow_command", metricType: Counter},
+		CommandTypeContinueAsNewCounter:                   {metricName: "continue_as_new_command", metricType: Counter},
+		CommandTypeSignalExternalWorkflowCounter:          {metricName: "signal_external_workflow_command", metricType: Counter},
+		CommandTypeUpsertWorkflowSearchAttributesCounter:  {metricName: "upsert_workflow_search_attributes_command", metricType: Counter},
+		CommandTypeChildWorkflowCounter:                   {metricName: "child_workflow_command", metricType: Counter},
+		EmptyCompletionCommandsCounter:                    {metricName: "empty_completion_commands", metricType: Counter},
+		MultipleCompletionCommandsCounter:                 {metricName: "multiple_completion_commands", metricType: Counter},
+		FailedWorkflowTasksCounter:                        {metricName: "failed_workflow_tasks", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},
 		AutoResetPointsLimitExceededCounter:               {metricName: "auto_reset_points_exceed_limit", metricType: Counter},
 		AutoResetPointCorruptionCounter:                   {metricName: "auto_reset_point_corruption", metricType: Counter},
@@ -2157,9 +2157,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetEngineForShardErrorCounter:                     {metricName: "get_engine_for_shard_errors", metricType: Counter},
 		GetEngineForShardLatency:                          {metricName: "get_engine_for_shard_latency", metricType: Timer},
 		RemoveEngineForShardLatency:                       {metricName: "remove_engine_for_shard_latency", metricType: Timer},
-		CompleteDecisionWithStickyEnabledCounter:          {metricName: "complete_decision_sticky_enabled_count", metricType: Counter},
-		CompleteDecisionWithStickyDisabledCounter:         {metricName: "complete_decision_sticky_disabled_count", metricType: Counter},
-		DecisionHeartbeatTimeoutCounter:                   {metricName: "decision_heartbeat_timeout_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyEnabledCounter:      {metricName: "complete_workflow_task_sticky_enabled_count", metricType: Counter},
+		CompleteWorkflowTaskWithStickyDisabledCounter:     {metricName: "complete_workflow_task_sticky_disabled_count", metricType: Counter},
+		WorkflowTaskHeartbeatTimeoutCounter:               {metricName: "workflow_task_heartbeat_timeout_count", metricType: Counter},
 		HistoryEventNotificationQueueingLatency:           {metricName: "history_event_notification_queueing_latency", metricType: Timer},
 		HistoryEventNotificationFanoutLatency:             {metricName: "history_event_notification_fanout_latency", metricType: Timer},
 		HistoryEventNotificationInFlightMessageGauge:      {metricName: "history_event_notification_inflight_message_gauge", metricType: Gauge},
@@ -2238,7 +2238,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DirectQueryDispatchTimeoutBeforeNonStickyCount:    {metricName: "direct_query_dispatch_timeout_before_non_sticky", metricType: Counter},
 		WorkflowTaskQueryLatency:                          {metricName: "workflow_task_query_latency", metricType: Timer},
 		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
-		QueryBeforeFirstDecisionCount:                     {metricName: "query_before_first_decision", metricType: Counter},
+		QueryBeforeFirstWorkflowTaskCount:                 {metricName: "query_before_first_workflow_task", metricType: Counter},
 		QueryBufferExceededCount:                          {metricName: "query_buffer_exceeded", metricType: Counter},
 		QueryRegistryInvalidStateCount:                    {metricName: "query_registry_invalid_state", metricType: Counter},
 		WorkerNotSupportsConsistentQueryCount:             {metricName: "worker_not_supports_consistent_query", metricType: Counter},

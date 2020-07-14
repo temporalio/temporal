@@ -103,7 +103,7 @@ func printPollerInfo(pollers []*taskqueuepb.PollerInfo, taskQueueType enumspb.Ta
 	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
-		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
+		table.SetHeader([]string{"Workflow Poller Identity", "Last Access Time"})
 	}
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
