@@ -1529,7 +1529,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 				WorkflowExecutionTimeoutSeconds: 2,
 				WorkflowTaskTimeoutSeconds:      1,
 			},
-			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		},
 	)
 	s.Nil(err)
@@ -2030,7 +2030,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			InitiatedId: task.GetScheduleId(),
 		},
 		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now),
-		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 	}
 }
 

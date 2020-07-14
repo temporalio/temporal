@@ -113,8 +113,8 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HistoryServiceClient interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-	// first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
+	// initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(ctx context.Context, in *StartWorkflowExecutionRequest, opts ...grpc.CallOption) (*StartWorkflowExecutionResponse, error)
 	// Returns the information from mutable state of workflow execution.
@@ -142,10 +142,10 @@ type HistoryServiceClient interface {
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(ctx context.Context, in *RecordActivityTaskStartedRequest, opts ...grpc.CallOption) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
-	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
-	// for completing the WorkflowTask.
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new result in new commands for the
+	// workflow execution and potentially new ActivityTasks created for correspondent commands. It will also create a
+	// WorkflowTaskCompleted event in the history for that session.  Use the 'taskToken' provided as response of
+	// PollWorkflowTaskQueue API call for completing the WorkflowTask.
 	RespondWorkflowTaskCompleted(ctx context.Context, in *RespondWorkflowTaskCompletedRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskCompletedResponse, error)
 	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
 	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to
@@ -598,8 +598,8 @@ func (c *historyServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Ref
 // HistoryServiceServer is the server API for HistoryService service.
 type HistoryServiceServer interface {
 	// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
-	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
-	// first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
+	// 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
+	// initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 	// exists with same workflowId.
 	StartWorkflowExecution(context.Context, *StartWorkflowExecutionRequest) (*StartWorkflowExecutionResponse, error)
 	// Returns the information from mutable state of workflow execution.
@@ -627,10 +627,10 @@ type HistoryServiceServer interface {
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(context.Context, *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
-	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new events for the workflow execution and
-	// potentially new ActivityTask being created for corresponding commands.  It will also create a WorkflowTaskCompleted
-	// event in the history for that session.  Use the 'taskToken' provided as response of PollWorkflowTaskQueue API call
-	// for completing the WorkflowTask.
+	// 'PollWorkflowTaskQueue' API call.  Completing a WorkflowTask will result in new result in new commands for the
+	// workflow execution and potentially new ActivityTasks created for correspondent commands. It will also create a
+	// WorkflowTaskCompleted event in the history for that session.  Use the 'taskToken' provided as response of
+	// PollWorkflowTaskQueue API call for completing the WorkflowTask.
 	RespondWorkflowTaskCompleted(context.Context, *RespondWorkflowTaskCompletedRequest) (*RespondWorkflowTaskCompletedResponse, error)
 	// RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
 	// WorkflowTaskFailedEvent written to the history and a new WorkflowTask created.  This API can be used by client to

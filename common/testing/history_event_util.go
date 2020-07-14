@@ -295,7 +295,7 @@ func InitializeHistoryEventGenerator(
 			WorkflowRunTimeoutSeconds:    timeout,
 			WorkflowTaskTimeoutSeconds:   timeout,
 			WorkflowTaskCompletedEventId: eventID - 1,
-			Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_DECIDER,
+			Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		}}
 		return historyEvent
 	})
