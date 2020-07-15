@@ -1653,8 +1653,10 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	if attributes.TaskQueue != nil {
 		taskQueue = attributes.TaskQueue.GetName()
 	}
-	tl := &taskqueuepb.TaskQueue{}
-	tl.Name = taskQueue
+	tq := &taskqueuepb.TaskQueue{
+		Name: taskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	workflowType := previousExecutionInfo.WorkflowTypeName
 	if attributes.WorkflowType != nil {
@@ -1678,7 +1680,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		RequestId:                       uuid.New(),
 		Namespace:                       e.namespaceEntry.GetInfo().Name,
 		WorkflowId:                      execution.WorkflowId,
-		TaskQueue:                       tl,
+		TaskQueue:                       tq,
 		WorkflowType:                    wType,
 		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,

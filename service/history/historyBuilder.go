@@ -1051,6 +1051,7 @@ func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, tas
 	attributes := &historypb.WorkflowTaskScheduledEventAttributes{}
 	attributes.TaskQueue = &taskqueuepb.TaskQueue{}
 	attributes.TaskQueue.Name = taskQueue
+	attributes.TaskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	attributes.StartToCloseTimeoutSeconds = startToCloseTimeoutSeconds
 	attributes.Attempt = attempt
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: attributes}

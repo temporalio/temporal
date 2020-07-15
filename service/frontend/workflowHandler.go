@@ -2866,8 +2866,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		NamespaceId:      queryTaskToken.GetNamespaceId(),
-		TaskQueue:        &taskqueuepb.TaskQueue{Name: queryTaskToken.GetTaskQueue()},
+		NamespaceId: queryTaskToken.GetNamespaceId(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: queryTaskToken.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 		TaskId:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}

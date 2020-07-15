@@ -1074,13 +1074,19 @@ func (e *historyEngineImpl) getMutableState(
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	retResp = &historyservice.GetMutableStateResponse{
-		Execution:                             &execution,
-		WorkflowType:                          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:                      mutableState.GetLastFirstEventID(),
-		NextEventId:                           mutableState.GetNextEventID(),
-		PreviousStartedEventId:                mutableState.GetPreviousStartedEventID(),
-		TaskQueue:                             &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
-		StickyTaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.StickyTaskQueue},
+		Execution:              &execution,
+		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+		LastFirstEventId:       mutableState.GetLastFirstEventID(),
+		NextEventId:            mutableState.GetNextEventID(),
+		PreviousStartedEventId: mutableState.GetPreviousStartedEventID(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: executionInfo.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		StickyTaskQueue: &taskqueuepb.TaskQueue{
+			Name: executionInfo.StickyTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		},
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
@@ -1221,7 +1227,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: executionInfo.TaskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
 			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
