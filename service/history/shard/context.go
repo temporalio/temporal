@@ -513,7 +513,7 @@ Create_Loop:
 							"Closing shard: CreateWorkflowExecution failed due to stolen shard.",
 							tag.ShardID(s.GetShardID()),
 							tag.Error(err),
-							)
+						)
 						s.closeShard()
 						break Create_Loop
 					}
@@ -973,26 +973,42 @@ func (s *contextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID})
-	if err != nil {
-		// Shard is stolen, trigger history engine shutdown
-		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
+	var err error
+	var attempt int32
+Retry_Loop:
+	for attempt = 0; attempt < conditionalRetryCount; attempt++ {
+		err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
+			ShardInfo:       updatedShardInfo,
+			PreviousRangeID: s.shardInfo.RangeID})
+		switch err.(type) {
+		case nil:
+			break Retry_Loop
+		case *persistence.ShardOwnershipLostError:
+			// Shard is stolen, trigger history engine shutdown
 			s.logger.Warn(
 				"Closing shard: renewRangeLocked failed due to stolen shard.",
 				tag.ShardID(s.GetShardID()),
 				tag.Error(err),
+				tag.Attempt(attempt),
 			)
 			s.closeShard()
-		} else {
-			// Failure in updating shard to grab new RangeID
-			s.logger.Error("renewRangeLocked failed due to unknown error.",
-				tag.StoreOperationUpdateShard,
+			break Retry_Loop
+		default:
+			s.logger.Warn("UpdateShard failed with an unknown error.",
 				tag.Error(err),
 				tag.ShardRangeID(updatedShardInfo.RangeID),
-				tag.PreviousShardRangeID(s.shardInfo.RangeID))
+				tag.PreviousShardRangeID(s.shardInfo.RangeID),
+				tag.Attempt(attempt))
 		}
+	}
+	if err != nil {
+		// Failure in updating shard to grab new RangeID
+		s.logger.Error("renewRangeLocked failed.",
+			tag.StoreOperationUpdateShard,
+			tag.Error(err),
+			tag.ShardRangeID(updatedShardInfo.RangeID),
+			tag.PreviousShardRangeID(s.shardInfo.RangeID),
+			tag.Attempt(attempt))
 		return err
 	}
 
@@ -1249,6 +1265,7 @@ func (s *contextImpl) ReplicateFailoverMarkers(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	var err error
+Retry_Loop:
 	for attempt := int32(0); attempt < conditionalRetryCount; attempt++ {
 		err = s.executionManager.CreateFailoverMarkerTasks(
 			&persistence.CreateFailoverMarkersRequest{
@@ -1258,7 +1275,7 @@ func (s *contextImpl) ReplicateFailoverMarkers(
 		)
 		switch err.(type) {
 		case nil:
-			break
+			break Retry_Loop
 		case *persistence.ShardOwnershipLostError:
 			// do not retry on ShardOwnershipLostError
 			s.logger.Warn(
@@ -1267,7 +1284,7 @@ func (s *contextImpl) ReplicateFailoverMarkers(
 				tag.Error(err),
 			)
 			s.closeShard()
-			break
+			break Retry_Loop
 		default:
 			s.logger.Error(
 				"Failed to insert the failover marker into replication queue.",
