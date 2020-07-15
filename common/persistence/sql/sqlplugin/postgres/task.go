@@ -34,14 +34,14 @@ import (
 )
 
 const (
-	taskQueueCreatePart = `INTO task_queues(range_hash, namespace_id, name, task_type, range_id, data, data_encoding) ` +
-		`VALUES (:range_hash, :namespace_id, :name, :task_type, :range_id, :data, :data_encoding)`
+	taskQueueCreatePart = `INTO task_queues(range_hash, task_queue_id, range_id, data, data_encoding) ` +
+		`VALUES (:range_hash, :task_queue_id, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
 	replaceTaskQueueQry = `INSERT ` + taskQueueCreatePart +
-		`ON CONFLICT (range_hash, namespace_id, name, task_type) DO UPDATE
+		`ON CONFLICT (range_hash, task_queue_id) DO UPDATE
 SET range_id = excluded.range_id,
 data = excluded.data,
 data_encoding = excluded.data_encoding`
@@ -52,26 +52,24 @@ data = :data,
 data_encoding = :data_encoding
 WHERE
 range_hash = :range_hash AND
-namespace_id = :namespace_id AND
-name = :name AND
-task_type = :task_type
+task_queue_id = :task_queue_id
 `
-	listTaskQueueWithShardRangeQry = `SELECT range_hash, namespace_id, range_id, name, task_type, data, data_encoding ` +
-		`FROM task_queues ` +
-		`WHERE range_hash >= $1 AND range_hash <= $2 ORDER BY range_hash, namespace_id,name,task_type LIMIT $3`
 
-	listTaskQueueQry = `SELECT range_hash, namespace_id, range_id, name, task_type, data, data_encoding ` +
-		`FROM task_queues ` +
-		`WHERE range_hash = $1 AND namespace_id > $2 AND name > $3 AND task_type > $4 ORDER BY range_hash, namespace_id,name,task_type LIMIT $5`
+	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding from task_queues `
 
-	getTaskQueueQry = `SELECT range_hash, namespace_id, range_id, name, task_type, data, data_encoding ` +
-		`FROM task_queues ` +
-		`WHERE range_hash = $1 AND namespace_id = $2 AND name = $3 AND task_type = $4`
+	listTaskQueueWithHashRangeQry = listTaskQueueRowSelect +
+		`WHERE range_hash >= $1 AND range_hash <= $2 AND task_queue_id > $3 ORDER BY task_queue_id ASC LIMIT $4`
 
-	deleteTaskQueueQry = `DELETE FROM task_queues WHERE range_hash=$1 AND namespace_id=$2 AND name=$3 AND task_type=$4 AND range_id=$5`
+	listTaskQueueQry = listTaskQueueRowSelect +
+		`WHERE range_hash = $1 AND task_queue_id > $2 ORDER BY task_queue_id ASC LIMIT $3`
+
+	getTaskQueueQry = listTaskQueueRowSelect +
+		`WHERE range_hash = $1 AND task_queue_id=$2`
+
+	deleteTaskQueueQry = `DELETE FROM task_queues WHERE range_hash=$1 AND task_queue_id=$2 AND range_id=$3`
 
 	lockTaskQueueQry = `SELECT range_id FROM task_queues ` +
-		`WHERE range_hash = $1 AND namespace_id = $2 AND name = $3 AND task_type = $4 FOR UPDATE`
+		`WHERE range_hash=$1 AND task_queue_id=$2 FOR UPDATE`
 
 	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
@@ -148,14 +146,14 @@ func (pdb *db) UpdateTaskQueues(row *sqlplugin.TaskQueuesRow) (sql.Result, error
 // SelectFromTaskQueues reads one or more rows from task_queues table
 func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
-	case filter.NamespaceID != nil && filter.Name != nil && filter.TaskType != nil:
+	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
 			return nil, serviceerror.NewInternal("shardID range not supported for specific selection")
 		}
 		return pdb.selectFromTaskQueues(filter)
 	case filter.RangeHashLessThanEqualTo != 0:
 		return pdb.rangeSelectFromTaskQueues(filter)
-	case filter.NamespaceIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
+	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
 		return pdb.rangeSelectFromTaskQueues(filter)
 	default:
 		return nil, serviceerror.NewInternal("invalid set of query filter params")
@@ -165,7 +163,7 @@ func (pdb *db) SelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlpl
 func (pdb *db) selectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
-	err = pdb.conn.Get(&row, getTaskQueueQry, filter.RangeHash, *filter.NamespaceID, *filter.Name, *filter.TaskType)
+	err = pdb.conn.Get(&row, getTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,11 +174,11 @@ func (pdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
 	if filter.RangeHashLessThanEqualTo > 0 {
-		err = pdb.conn.Select(&rows, listTaskQueueWithShardRangeQry,
-			filter.RangeHashGreaterThanEqualTo, filter.RangeHashLessThanEqualTo, *filter.PageSize)
+		err = pdb.conn.Select(&rows, listTaskQueueWithHashRangeQry,
+			filter.RangeHashGreaterThanEqualTo, filter.RangeHashLessThanEqualTo, filter.TaskQueueIDGreaterThan, *filter.PageSize)
 	} else {
 		err = pdb.conn.Select(&rows, listTaskQueueQry,
-			filter.RangeHash, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+			filter.RangeHash, filter.TaskQueueIDGreaterThan, *filter.PageSize)
 	}
 	if err != nil {
 		return nil, err
@@ -191,12 +189,12 @@ func (pdb *db) rangeSelectFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) ([]
 
 // DeleteFromTaskQueues deletes a row from task_queues table
 func (pdb *db) DeleteFromTaskQueues(filter *sqlplugin.TaskQueuesFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteTaskQueueQry, filter.RangeHash, *filter.NamespaceID, *filter.Name, *filter.TaskType, *filter.RangeID)
+	return pdb.conn.Exec(deleteTaskQueueQry, filter.RangeHash, filter.TaskQueueID, *filter.RangeID)
 }
 
 // LockTaskQueues locks a row in task_queues table
 func (pdb *db) LockTaskQueues(filter *sqlplugin.TaskQueuesFilter) (int64, error) {
 	var rangeID int64
-	err := pdb.conn.Get(&rangeID, lockTaskQueueQry, filter.RangeHash, *filter.NamespaceID, *filter.Name, *filter.TaskType)
+	err := pdb.conn.Get(&rangeID, lockTaskQueueQry, filter.RangeHash, filter.TaskQueueID)
 	return rangeID, err
 }

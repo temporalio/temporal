@@ -424,9 +424,9 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 	}
 	s.deleteAllTaskQueue()
 	resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
+	s.Equal(0, len(resp.Items))
 	s.NoError(err)
 	s.Nil(resp.NextPageToken)
-	s.Equal(0, len(resp.Items))
 
 	rangeID := int64(0)
 	ackLevel := int64(0)

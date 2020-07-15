@@ -230,9 +230,7 @@ type (
 	// TaskQueuesRow represents a row in task_queues table
 	TaskQueuesRow struct {
 		RangeHash    uint32
-		NamespaceID  primitives.UUID
-		Name         string
-		TaskType     int64
+		TaskQueueID  []byte
 		RangeID      int64
 		Data         []byte
 		DataEncoding string
@@ -244,12 +242,8 @@ type (
 		RangeHash                   uint32
 		RangeHashGreaterThanEqualTo uint32
 		RangeHashLessThanEqualTo    uint32
-		NamespaceID                 *primitives.UUID
-		Name                        *string
-		TaskType                    *int64
-		NamespaceIDGreaterThan      *primitives.UUID
-		NameGreaterThan             *string
-		TaskTypeGreaterThan         *int64
+		TaskQueueID                 []byte
+		TaskQueueIDGreaterThan      []byte
 		RangeID                     *int64
 		PageSize                    *int
 	}
