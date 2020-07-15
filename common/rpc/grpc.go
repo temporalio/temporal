@@ -29,11 +29,11 @@ import (
 	"crypto/tls"
 
 	"github.com/gogo/status"
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/serviceerror"
 )
 
 const (

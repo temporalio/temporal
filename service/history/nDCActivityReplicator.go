@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -252,7 +253,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		if currentVersionHistory.IsLCAAppendable(lcaItem) || incomingVersionHistory.IsLCAAppendable(lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventID() {
-				return false, newNDCRetryTaskErrorWithHint(
+				return false, serviceerrors.NewRetryTaskV2(
 					resendMissingEventMessage,
 					namespaceID,
 					workflowID,
@@ -270,7 +271,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				return false, nil
 			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
 				// case 2-2
-				return false, newNDCRetryTaskErrorWithHint(
+				return false, serviceerrors.NewRetryTaskV2(
 					resendHigherVersionMessage,
 					namespaceID,
 					workflowID,
@@ -304,7 +305,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 			// version >= last write version
 			// this can happen if out of order delivery happens
-			return false, newRetryTaskErrorWithHint(
+			return false, serviceerrors.NewRetryTask(
 				ErrRetrySyncActivityMsg,
 				namespaceID,
 				workflowID,

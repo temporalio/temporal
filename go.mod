@@ -77,3 +77,5 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
+
+replace go.temporal.io/api v0.26.1-0.20200714004414-a2b31a0f7797 => ../temporal-proto-go

@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -756,7 +757,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		request.CurrentBranchToken = response.CurrentBranchToken
 	}
 	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-		return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
+		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
@@ -782,7 +783,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		}
 		// check again if the current branch token changed
 		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-			return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
+			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return response, nil
@@ -803,7 +804,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
-					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
+					return nil, serviceerrors.NewCurrentBranchChanged(event.currentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
@@ -1394,7 +1395,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
 				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
-				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
+				return serviceerrors.NewEventAlreadyStarted("Activity task already started.")
 			}
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(

@@ -13,7 +13,7 @@ frontend.validSearchAttributes:
       StartTime: "Int"
       ExecutionTime: "Int"
       CloseTime: "Int"
-      Status: "Int"
+      ExecutionStatus: "Int"
       HistoryLength: "Int"
       TaskQueue: "Keyword"
       CustomStringField: "String"
