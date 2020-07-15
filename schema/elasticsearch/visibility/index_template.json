@@ -35,10 +35,10 @@
           "type": "long"
         },
         "ExecutionStatus": {
-          "type": "integer"
+          "type": "long"
         },
         "HistoryLength": {
-          "type": "integer"
+          "type": "long"
         },
         "KafkaKey": {
           "type": "keyword"
