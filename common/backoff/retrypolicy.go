@@ -101,7 +101,7 @@ func NewRetrier(policy RetryPolicy, clock Clock) Retrier {
 		policy:         policy,
 		clock:          clock,
 		startTime:      clock.Now(),
-		currentAttempt: 0,
+		currentAttempt: 1,
 	}
 }
 

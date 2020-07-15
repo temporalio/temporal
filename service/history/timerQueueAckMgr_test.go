@@ -196,7 +196,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 				TaskType:        1,
 				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				EventId:         int64(28),
-				ScheduleAttempt: 0,
+				ScheduleAttempt: 1,
 			},
 		},
 		NextPageToken: []byte("some random output next page token"),
@@ -233,7 +233,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 				TaskType:        1,
 				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				EventId:         int64(28),
-				ScheduleAttempt: 0,
+				ScheduleAttempt: 1,
 			},
 		},
 		NextPageToken: nil,
@@ -268,7 +268,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
 		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
@@ -311,7 +311,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 		Version:         int64(79),
 	}
 
@@ -357,7 +357,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -404,7 +404,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 		Version:         int64(79),
 	}
 
@@ -438,7 +438,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	timer2 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:     TestNamespaceId,
@@ -449,7 +449,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(29),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	timer3 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:     TestNamespaceId,
@@ -460,7 +460,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(30),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
 		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},
@@ -517,7 +517,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 		Version:         int64(79),
 	}
 
@@ -642,7 +642,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 
 	timer2 := &persistenceblobs.TimerTaskInfo{
@@ -654,7 +654,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -746,7 +746,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(28),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	timer2 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:     TestNamespaceId,
@@ -757,7 +757,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(29),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	timer3 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:     TestNamespaceId,
@@ -768,7 +768,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		TaskType:        1,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventId:         int64(30),
-		ScheduleAttempt: 0,
+		ScheduleAttempt: 1,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
 		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},

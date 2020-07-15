@@ -228,6 +228,7 @@ func newMutableStateBuilder(
 		WorkflowTaskStartedID:      common.EmptyEventID,
 		WorkflowTaskRequestID:      emptyUUID,
 		CurrentWorkflowTaskTimeout: 0,
+		WorkflowTaskAttempt:        1,
 
 		NextEventID:        common.FirstEventID,
 		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

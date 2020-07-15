@@ -599,10 +599,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
 		StartedID:           common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: 0,
-		Attempt:             0,
+		Attempt:             1,
 		StartedTimestamp:    0,
 		ScheduledTimestamp:  0,
-		TaskQueue:           "",
+
+		TaskQueue: "",
 		// Keep the last original scheduled timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
 		OriginalScheduledTimestamp: m.getWorkflowTaskInfo().OriginalScheduledTimestamp,
 	}
