@@ -42,7 +42,7 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
-	github.com/olivere/elastic v6.2.32+incompatible
+	github.com/olivere/elastic v6.2.34+incompatible
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect
 	github.com/pborman/uuid v1.2.0
