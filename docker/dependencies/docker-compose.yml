@@ -53,9 +53,6 @@ services:
       - temporal-dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
-    # This is the full image which includes everything but needs a license after some grace period.
-    # image: docker.elastic.co/elasticsearch/elasticsearch:6.4.0
-
     # Make ES available both on _local_ and _site_,
     # and use use _local_ for the publish_host.
     #
