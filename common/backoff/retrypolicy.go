@@ -34,12 +34,12 @@ const (
 	// NoInterval represents Maximim interval
 	NoInterval                      = 0
 	done              time.Duration = -1
-	oneMaximumAttempt               = 1
+	noMaximumAttempts               = 0
 
 	defaultBackoffCoefficient = 2.0
 	defaultMaximumInterval    = 10 * time.Second
 	defaultExpirationInterval = time.Minute
-	defaultMaximumAttempts    = oneMaximumAttempt
+	defaultMaximumAttempts    = noMaximumAttempts
 )
 
 type (
@@ -137,7 +137,7 @@ func (p *ExponentialRetryPolicy) SetMaximumAttempts(maximumAttempts int) {
 // ComputeNextDelay returns the next delay interval.  This is used by Retrier to delay calling the operation again
 func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
 	// Check to see if we ran out of maximum number of attempts
-	if p.maximumAttempts != oneMaximumAttempt && numAttempts >= p.maximumAttempts {
+	if p.maximumAttempts != noMaximumAttempts && numAttempts > p.maximumAttempts {
 		return done
 	}
 

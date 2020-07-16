@@ -219,7 +219,7 @@ func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
 	policy.SetBackoffCoefficient(2)
 	policy.SetMaximumInterval(NoInterval)
 	policy.SetExpirationInterval(NoInterval)
-	policy.SetMaximumAttempts(oneMaximumAttempt)
+	policy.SetMaximumAttempts(noMaximumAttempts)
 
 	return policy
 }
