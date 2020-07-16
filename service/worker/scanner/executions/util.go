@@ -110,12 +110,12 @@ func getShortActivityContext(ctx workflow.Context) workflow.Context {
 func getLongActivityContext(ctx workflow.Context) workflow.Context {
 	activityOptions := workflow.ActivityOptions{
 		ScheduleToStartTimeout: time.Minute,
-		StartToCloseTimeout:    8 * time.Hour,
+		StartToCloseTimeout:    48 * time.Hour,
 		HeartbeatTimeout:       time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       1.7,
-			ExpirationInterval:       8 * time.Hour,
+			ExpirationInterval:       48 * time.Hour,
 			NonRetriableErrorReasons: []string{ErrScanWorkflowNotClosed, ErrSerialization},
 		},
 	}
