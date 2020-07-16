@@ -3045,7 +3045,9 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
 			return nil, err
 		}
-		tasks = append(tasks, task)
+		if task != nil {
+			tasks = append(tasks, task)
+		}
 	}
 
 	return tasks, nil
