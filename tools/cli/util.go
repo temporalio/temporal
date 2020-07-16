@@ -260,9 +260,6 @@ func ColorEvent(e *historypb.HistoryEvent) string {
 	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
 		data = e.EventType.String()
 
-	case enumspb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
-		data = color.RedString(e.EventType.String())
-
 	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 		data = e.EventType.String()
 
@@ -271,9 +268,6 @@ func ColorEvent(e *historypb.HistoryEvent) string {
 
 	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.EventType.String()
-
-	case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
-		data = color.RedString(e.EventType.String())
 
 	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = color.MagentaString(e.EventType.String())
@@ -400,9 +394,6 @@ func getEventAttributes(e *historypb.HistoryEvent) interface{} {
 
 	case enumspb.EVENT_TYPE_TIMER_FIRED:
 		data = e.GetTimerFiredEventAttributes()
-
-	case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
-		data = e.GetCancelTimerFailedEventAttributes()
 
 	case enumspb.EVENT_TYPE_TIMER_CANCELED:
 		data = e.GetTimerCanceledEventAttributes()

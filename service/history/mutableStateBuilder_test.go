@@ -220,7 +220,6 @@ func (s *mutableStateSuite) TestShouldBufferEvent() {
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:                       true,
 		enumspb.EVENT_TYPE_TIMER_STARTED:                                        true,
 		enumspb.EVENT_TYPE_TIMER_CANCELED:                                       true,
-		enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:                                  true,
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED: true,
 		enumspb.EVENT_TYPE_MARKER_RECORDED:                                      true,
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:             true,
@@ -261,9 +260,7 @@ OtherEventsLoop:
 
 	commandTypes := enumspb.CommandType_name
 	delete(commandTypes, 0) // Remove Unspecified.
-	// +1 is because CommandTypeCancelTimer will be mapped
-	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-	s.Equal(len(commandTypes)+1, len(commandEvents),
+	s.Equal(len(commandTypes), len(commandEvents),
 		"This assertion will be broken a new command is added and no corresponding logic added to shouldBufferEvent()")
 }
 

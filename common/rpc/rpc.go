@@ -183,11 +183,11 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 		if ip != nil && ip.To4() != nil {
 			return ip.To4()
 		}
-		logger.Fatal("ListenIP failed, unable to parse bindOnIP value %q or it is not IPv4 address", tag.Address(cfg.BindOnIP))
+		logger.Fatal("ListenIP failed, unable to parse bindOnIP value or it is not IPv4 address", tag.Address(cfg.BindOnIP))
 	}
 	ip, err := config.ListenIP()
 	if err != nil {
-		logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
+		logger.Fatal("ListenIP failed", tag.Error(err))
 	}
 	return ip
 }
