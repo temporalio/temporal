@@ -4,15 +4,14 @@ Quickstart for localhost development
 Install [docker](https://docs.docker.com/engine/installation/) and [docker-compose](https://docs.docker.com/compose/install/).
 
 Following steps will bring up the docker container running Temporal server
-along with all its dependencies (cassandra, statsd, graphite). Exposes Temporal
-frontend on port `7233` and grafana metrics frontend on port `8080`.
+along with all its dependencies (cassandra, statsd). Exposes Temporal
+frontend on port `7233`.
 
 ```bash
 $ cd docker
 $ docker-compose up
 ```
 
-View metrics at `localhost:8080/dashboard`.
 View Temporal web UI at `localhost:8088`.
 Use Temporal CLI with `docker run --network=host --rm temporalio/tctl:latest`.
 
@@ -25,7 +24,7 @@ Using a pre-built image
 -----------------------
 With every tagged release of the temporal server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
-contain a **docker.tar.gz** file (docker-compose startup scripts). 
+contain a **docker.tar.gz** file (docker-compose startup scripts).
 [Download](https://github.com/temporalio/temporal/releases/latest) the latest **docker.tar.gz**.
 
 Execute the following
@@ -69,7 +68,7 @@ Run Temporal with ElasticSearch for enhanced visibility queries:
 
 ```bash
 $ docker-compose -f docker-compose-es.yml up
-``` 
+```
 
 Quickstart for production
 =========================
