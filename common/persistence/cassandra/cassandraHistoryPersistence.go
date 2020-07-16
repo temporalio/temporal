@@ -79,7 +79,7 @@ func NewHistoryV2PersistenceFromSession(
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
 
-// newHistoryPersistence is used to create an instance of HistoryManager implementation
+// newHistoryV2Persistence is used to create an instance of HistoryManager implementation
 func newHistoryV2Persistence(
 	cfg config.Cassandra,
 	logger log.Logger,
@@ -87,8 +87,8 @@ func newHistoryV2Persistence(
 
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {

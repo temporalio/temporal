@@ -26,7 +26,7 @@ option go_package = "go.temporal.io/server/api/history/v1;history";
 
 import "temporal/api/history/v1/message.proto";
 
-message TransientDecisionInfo {
+message TransientWorkflowTaskInfo {
     temporal.api.history.v1.HistoryEvent scheduled_event = 1;
     temporal.api.history.v1.HistoryEvent started_event = 2;
 }

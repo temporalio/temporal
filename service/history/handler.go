@@ -526,8 +526,8 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	}
 
 	completeRequest := request.CompleteRequest
-	if len(completeRequest.Decisions) == 0 {
-		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionDecisionsCounter)
+	if len(completeRequest.Commands) == 0 {
+		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionCommandsCounter)
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
@@ -591,7 +591,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_DECISION {
+	if failedRequest.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
@@ -979,7 +979,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 }
 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
-// used to clean execution info when signal decision finished.
+// used to clean execution info when signal workflow task finished.
 func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()

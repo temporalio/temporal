@@ -174,7 +174,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
-	cadenceParams := &TemporalParams{
+
+	temporalParams := &TemporalParams{
 		ClusterMetadata:                  clusterMetadata,
 		PersistenceConfig:                pConfig,
 		MessagingClient:                  messagingClient,
@@ -203,7 +204,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := NewTemporal(cadenceParams)
+	cluster := NewTemporal(temporalParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}

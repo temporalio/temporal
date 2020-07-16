@@ -59,7 +59,7 @@ func DescribeTaskQueue(c *cli.Context) {
 	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
-		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
+		table.SetHeader([]string{"Workflow Poller Identity", "Last Access Time"})
 	}
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
@@ -87,7 +87,7 @@ func ListTaskQueuePartitions(c *cli.Context) {
 		ErrorAndExit("Operation ListTaskQueuePartitions failed.", err)
 	}
 	if len(response.WorkflowTaskQueuePartitions) > 0 {
-		printTaskQueuePartitions("Decision", response.WorkflowTaskQueuePartitions)
+		printTaskQueuePartitions("Workflow", response.WorkflowTaskQueuePartitions)
 	}
 	if len(response.ActivityTaskQueuePartitions) > 0 {
 		printTaskQueuePartitions("Activity", response.ActivityTaskQueuePartitions)

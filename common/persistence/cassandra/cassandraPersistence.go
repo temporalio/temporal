@@ -726,8 +726,8 @@ var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Logger) (p.ShardStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -755,8 +755,8 @@ func NewWorkflowExecutionPersistence(
 func newTaskPersistence(cfg config.Cassandra, logger log.Logger) (p.TaskStore, error) {
 	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.Timeout = defaultSessionTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
@@ -1970,7 +1970,7 @@ func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest
 
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
 
-	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading transfer tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -2041,7 +2041,7 @@ func (d *cassandraPersistence) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
 
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetReplicationTasksQuery,
 		d.shardID,
 		rowTypeReplicationTask,
@@ -2540,7 +2540,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 		return &p.GetTasksResponse{}, nil
 	}
 
-	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.session.Query(templateGetTasksQuery,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2671,7 +2671,7 @@ func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.
 
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
 	error) {
-	// Reading timer tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
 	minTimestamp := p.UnixNanoToDBTimestamp(request.MinTimestamp.UnixNano())
 	maxTimestamp := p.UnixNanoToDBTimestamp(request.MaxTimestamp.UnixNano())
 	query := d.session.Query(templateGetTimerTasksQuery,
@@ -2743,7 +2743,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
-	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.session.Query(templateGetReplicationTasksQuery,
 		d.shardID,
 		rowTypeDLQ,

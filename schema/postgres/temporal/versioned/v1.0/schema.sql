@@ -82,7 +82,7 @@ CREATE INDEX buffered_events_by_events_ids ON buffered_events(shard_id, namespac
 CREATE TABLE tasks (
   namespace_id BYTEA NOT NULL,
   task_queue_name VARCHAR(255) NOT NULL,
-  task_type SMALLINT NOT NULL, -- {Activity, Decision}
+  task_type SMALLINT NOT NULL, -- {Activity, Workflow}
   task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,

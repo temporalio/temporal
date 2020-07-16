@@ -43,7 +43,7 @@ var (
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:        5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts: 1,
 		dynamicconfig.AdvancedVisibilityWritingMode:                 common.AdvancedVisibilityWritingModeOff,
-		dynamicconfig.DecisionHeartbeatTimeout:                      5 * time.Second,
+		dynamicconfig.WorkflowTaskHeartbeatTimeout:                  5 * time.Second,
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:     200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,

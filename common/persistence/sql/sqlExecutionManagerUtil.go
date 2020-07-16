@@ -891,7 +891,7 @@ func createTimerTasks(
 		for i, task := range timerTasks {
 			info := &persistenceblobs.TimerTaskInfo{}
 			switch t := task.(type) {
-			case *p.DecisionTimeoutTask:
+			case *p.WorkflowTaskTimeoutTask:
 				info.EventId = t.EventID
 				info.TimeoutType = t.TimeoutType
 				info.ScheduleAttempt = t.ScheduleAttempt

@@ -105,12 +105,12 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	resetPoints0 := &workflowpb.ResetPoints{
 		Points: []*workflowpb.ResetPointInfo{
 			{
-				BinaryChecksum:           "bad-binary-cs",
-				RunId:                    "test-run-id",
-				FirstDecisionCompletedId: 123,
-				CreateTimeNano:           456,
-				ExpireTimeNano:           789,
-				Resettable:               true,
+				BinaryChecksum:               "bad-binary-cs",
+				RunId:                        "test-run-id",
+				FirstWorkflowTaskCompletedId: 123,
+				CreateTimeNano:               456,
+				ExpireTimeNano:               789,
+				Resettable:                   true,
 			},
 		},
 	}

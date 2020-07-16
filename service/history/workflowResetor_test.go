@@ -185,11 +185,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             "testNamespace",
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 29,
-		RequestId:             uuid.New().String(),
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 29,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -214,17 +214,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	signalName2 := "sig2"
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        34,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            34,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -239,16 +239,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -735,8 +735,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed :29
-	// 2. activityFailed :30
+	// 1. workflowTaskFailed :29
+	// 2. activityTaskFailed :30
 	// 3. signal 1 :31
 	// 4. signal 2 :32
 	// 5. workflowTaskScheduled :33
@@ -788,7 +788,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
 	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 	// 35 = resetEventID(29) + 6 in a batch
-	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskScheduleID)
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	// one activity task, one workflow task and one record workflow started task
@@ -867,11 +867,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             "testNamespace",
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -899,17 +899,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        35,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            35,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -924,16 +924,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
@@ -1455,11 +1455,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -1486,17 +1486,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        35,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            35,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -1520,16 +1520,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -2025,8 +2025,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled
@@ -2077,7 +2077,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
 	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskScheduleID)
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
@@ -2161,11 +2161,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -2192,17 +2192,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        35,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            35,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2226,16 +2226,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
@@ -2761,11 +2761,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:             namespace,
-		WorkflowExecution:     &we,
-		Reason:                "test reset",
-		DecisionFinishEventId: 30,
-		RequestId:             uuid.New().String(),
+		Namespace:                 namespace,
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 30,
+		RequestId:                 uuid.New().String(),
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -2792,17 +2792,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        35,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            35,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2826,16 +2826,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -3330,8 +3330,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.NotNil(response.RunId)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled
@@ -3371,7 +3371,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
 	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskScheduleID)
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
@@ -3473,17 +3473,17 @@ func (s *resetorSuite) TestApplyReset() {
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              forkRunID,
-		BranchToken:        forkBranchToken,
-		NextEventID:        35,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  forkRunID,
+		BranchToken:            forkBranchToken,
+		NextEventID:            35,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -3507,16 +3507,16 @@ func (s *resetorSuite) TestApplyReset() {
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:        namespaceID,
-		WorkflowID:         wid,
-		WorkflowTypeName:   wfType,
-		TaskQueue:          taskQueueName,
-		RunID:              currRunID,
-		NextEventID:        common.FirstEventID,
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		DecisionVersion:    common.EmptyVersion,
-		DecisionScheduleID: common.EmptyEventID,
-		DecisionStartedID:  common.EmptyEventID,
+		NamespaceID:            namespaceID,
+		WorkflowID:             wid,
+		WorkflowTypeName:       wfType,
+		TaskQueue:              taskQueueName,
+		RunID:                  currRunID,
+		NextEventID:            common.FirstEventID,
+		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -4018,8 +4018,8 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Nil(err)
 
 	// verify historyEvent: 5 events to append
-	// 1. decisionFailed
-	// 2. activityFailed
+	// 1. workflowTaskFailed
+	// 2. activityTaskFailed
 	// 3. signal 1
 	// 4. signal 2
 	// 5. workflowTaskScheduled
@@ -4061,7 +4061,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
 	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskScheduleID)
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
