@@ -583,6 +583,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 		StartedTimestamp:           0,
 		TaskQueue:                  "",
 		OriginalScheduledTimestamp: 0,
+		Attempt:                    1,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.msb.executionInfo.WorkflowTaskAttempt + 1

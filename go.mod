@@ -13,6 +13,7 @@ require (
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
+	github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13

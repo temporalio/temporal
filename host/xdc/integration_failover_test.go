@@ -628,7 +628,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		T:                                   s.T(),
 	}
 
-	_, err = poller1.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
+	_, err = poller1.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(firstCommandMade)
@@ -664,7 +664,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
+	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(secondCommandMade)
@@ -1715,7 +1715,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	for _, event := range history.Events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED {
 			attribute := event.GetActivityTaskStartedEventAttributes()
-			s.True(attribute.GetAttempt() > 0)
+			s.True(attribute.GetAttempt() > 1)
 			activityRetryFound = true
 		}
 	}
@@ -1836,9 +1836,9 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	// for failover transient workflow task, it is guaranteed that the transient workflow task
-	// after the failover has attempt 0
+	// after the failover has attempt 1
 	// for details see ReplicateTransientWorkflowTaskScheduled
-	_, err = poller2.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 0)
+	_, err = poller2.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 1)
 	s.NoError(err)
 	s.True(workflowFinished)
 }
@@ -2040,21 +2040,21 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
-	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[2])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.Equal(int32(3), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
 func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {

@@ -74,17 +74,17 @@ type (
 
 // PollAndProcessWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, int64(0))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, int64(1))
 }
 
 // PollAndProcessWorkflowTaskWithSticky for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, int64(0))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, int64(1))
 }
 
 // PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(0), 1)
+	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(1), 1)
 }
 
 // PollAndProcessWorkflowTaskWithAttempt for workflow tasks

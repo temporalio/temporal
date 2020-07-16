@@ -147,7 +147,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(0))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -307,7 +307,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(0))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1197,7 +1197,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(0))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

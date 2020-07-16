@@ -571,7 +571,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTimeoutSecond := int32(222)
 	runTimeoutSecond := int32(111)
 	workflowTaskTimeoutSecond := int32(11)
-	workflowTaskAttempt := int64(0)
+	workflowTaskAttempt := int64(1)
 
 	eventID := int64(1)
 	workflowStartEvent := &historypb.HistoryEvent{
