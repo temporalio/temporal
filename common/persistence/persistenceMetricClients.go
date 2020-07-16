@@ -460,6 +460,22 @@ func (p *workflowExecutionPersistenceClient) GetReplicationTasksFromDLQ(
 	return response, err
 }
 
+func (p *workflowExecutionPersistenceClient) GetReplicationDLQSize(
+	request *GetReplicationDLQSizeRequest,
+) (*GetReplicationDLQSizeResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetReplicationDLQSizeScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationDLQSizeScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetReplicationDLQSize(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetReplicationDLQSizeScope, err)
+	}
+
+	return response, err
+}
+
 func (p *workflowExecutionPersistenceClient) DeleteReplicationTaskFromDLQ(
 	request *DeleteReplicationTaskFromDLQRequest,
 ) error {

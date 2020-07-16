@@ -731,6 +731,14 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
+	templateGetDLQSizeQuery = `SELECT count(1) as count ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ?`
+
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -2836,6 +2844,37 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query)
+}
+
+func (d *cassandraPersistence) GetReplicationDLQSize(
+	request *p.GetReplicationDLQSizeRequest,
+) (*p.GetReplicationDLQSizeResponse, error) {
+
+	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	query := d.session.Query(templateGetDLQSizeQuery,
+		d.shardID,
+		rowTypeDLQ,
+		rowTypeDLQDomainID,
+		request.SourceClusterName,
+		rowTypeDLQRunID,
+	)
+
+	result := make(map[string]interface{})
+	if err := query.MapScan(result); err != nil {
+		if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("GetReplicationDLQSize operation failed. Error: %v", err),
+			}
+		}
+
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetReplicationDLQSize operation failed. Error: %v", err),
+		}
+	}
+	queueSize := result["count"].(int64)
+	return &p.GetReplicationDLQSizeResponse{
+		Size: queueSize,
+	}, nil
 }
 
 func (d *cassandraPersistence) DeleteReplicationTaskFromDLQ(

@@ -1125,6 +1125,16 @@ func (s *TestBase) GetReplicationTasksFromDLQ(
 	})
 }
 
+// GetReplicationDLQSize is a utility method to read replication dlq size
+func (s *TestBase) GetReplicationDLQSize(
+	sourceCluster string,
+) (*p.GetReplicationDLQSizeResponse, error) {
+
+	return s.ExecutionManager.GetReplicationDLQSize(&p.GetReplicationDLQSizeRequest{
+		SourceClusterName: sourceCluster,
+	})
+}
+
 // DeleteReplicationTaskFromDLQ is a utility method to delete a replication task info
 func (s *TestBase) DeleteReplicationTaskFromDLQ(
 	sourceCluster string,

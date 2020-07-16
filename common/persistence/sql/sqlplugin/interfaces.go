@@ -240,6 +240,13 @@ type (
 		SourceClusterName string
 	}
 
+	// ReplicationTaskDLQFilter contains the column names within replication_tasks_dlq table that
+	// can be used to filter results through a WHERE clause
+	ReplicationTaskDLQFilter struct {
+		SourceClusterName string
+		ShardID           int
+	}
+
 	// TimerTasksRow represents a row in timer_tasks table
 	TimerTasksRow struct {
 		ShardID             int
@@ -607,6 +614,9 @@ type (
 		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
 		// Required filter params - {sourceClusterName, shardID, minTaskID, pageSize}
 		SelectFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) ([]ReplicationTasksRow, error)
+		// SelectFromReplicationDLQ returns one row from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName}
+		SelectFromReplicationDLQ(filter *ReplicationTaskDLQFilter) (int64, error)
 		// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
 		// Required filter params - {sourceClusterName, shardID, taskID}
 		DeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
