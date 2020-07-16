@@ -33,7 +33,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/serviceerror"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -66,7 +66,7 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 
 func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	err := invoker(ctx, method, req, reply, cc, opts...)
-	err = serviceerror.FromStatus(status.Convert(err))
+	err = serviceerrors.FromStatus(status.Convert(err))
 	return err
 }
 
