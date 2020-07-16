@@ -347,7 +347,7 @@ func getPartitionBoundaryStart(partition uint32, totalPartitions uint32) uint32 
 		return 0
 	}
 
-	if partition == totalPartitions {
+	if partition >= totalPartitions {
 		return math.MaxUint32
 	}
 
@@ -355,7 +355,13 @@ func getPartitionBoundaryStart(partition uint32, totalPartitions uint32) uint32 
 }
 
 func getBoundariesForPartition(partition uint32, totalPartitions uint32) (uint32, uint32) {
-	return getPartitionBoundaryStart(partition, totalPartitions), getPartitionBoundaryStart(partition+1, totalPartitions)
+	endBoundary := getPartitionBoundaryStart(partition+1, totalPartitions)
+
+	if endBoundary != math.MaxUint32 {
+		endBoundary--
+	}
+
+	return getPartitionBoundaryStart(partition, totalPartitions), endBoundary
 }
 
 func (m *sqlTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
