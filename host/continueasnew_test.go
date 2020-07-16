@@ -254,7 +254,6 @@ GetHistoryLoop:
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
-	s.T().Skip()
 	id := "integration-continue-as-new-workflow-timeout-test"
 	wt := "integration-continue-as-new-workflow-timeout-test-type"
 	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
