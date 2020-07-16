@@ -4543,6 +4543,9 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
+
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 		Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
@@ -4551,6 +4554,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
@@ -4565,10 +4569,10 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(common.EmptyEventID), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingWorkflowTask())
+	s.True(executionBuilder.HasPendingWorkflowTask())
 }
 
 func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() {

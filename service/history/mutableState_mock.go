@@ -177,21 +177,6 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskTimedOutEvent(arg0, arg1,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskTimedOutEvent", reflect.TypeOf((*MockmutableState)(nil).AddActivityTaskTimedOutEvent), arg0, arg1, arg2, arg3)
 }
 
-// AddCancelTimerFailedEvent mocks base method.
-func (m *MockmutableState) AddCancelTimerFailedEvent(arg0 int64, arg1 *command.CancelTimerCommandAttributes, arg2 string) (*history.HistoryEvent, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddCancelTimerFailedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*history.HistoryEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddCancelTimerFailedEvent indicates an expected call of AddCancelTimerFailedEvent.
-func (mr *MockmutableStateMockRecorder) AddCancelTimerFailedEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCancelTimerFailedEvent", reflect.TypeOf((*MockmutableState)(nil).AddCancelTimerFailedEvent), arg0, arg1, arg2)
-}
-
 // AddChildWorkflowExecutionCanceledEvent mocks base method.
 func (m *MockmutableState) AddChildWorkflowExecutionCanceledEvent(arg0 int64, arg1 *common.WorkflowExecution, arg2 *history.WorkflowExecutionCanceledEventAttributes) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
