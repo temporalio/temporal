@@ -63,7 +63,6 @@ var keys = map[Key]string{
 	EnableNDC:                              "system.enableNDC",
 	EnableNewKafkaClient:                   "system.enableNewKafkaClient",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
-	EnableReadFromClosedExecutionV2:        "system.enableReadFromClosedExecutionV2",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
 	HistoryArchivalState:                   "system.historyArchivalState",
@@ -318,8 +317,6 @@ const (
 	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
-	// EnableReadFromClosedExecutionV2 is key for enable read from temporal_visibility.closed_executions_v2
-	EnableReadFromClosedExecutionV2
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
 	// EmitShardDiffLog whether emit the shard diff log

@@ -269,7 +269,7 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 		return nil, err
 	}
 	visConfig := f.config.VisibilityConfig
-	if visConfig != nil && visConfig.EnableReadFromClosedExecutionV2() && f.isCassandra() {
+	if f.isCassandra() {
 		store, err = cassandra.NewVisibilityPersistenceV2(store, f.getCassandraConfig(), f.logger)
 	}
 
