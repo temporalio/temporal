@@ -548,6 +548,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
@@ -661,6 +662,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
@@ -884,6 +886,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
@@ -1022,6 +1025,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       scheduleID,
 				WorkflowType:           workflowType,
+				Attempt:                1,
 			}, nil
 		}).AnyTimes()
 	for p := 0; p < workerCount; p++ {
@@ -1188,6 +1192,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 			startedTasks[taskRequest.TaskId] = true
 			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
@@ -1337,6 +1342,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       scheduleID,
 				WorkflowType:           workflowType,
+				Attempt:                1,
 			}, nil
 		}).AnyTimes()
 	for j := 0; j < iterations; j++ {
@@ -1662,6 +1668,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:                    activityID,
