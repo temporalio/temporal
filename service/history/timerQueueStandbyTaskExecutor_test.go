@@ -229,15 +229,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.UserTimerTask).GetVisibilityTimestamp())
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_USER_TIMER,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
-		EventId:        event.EventId,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_USER_TIMER,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
+		EventId:         event.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -304,15 +305,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.UserTimerTask).GetVisibilityTimestamp())
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_USER_TIMER,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
-		EventId:        event.EventId,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_USER_TIMER,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
+		EventId:         event.EventId,
 	}
 
 	event = addTimerFiredEvent(mutableState, timerID)
@@ -372,15 +374,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.UserTimerTask).GetVisibilityTimestamp())
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_USER_TIMER,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
-		EventId:        event.EventId,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_USER_TIMER,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
+		EventId:         event.EventId,
 	}
 
 	event = addTimerFiredEvent(mutableState, timerID1)
@@ -440,15 +443,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp())
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
-		EventId:        event.EventId,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
+		EventId:         event.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -520,15 +524,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp())
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
-		EventId:        event.GetEventId(),
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
+		EventId:         event.GetEventId(),
 	}
 
 	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
@@ -590,15 +595,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	protoTaskTime, err := types.TimestampProto(task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp().Add(-time.Second))
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		VisibilityTime: protoTaskTime,
-		EventId:        scheduledEvent.GetEventId(),
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		VisibilityTime:  protoTaskTime,
+		EventId:         scheduledEvent.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
@@ -666,15 +672,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	protoTime, err := types.TimestampProto(activityInfo2.LastHeartBeatUpdatedTime.Add(-5 * time.Second))
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		VisibilityTime: protoTime,
-		EventId:        scheduledEvent2.GetEventId(),
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		VisibilityTime:  protoTime,
+		EventId:         scheduledEvent2.GetEventId(),
 	}
 
 	completeEvent1 := addActivityTaskCompletedEvent(mutableState, scheduledEvent1.GetEventId(), startedEvent1.GetEventId(), nil, identity)
@@ -756,15 +763,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	protoTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTime,
-		EventId:        di.ScheduleID,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTime,
+		EventId:         di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
@@ -800,15 +808,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Sche
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		VisibilityTime: protoTaskTime,
-		EventId:        workflowTaskScheduleID,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		VisibilityTime:  protoTaskTime,
+		EventId:         workflowTaskScheduleID,
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
@@ -849,15 +858,16 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 	protoTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTime,
-		EventId:        di.ScheduleID,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTime,
+		EventId:         di.ScheduleID,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -897,13 +907,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
-		VisibilityTime: protoTaskTime,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
+		VisibilityTime:  protoTaskTime,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -957,13 +968,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
-		VisibilityTime: protoTaskTime,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
+		VisibilityTime:  protoTaskTime,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
@@ -1008,14 +1020,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completionEvent.GetEventId(), completionEvent.GetVersion())
@@ -1073,14 +1086,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1119,14 +1133,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 	protoTaskTime, err := types.TimestampProto(s.now)
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
-		Version:        s.version,
-		NamespaceId:    s.namespaceID,
-		WorkflowId:     execution.GetWorkflowId(),
-		RunId:          execution.GetRunId(),
-		TaskId:         int64(100),
-		TaskType:       enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
-		TimeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		VisibilityTime: protoTaskTime,
+		ScheduleAttempt: 1,
+		Version:         s.version,
+		NamespaceId:     s.namespaceID,
+		WorkflowId:      execution.GetWorkflowId(),
+		RunId:           execution.GetRunId(),
+		TaskId:          int64(100),
+		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTime:  protoTaskTime,
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
