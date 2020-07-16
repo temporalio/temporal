@@ -205,10 +205,9 @@ type (
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		NamespaceID   primitives.UUID
-		TaskType      int64
+		RangeHash     uint32
+		TaskQueueID   []byte
 		TaskID        int64
-		TaskQueueName string
 		Data          []byte
 		DataEncoding  string
 	}
@@ -216,9 +215,8 @@ type (
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		NamespaceID          primitives.UUID
-		TaskQueueName        string
-		TaskType             int64
+		RangeHash            uint32
+		TaskQueueID   		 []byte
 		TaskID               *int64
 		MinTaskID            *int64
 		MaxTaskID            *int64
