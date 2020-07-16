@@ -211,7 +211,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 				// Looks like WorkflowTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, serviceerrors.NewEventAlreadyStarted("Workflow task already started.")
+				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(scheduleID, requestID, req.PollRequest)

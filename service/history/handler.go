@@ -1810,8 +1810,8 @@ func (h *Handler) updateErrorMetric(
 	switch err := err.(type) {
 	case *serviceerrors.ShardOwnershipLost:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-	case *serviceerrors.EventAlreadyStarted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEventAlreadyStartedCounter)
+	case *serviceerrors.TaskAlreadyStarted:
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:

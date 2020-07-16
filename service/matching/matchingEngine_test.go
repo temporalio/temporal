@@ -1323,7 +1323,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.TaskId]; ok {
 				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
-				return nil, serviceerrors.NewEventAlreadyStarted("already started")
+				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")

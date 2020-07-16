@@ -396,7 +396,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&serviceerrors.EventAlreadyStarted{}, err)
+	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
 	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
 
@@ -570,7 +570,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&serviceerrors.EventAlreadyStarted{}, err)
+	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
 	s.logger.Info("Failed with error", tag.Error(err))
 }
 

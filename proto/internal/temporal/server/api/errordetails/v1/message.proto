@@ -28,7 +28,7 @@ package temporal.server.api.errordetails.v1;
 
 option go_package = "go.temporal.io/server/api/errordetails/v1;errordetails";
 
-message EventAlreadyStartedFailure {
+message TaskAlreadyStartedFailure {
 }
 
 message CurrentBranchChangedFailure {

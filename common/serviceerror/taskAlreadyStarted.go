@@ -23,6 +23,8 @@
 package serviceerror
 
 import (
+	"fmt"
+
 	"github.com/gogo/status"
 	"google.golang.org/grpc/codes"
 
@@ -30,39 +32,39 @@ import (
 )
 
 type (
-	// EventAlreadyStarted represents event already started error.
-	EventAlreadyStarted struct {
+	// TaskAlreadyStarted represents task already started error.
+	TaskAlreadyStarted struct {
 		Message string
 		st      *status.Status
 	}
 )
 
-// NewEventAlreadyStarted returns new EventAlreadyStarted error.
-func NewEventAlreadyStarted(message string) *EventAlreadyStarted {
-	return &EventAlreadyStarted{
-		Message: message,
+// NewTaskAlreadyStarted returns new TaskAlreadyStarted error.
+func NewTaskAlreadyStarted(taskType string) *TaskAlreadyStarted {
+	return &TaskAlreadyStarted{
+		Message: fmt.Sprintf("%s task already started.", taskType),
 	}
 }
 
 // Error returns string message.
-func (e *EventAlreadyStarted) Error() string {
+func (e *TaskAlreadyStarted) Error() string {
 	return e.Message
 }
 
-func (e *EventAlreadyStarted) status() *status.Status {
+func (e *TaskAlreadyStarted) status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
 
 	st := status.New(codes.AlreadyExists, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.EventAlreadyStartedFailure{},
+		&errordetails.TaskAlreadyStartedFailure{},
 	)
 	return st
 }
 
-func newEventAlreadyStarted(st *status.Status) *EventAlreadyStarted {
-	return &EventAlreadyStarted{
+func newTaskAlreadyStarted(st *status.Status) *TaskAlreadyStarted {
+	return &TaskAlreadyStarted{
 		Message: st.Message(),
 		st:      st,
 	}

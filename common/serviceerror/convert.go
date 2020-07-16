@@ -46,8 +46,8 @@ func FromStatus(st *status.Status) error {
 		}
 	case codes.AlreadyExists:
 		switch errDetails.(type) {
-		case *errordetails.EventAlreadyStartedFailure:
-			return newEventAlreadyStarted(st)
+		case *errordetails.TaskAlreadyStartedFailure:
+			return newTaskAlreadyStarted(st)
 		}
 	case codes.Aborted:
 		switch errDetails := errDetails.(type) {

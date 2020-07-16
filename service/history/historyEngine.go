@@ -1395,7 +1395,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
 				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
-				return serviceerrors.NewEventAlreadyStarted("Activity task already started.")
+				return serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(
