@@ -328,9 +328,9 @@ func NewRetryTaskErrorWithHint(
 	workflowID string,
 	runID string,
 	nextEventID int64,
-) *shared.RetryTaskError {
+) *workflow.RetryTaskError {
 
-	return &shared.RetryTaskError{
+	return &workflow.RetryTaskError{
 		Message:     msg,
 		DomainId:    common.StringPtr(domainID),
 		WorkflowId:  common.StringPtr(workflowID),
