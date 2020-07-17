@@ -58,13 +58,13 @@ func NewTestCluster(pluginName, dbName, username, password, host string, port in
 	}
 	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
-		User:            username,
-		Password:        password,
-		ConnectAddr:     fmt.Sprintf("%v:%v", host, port),
-		ConnectProtocol: "tcp",
-		PluginName:      pluginName,
-		DatabaseName:    dbName,
-		NumShards:       4,
+		User:               username,
+		Password:           password,
+		ConnectAddr:        fmt.Sprintf("%v:%v", host, port),
+		ConnectProtocol:    "tcp",
+		PluginName:         pluginName,
+		DatabaseName:       dbName,
+		TaskScanPartitions: 4,
 	}
 	return &result
 }

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -257,7 +258,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 		return shardItem, nil
 	}
 
-	return nil, createShardOwnershipLostError(c.GetHostInfo().Identity(), info.GetAddress())
+	return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
 }
 
 func (c *shardController) removeHistoryShardItem(shardID int, shardItem *historyShardsItem) (*historyShardsItem, error) {

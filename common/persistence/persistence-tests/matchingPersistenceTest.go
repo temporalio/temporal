@@ -424,9 +424,9 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 	}
 	s.deleteAllTaskQueue()
 	resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})
+	s.Equal(0, len(resp.Items))
 	s.NoError(err)
 	s.Nil(resp.NextPageToken)
-	s.Equal(0, len(resp.Items))
 
 	rangeID := int64(0)
 	ackLevel := int64(0)
@@ -485,8 +485,8 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskQueue() {
 	s.deleteAllTaskQueue()
 	namespaceID := uuid.New()
 	tlNames := make(map[string]struct{})
-	for i := 0; i < 10; i++ {
-		name := fmt.Sprintf("test-list-with-multiple-%v", i)
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("test-list-with-multiple-%04d", i)
 		_, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 			NamespaceID:   namespaceID,
 			TaskQueue:     name,
@@ -497,6 +497,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskQueue() {
 		tlNames[name] = struct{}{}
 		listedNames := make(map[string]struct{})
 		var nextPageToken []byte
+		var prev *p.ListTaskQueueResponse
 		for {
 			resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10, PageToken: nextPageToken})
 			s.NoError(err)
@@ -509,12 +510,14 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskQueue() {
 				s.False(ok, "list API returns duplicate entries - have: %+v got:%v", listedNames, it.Name)
 				listedNames[it.Name] = struct{}{}
 			}
+			prev = resp
 			nextPageToken = resp.NextPageToken
 			if nextPageToken == nil {
 				break
 			}
 		}
 		s.Equal(tlNames, listedNames, "list API returned wrong set of task queue names")
+		s.NotNil(prev)
 	}
 	s.deleteAllTaskQueue()
 	resp, err := s.TaskMgr.ListTaskQueue(&p.ListTaskQueueRequest{PageSize: 10})

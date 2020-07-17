@@ -25,7 +25,9 @@
 package sql
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"time"
@@ -36,7 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -46,21 +47,22 @@ import (
 
 type sqlTaskManager struct {
 	sqlStore
-	nShards int
+	taskScanPartitions uint32
 }
 
 var (
-	minUUID = "00000000-0000-0000-0000-000000000000"
+	// minUUID = primitives.MustParseUUID("00000000-0000-0000-0000-000000000000")
+	minTaskQueueId = make([]byte, 0, 0)
 )
 
 // newTaskPersistence creates a new instance of TaskManager
-func newTaskPersistence(db sqlplugin.DB, nShards int, log log.Logger) (persistence.TaskManager, error) {
+func newTaskPersistence(db sqlplugin.DB, taskScanPartitions int, log log.Logger) (persistence.TaskManager, error) {
 	return &sqlTaskManager{
 		sqlStore: sqlStore{
 			db:     db,
 			logger: log,
 		},
-		nShards: nShards,
+		taskScanPartitions: uint32(taskScanPartitions),
 	}, nil
 }
 
@@ -71,15 +73,11 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	shardID := m.shardID(nidBytes, request.TaskQueue)
-	namespaceID := request.NamespaceID
-	rows, err := m.db.SelectFromTaskQueues(&sqlplugin.TaskQueuesFilter{
-		ShardID:     shardID,
-		NamespaceID: &nidBytes,
-		Name:        &request.TaskQueue,
-		TaskType:    convert.Int64Ptr(int64(request.TaskType))})
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+	rows, err := m.db.SelectFromTaskQueues(&sqlplugin.TaskQueuesFilter{RangeHash: tqHash, TaskQueueID: tqId})
 	if err != nil {
 		if err == sql.ErrNoRows {
+			namespaceID := request.NamespaceID
 			tqInfo := &persistenceblobs.TaskQueueInfo{
 				NamespaceId:    namespaceID,
 				Name:           request.TaskQueue,
@@ -94,10 +92,8 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 				return nil, err
 			}
 			row := sqlplugin.TaskQueuesRow{
-				ShardID:      shardID,
-				NamespaceID:  nidBytes,
-				Name:         request.TaskQueue,
-				TaskType:     int64(request.TaskType),
+				RangeHash:    tqHash,
+				TaskQueueID:  tqId,
 				Data:         blob.Data,
 				DataEncoding: blob.Encoding.String(),
 			}
@@ -129,7 +125,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
-		err1 := lockTaskQueue(tx, shardID, nidBytes, request.TaskQueue, request.TaskType, rangeID)
+		err1 := lockTaskQueue(tx, tqHash, tqId, rangeID)
 		if err1 != nil {
 			return err1
 		}
@@ -142,11 +138,9 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			return err1
 		}
 		result, err1 := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
-			ShardID:      shardID,
-			NamespaceID:  row.NamespaceID,
+			RangeHash:    tqHash,
+			TaskQueueID:  tqId,
 			RangeID:      row.RangeID + 1,
-			Name:         row.Name,
-			TaskType:     row.TaskType,
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		})
@@ -175,7 +169,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
-	shardID := m.shardID(nidBytes, request.TaskQueueInfo.Name)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
 
 	tq := request.TaskQueueInfo
 	tq.LastUpdateTime = types.TimestampNow()
@@ -191,11 +185,9 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			return nil, err
 		}
 		if _, err := m.db.ReplaceIntoTaskQueues(&sqlplugin.TaskQueuesRow{
-			ShardID:      shardID,
-			NamespaceID:  nidBytes,
+			RangeHash:    tqHash,
+			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
-			Name:         request.TaskQueueInfo.Name,
-			TaskType:     int64(request.TaskQueueInfo.TaskType),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		}); err != nil {
@@ -208,17 +200,14 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 		return nil, err
 	}
 	err = m.txExecute("UpdateTaskQueue", func(tx sqlplugin.Tx) error {
-		err1 := lockTaskQueue(
-			tx, shardID, nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType, request.RangeID)
+		err1 := lockTaskQueue(tx, tqHash, tqId, request.RangeID)
 		if err1 != nil {
 			return err1
 		}
 		result, err1 := tx.UpdateTaskQueues(&sqlplugin.TaskQueuesRow{
-			ShardID:      shardID,
-			NamespaceID:  nidBytes,
+			RangeHash:    tqHash,
+			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
-			Name:         request.TaskQueueInfo.Name,
-			TaskType:     int64(request.TaskQueueInfo.TaskType),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		})
@@ -239,14 +228,12 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 }
 
 type taskQueuePageToken struct {
-	ShardID     int
-	NamespaceID string
-	Name        string
-	TaskType    int64
+	MinRangeHash   uint32
+	MinTaskQueueId []byte
 }
 
 func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
-	pageToken := taskQueuePageToken{TaskType: math.MinInt16, NamespaceID: minUUID}
+	pageToken := taskQueuePageToken{MinTaskQueueId: minTaskQueueId}
 	if request.PageToken != nil {
 		if err := gobDeserialize(request.PageToken, &pageToken); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
@@ -254,45 +241,52 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 	}
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
-	namespaceID := primitives.MustParseUUID(pageToken.NamespaceID)
-	for pageToken.ShardID < m.nShards {
-		rows, err = m.db.SelectFromTaskQueues(&sqlplugin.TaskQueuesFilter{
-			ShardID:                pageToken.ShardID,
-			NamespaceIDGreaterThan: &namespaceID,
-			NameGreaterThan:        &pageToken.Name,
-			TaskTypeGreaterThan:    &pageToken.TaskType,
-			PageSize:               &request.PageSize,
-		})
+	var shardGreaterThan uint32
+	var shardLessThan uint32
+
+	i := uint32(0)
+	if pageToken.MinRangeHash > 0 {
+		// Resume partition position from page token, if exists, before entering loop
+		i = getPartitionForRangeHash(pageToken.MinRangeHash, m.taskScanPartitions)
+	}
+
+	lastPageFull := !bytes.Equal(pageToken.MinTaskQueueId, minTaskQueueId)
+	for ; i < m.taskScanPartitions; i++ {
+		// Get start/end boundaries for partition
+		shardGreaterThan, shardLessThan = getBoundariesForPartition(i, m.taskScanPartitions)
+
+		// If page token hash is greater than the boundaries for this partition, use the pageToken hash for resume point
+		if pageToken.MinRangeHash > shardGreaterThan {
+			shardGreaterThan = pageToken.MinRangeHash
+		}
+
+		filter := &sqlplugin.TaskQueuesFilter{
+			RangeHashGreaterThanEqualTo: shardGreaterThan,
+			RangeHashLessThanEqualTo:    shardLessThan,
+			TaskQueueIDGreaterThan:      minTaskQueueId,
+			PageSize:                    &request.PageSize,
+		}
+
+		if lastPageFull {
+			// Use page token TaskQueueID filter for this query and set this to false
+			// in order for the next partition so we don't miss any results.
+			filter.TaskQueueIDGreaterThan = pageToken.MinTaskQueueId
+			lastPageFull = false
+		}
+
+		rows, err = m.db.SelectFromTaskQueues(filter)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
+
 		if len(rows) > 0 {
 			break
 		}
-		pageToken = taskQueuePageToken{ShardID: pageToken.ShardID + 1, TaskType: math.MinInt16, NamespaceID: minUUID}
 	}
 
-	var nextPageToken []byte
-	switch {
-	case len(rows) >= request.PageSize:
-		lastRow := &rows[request.PageSize-1]
-		nextPageToken, err = gobSerialize(&taskQueuePageToken{
-			ShardID:     pageToken.ShardID,
-			NamespaceID: lastRow.NamespaceID.String(),
-			Name:        lastRow.Name,
-			TaskType:    lastRow.TaskType,
-		})
-	case pageToken.ShardID+1 < m.nShards:
-		nextPageToken, err = gobSerialize(&taskQueuePageToken{ShardID: pageToken.ShardID + 1, TaskType: math.MinInt16})
-	}
-
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing nextPageToken:%v", err))
-	}
-
+	maxRangeHash := uint32(0)
 	resp := &persistence.ListTaskQueueResponse{
-		Items:         make([]*persistence.PersistedTaskQueueInfo, len(rows)),
-		NextPageToken: nextPageToken,
+		Items: make([]*persistence.PersistedTaskQueueInfo, len(rows)),
 	}
 
 	for i := range rows {
@@ -304,9 +298,70 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 			Data:    info,
 			RangeID: rows[i].RangeID,
 		}
+
+		// Only want to look at up to PageSize number of records to prevent losing data.
+		if rows[i].RangeHash > maxRangeHash {
+			maxRangeHash = rows[i].RangeHash
+		}
+
+		// Enforces PageSize
+		if i >= request.PageSize-1 {
+			break
+		}
 	}
 
+	var nextPageToken []byte
+	switch {
+	case len(rows) >= request.PageSize:
+		// Store the details of the lastRow seen up to PageSize.
+		// Note we don't increment the rangeHash as we do in the case below.
+		// This is so we can exhaust this hash before moving forward.
+		lastRow := &rows[request.PageSize-1]
+		nextPageToken, err = gobSerialize(&taskQueuePageToken{
+			MinRangeHash:   shardGreaterThan,
+			MinTaskQueueId: lastRow.TaskQueueID,
+		})
+	case shardLessThan < math.MaxUint32:
+		// Create page token with +1 from the last rangeHash we have seen to prevent duplicating the last row.
+		// Since we have not exceeded PageSize, we are confident we won't lose data here and we have exhausted this hash.
+		nextPageToken, err = gobSerialize(&taskQueuePageToken{MinRangeHash: shardLessThan + 1, MinTaskQueueId: minTaskQueueId})
+	}
+
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing nextPageToken:%v", err))
+	}
+
+	resp.NextPageToken = nextPageToken
 	return resp, nil
+}
+
+func getPartitionForRangeHash(rangeHash uint32, totalPartitions uint32) uint32 {
+	if totalPartitions == 0 {
+		return 0
+	}
+	return rangeHash / getPartitionBoundaryStart(1, totalPartitions)
+}
+
+func getPartitionBoundaryStart(partition uint32, totalPartitions uint32) uint32 {
+	if totalPartitions == 0 {
+		return 0
+	}
+
+	if partition >= totalPartitions {
+		return math.MaxUint32
+	}
+
+	return uint32((float32(partition) / float32(totalPartitions)) * math.MaxUint32)
+}
+
+func getBoundariesForPartition(partition uint32, totalPartitions uint32) (uint32, uint32) {
+	endBoundary := getPartitionBoundaryStart(partition+1, totalPartitions)
+
+	if endBoundary != math.MaxUint32 {
+		endBoundary--
+	}
+
+	return getPartitionBoundaryStart(partition, totalPartitions), endBoundary
 }
 
 func (m *sqlTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
@@ -314,12 +369,10 @@ func (m *sqlTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueReq
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
 	}
-
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
 	result, err := m.db.DeleteFromTaskQueues(&sqlplugin.TaskQueuesFilter{
-		ShardID:     m.shardID(nidBytes, request.TaskQueue.Name),
-		NamespaceID: &nidBytes,
-		Name:        &request.TaskQueue.Name,
-		TaskType:    convert.Int64Ptr(int64(request.TaskQueue.TaskType)),
+		RangeHash:   tqHash,
+		TaskQueueID: tqId,
 		RangeID:     &request.RangeID,
 	})
 	if err != nil {
@@ -367,13 +420,9 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		if _, err1 := tx.InsertIntoTasks(tasksRows); err1 != nil {
 			return err1
 		}
+		tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Data.Name, request.TaskQueueInfo.Data.TaskType)
 		// Lock task queue before committing.
-		err1 := lockTaskQueue(tx,
-			m.shardID(nidBytes, request.TaskQueueInfo.Data.Name),
-			nidBytes,
-			request.TaskQueueInfo.Data.Name,
-			request.TaskQueueInfo.Data.TaskType,
-			request.TaskQueueInfo.RangeID)
+		err1 := lockTaskQueue(tx, tqHash, tqId, request.TaskQueueInfo.RangeID)
 		if err1 != nil {
 			return err1
 		}
@@ -454,14 +503,27 @@ func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTask
 	return int(nRows), nil
 }
 
-func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
-	id := farm.Hash32(append(namespaceID, []byte("_"+name)...)) % uint32(m.nShards)
-	return int(id)
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+func (m *sqlTaskManager) calculateTaskQueueHash(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) uint32 {
+	return farm.Hash32(m.taskQueueId(namespaceID, name, taskType))
 }
 
-func lockTaskQueue(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskQueueType enumspb.TaskQueueType, oldRangeID int64) error {
-	rangeID, err := tx.LockTaskQueues(&sqlplugin.TaskQueuesFilter{
-		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: convert.Int64Ptr(int64(taskQueueType))})
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+func (m *sqlTaskManager) taskQueueIdAndHash(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) ([]byte, uint32) {
+	id := m.taskQueueId(namespaceID, name, taskType)
+	return id, farm.Hash32(id)
+}
+
+func (m *sqlTaskManager) taskQueueId(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) []byte {
+	idBytes := make([]byte, 0, 16+len(name)+2+8)
+	idBytes = append(idBytes, namespaceID...)
+	idBytes = append(idBytes, []byte("_"+name+"_")...)
+	binary.BigEndian.PutUint64(idBytes, uint64(taskType))
+	return idBytes
+}
+
+func lockTaskQueue(tx sqlplugin.Tx, tqHash uint32, tqId []byte, oldRangeID int64) error {
+	rangeID, err := tx.LockTaskQueues(&sqlplugin.TaskQueuesFilter{RangeHash: tqHash, TaskQueueID: tqId})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}

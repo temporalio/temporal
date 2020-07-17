@@ -74,7 +74,6 @@ type (
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (*historypb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
-		AddCancelTimerFailedEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionFailedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionFailedEventAttributes) (*historypb.HistoryEvent, error)
