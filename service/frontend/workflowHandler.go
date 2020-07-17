@@ -3090,10 +3090,6 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if request.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return nil, wh.error(errTaskQueueTypeNotSet, scope)
-	}
-
 	var matchingResponse *matchingservice.DescribeTaskQueueResponse
 	op := func() error {
 		var err error
