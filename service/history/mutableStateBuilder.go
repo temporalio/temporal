@@ -1461,10 +1461,15 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 // nolint:unused
 func (e *mutableStateBuilder) getWorkflowTaskInfo() *workflowTaskInfo {
 
-	taskQueue := e.executionInfo.TaskQueue
+	taskQueue := &taskqueuepb.TaskQueue{}
 	if e.IsStickyTaskQueueEnabled() {
-		taskQueue = e.executionInfo.StickyTaskQueue
+		taskQueue.Name = e.executionInfo.StickyTaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+	} else {
+		taskQueue.Name = e.executionInfo.TaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
+
 	return &workflowTaskInfo{
 		Version:                    e.executionInfo.WorkflowTaskVersion,
 		ScheduleID:                 e.executionInfo.WorkflowTaskScheduleID,
@@ -1917,7 +1922,7 @@ func (e *mutableStateBuilder) ReplicateTransientWorkflowTaskScheduled() (*workfl
 func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
 	scheduleID int64,
-	taskQueue string,
+	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
 	scheduleTimestamp int64,

@@ -35,6 +35,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,7 +48,7 @@ type (
 		ReplicateWorkflowTaskScheduledEvent(
 			version int64,
 			scheduleID int64,
-			taskQueue string,
+			taskQueue *taskqueuepb.TaskQueue,
 			startToCloseTimeoutSeconds int32,
 			attempt int64,
 			scheduleTimestamp int64,
@@ -125,7 +126,7 @@ func newMutableStateWorkflowTaskManager(msb *mutableStateBuilder) mutableStateWo
 func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
 	scheduleID int64,
-	taskQueue string,
+	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
 	scheduleTimestamp int64,
@@ -182,7 +183,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 		StartedID:           common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: m.msb.GetExecutionInfo().WorkflowTaskTimeout,
-		TaskQueue:           m.msb.GetExecutionInfo().TaskQueue,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.msb.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Attempt:             m.msb.GetExecutionInfo().WorkflowTaskAttempt,
 		ScheduledTimestamp:  m.msb.timeSource.Now().UnixNano(),
 		StartedTimestamp:    0,
@@ -300,9 +301,10 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 	}
 
 	// Task queue and workflow task timeout should already be set from workflow execution started event
-	taskQueue := m.msb.executionInfo.TaskQueue
+	taskQueue := &taskqueuepb.TaskQueue{}
 	if m.msb.IsStickyTaskQueueEnabled() {
-		taskQueue = m.msb.executionInfo.StickyTaskQueue
+		taskQueue.Name = m.msb.executionInfo.StickyTaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 	} else {
 		// It can be because stickyness has expired due to StickyTTL config
 		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
@@ -310,6 +312,8 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		// TODO: https://github.com/temporalio/temporal/issues/2357:
 		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.
 		m.msb.ClearStickyness()
+		taskQueue.Name = m.msb.executionInfo.TaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
 	taskTimeout := m.msb.executionInfo.WorkflowTaskTimeout
 
@@ -423,12 +427,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	var event *historypb.HistoryEvent
 	scheduleID := workflowTask.ScheduleID
 	startedID := scheduleID + 1
-	taskqueue := request.TaskQueue.GetName()
 	startTime := m.msb.timeSource.Now().UnixNano()
 	// First check to see if new events came since transient workflowTask was scheduled
 	if workflowTask.Attempt > 0 && workflowTask.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(taskqueue, workflowTask.WorkflowTaskTimeout, 0)
+		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), workflowTask.WorkflowTaskTimeout, 0)
 		scheduleID = scheduleEvent.GetEventId()
 		workflowTask.Attempt = 0
 	}
@@ -473,7 +476,11 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 	m.beforeAddWorkflowTaskCompletedEvent()
 	if workflowTask.Attempt > 0 {
 		// Create corresponding WorkflowTaskSchedule and WorkflowTaskStarted events for workflow tasks we have been retrying
-		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(m.msb.executionInfo.TaskQueue, workflowTask.WorkflowTaskTimeout,
+		taskQueue := &taskqueuepb.TaskQueue{
+			Name: m.msb.executionInfo.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt, workflowTask.ScheduledTimestamp)
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), workflowTask.RequestID,
 			request.GetIdentity(), workflowTask.StartedTimestamp)
@@ -581,7 +588,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) FailWorkflowTask(
 		RequestID:                  emptyUUID,
 		WorkflowTaskTimeout:        0,
 		StartedTimestamp:           0,
-		TaskQueue:                  "",
+		TaskQueue:                  nil,
 		OriginalScheduledTimestamp: 0,
 	}
 	if incrementAttempt {
@@ -602,7 +609,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) DeleteWorkflowTask() {
 		Attempt:             0,
 		StartedTimestamp:    0,
 		ScheduledTimestamp:  0,
-		TaskQueue:           "",
+		TaskQueue:           nil,
 		// Keep the last original scheduled timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
 		OriginalScheduledTimestamp: m.getWorkflowTaskInfo().OriginalScheduledTimestamp,
 	}
@@ -680,7 +687,10 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 	workflowTask *workflowTaskInfo,
 	identity string,
 ) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
-	taskqueue := m.msb.executionInfo.TaskQueue
+	taskqueue := &taskqueuepb.TaskQueue{
+		Name: m.msb.executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 	scheduledEvent := newWorkflowTaskScheduledEventWithInfo(
 		workflowTask.ScheduleID,
 		workflowTask.ScheduledTimestamp,
@@ -701,10 +711,15 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 }
 
 func (m *mutableStateWorkflowTaskManagerImpl) getWorkflowTaskInfo() *workflowTaskInfo {
-	taskQueue := m.msb.executionInfo.TaskQueue
+	taskQueue := &taskqueuepb.TaskQueue{}
 	if m.msb.IsStickyTaskQueueEnabled() {
-		taskQueue = m.msb.executionInfo.StickyTaskQueue
+		taskQueue.Name = m.msb.executionInfo.StickyTaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+	} else {
+		taskQueue.Name = m.msb.executionInfo.TaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
+
 	return &workflowTaskInfo{
 		Version:                    m.msb.executionInfo.WorkflowTaskVersion,
 		ScheduleID:                 m.msb.executionInfo.WorkflowTaskScheduleID,

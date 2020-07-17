@@ -253,7 +253,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		NamespaceID:         executionInfo.NamespaceID,
-		TaskQueue:           workflowTask.TaskQueue,
+		TaskQueue:           workflowTask.TaskQueue.GetName(),
 		ScheduleID:          workflowTask.ScheduleID,
 		Version:             workflowTask.Version,
 	})

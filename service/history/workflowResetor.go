@@ -336,7 +336,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	newTransferTasks = append(newTransferTasks,
 		&persistence.WorkflowTask{
 			NamespaceID: namespaceID,
-			TaskQueue:   workflowTask.TaskQueue,
+			TaskQueue:   workflowTask.TaskQueue.GetName(),
 			ScheduleID:  workflowTask.ScheduleID,
 		},
 		&persistence.RecordWorkflowStartedTask{},
@@ -1021,7 +1021,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	workflowTask, _ = newMsBuilder.GetWorkflowTaskInfo(workflowTaskScheduledID)
 	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,
-		TaskQueue:        workflowTask.TaskQueue,
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduleID:       workflowTask.ScheduleID,
 		RecordVisibility: true,
 	})

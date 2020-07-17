@@ -639,7 +639,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	di, err := s.msBuilder.ReplicateWorkflowTaskScheduledEvent(
 		workflowTaskScheduleEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
-		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().TaskQueue.GetName(),
+		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
@@ -690,7 +690,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	di, err = s.msBuilder.ReplicateWorkflowTaskScheduledEvent(
 		newWorkflowTaskScheduleEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().TaskQueue.GetName(),
+		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
