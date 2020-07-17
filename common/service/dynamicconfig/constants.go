@@ -813,7 +813,7 @@ const (
 	TaskQueueName
 	// TaskType is the task type (0:Workflow, 1:Activity)
 	TaskType
-	// ShardID is the shard id
+	// RangeHash is the shard id
 	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose

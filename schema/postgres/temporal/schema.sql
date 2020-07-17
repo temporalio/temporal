@@ -91,15 +91,13 @@ CREATE TABLE tasks (
 );
 
 CREATE TABLE task_queues (
-  shard_id INTEGER NOT NULL,
-  namespace_id BYTEA NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  task_type SMALLINT NOT NULL, -- {Activity, Workflow}
+  range_hash BIGINT NOT NULL,
+  task_queue_id BYTEA NOT NULL,
   --
   range_id BIGINT NOT NULL,
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (shard_id, namespace_id, name, task_type)
+  PRIMARY KEY (range_hash, task_queue_id)
 );
 
 CREATE TABLE replication_tasks (
