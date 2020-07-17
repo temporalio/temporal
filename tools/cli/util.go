@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
+// Portions of the Software are attributed to Copyright (c) 2020 Temporal Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -740,6 +741,15 @@ func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc)
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
 	return context.WithTimeout(context.Background(), contextTimeout)
+}
+
+func newIndefiniteContext(c *cli.Context) (context.Context, context.CancelFunc) {
+	if c.GlobalIsSet(FlagContextTimeout) {
+		contextTimeout := time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+		return context.WithTimeout(context.Background(), contextTimeout)
+	}
+
+	return context.WithCancel(context.Background())
 }
 
 // process and validate input provided through cmd or file

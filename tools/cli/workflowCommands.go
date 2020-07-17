@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
+// Portions of the Software are attributed to Copyright (c) 2020 Temporal Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -366,7 +367,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	var lastEvent *s.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
-	tcCtx, cancel := newContextForLongPoll(c)
+	tcCtx, cancel := newIndefiniteContext(c)
 	defer cancel()
 
 	showDetails := c.Bool(FlagShowDetail)
