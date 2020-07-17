@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/scanner/executions/common"
+	"github.com/uber/cadence/common/reconciliation/common"
 )
 
 type ScannerSuite struct {

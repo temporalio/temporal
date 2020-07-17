@@ -24,7 +24,7 @@ package invariants
 
 import (
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/scanner/executions/common"
+	"github.com/uber/cadence/common/reconciliation/common"
 )
 
 const (

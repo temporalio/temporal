@@ -26,7 +26,7 @@ import (
 	"math/rand"
 
 	c "github.com/uber/cadence/common"
-	"github.com/uber/cadence/service/worker/scanner/executions/common"
+	"github.com/uber/cadence/common/reconciliation/common"
 )
 
 func (s *workflowsSuite) TestShardScanResultAggregator() {

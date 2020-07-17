@@ -28,8 +28,8 @@ import (
 	"github.com/pborman/uuid"
 
 	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/service/worker/scanner/executions/common"
-	"github.com/uber/cadence/service/worker/scanner/executions/invariants"
+	"github.com/uber/cadence/common/reconciliation/common"
+	"github.com/uber/cadence/common/reconciliation/invariants"
 )
 
 type (

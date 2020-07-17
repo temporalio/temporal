@@ -33,7 +33,7 @@ import (
 	"go.uber.org/cadence/workflow"
 
 	"github.com/uber/cadence/common"
-	c "github.com/uber/cadence/service/worker/scanner/executions/common"
+	c "github.com/uber/cadence/common/reconciliation/common"
 )
 
 type workflowsSuite struct {

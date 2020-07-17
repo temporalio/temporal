@@ -36,9 +36,9 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
+	c "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	c "github.com/uber/cadence/service/worker/scanner/executions/common"
 )
 
 type activitiesSuite struct {
