@@ -281,7 +281,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         200,
-		WorkflowTaskTimeout:        100,
+		DefaultWorkflowTaskTimeout: 100,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(8),
@@ -290,7 +290,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		CurrentWorkflowTaskTimeout: 100,
+		WorkflowTaskTimeout:        100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -739,7 +739,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         200,
-		WorkflowTaskTimeout:        100,
+		DefaultWorkflowTaskTimeout: 100,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(101),
@@ -748,7 +748,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		CurrentWorkflowTaskTimeout: 100,
+		WorkflowTaskTimeout:        100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{

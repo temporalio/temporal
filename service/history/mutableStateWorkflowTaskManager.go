@@ -181,7 +181,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateTransientWorkflowTaskSche
 		ScheduleID:          m.msb.GetNextEventID(),
 		StartedID:           common.EmptyEventID,
 		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: m.msb.GetExecutionInfo().WorkflowTaskTimeout,
+		WorkflowTaskTimeout: m.msb.GetExecutionInfo().DefaultWorkflowTaskTimeout,
 		TaskQueue:           m.msb.GetExecutionInfo().TaskQueue,
 		Attempt:             m.msb.GetExecutionInfo().WorkflowTaskAttempt,
 		ScheduledTimestamp:  m.msb.timeSource.Now().UnixNano(),
@@ -311,7 +311,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.
 		m.msb.ClearStickyness()
 	}
-	taskTimeout := m.msb.executionInfo.WorkflowTaskTimeout
+	taskTimeout := m.msb.executionInfo.DefaultWorkflowTaskTimeout
 
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
 	// workflow task and will cause in timeout processing to not work for transient workflow tasks
@@ -617,7 +617,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 	m.msb.executionInfo.WorkflowTaskScheduleID = workflowTask.ScheduleID
 	m.msb.executionInfo.WorkflowTaskStartedID = workflowTask.StartedID
 	m.msb.executionInfo.WorkflowTaskRequestID = workflowTask.RequestID
-	m.msb.executionInfo.CurrentWorkflowTaskTimeout = workflowTask.WorkflowTaskTimeout
+	m.msb.executionInfo.WorkflowTaskTimeout = workflowTask.WorkflowTaskTimeout
 	m.msb.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
 	m.msb.executionInfo.WorkflowTaskStartedTimestamp = workflowTask.StartedTimestamp
 	m.msb.executionInfo.WorkflowTaskScheduledTimestamp = workflowTask.ScheduledTimestamp
@@ -710,7 +710,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) getWorkflowTaskInfo() *workflowTas
 		ScheduleID:                 m.msb.executionInfo.WorkflowTaskScheduleID,
 		StartedID:                  m.msb.executionInfo.WorkflowTaskStartedID,
 		RequestID:                  m.msb.executionInfo.WorkflowTaskRequestID,
-		WorkflowTaskTimeout:        m.msb.executionInfo.CurrentWorkflowTaskTimeout,
+		WorkflowTaskTimeout:        m.msb.executionInfo.WorkflowTaskTimeout,
 		Attempt:                    m.msb.executionInfo.WorkflowTaskAttempt,
 		StartedTimestamp:           m.msb.executionInfo.WorkflowTaskStartedTimestamp,
 		ScheduledTimestamp:         m.msb.executionInfo.WorkflowTaskScheduledTimestamp,

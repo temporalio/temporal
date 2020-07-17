@@ -1225,7 +1225,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			TaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
-			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
+			WorkflowTaskTimeoutSeconds:      executionInfo.DefaultWorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
