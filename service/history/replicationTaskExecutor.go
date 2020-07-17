@@ -30,7 +30,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -145,9 +145,9 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	defer cancel()
 	err = e.historyEngine.SyncActivity(ctx, request)
 	// Handle resend error
-	retryV2Err, okV2 := e.convertRetryTaskV2Error(err)
+	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 	// TODO: remove handling retry error v1 after 2DC deprecation
-	retryV1Err, okV1 := e.convertRetryTaskError(err)
+	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
 
 	if !okV1 && !okV2 {
 		return err
@@ -229,7 +229,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEvents(ctx, request)
-	retryErr, ok := e.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -281,7 +281,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
-	retryErr, ok := e.convertRetryTaskV2Error(err)
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
 	if !ok {
 		return err
 	}
@@ -329,21 +329,4 @@ FilterLoop:
 		}
 	}
 	return shouldProcessTask, nil
-}
-
-// TODO: remove this code after 2DC deprecation
-func (e *replicationTaskExecutorImpl) convertRetryTaskError(
-	err error,
-) (*serviceerror.RetryTask, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTask)
-	return retError, ok
-}
-
-func (e *replicationTaskExecutorImpl) convertRetryTaskV2Error(
-	err error,
-) (*serviceerror.RetryTaskV2, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTaskV2)
-	return retError, ok
 }

@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -842,7 +843,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}
 
 	rereplicationContext := newHistoryRereplicationContext(s.namespaceID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"retry task status",
 		s.namespaceID,
 		workflowID,
@@ -921,7 +922,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 
 	rereplicationContext := newHistoryRereplicationContext(s.namespaceID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
 	rereplicationContext.rpcCalls = 1 // so this will be the second API call for rereplication
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		s.namespaceID,
 		workflowID,

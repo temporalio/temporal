@@ -71,7 +71,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTaskPersistence(conn, f.cfg.NumShards, f.logger)
+	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger)
 }
 
 // NewShardStore returns a new shard store

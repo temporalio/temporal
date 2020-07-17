@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 )
 
@@ -1778,9 +1778,9 @@ func (h *Handler) convertError(err error) error {
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
 		info, err := h.GetHistoryServiceResolver().Lookup(string(shardID))
 		if err == nil {
-			return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), info.GetAddress())
+			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
-		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
+		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowExecutionAlreadyStartedError:
 		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
 		return serviceerror.NewInternal(err.Msg)
@@ -1808,10 +1808,10 @@ func (h *Handler) updateErrorMetric(
 	}
 
 	switch err := err.(type) {
-	case *serviceerror.ShardOwnershipLost:
+	case *serviceerrors.ShardOwnershipLost:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-	case *serviceerror.EventAlreadyStarted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEventAlreadyStartedCounter)
+	case *serviceerrors.TaskAlreadyStarted:
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:
@@ -1824,9 +1824,9 @@ func (h *Handler) updateErrorMetric(
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.RetryTask:
+	case *serviceerrors.RetryTask:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.RetryTaskV2:
+	case *serviceerrors.RetryTaskV2:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
@@ -1870,14 +1870,6 @@ func (h *Handler) getLoggerWithTags(
 	}
 
 	return logger
-}
-
-func createShardOwnershipLostError(
-	currentHost string,
-	ownerHost string,
-) *serviceerror.ShardOwnershipLost {
-
-	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
