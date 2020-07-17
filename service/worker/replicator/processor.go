@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -462,7 +463,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 
 	// Also update counter to distinguish between type of failures
 	switch err.(type) {
-	case *serviceerror.ShardOwnershipLost:
+	case *serviceerrors.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
@@ -474,7 +475,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.RetryTask:
+	case *serviceerrors.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)

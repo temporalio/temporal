@@ -287,21 +287,6 @@ func (b *historyBuilder) AddTimerCanceledEvent(startedEventID int64,
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddCancelTimerFailedEvent(timerID string, workflowTaskCompletedEventID int64,
-	cause string, identity string) *historypb.HistoryEvent {
-
-	attributes := &historypb.CancelTimerFailedEventAttributes{}
-	attributes.TimerId = timerID
-	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
-	attributes.Cause = cause
-	attributes.Identity = identity
-
-	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED)
-	event.Attributes = &historypb.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: attributes}
-
-	return b.addEventToHistory(event)
-}
-
 func (b *historyBuilder) AddWorkflowExecutionCancelRequestedEvent(cause string,
 	request *historyservice.RequestCancelWorkflowExecutionRequest) *historypb.HistoryEvent {
 	event := b.newWorkflowExecutionCancelRequestedEvent(cause, request)

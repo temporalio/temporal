@@ -961,10 +961,9 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_TIMER_STARTED,
 		// CommandTypeCancelTimer is an exception. This command will be mapped
-		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-		// So both should not be buffered. Ref: historyEngine, search for "workflow.CommandTypeCancelTimer"
+		// to workflow.EventTypeTimerCanceled.
+		// This event should not be buffered. Ref: historyEngine, search for "workflow.CommandTypeCancelTimer"
 		enumspb.EVENT_TYPE_TIMER_CANCELED,
-		enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED,
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_MARKER_RECORDED,
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
@@ -3193,23 +3192,6 @@ func (e *mutableStateBuilder) ReplicateTimerCanceledEvent(
 	timerID := attributes.GetTimerId()
 
 	return e.DeleteUserTimer(timerID)
-}
-
-func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
-	workflowTaskCompletedEventID int64,
-	attributes *commandpb.CancelTimerCommandAttributes,
-	identity string,
-) (*historypb.HistoryEvent, error) {
-
-	opTag := tag.WorkflowActionTimerCancelFailed
-	if err := e.checkMutability(opTag); err != nil {
-		return nil, err
-	}
-
-	// No Operation: We couldn't cancel it probably TIMER_ID_UNKNOWN
-	timerID := attributes.GetTimerId()
-	return e.hBuilder.AddCancelTimerFailedEvent(timerID, workflowTaskCompletedEventID,
-		timerCancellationMsgTimerIDUnknown, identity), nil
 }
 
 func (e *mutableStateBuilder) AddRecordMarkerEvent(

@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 // Implements matching.Engine
@@ -388,7 +389,7 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug(fmt.Sprintf("Duplicated workflow task taskQueue=%v, taskID=%v",
 					taskQueueName, task.event.GetTaskId()))
 				task.finish(nil)
@@ -455,7 +456,7 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.Name(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
@@ -810,7 +811,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true
@@ -839,7 +840,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true

@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -210,7 +211,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 				// Looks like WorkflowTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewEventAlreadyStarted("Workflow task already started.")
+				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(scheduleID, requestID, req.PollRequest)

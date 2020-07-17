@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -180,7 +181,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		// the base event and incoming event are from different branch
 		// only re-replicate the gap on the incoming branch
 		// the base branch event will eventually arrived
-		return nil, newNDCRetryTaskErrorWithHint(
+		return nil, serviceerrors.NewRetryTaskV2(
 			resendOnResetWorkflowMessage,
 			r.namespaceID,
 			r.workflowID,

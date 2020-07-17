@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -345,7 +346,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		s.mockRereplicator,
 		s.mockNDCResender)
 	task.attempt = s.config.ReplicatorActivityBufferRetryCount() + 1
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
@@ -560,7 +561,7 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = s.config.ReplicatorHistoryBufferRetryCount() + 1
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
@@ -711,7 +712,7 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,

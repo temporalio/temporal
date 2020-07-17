@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -247,12 +247,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&serviceerror.RetryTaskV2{}, err)
+	s.IsType(&serviceerrors.RetryTaskV2{}, err)
 	s.Nil(rebuiltMutableState)
 
-	retryErr, isRetryError := err.(*serviceerror.RetryTaskV2)
+	retryErr, isRetryError := err.(*serviceerrors.RetryTaskV2)
 	s.True(isRetryError)
-	expectedErr := serviceerror.NewRetryTaskV2(
+	expectedErr := serviceerrors.NewRetryTaskV2(
 		resendOnResetWorkflowMessage,
 		s.namespaceID,
 		s.workflowID,

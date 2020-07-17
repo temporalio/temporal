@@ -13,7 +13,7 @@ frontend.validSearchAttributes:
       StartTime: "Int"
       ExecutionTime: "Int"
       CloseTime: "Int"
-      Status: "Int"
+      ExecutionStatus: "Int"
       HistoryLength: "Int"
       TaskQueue: "Keyword"
       CustomStringField: "String"
@@ -22,6 +22,8 @@ frontend.validSearchAttributes:
       CustomDoubleField: "Double"
       CustomBoolField: "Bool"
       CustomDatetimeField: "Datetime"
+      TemporalChangeVersion: "Keyword"
+      BinaryChecksums: "Keyword"
       project: "Keyword"
       service: "Keyword"
       environment: "Keyword"
@@ -31,7 +33,6 @@ frontend.validSearchAttributes:
       CustomNamespace: "Keyword"
       Operator: "Keyword"
       RolloutId: "Keyword"
-      TemporalChangeVersion: "Keyword"
-      BinaryChecksums: "Keyword"
+      
 system.minRetentionDays:
     - value: 0

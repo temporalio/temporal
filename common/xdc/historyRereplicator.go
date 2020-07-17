@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var (
@@ -355,7 +356,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
-	retryErr, ok := err.(*serviceerror.RetryTask)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok {
 		logger.Error("error sending history", tag.Error(err))
 		return err
