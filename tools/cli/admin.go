@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
+// Portions of the Software are attributed to Copyright (c) 2020 Temporal Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -122,11 +123,6 @@ func newAdminShardManagementCommands() []cli.Command {
 				cli.IntFlag{
 					Name:  FlagShardID,
 					Usage: "The Id of the shard to describe",
-				},
-				cli.StringFlag{
-					Name:  FlagTargetCluster,
-					Value: "active",
-					Usage: "Temporal cluster to use",
 				},
 			),
 			Action: func(c *cli.Context) {
@@ -878,11 +874,6 @@ func newDBCommands() []cli.Command {
 func getDBFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagDBEngine,
-			Value: "cassandra",
-			Usage: "Type of the DB engine to use (cassandra, mysql..)",
-		},
-		cli.StringFlag{
 			Name:  FlagDBAddress,
 			Value: "127.0.0.1",
 			Usage: "persistence address (right now only cassandra is fully supported)",
@@ -902,7 +893,7 @@ func getDBFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagKeyspace,
-			Value: "temporal",
+			Value: "cadence",
 			Usage: "cassandra keyspace",
 		},
 		cli.BoolFlag{

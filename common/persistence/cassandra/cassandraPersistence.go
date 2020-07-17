@@ -920,6 +920,15 @@ func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Lo
 	}, nil
 }
 
+// NewShardPersistence is used to create an instance of ShardManager implementation
+func NewShardPersistence(session *gocql.Session, clusterName string, logger log.Logger) p.ShardStore {
+	return &cassandraPersistence{
+		cassandraStore:     cassandraStore{session: session, logger: logger},
+		shardID:            -1,
+		currentClusterName: clusterName,
+	}
+}
+
 // NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewWorkflowExecutionPersistence(
 	shardID int,

@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
+// Portions of the Software are attributed to Copyright (c) 2020 Temporal Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -392,15 +393,14 @@ func AdminRemoveTask(c *cli.Context) {
 // AdminDescribeShard describes shard by shard id
 func AdminDescribeShard(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	pFactory := CreatePersistenceFactory(c)
-	shardManager, err := pFactory.NewShardManager()
+	session := connectToCassandra(c)
+	shardManager := cassp.NewShardPersistence(session, "current-cluster", loggerimpl.NewNopLogger())
 
-	if err != nil {
-		ErrorAndExit("Failed to initialize shard manager", err)
-	}
-
-	getShardReq := &persistence.GetShardRequest{ShardID: int32(sid)}
+	getShardReq := &persistence.GetShardRequest{ShardID: sid}
 	shard, err := shardManager.GetShard(getShardReq)
+	if err != nil {
+		ErrorAndExit("Failed to describe shard.", err)
+	}
 
 	prettyPrintJSONObject(shard)
 }
