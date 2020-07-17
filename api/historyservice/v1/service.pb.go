@@ -134,11 +134,11 @@ type HistoryServiceClient interface {
 	// 5. ClientImpl
 	ResetStickyTaskQueue(ctx context.Context, in *ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*ResetStickyTaskQueueResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
-	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
+	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordWorkflowTaskStarted(ctx context.Context, in *RecordWorkflowTaskStartedRequest, opts ...grpc.CallOption) (*RecordWorkflowTaskStartedResponse, error)
 	// RecordActivityTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
-	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
+	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(ctx context.Context, in *RecordActivityTaskStartedRequest, opts ...grpc.CallOption) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
@@ -619,11 +619,11 @@ type HistoryServiceServer interface {
 	// 5. ClientImpl
 	ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
-	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
+	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponse, error)
 	// RecordActivityTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
-	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'EventAlreadyStartedError',
+	// a PollActivityTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
 	RecordActivityTaskStarted(context.Context, *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	// RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of

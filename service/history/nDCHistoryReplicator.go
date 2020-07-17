@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var (
@@ -366,7 +367,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	switch err.(type) {
 	case nil:
 		return doContinue, versionHistoryIndex, nil
-	case *serviceerror.RetryTaskV2:
+	case *serviceerrors.RetryTaskV2:
 		// replication message can arrive out of order
 		// do not log
 		return false, 0, err
@@ -613,7 +614,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
 		firstEvent := task.getFirstEvent()
-		return nil, newNDCRetryTaskErrorWithHint(
+		return nil, serviceerrors.NewRetryTaskV2(
 			mutableStateMissingMessage,
 			task.getNamespaceID(),
 			task.getWorkflowID(),
@@ -720,27 +721,4 @@ func (r *nDCHistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
-}
-
-func newNDCRetryTaskErrorWithHint(
-	message string,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	startEventID int64,
-	startEventVersion int64,
-	endEventID int64,
-	endEventVersion int64,
-) error {
-
-	return serviceerror.NewRetryTaskV2(
-		message,
-		namespaceID,
-		workflowID,
-		runID,
-		startEventID,
-		startEventVersion,
-		endEventID,
-		endEventVersion,
-	)
 }

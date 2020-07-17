@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -75,10 +76,10 @@ type (
 var (
 	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
 	// try this task again after a small delay.
-	ErrRetryEntityNotExists = serviceerror.NewRetryTask("entity not exists", "", "", "", common.EmptyEventID)
+	ErrRetryEntityNotExists = serviceerrors.NewRetryTask("entity not exists", "", "", "", common.EmptyEventID)
 	// ErrRetryRaceCondition is returned to indicate logic race condition encountered and replicator should
 	// try this task again after a small delay.
-	ErrRetryRaceCondition = serviceerror.NewRetryTask("encounter race condition, retry", "", "", "", common.EmptyEventID)
+	ErrRetryRaceCondition = serviceerrors.NewRetryTask("encounter race condition, retry", "", "", "", common.EmptyEventID)
 	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
 	ErrRetrySyncActivityMsg = "retry on applying sync activity"
 	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
@@ -91,7 +92,7 @@ var (
 	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
 	// the target workflow has done continue as new.
 	// try this task again after a small delay.
-	ErrRetryExecutionAlreadyStarted = serviceerror.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
+	ErrRetryExecutionAlreadyStarted = serviceerrors.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
 	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
 	ErrCorruptedReplicationInfo = serviceerror.NewInvalidArgument("replication task is has corrupted cluster replication info")
 	// ErrCorruptedMutableStateWorkflowTask is returned when mutable state workflow task is corrupted
@@ -356,7 +357,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 	defer func() { currentRelease(retError) }()
 
@@ -389,7 +390,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if request.GetResetWorkflow() {
 			return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 
 	// currentLastWriteVersion == incomingVersion
@@ -398,14 +399,14 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID)
 	}
 
 	if request.GetResetWorkflow() {
 		//Note that at this point, current run is already closed and currentLastWriteVersion <= incomingVersion
 		return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 	}
-	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
+	return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 }
 
 func (r *historyReplicator) ApplyOtherEventsVersionChecking(
@@ -565,7 +566,7 @@ func (r *historyReplicator) ApplyOtherEvents(
 			return nil
 		}
 
-		return newRetryTaskErrorWithHint(
+		return serviceerrors.NewRetryTask(
 			ErrRetryBufferEventsMsg,
 			context.getNamespaceID(),
 			context.getExecution().GetWorkflowId(),
@@ -773,7 +774,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(
+		return serviceerrors.NewRetryTask(
 			ErrRetryExistingWorkflowMsg,
 			namespaceID,
 			execution.GetWorkflowId(),
@@ -952,7 +953,7 @@ func (r *historyReplicator) terminateWorkflow(
 				return err
 			}
 			if incomingVersion <= currentLastWriteVersion {
-				return newRetryTaskErrorWithHint(
+				return serviceerrors.NewRetryTask(
 					ErrRetryExistingWorkflowMsg,
 					namespaceID,
 					workflowID,
@@ -971,7 +972,7 @@ func (r *historyReplicator) terminateWorkflow(
 			// if last write version indicates not from current cluster, need to fetch from remote
 			sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(currentLastWriteVersion)
 			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
-				return newRetryTaskErrorWithHint(
+				return serviceerrors.NewRetryTask(
 					ErrRetryExistingWorkflowMsg,
 					namespaceID,
 					workflowID,
@@ -1346,23 +1347,6 @@ func logError(
 	err error,
 ) {
 	logger.Error(msg, tag.Error(err))
-}
-
-func newRetryTaskErrorWithHint(
-	msg string,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	nextEventID int64,
-) *serviceerror.RetryTask {
-
-	return serviceerror.NewRetryTask(
-		msg,
-		namespaceID,
-		workflowID,
-		runID,
-		nextEventID,
-	)
 }
 
 func notify(
