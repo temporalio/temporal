@@ -306,7 +306,7 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) metrics.Service
 	case common.WorkerServiceName:
 		return metrics.Worker
 	default:
-		logger.Fatal("Unknown service name '%v' for metrics!", tag.Service(serviceName))
+		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
 	}
 
 	// this should never happen!

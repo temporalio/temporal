@@ -120,11 +120,11 @@ func (d *RPCFactory) getListenIP() net.IP {
 		if ip != nil && ip.To4() != nil {
 			return ip.To4()
 		}
-		d.logger.Fatal("ListenIP failed, unable to parse bindOnIP value %q or it is not IPv4 address", tag.Address(d.config.BindOnIP))
+		d.logger.Fatal("ListenIP failed, unable to parse bindOnIP value or it is not an IPv4 address", tag.Address(d.config.BindOnIP))
 	}
 	ip, err := ListenIP()
 	if err != nil {
-		d.logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
+		d.logger.Fatal("ListenIP failed", tag.Error(err))
 	}
 	return ip
 }
