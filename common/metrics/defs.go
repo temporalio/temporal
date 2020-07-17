@@ -1707,7 +1707,7 @@ const (
 	AutoResetPointsLimitExceededCounter
 	AutoResetPointCorruptionCounter
 	ConcurrencyUpdateFailureCounter
-	ServiceErrEventAlreadyStartedCounter
+	ServiceErrTaskAlreadyStartedCounter
 	ServiceErrShardOwnershipLostCounter
 	HeartbeatTimeoutCounter
 	ScheduleToStartTimeoutCounter
@@ -2123,7 +2123,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		AutoResetPointCorruptionCounter:                   {metricName: "auto_reset_point_corruption", metricType: Counter},
 		ConcurrencyUpdateFailureCounter:                   {metricName: "concurrency_update_failure", metricType: Counter},
 		ServiceErrShardOwnershipLostCounter:               {metricName: "service_errors_shard_ownership_lost", metricType: Counter},
-		ServiceErrEventAlreadyStartedCounter:              {metricName: "service_errors_event_already_started", metricType: Counter},
+		ServiceErrTaskAlreadyStartedCounter:               {metricName: "service_errors_task_already_started", metricType: Counter},
 		HeartbeatTimeoutCounter:                           {metricName: "heartbeat_timeout", metricType: Counter},
 		ScheduleToStartTimeoutCounter:                     {metricName: "schedule_to_start_timeout", metricType: Counter},
 		StartToCloseTimeoutCounter:                        {metricName: "start_to_close_timeout", metricType: Counter},
