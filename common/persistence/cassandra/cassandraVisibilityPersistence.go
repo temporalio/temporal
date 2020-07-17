@@ -63,19 +63,11 @@ const (
 		`AND start_time = ? ` +
 		`AND run_id = ?`
 
-	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
+	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions_v2 (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
-	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	templateCreateWorkflowExecutionClosedWithTTLV2 = `INSERT INTO closed_executions_v2 (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
-
-	templateCreateWorkflowExecutionClosedV2 = `INSERT INTO closed_executions_v2 (` +
+	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions_v2 (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -103,7 +95,7 @@ const (
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions ` +
+		`FROM closed_executions_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND workflow_id = ? ` +
@@ -255,41 +247,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			string(request.Memo.GetEncoding()),
 			request.TaskQueue,
 		)
-		// duplicate write to v2 to order by close time
-		batch.Query(templateCreateWorkflowExecutionClosedV2,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskQueue,
-		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
-			request.TaskQueue,
-			retention,
-		)
-		// duplicate write to v2 to order by close time
-		batch.Query(templateCreateWorkflowExecutionClosedWithTTLV2,
 			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
