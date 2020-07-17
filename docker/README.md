@@ -28,7 +28,7 @@ contain a **docker.tar.gz** file (docker-compose startup scripts).
 [Download](https://github.com/temporalio/temporal/releases/latest) the latest **docker.tar.gz**.
 
 Execute the following
-commands to start a pre-built image along with all dependencies (`cassandra`).
+commands to start a pre-built image along with all dependencies (i.e. `cassandra`, `mysql`, `elasticsearch`, etc).
 
 ```bash
 $ curl -L https://github.com/temporalio/temporal/releases/latest/download/docker.tar.gz | tar -xz
