@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -800,7 +801,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	}
 	if baseMutableState.GetNextEventID() < workflowTaskFinishEventID {
 		// re-replicate the whole new run
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 	}
 
 	if currentRunID == resetAttr.GetBaseRunId() {
@@ -963,7 +964,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 	if lastEvent.GetEventId() != workflowTaskFinishEventID-1 || lastEvent.GetVersion() != forkEventVersion {
 		// re-replicate the whole new run
-		retError = newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		retError = serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 		return
 	}
 	startTime := time.Unix(0, firstEvent.GetTimestamp())

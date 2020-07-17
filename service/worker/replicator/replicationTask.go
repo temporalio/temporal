@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -322,8 +323,8 @@ func (t *activityReplicationTask) HandleErr(
 		return err
 	}
 
-	retryV1Err, okV1 := t.convertRetryTaskError(err)
-	retryV2Err, okV2 := t.convertRetryTaskV2Error(err)
+	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
+	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
 	if !okV1 && !okV2 {
 		return err
@@ -391,7 +392,7 @@ func (t *historyReplicationTask) HandleErr(
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -444,7 +445,7 @@ func (t *historyMetadataReplicationTask) Execute() error {
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -483,7 +484,7 @@ func (t *historyReplicationV2Task) HandleErr(err error) error {
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskV2Error(err)
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
 	if !ok {
 		return err
 	}
@@ -557,20 +558,4 @@ func (t *workflowReplicationTask) Nack() {
 	if err != nil {
 		t.logger.Error("Unable to nack.")
 	}
-}
-
-func (t *workflowReplicationTask) convertRetryTaskError(
-	err error,
-) (*serviceerror.RetryTask, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTask)
-	return retError, ok
-}
-
-func (t *workflowReplicationTask) convertRetryTaskV2Error(
-	err error,
-) (*serviceerror.RetryTaskV2, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTaskV2)
-	return retError, ok
 }

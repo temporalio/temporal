@@ -165,7 +165,7 @@ proto-mock: $(PROTO_OUT)
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api..."
-	@go get -u go.temporal.io/api
+	@go get -u go.temporal.io/api@master
 
 goimports-proto:
 	@printf $(COLOR) "Run goimports..."

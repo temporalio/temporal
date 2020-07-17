@@ -36,7 +36,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -307,7 +307,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		},
 		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
 	}
-	retryErr := serviceerror.NewRetryTaskV2(
+	retryErr := serviceerrors.NewRetryTaskV2(
 		"",
 		s.namespaceID,
 		workflowID,

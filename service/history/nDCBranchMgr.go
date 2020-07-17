@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -211,7 +212,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	}
 	if incomingFirstEventID > nextEventID {
 		executionInfo := r.mutableState.GetExecutionInfo()
-		return false, newNDCRetryTaskErrorWithHint(
+		return false, serviceerrors.NewRetryTaskV2(
 			outOfOrderDeliveryMessage,
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,

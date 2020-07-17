@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -188,7 +189,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Missing
 	}).Return(nil, serviceerror.NewNotFound(""))
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_NoEventsReapplication() {
@@ -500,7 +501,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingEqualToCurrent_CurrentRunning_OutOfOrder() {
@@ -648,7 +649,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingNotLessThanCurrent_CurrentFinished() {
@@ -717,7 +718,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestWorkflowReset() {
@@ -1817,7 +1818,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	msBuilder.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 	err := s.historyReplicator.ApplyOtherEvents(context.Background(), weContext, msBuilder, request, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryBufferEventsMsg, namespaceID, workflowID, runID, currentNextEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrRetryBufferEventsMsg, namespaceID, workflowID, runID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyReplicationTask() {
@@ -3303,7 +3304,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(context.Background(), weContext, msBuilder, history, s.mockStateBuilder, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrRetryExistingWorkflowMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingEqualToCurrent_OutOfOrder() {

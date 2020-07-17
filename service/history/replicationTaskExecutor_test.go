@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -142,30 +141,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 func (s *replicationTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_OK() {
-	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
-	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_NotOK() {
-	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
-	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
-	s.False(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_OK() {
-	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
-	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_NotOK() {
-	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
-	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
-	s.False(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask() {
