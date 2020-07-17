@@ -208,7 +208,7 @@ func AdminListNamespaces(c *cli.Context) {
 		}
 		return items, token, nil
 	}
-	paginate(c, paginationFunc)
+	paginate(c, paginationFunc, []string{})
 }
 
 // AdminDeleteWorkflow delete a workflow execution for admin
@@ -479,7 +479,7 @@ func AdminListTasks(c *cli.Context) {
 			}
 			return items, token, nil
 		}
-		paginate(c, paginationFunc)
+		paginate(c, paginationFunc, []string{})
 	} else if category == enumsspb.TASK_CATEGORY_TIMER {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
@@ -499,7 +499,7 @@ func AdminListTasks(c *cli.Context) {
 			}
 			return items, token, nil
 		}
-		paginate(c, paginationFunc)
+		paginate(c, paginationFunc, []string{})
 	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
 		req := &persistence.GetReplicationTasksRequest{}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -516,7 +516,7 @@ func AdminListTasks(c *cli.Context) {
 			}
 			return items, token, nil
 		}
-		paginate(c, paginationFunc)
+		paginate(c, paginationFunc, []string{})
 	} else {
 		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
 	}

@@ -931,7 +931,7 @@ func showNextPage() bool {
 }
 
 // paginate creates an interactive CLI mode to control the printing of items
-func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
+func paginate(c *cli.Context, paginationFn collection.PaginationFn, fields []string) error {
 	more := c.Bool(FlagMore)
 	isTableView := !c.Bool(FlagPrintJSON)
 	pageSize := c.Int(FlagPageSize)
@@ -950,7 +950,7 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				printTable(pageItems)
+				printTable(pageItems, fields)
 			} else {
 				prettyPrintJSONObject(pageItems)
 			}
@@ -965,20 +965,26 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
 	return nil
 }
 
-func printTable(items []interface{}) error {
-	if len(items) == 0 {
-		return nil
-	}
+func printTable(items []interface{}, fields []string) error {
+	// func getField(v *Vertex, field string) int {
+	// 	r := reflect.ValueOf(v)
+	// 	f := reflect.Indirect(r).FieldByName(field)
+	// 	return int(f.Int())
+	// }
 
-	e := reflect.ValueOf(items[0])
-	for e.Type().Kind() == reflect.Ptr {
-		e = e.Elem()
-	}
-
-	var fields []string
-	t := e.Type()
-	for i := 0; i < e.NumField(); i++ {
-		fields = append(fields, t.Field(i).Name)
+	if len(fields) == 0 {
+		// dynamically examine fields
+		if len(items) == 0 {
+			return nil
+		}
+		e := reflect.ValueOf(items[0])
+		for e.Type().Kind() == reflect.Ptr {
+			e = e.Elem()
+		}
+		t := e.Type()
+		for i := 0; i < e.NumField(); i++ {
+			fields = append(fields, t.Field(i).Name)
+		}
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
@@ -993,7 +999,7 @@ func printTable(items []interface{}) error {
 		}
 		var columns []string
 		for j := 0; j < len(fields); j++ {
-			col := item.Field(j)
+			col := item.FieldByName(fields[j])
 			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}
 		table.Append(columns)

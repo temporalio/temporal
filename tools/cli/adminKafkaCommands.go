@@ -889,7 +889,7 @@ func AdminListDLQ(c *cli.Context) {
 		}
 		return items, token, nil
 	}
-	paginate(c, paginationFunc)
+	paginate(c, paginationFunc, []string{})
 }
 
 func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, group, fromTopic string) *cluster.Consumer {

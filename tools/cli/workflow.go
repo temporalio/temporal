@@ -137,6 +137,16 @@ func newWorkflowCommands() []cli.Command {
 			},
 		},
 		{
+			Name:        "list2",
+			Aliases:     []string{"ls"},
+			Usage:       "list open or closed workflow executions",
+			Description: "list one page (default size 10 items) by default, use flag --pagesize to change page size",
+			Flags:       getFlagsForList(),
+			Action: func(c *cli.Context) {
+				ListWorkflow2(c)
+			},
+		},
+		{
 			Name:    "listall",
 			Aliases: []string{"la"},
 			Usage:   "list all open or closed workflow executions",

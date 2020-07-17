@@ -171,5 +171,5 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 		return items, nil, nil
 	}
 
-	paginate(c, paginationFunc)
+	paginate(c, paginationFunc, []string{})
 }
