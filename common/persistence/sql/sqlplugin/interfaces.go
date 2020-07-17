@@ -205,18 +205,18 @@ type (
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		RangeHash     uint32
-		TaskQueueID   []byte
-		TaskID        int64
-		Data          []byte
-		DataEncoding  string
+		RangeHash    uint32
+		TaskQueueID  []byte
+		TaskID       int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
 		RangeHash            uint32
-		TaskQueueID   		 []byte
+		TaskQueueID          []byte
 		TaskID               *int64
 		MinTaskID            *int64
 		MaxTaskID            *int64

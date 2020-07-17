@@ -107,7 +107,7 @@ func (pdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 	switch {
 	case filter.MaxTaskID != nil:
 		err = pdb.conn.Select(&rows, getTaskMinMaxQry,
-			filter.RangeHash, filter.TaskQueueID,*filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+			filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
 	default:
 		err = pdb.conn.Select(&rows, getTaskMinQry,
 			filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.PageSize)

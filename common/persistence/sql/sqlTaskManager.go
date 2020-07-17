@@ -472,9 +472,9 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 	taskID := request.TaskID
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
 	_, err = m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		RangeHash:     tqHash,
-		TaskQueueID:   tqId,
-		TaskID:        &taskID})
+		RangeHash:   tqHash,
+		TaskQueueID: tqId,
+		TaskID:      &taskID})
 	if err != nil && err != sql.ErrNoRows {
 		return serviceerror.NewInternal(err.Error())
 	}
