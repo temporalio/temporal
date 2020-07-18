@@ -212,6 +212,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: int32(et),

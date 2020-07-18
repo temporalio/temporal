@@ -128,8 +128,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
-		TaskId:         12345,
-		VisibilityTime: types.TimestampNow(),
+		ScheduleAttempt: 1,
+		TaskId:          12345,
+		VisibilityTime:  types.TimestampNow(),
 	}
 	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
@@ -169,7 +170,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 	}, nil)
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.NoError(err)
 }
 
@@ -187,6 +189,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	})).Return(nil, errors.New("failed to send signal"))
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)
 }

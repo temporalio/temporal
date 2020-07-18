@@ -494,7 +494,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Create_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
 
@@ -589,7 +589,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Update_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
 		resp, err := s.executionManager.UpdateWorkflowExecution(request)
@@ -675,7 +675,7 @@ func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWork
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Reset_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
 		err := s.executionManager.ResetWorkflowExecution(request)
@@ -776,7 +776,7 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Reset_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
 		err := s.executionManager.ConflictResolveWorkflowExecution(request)

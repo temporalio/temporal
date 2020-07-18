@@ -272,7 +272,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
-		attempt:      0,
+		attempt:      1,
 	}}, timerSequenceIDs)
 }
 
@@ -307,14 +307,14 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 			timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
-			attempt:      0,
+			attempt:      1,
 		},
 		{
 			eventID:      timerInfo2.GetStartedId(),
 			timestamp:    time.Unix(timer2Expiry.Seconds, int64(timer2Expiry.Nanos)).UTC(),
 			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: false,
-			attempt:      0,
+			attempt:      1,
 		},
 	}, timerSequenceIDs)
 }
@@ -677,7 +677,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
-		attempt:      0,
+		attempt:      1,
 	}
 
 	timerSequence := s.timerSequence.getUserTimerTimeout(timerInfo)

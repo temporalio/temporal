@@ -54,8 +54,11 @@ func AdminDescribeTaskQueue(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.DescribeTaskQueueRequest{
-		Namespace:              namespace,
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+		Namespace: namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 		TaskQueueType:          tlType,
 		IncludeTaskQueueStatus: true,
 	}

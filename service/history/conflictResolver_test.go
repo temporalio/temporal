@@ -224,7 +224,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowTaskStartedID:        common.EmptyEventID,
 		WorkflowTaskRequestID:        emptyUUID,
 		CurrentWorkflowTaskTimeout:   0,
-		WorkflowTaskAttempt:          0,
+		WorkflowTaskAttempt:          1,
 		WorkflowTaskStartedTimestamp: 0,
 		CreateRequestID:              createRequestID,
 		BranchToken:                  branchToken,

@@ -414,7 +414,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -479,7 +479,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
-					Attempt:          0,
+					Attempt:          1,
 				}},
 			},
 		}},
@@ -501,7 +501,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -545,7 +545,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 			{
@@ -607,7 +607,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -725,7 +725,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -790,7 +790,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
-					Attempt:          0,
+					Attempt:          1,
 				}},
 			},
 		}},
@@ -812,7 +812,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -856,7 +856,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 			{
@@ -1195,7 +1195,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -1260,7 +1260,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 					ScheduledEventId: 6,
 					Identity:         identity,
 					RequestId:        uuid.New(),
-					Attempt:          0,
+					Attempt:          1,
 				}},
 			},
 		}},
@@ -1282,7 +1282,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -1326,7 +1326,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 			{
@@ -1406,7 +1406,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
 					StartToCloseTimeoutSeconds: 1000,
-					Attempt:                    0,
+					Attempt:                    1,
 				}},
 			},
 		}},
@@ -1674,7 +1674,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 			OriginalExecutionRunId:               runID,
 			Identity:                             "NDC-test",
 			FirstExecutionRunId:                  runID,
-			Attempt:                              0,
+			Attempt:                              1,
 			WorkflowExecutionExpirationTimestamp: time.Now().Add(time.Minute).UnixNano(),
 		}},
 	}
