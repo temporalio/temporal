@@ -202,6 +202,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// task or not.
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask

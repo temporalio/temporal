@@ -79,7 +79,10 @@ func ListTaskQueuePartitions(c *cli.Context) {
 	defer cancel()
 	request := &workflowservice.ListTaskQueuePartitionsRequest{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 	}
 
 	response, err := frontendClient.ListTaskQueuePartitions(ctx, request)

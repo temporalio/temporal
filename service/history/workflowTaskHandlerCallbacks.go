@@ -491,7 +491,7 @@ Update_History_Loop:
 				// start the new workflow task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(newWorkflowTask.ScheduleID, "request-from-RespondWorkflowTaskCompleted", &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: &taskqueuepb.TaskQueue{Name: newWorkflowTask.TaskQueue},
+					TaskQueue: newWorkflowTask.TaskQueue,
 					Identity:  request.Identity,
 				})
 				if err != nil {
