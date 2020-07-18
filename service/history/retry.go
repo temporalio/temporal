@@ -37,7 +37,7 @@ import (
 func getBackoffInterval(
 	now time.Time,
 	expirationTime time.Time,
-	currAttempt int32,
+	currentAttemptCounterValue int32,
 	maxAttempts int32,
 	initInterval int32,
 	maxInterval int32,
@@ -45,6 +45,12 @@ func getBackoffInterval(
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
+
+	// Sanitiy check to make sure currentAttemptCounterValue started with 1.
+	if currentAttemptCounterValue < 1 {
+		currentAttemptCounterValue = 1
+	}
+
 	if !isRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
@@ -53,13 +59,18 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
-		// currAttempt starts from 0.
-		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
+	// currentAttemptCounterValue starts from 1.
+	// maxAttempts is the total attempts, including initial (non-retry) attempt.
+	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
+	// For example, if maxAttepmtps is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
+	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
+	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
+	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 time already).
+	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
+	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
 	if nextInterval <= 0 {
 		// math.Pow() could overflow
 		if maxInterval > 0 {

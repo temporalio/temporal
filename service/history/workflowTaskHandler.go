@@ -225,6 +225,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		return err
 	}
 
+	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
+
 	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.workflowTaskCompletedID, attr)
 	switch err.(type) {
 	case nil:

@@ -46,7 +46,7 @@ const (
 	workflowType         = "test-workflow-type"
 	taskQueue            = "taskQueue"
 	identity             = "identity"
-	workflowTaskAttempts = 0
+	workflowTaskAttempts = 1
 	childWorkflowID      = "child-workflowID"
 	externalWorkflowID   = "external-workflowID"
 )
@@ -248,6 +248,7 @@ func InitializeHistoryEventGenerator(
 			WorkflowTaskTimeoutSeconds:      timeout,
 			Identity:                        identity,
 			FirstExecutionRunId:             uuid.New(),
+			Attempt:                         1,
 		}}
 		return historyEvent
 	})
@@ -419,7 +420,7 @@ func InitializeHistoryEventGenerator(
 			ScheduledEventId: lastEvent.EventId,
 			Identity:         identity,
 			RequestId:        uuid.New(),
-			Attempt:          0,
+			Attempt:          1,
 		}}
 		return historyEvent
 	})

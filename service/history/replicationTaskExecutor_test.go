@@ -190,6 +190,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
+				Attempt:     1,
 			},
 		},
 	}
@@ -203,7 +204,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		StartedId:          0,
 		StartedTime:        0,
 		LastHeartbeatTime:  0,
-		Attempt:            0,
+		Attempt:            1,
 		LastFailure:        nil,
 		LastWorkerIdentity: "",
 	}

@@ -407,12 +407,12 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 	}
 
 	retryCount := t.config.TimerProcessorGetFailureRetryCount()
-	for attempt := 0; attempt < retryCount; attempt++ {
+	for attempt := 1; attempt <= retryCount; attempt++ {
 		response, err := t.executionMgr.GetTimerIndexTasks(request)
 		if err == nil {
 			return response.Timers, response.NextPageToken, nil
 		}
-		backoff := time.Duration(attempt * 100)
+		backoff := time.Duration((attempt - 1) * 100)
 		time.Sleep(backoff * time.Millisecond)
 	}
 	return nil, nil, ErrMaxAttemptsExceeded

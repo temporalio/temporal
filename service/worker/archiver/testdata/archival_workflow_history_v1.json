@@ -20,7 +20,7 @@
         "originalExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
         "identity": "59844@ycyang-C02XW41WJGH6@",
         "firstExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
-        "attempt": 0,
+        "attempt": 1,
         "cronSchedule": "",
         "firstWorkflowTaskBackoffSeconds": 0,
         "header": {}
@@ -49,7 +49,7 @@
           "name": "temporal-archival-tq"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -128,7 +128,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -147,7 +147,7 @@
         "scheduledEventId": 8,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "7dccfd5f-fb84-450f-b452-3a5dd5f382e9",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -173,7 +173,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -236,7 +236,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -288,7 +288,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -307,7 +307,7 @@
         "scheduledEventId": 19,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "d8b8a27d-e66d-4ae5-89ac-058cd336b660",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -333,7 +333,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -396,7 +396,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -472,7 +472,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -505,7 +505,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -538,7 +538,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -557,7 +557,7 @@
         "scheduledEventId": 32,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "57e8b0cb-14b3-46c5-9549-5910a4c17cc4",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -583,7 +583,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -596,7 +596,7 @@
         "scheduledEventId": 33,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "de068cc4-efd0-4ddf-afd8-c4e2272c134c",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -621,7 +621,7 @@
         "scheduledEventId": 34,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "6bfef50a-28cb-4f05-b8d5-915d58347891",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -720,7 +720,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -772,7 +772,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -791,7 +791,7 @@
         "scheduledEventId": 51,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "640f192d-c9b3-4ff7-8e71-3234d7bb09c5",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -817,7 +817,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -880,7 +880,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -932,7 +932,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -951,7 +951,7 @@
         "scheduledEventId": 62,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "870d2b5f-3286-4992-9b83-911d9cb10842",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -977,7 +977,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1040,7 +1040,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1092,7 +1092,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -1111,7 +1111,7 @@
         "scheduledEventId": 73,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "3a35e9d7-790f-41df-a518-0f4d6a5bc0f2",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1137,7 +1137,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1200,7 +1200,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1252,7 +1252,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -1271,7 +1271,7 @@
         "scheduledEventId": 84,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "b247c133-bc34-472b-9bbd-a4e5e1f942d3",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1297,7 +1297,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1360,7 +1360,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1412,7 +1412,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -1431,7 +1431,7 @@
         "scheduledEventId": 95,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "8b9abe6e-e31f-4fd0-ba44-761d7ec7f4b7",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1457,7 +1457,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1520,7 +1520,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1572,7 +1572,7 @@
           "initialIntervalInSeconds": 1,
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
-          "maximumAttempts": 0,
+          "maximumAttempts": 1,
           "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retryable error"
@@ -1591,7 +1591,7 @@
         "scheduledEventId": 106,
         "identity": "59844@ycyang-C02XW41WJGH6@temporal-archival-tq",
         "requestId": "0e6ba111-0876-423c-9962-6f20948f48fa",
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
@@ -1617,7 +1617,7 @@
           "name": "ycyang-C02XW41WJGH6:7ce34128-dace-4a8a-a3ca-6eaa9c97dd13"
         },
         "startToCloseTimeoutSeconds": 60,
-        "attempt": 0
+        "attempt": 1
       }
     },
     {
