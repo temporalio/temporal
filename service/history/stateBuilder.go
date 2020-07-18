@@ -199,7 +199,7 @@ func (b *stateBuilderImpl) applyEvents(
 			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
-				attributes.TaskQueue.GetName(),
+				attributes.TaskQueue,
 				attributes.GetStartToCloseTimeoutSeconds(),
 				attributes.GetAttempt(),
 				event.GetTimestamp(),

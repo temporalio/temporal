@@ -312,7 +312,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			pendingActivity := pendingActivities[0]
 
 			s.Equal(int32(3), pendingActivity.GetMaximumAttempts())
-			s.Equal(int32(i+1), pendingActivity.GetAttempt())
+			s.Equal(int32(i+2), pendingActivity.GetAttempt())
 			s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivity.GetState())
 			if i == 0 {
 				s.Equal(failure.NewTimeoutFailure(enumspb.TIMEOUT_TYPE_HEARTBEAT), pendingActivity.GetLastFailure())

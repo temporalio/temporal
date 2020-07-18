@@ -620,7 +620,9 @@ func (v *commandAttrValidator) validatedTaskQueue(
 ) (*taskqueuepb.TaskQueue, error) {
 
 	if taskQueue == nil {
-		taskQueue = &taskqueuepb.TaskQueue{}
+		taskQueue = &taskqueuepb.TaskQueue{
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
 	}
 
 	if taskQueue.GetName() == "" {
