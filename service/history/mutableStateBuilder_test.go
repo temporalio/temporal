@@ -290,6 +290,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
+		WorkflowTaskAttempt:        1,
 		CurrentWorkflowTaskTimeout: 100,
 	}
 
@@ -567,7 +568,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTimeoutSecond := int32(222)
 	runTimeoutSecond := int32(111)
 	workflowTaskTimeoutSecond := int32(11)
-	workflowTaskAttempt := int64(0)
+	workflowTaskAttempt := int64(1)
 
 	eventID := int64(1)
 	workflowStartEvent := &historypb.HistoryEvent{
@@ -748,6 +749,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
+		WorkflowTaskAttempt:        1,
 		CurrentWorkflowTaskTimeout: 100,
 	}
 

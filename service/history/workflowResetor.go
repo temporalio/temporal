@@ -983,9 +983,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 
-	// always enforce the attempt to zero so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
+	// always enforce the attempt to 1 so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
 	workflowTask, _ := newMsBuilder.GetInFlightWorkflowTask()
-	workflowTask.Attempt = 0
+	workflowTask.Attempt = 1
 	newMsBuilder.UpdateWorkflowTask(workflowTask)
 
 	// before this, the mutable state is in replay mode

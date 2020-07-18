@@ -175,6 +175,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
+			Attempt:     1,
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{

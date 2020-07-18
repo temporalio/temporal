@@ -344,6 +344,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	_, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
 		we,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowId:                      we.WorkflowId,
@@ -798,6 +799,7 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we commonpb.Workf
 	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
 		we,
 		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:      1,
 			NamespaceId:  s.namespaceID,
 			StartRequest: request,
 		},

@@ -422,7 +422,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  currentStickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1129,7 +1129,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1266,7 +1266,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1733,7 +1733,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		ScheduleID: currentLastEventID + 2,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -3139,7 +3139,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  currentStickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 

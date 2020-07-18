@@ -157,6 +157,7 @@ func Test_NextRetry(t *testing.T) {
 		HasRetryPolicy:         false,
 		NonRetryableErrorTypes: []string{},
 		StartedIdentity:        identity,
+		Attempt:                1,
 	}
 	interval, retryState := getBackoffInterval(
 		clock.NewRealTimeSource().Now(),
@@ -304,7 +305,7 @@ func Test_NextRetry(t *testing.T) {
 	ai.Attempt++
 
 	// no retry as max attempt reached
-	a.Equal(ai.MaximumAttempts-1, ai.Attempt)
+	a.Equal(ai.MaximumAttempts, ai.Attempt)
 	interval, retryState = getBackoffInterval(
 		now,
 		ai.ExpirationTime,

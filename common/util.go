@@ -401,6 +401,7 @@ func CreateHistoryStartWorkflowRequest(
 		NamespaceId:            namespaceID,
 		StartRequest:           startRequest,
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Attempt:                1,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
 		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()

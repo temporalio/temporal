@@ -404,7 +404,8 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -523,7 +524,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCanceledRequest{
@@ -571,7 +573,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCompletedRequest{
@@ -619,7 +622,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -667,7 +671,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -694,7 +699,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		NamespaceId: s.namespaceID,
+		ScheduleAttempt: 1,
+		NamespaceId:     s.namespaceID,
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondWorkflowTaskFailedRequest{

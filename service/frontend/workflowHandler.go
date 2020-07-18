@@ -1262,11 +1262,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1466,11 +1467,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1663,11 +1665,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1858,11 +1861,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {

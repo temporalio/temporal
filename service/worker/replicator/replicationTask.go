@@ -129,7 +129,7 @@ func newActivityReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetScheduledId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -186,7 +186,7 @@ func newHistoryReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -244,7 +244,7 @@ func newHistoryMetadataReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -286,7 +286,7 @@ func newHistoryReplicationV2Task(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetTaskId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -319,7 +319,7 @@ func (t *activityReplicationTask) Execute() error {
 func (t *activityReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorActivityBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorActivityBufferRetryCount() {
 		return err
 	}
 
@@ -388,7 +388,7 @@ func (t *historyReplicationTask) Execute() error {
 func (t *historyReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
@@ -480,7 +480,7 @@ func (t *historyReplicationV2Task) Execute() error {
 }
 
 func (t *historyReplicationV2Task) HandleErr(err error) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
