@@ -878,7 +878,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		attemptCount++
-		if attemptCount > 2 {
+		if attemptCount == 3 {
 			return []*commandpb.Command{
 				{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
