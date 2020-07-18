@@ -61,8 +61,8 @@ func (c *Persistence) Validate() error {
 		if ds.SQL != nil && ds.Cassandra != nil {
 			return fmt.Errorf("persistence config: datastore %v: only one of SQL or cassandra can be specified", st)
 		}
-		if ds.SQL != nil && ds.SQL.NumShards == 0 {
-			ds.SQL.NumShards = 1
+		if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
+			ds.SQL.TaskScanPartitions = 1
 		}
 		if ds.Cassandra != nil {
 			if err := ds.Cassandra.validate(); err != nil {
