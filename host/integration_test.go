@@ -629,13 +629,13 @@ func (s *integrationSuite) TestWorkflowRetry() {
 
 	var executions []*commonpb.WorkflowExecution
 
-	attemptCount := 0
+	attemptCount := 1
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		attemptCount++
-		if attemptCount == maximumAttempts {
+		if attemptCount > maximumAttempts {
 			return []*commandpb.Command{
 				{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -670,22 +670,22 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		})
 	}
 
-	for i := 0; i != maximumAttempts; i++ {
+	for i := 1; i <= maximumAttempts; i++ {
 		_, err := poller.PollAndProcessWorkflowTask(false, false)
 		s.True(err == nil, err)
-		events := s.getHistory(s.namespace, executions[i])
-		if i == maximumAttempts-1 {
+		events := s.getHistory(s.namespace, executions[i-1])
+		if i == maximumAttempts {
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
 		} else {
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 		}
-		s.Equal(int32(i+1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+		s.Equal(int32(i), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
-		dweResponse, err := describeWorkflowExecution(executions[i])
+		dweResponse, err := describeWorkflowExecution(executions[i-1])
 		s.NoError(err)
 		backoff := time.Duration(0)
-		if i > 0 {
-			backoff = time.Duration(float64(initialIntervalInSeconds)*math.Pow(backoffCoefficient, float64(i-1))) * time.Second
+		if i > 1 {
+			backoff = time.Duration(float64(initialIntervalInSeconds)*math.Pow(backoffCoefficient, float64(i-2))) * time.Second
 			// retry backoff cannot larger than MaximumIntervalInSeconds
 			if backoff > time.Second {
 				backoff = time.Second
@@ -703,13 +703,13 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	identity := "worker1"
 
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {
-		attemptCount := 0
+		attemptCount := 1
 
 		wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 			previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 			*executions = append(*executions, execution)
 			attemptCount++
-			if attemptCount == attempts {
+			if attemptCount > attempts {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -872,13 +872,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	var executions []*commonpb.WorkflowExecution
 
-	attemptCount := 0
+	attemptCount := 1
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		executions = append(executions, execution)
 		attemptCount++
-		if attemptCount == 2 {
+		if attemptCount > 2 {
 			return []*commandpb.Command{
 				{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -941,7 +941,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil, err)
 
-	s.Equal(3, attemptCount)
+	s.Equal(4, attemptCount)
 
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,

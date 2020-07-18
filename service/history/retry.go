@@ -45,6 +45,12 @@ func getBackoffInterval(
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
+
+	// Sanitiy check to make sure currentAttemptCounterValue started with 1.
+	if currentAttemptCounterValue < 1 {
+		currentAttemptCounterValue = 1
+	}
+
 	if !isRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}

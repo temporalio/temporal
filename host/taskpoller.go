@@ -139,7 +139,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWor
 	queryResult *querypb.WorkflowQueryResult,
 ) (isQueryTask bool, newTask *workflowservice.RespondWorkflowTaskCompletedResponse, err error) {
 Loop:
-	for attempt := 0; attempt < retryCount; attempt++ {
+	for attempt := 1; attempt <= retryCount; attempt++ {
 
 		taskQueue := p.TaskQueue
 		if pollStickyTaskQueue {
@@ -348,7 +348,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 // PollAndProcessActivityTask for activity tasks
 func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 1; attempt <= 5; attempt++ {
 		response, err := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
@@ -410,7 +410,7 @@ retry:
 // PollAndProcessActivityTaskWithID is similar to PollAndProcessActivityTask but using RespondActivityTask...ByID
 func (p *TaskPoller) PollAndProcessActivityTaskWithID(dropTask bool) error {
 retry:
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 1; attempt <= 5; attempt++ {
 		response, err1 := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
