@@ -486,16 +486,25 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
 	timeoutFailure := failure.NewTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-	backoffInterval, retryState := mutableState.GetRetryBackoffDuration(timeoutFailure)
+	backoffInterval := backoff.NoBackoff
+	retryState := enumspb.RETRY_STATE_TIMEOUT
 	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
-	if backoffInterval == backoff.NoBackoff {
-		// check if a cron backoff is needed
-		backoffInterval, err = mutableState.GetCronBackoffDuration()
-		if err != nil {
-			return err
+
+	// Retry only if workflow is not expired.
+	if mutableState.GetExecutionInfo().WorkflowExpirationTime.After(t.shard.GetTimeSource().Now()) {
+		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
+
+		if backoffInterval == backoff.NoBackoff {
+			// Check if a cron backoff is needed.
+			backoffInterval, err = mutableState.GetCronBackoffDuration()
+			if err != nil {
+				return err
+			}
+			continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 		}
-		continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
+
+	// No more retries, or workflow is expired.
 	if backoffInterval == backoff.NoBackoff {
 		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryState); err != nil {
 			return err

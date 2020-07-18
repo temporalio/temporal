@@ -51,17 +51,22 @@ var crontests = []struct {
 	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-17T09:00:00+00:00", time.Hour * 4},
 	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-18T00:00:00+00:00", time.Hour * 4},
 	{"0 3 * * 0-6", "2018-12-17T08:00:00-08:00", "", time.Hour * 11},
+	{"@every 30s", "2020-07-17T09:00:02-01:00", "2020-07-17T09:00:02-01:00", time.Second * 30},
+	{"@every 30s", "2020-07-17T09:00:02-01:00", "2020-09-17T03:00:53-01:00", time.Second * 9},
+	{"@every 30s", "2020-07-17T09:00:02-01:00", "2020-07-17T04:00:02-01:00", time.Second * 30},
 }
 
 func TestCron(t *testing.T) {
 	for idx, tt := range crontests {
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
-			start, _ := time.Parse(time.RFC3339, tt.startTime)
+			start, err := time.Parse(time.RFC3339, tt.startTime)
+			assert.NoError(t, err, "Parse start time: %v", tt.startTime)
 			end := start
 			if tt.endTime != "" {
-				end, _ = time.Parse(time.RFC3339, tt.endTime)
+				end, err = time.Parse(time.RFC3339, tt.endTime)
+				assert.NoError(t, err, "Parse end time: %v", tt.endTime)
 			}
-			err := ValidateSchedule(tt.cron)
+			err = ValidateSchedule(tt.cron)
 			if tt.result != NoBackoff {
 				assert.NoError(t, err)
 			}
