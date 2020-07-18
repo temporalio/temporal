@@ -32,48 +32,35 @@ setup_cassandra_schema() {
     temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
-temporal_mysql_tool() {
-    echo "temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw XXXX $MYSQL_CONNECT_ATTR $@"; 
-    { temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR $@; } 2> /dev/null
-}
-
-temporal_postgres_tool() {
-    echo "temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw XXXX -p $DB_PORT $@"; 
-    { temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT $@; } 2> /dev/null
-}
-
 setup_mysql_schema() {
+    { export SQL_PASSWORD=$MYSQL_PWD; } 2> /dev/null
+
     SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/temporal/versioned
-    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/visibility/versioned
-    
+
     if [ "$MYSQL_TX_ISOLATION_COMPAT" == "true" ]; then
         MYSQL_CONNECT_ATTR='--connect-attributes tx_isolation=READ-COMMITTED'
     fi
-    
-    {
-        temporal_mysql_tool create --db $DBNAME;
-        temporal_mysql_tool --db $DBNAME setup-schema -v 0.0;
-        temporal_mysql_tool --db $DBNAME update-schema -d $SCHEMA_DIR;
 
-        temporal_mysql_tool create --db $VISIBILITY_DBNAME;
-        temporal_mysql_tool --db $VISIBILITY_DBNAME setup-schema -v 0.0;
-        temporal_mysql_tool --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR;
-    } 2> /dev/null
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR create --db $DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $DBNAME update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/visibility/versioned
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_postgres_schema() {
-    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
-    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
+    { export SQL_PASSWORD=$POSTGRES_PWD; } 2> /dev/null
 
-    {
-        temporal_postgres_tool create --db $DBNAME
-        temporal_postgres_tool --db $DBNAME setup-schema -v 0.0
-        temporal_postgres_tool --db $DBNAME update-schema -d $SCHEMA_DIR
-        
-        temporal_postgres_tool create --db $VISIBILITY_DBNAME
-        temporal_postgres_tool --db $VISIBILITY_DBNAME setup-schema -v 0.0
-        temporal_postgres_tool --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
-    } 2> /dev/null
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 
