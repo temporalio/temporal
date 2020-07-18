@@ -87,7 +87,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(0), resp1.GetAttempt())
+	s.Equal(int64(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	taskToken := resp1.GetTaskToken()
@@ -193,7 +193,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(0), resp1.GetAttempt())
+	s.Equal(int64(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -342,7 +342,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTas
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(0), resp1.GetAttempt())
+	s.Equal(int64(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	// then terminate the worklfow
@@ -562,7 +562,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i), resp1.GetAttempt())
+		s.Equal(int64(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
@@ -600,7 +600,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(0), resp1.GetAttempt())
+	s.Equal(int64(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 7, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	// then terminate the worklfow
@@ -665,7 +665,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i), resp1.GetAttempt())
+		s.Equal(int64(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
@@ -765,7 +765,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i), resp1.GetAttempt())
+		s.Equal(int64(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())

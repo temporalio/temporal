@@ -228,6 +228,7 @@ func newMutableStateBuilder(
 		WorkflowTaskStartedID:      common.EmptyEventID,
 		WorkflowTaskRequestID:      emptyUUID,
 		CurrentWorkflowTaskTimeout: 0,
+		WorkflowTaskAttempt:        1,
 
 		NextEventID:        common.FirstEventID,
 		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1708,6 +1709,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
+	} else {
+		req.Attempt = 1
 	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
 	if !workflowTimeoutTime.IsZero() {
@@ -2197,6 +2200,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		TimerTaskStatus:          timerTaskStatusNone,
 		TaskQueue:                attributes.TaskQueue.GetName(),
 		HasRetryPolicy:           attributes.RetryPolicy != nil,
+		Attempt:                  1,
 	}
 	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 	if ai.HasRetryPolicy {

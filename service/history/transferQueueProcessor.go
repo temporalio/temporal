@@ -293,7 +293,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 			return
 		case <-timer.C:
 		CompleteLoop:
-			for attempt := 0; attempt < t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
+			for attempt := 1; attempt <= t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
@@ -302,7 +302,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 						t.Stop()
 						return
 					}
-					backoff := time.Duration(attempt * 100)
+					backoff := time.Duration((attempt - 1) * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {
 					break CompleteLoop

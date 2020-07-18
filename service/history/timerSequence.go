@@ -241,7 +241,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 		timestamp:    expiryTime,
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
-		attempt:      0,
+		attempt:      1,
 	}
 }
 

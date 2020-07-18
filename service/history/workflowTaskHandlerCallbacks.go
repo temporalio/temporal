@@ -307,7 +307,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	defer func() { release(retError) }()
 
 Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		msBuilder, err := weContext.loadWorkflowExecution()
 		if err != nil {
 			return nil, err
@@ -611,7 +611,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTimestamp = workflowTask.ScheduledTimestamp
 	response.StartedTimestamp = workflowTask.StartedTimestamp
 
-	if workflowTask.Attempt > 0 {
+	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)

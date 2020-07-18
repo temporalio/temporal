@@ -862,7 +862,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(0)
+	attempt := int32(1)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 

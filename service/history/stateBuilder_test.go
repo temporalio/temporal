@@ -756,7 +756,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		RequestID:           workflowTaskRequestID,
 		WorkflowTaskTimeout: timeoutSecond,
 		TaskQueue:           taskqueue,
-		Attempt:             0,
+		Attempt:             1,
 	}
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
 		(*workflowTaskInfo)(nil), event.GetVersion(), scheduleID, event.GetEventId(), workflowTaskRequestID, event.GetTimestamp(),
