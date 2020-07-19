@@ -1745,16 +1745,16 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				return []*commandpb.Command{{
 					CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 					Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						WorkflowId:                 childID,
-						WorkflowType:               childWorkflowType,
-						TaskQueue:                  taskQueueChild,
-						Input:                      payloads.EncodeString("child-workflow-input"),
-						Header:                     header,
-						WorkflowRunTimeoutSeconds:  200,
-						WorkflowTaskTimeoutSeconds: 2,
-						Control:                    "",
-						Memo:                       memo,
-						SearchAttributes:           searchAttr,
+						WorkflowId:                      childID,
+						WorkflowType:                    childWorkflowType,
+						TaskQueue:                       taskQueueChild,
+						Input:                           payloads.EncodeString("child-workflow-input"),
+						Header:                          header,
+						WorkflowExecutionTimeoutSeconds: 200,
+						WorkflowTaskTimeoutSeconds:      2,
+						Control:                         "",
+						Memo:                            memo,
+						SearchAttributes:                searchAttr,
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -1845,6 +1845,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
 	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
+	s.Equal(int32(200), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeoutSeconds())
+	s.Equal(int32(200), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)

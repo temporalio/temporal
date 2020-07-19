@@ -596,14 +596,22 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
+	parentSpecifiedExecutionTimeout := attributes.GetWorkflowExecutionTimeoutSeconds()
 	// Inherit workflow timeout from parent workflow execution if not provided on command
-	if attributes.GetWorkflowExecutionTimeoutSeconds() <= 0 {
+	if parentSpecifiedExecutionTimeout <= 0 {
 		attributes.WorkflowExecutionTimeoutSeconds = parentInfo.WorkflowExecutionTimeout
 	}
 
 	// Inherit workflow timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowRunTimeoutSeconds() <= 0 {
-		attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
+		if parentSpecifiedExecutionTimeout > 0 {
+			// Default to execution timeout specified by parent when starting child workflow execution
+			attributes.WorkflowRunTimeoutSeconds = parentSpecifiedExecutionTimeout
+		} else {
+			// Both execution timeout and run timeout are not specified on the command
+			// Default to run timeout of parent execution
+			attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
+		}
 	}
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
