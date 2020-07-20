@@ -83,7 +83,7 @@ func newCommandAttrValidator(
 	config *Config,
 	logger log.Logger,
 ) *commandAttrValidator {
-	v := &commandAttrValidator{
+	return &commandAttrValidator{
 		namespaceCache:   namespaceCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
@@ -93,10 +93,8 @@ func newCommandAttrValidator(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
+		defaultActivityRetryPolicy: fromConfigToActivityRetryPolicy(config.DefaultActivityRetryPolicy()),
 	}
-
-	v.defaultActivityRetryPolicy = fromConfigToActivityRetryPolicy(config.DefaultActivityRetryPolicy())
-	return v
 }
 
 func newWorkflowSizeChecker(
