@@ -401,13 +401,14 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		if err != nil {
 			return nil, err
 		}
+
+		tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Data.Name, request.TaskQueueInfo.Data.TaskType)
 		tasksRows[i] = sqlplugin.TasksRow{
-			NamespaceID:   nidBytes,
-			TaskQueueName: request.TaskQueueInfo.Data.Name,
-			TaskType:      int64(request.TaskQueueInfo.Data.TaskType),
-			TaskID:        v.GetTaskId(),
-			Data:          blob.Data,
-			DataEncoding:  string(blob.Encoding),
+			RangeHash:    tqHash,
+			TaskQueueID:  tqId,
+			TaskID:       v.GetTaskId(),
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		}
 	}
 	var resp *persistence.CreateTasksResponse
@@ -438,13 +439,13 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	rows, err := m.db.SelectFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:   nidBytes,
-		TaskQueueName: request.TaskQueue,
-		TaskType:      int64(request.TaskType),
-		MinTaskID:     &request.ReadLevel,
-		MaxTaskID:     request.MaxReadLevel,
-		PageSize:      &request.BatchSize,
+		RangeHash:   tqHash,
+		TaskQueueID: tqId,
+		MinTaskID:   &request.ReadLevel,
+		MaxTaskID:   request.MaxReadLevel,
+		PageSize:    &request.BatchSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
@@ -469,12 +470,11 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 	}
 
 	taskID := request.TaskID
-	taskQueue := request.TaskQueue
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
 	_, err = m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:   nidBytes,
-		TaskQueueName: taskQueue.Name,
-		TaskType:      int64(taskQueue.TaskType),
-		TaskID:        &taskID})
+		RangeHash:   tqHash,
+		TaskQueueID: tqId,
+		TaskID:      &taskID})
 	if err != nil && err != sql.ErrNoRows {
 		return serviceerror.NewInternal(err.Error())
 	}
@@ -486,10 +486,10 @@ func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTask
 	if err != nil {
 		return 0, serviceerror.NewInternal(err.Error())
 	}
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType)
 	result, err := m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		NamespaceID:          nidBytes,
-		TaskQueueName:        request.TaskQueueName,
-		TaskType:             int64(request.TaskType),
+		RangeHash:            tqHash,
+		TaskQueueID:          tqId,
 		TaskIDLessThanEquals: &request.TaskID,
 		Limit:                &request.Limit,
 	})

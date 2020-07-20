@@ -5,6 +5,7 @@ set -x
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
 ES_PORT="${ES_PORT:-9200}"
+ES_SCHEME="${ES_SCHEME:-http}"
 RF=${RF:-1}
 DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
 DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
@@ -67,9 +68,9 @@ setup_postgres_schema() {
 setup_es_template() {
     SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/visibility/index_template.json
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="http://$server:$ES_PORT/_template/temporal-visibility-template"
+    URL="${ES_SCHEME}://$server:$ES_PORT/_template/temporal-visibility-template"
     curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
-    URL="http://$server:$ES_PORT/temporal-visibility-dev"
+    URL="${ES_SCHEME}://$server:$ES_PORT/temporal-visibility-dev"
     curl -X PUT $URL
 }
 
@@ -120,7 +121,7 @@ wait_for_postgres() {
 
 wait_for_es() {
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="http://$server:$ES_PORT"
+    URL="${ES_SCHEME}://$server:$ES_PORT"
     curl -s $URL 2>&1 > /dev/null
     until [ $? -eq 0 ]; do
         echo 'waiting for elasticsearch to start up'

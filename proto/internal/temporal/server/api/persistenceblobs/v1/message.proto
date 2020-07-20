@@ -251,7 +251,7 @@ message WorkflowExecutionInfo {
     string workflow_type_name = 9;
     int32 workflow_execution_timeout_seconds = 10;
     int32 workflow_run_timeout_seconds = 11;
-    int32 workflow_task_timeout_seconds = 12;
+    int32 default_workflow_task_timeout_seconds = 12;
     int64 start_version = 15;
     int64 current_version = 16;
     ReplicationData replication_data = 17;
@@ -263,7 +263,7 @@ message WorkflowExecutionInfo {
     int64 workflow_task_version = 24;
     int64 workflow_task_schedule_id = 25;
     int64 workflow_task_started_id = 26;
-    int32 current_workflow_task_timeout = 27;
+    int32 workflow_task_timeout = 27;
     int64 workflow_task_attempt = 28;
     int64 workflow_task_started_timestamp_nanos = 29;
     int64 workflow_task_scheduled_timestamp_nanos = 30;
