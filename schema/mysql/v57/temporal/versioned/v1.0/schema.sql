@@ -80,14 +80,13 @@ CREATE TABLE buffered_events (
 CREATE INDEX buffered_events_by_events_ids ON buffered_events(shard_id, namespace_id, workflow_id, run_id);
 
 CREATE TABLE tasks (
-  namespace_id BINARY(16) NOT NULL,
-  task_queue_name VARCHAR(255) NOT NULL,
-  task_type TINYINT NOT NULL, -- {Activity, Workflow}
+  range_hash INT UNSIGNED NOT NULL,
+  task_queue_id VARBINARY(255) NOT NULL,
   task_id BIGINT NOT NULL,
   --
   data BLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_queue_name, task_type, task_id)
+  PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
 
 CREATE TABLE task_queues (
