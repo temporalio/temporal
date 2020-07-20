@@ -228,11 +228,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("ActivityType is not set on command.")
 	}
 
-	if attributes.RetryPolicy == nil {
-		attributes.RetryPolicy = v.defaultActivityRetryPolicy
-	}
-
-	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+	if err := v.validateActivityRetryPolicy(attributes); err != nil {
 		return err
 	}
 
@@ -651,6 +647,14 @@ func (v *commandAttrValidator) validatedTaskQueue(
 	}
 
 	return taskQueue, nil
+}
+
+func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb.ScheduleActivityTaskCommandAttributes) error {
+	if attributes.RetryPolicy == nil {
+		attributes.RetryPolicy = v.defaultActivityRetryPolicy
+	}
+
+	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
