@@ -204,8 +204,6 @@ type (
 	VisibilityConfig struct {
 		// EnableSampling for visibility
 		EnableSampling dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
-		// EnableReadFromClosedExecutionV2 read closed from v2 table
-		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// VisibilityOpenMaxQPS max QPS for record open workflows
 		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityClosedMaxQPS max QPS for record closed workflows
