@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -98,20 +99,27 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 
 // TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
-	hostID := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	// Expire previous records
+	// Todo: MetaMgr should provide api to clear all members
+	time.Sleep(time.Second * 2)
+	err := s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
+	s.Nil(err)
+
+	expectedIds := make(map[string]int, 100)
 	for i := 0; i < 100; i++ {
+		hostID := primitives.NewUUID().Downcast()
+		expectedIds[primitives.UUIDString(hostID)]++
 		req := &p.UpsertClusterMembershipRequest{
 			HostID:       hostID,
 			RPCAddress:   net.ParseIP("127.0.0.2"),
 			RPCPort:      123,
 			Role:         p.Frontend,
 			SessionStart: time.Now().UTC(),
-			RecordExpiry: time.Second * 2,
+			RecordExpiry: time.Second,
 		}
 
 		err := s.ClusterMetadataManager.UpsertClusterMembership(req)
 		s.NoError(err)
-		hostID = uuid.NewUUID()
 	}
 
 	hostCount := 0
@@ -120,17 +128,23 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{PageSize: 9, NextPageToken: nextPageToken})
 		s.NoError(err)
 		nextPageToken = resp.NextPageToken
-		hostCount += len(resp.ActiveMembers)
+		for _, member := range resp.ActiveMembers  {
+			expectedIds[primitives.UUIDString(member.HostID)]--
+			hostCount++
+		}
 
 		if nextPageToken == nil {
 			break
 		}
 	}
 
-	s.Equal(hostCount, 100)
+	s.Equal(100, hostCount)
+	for id, val := range expectedIds {
+		s.Zero(val, "identifier was either not found in db, or shouldn't be there - " + id)
+	}
 
 	time.Sleep(time.Second * 2)
-	err := s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
+	err = s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
 	s.NoError(err)
 }
 
@@ -157,7 +171,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		RPCPort:      123,
 		Role:         p.Frontend,
 		SessionStart: now,
-		RecordExpiry: time.Second * 10,
+		RecordExpiry: time.Second * 2,
 	}
 
 	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
