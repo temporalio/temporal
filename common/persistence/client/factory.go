@@ -268,15 +268,13 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	visConfig := f.config.VisibilityConfig
-	if visConfig != nil && visConfig.EnableReadFromClosedExecutionV2() && f.isCassandra() {
-		store, err = cassandra.NewVisibilityPersistenceV2(store, f.getCassandraConfig(), f.logger)
-	}
 
 	result := p.NewVisibilityManagerImpl(store, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
+
+	visConfig := f.config.VisibilityConfig
 	if visConfig != nil && visConfig.EnableSampling() {
 		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
 	}

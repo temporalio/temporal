@@ -53,25 +53,24 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                int
-	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS         dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
-	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
-	VisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESVisibilityListMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
-	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                             dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
-	MinRetentionDays                dynamicconfig.IntPropertyFn
-	DisallowQuery                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
+	NumHistoryShards           int
+	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableVisibilitySampling   dynamicconfig.BoolPropertyFn
+	VisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ESVisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow     dynamicconfig.IntPropertyFn
+	HistoryMaxPageSize         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                        dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit           dynamicconfig.IntPropertyFn
+	EnableClientVersionCheck   dynamicconfig.BoolPropertyFn
+	MinRetentionDays           dynamicconfig.IntPropertyFn
+	DisallowQuery              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -115,7 +114,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableVisibilitySampling:               dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2:        dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityListMaxQPS:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
 		EnableReadVisibilityFromES:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		ESVisibilityListMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
@@ -172,9 +170,8 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:            serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
+		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:       serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
