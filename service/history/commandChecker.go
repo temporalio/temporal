@@ -51,6 +51,7 @@ import (
 type (
 	commandAttrValidator struct {
 		namespaceCache            cache.NamespaceCache
+		config                    *Config
 		maxIDLengthLimit          int
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
@@ -84,6 +85,7 @@ func newCommandAttrValidator(
 ) *commandAttrValidator {
 	return &commandAttrValidator{
 		namespaceCache:   namespaceCache,
+		config:           config,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
 			logger,
@@ -546,6 +548,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
+	targetNamespace string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
@@ -596,15 +599,11 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	// Inherit workflow timeout from parent workflow execution if not provided on command
-	if attributes.GetWorkflowExecutionTimeoutSeconds() <= 0 {
-		attributes.WorkflowExecutionTimeoutSeconds = parentInfo.WorkflowExecutionTimeout
-	}
+	attributes.WorkflowExecutionTimeoutSeconds = getWorkflowExecutionTimeout(targetNamespace,
+		attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
 
-	// Inherit workflow timeout from parent workflow execution if not provided on command
-	if attributes.GetWorkflowRunTimeoutSeconds() <= 0 {
-		attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
-	}
+	attributes.WorkflowRunTimeoutSeconds = getWorkflowRunTimeout(targetNamespace,
+		attributes.GetWorkflowRunTimeoutSeconds(), attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {

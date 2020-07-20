@@ -1845,6 +1845,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
 	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
+	s.Equal(int32(315360000), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeoutSeconds())
+	s.Equal(int32(200), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
