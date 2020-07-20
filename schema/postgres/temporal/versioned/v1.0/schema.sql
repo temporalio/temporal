@@ -78,14 +78,13 @@ CREATE TABLE buffered_events (
 );
 
 CREATE TABLE tasks (
-  namespace_id BYTEA NOT NULL,
-  task_queue_name VARCHAR(255) NOT NULL,
-  task_type SMALLINT NOT NULL, -- {Activity, Workflow}
+  range_hash BIGINT NOT NULL,
+  task_queue_id BYTEA NOT NULL,
   task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (namespace_id, task_queue_name, task_type, task_id)
+  PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
 
 CREATE TABLE task_queues (

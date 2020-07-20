@@ -71,23 +71,23 @@ task_queue_id = :task_queue_id
 	// *** Tasks Below ***
 	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE namespace_id = ? AND task_queue_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? ` +
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id > ? AND task_id <= ? ` +
 		` ORDER BY task_id LIMIT ?`
 
 	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE namespace_id = ? AND task_queue_name = ? AND task_type = ? AND task_id > ? ORDER BY task_id LIMIT ?`
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id > ? ORDER BY task_id LIMIT ?`
 
 	createTaskQry = `INSERT INTO ` +
-		`tasks(namespace_id, task_queue_name, task_type, task_id, data, data_encoding) ` +
-		`VALUES(:namespace_id, :task_queue_name, :task_type, :task_id, :data, :data_encoding)`
+		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
+		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
 
 	deleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? AND task_queue_name = ? AND task_type = ? AND task_id = ?`
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id = ?`
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? AND task_queue_name = ? AND task_type = ? AND task_id <= ? ` +
-		`ORDER BY namespace_id,task_queue_name,task_type,task_id LIMIT ?`
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id <= ? ` +
+		`ORDER BY task_queue_id,task_id LIMIT ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -101,11 +101,9 @@ func (mdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 	var rows []sqlplugin.TasksRow
 	switch {
 	case filter.MaxTaskID != nil:
-		err = mdb.conn.Select(&rows, getTaskMinMaxQry, filter.NamespaceID,
-			filter.TaskQueueName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+		err = mdb.conn.Select(&rows, getTaskMinMaxQry, filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
 	default:
-		err = mdb.conn.Select(&rows, getTaskMinQry, filter.NamespaceID,
-			filter.TaskQueueName, filter.TaskType, *filter.MinTaskID, *filter.PageSize)
+		err = mdb.conn.Select(&rows, getTaskMinQry, filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.PageSize)
 	}
 	if err != nil {
 		return nil, err
@@ -120,9 +118,9 @@ func (mdb *db) DeleteFromTasks(filter *sqlplugin.TasksFilter) (sql.Result, error
 			return nil, fmt.Errorf("missing limit parameter")
 		}
 		return mdb.conn.Exec(rangeDeleteTaskQry,
-			filter.NamespaceID, filter.TaskQueueName, filter.TaskType, *filter.TaskIDLessThanEquals, *filter.Limit)
+			filter.RangeHash, filter.TaskQueueID, *filter.TaskIDLessThanEquals, *filter.Limit)
 	}
-	return mdb.conn.Exec(deleteTaskQry, filter.NamespaceID, filter.TaskQueueName, filter.TaskType, *filter.TaskID)
+	return mdb.conn.Exec(deleteTaskQry, filter.RangeHash, filter.TaskQueueID, *filter.TaskID)
 }
 
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
