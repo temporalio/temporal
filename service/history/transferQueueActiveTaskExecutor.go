@@ -202,6 +202,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// task or not.
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask
@@ -1228,6 +1229,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			now,
 		),
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Attempt:                1,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)

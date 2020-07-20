@@ -70,27 +70,29 @@ task_queue_id = :task_queue_id
 
 	lockTaskQueueQry = `SELECT range_id FROM task_queues ` +
 		`WHERE range_hash=$1 AND task_queue_id=$2 FOR UPDATE`
+	// *** Task_Queues Table Above ***
 
+	// *** Tasks Below ***
 	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE namespace_id = $1 AND task_queue_name = $2 AND task_type = $3 AND task_id > $4 AND task_id <= $5 ` +
-		` ORDER BY task_id LIMIT $6`
+		`WHERE range_hash = $1 AND task_queue_id=$2 AND task_id > $3 AND task_id <= $4 ` +
+		`ORDER BY task_id LIMIT $5`
 
 	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE namespace_id = $1 AND task_queue_name = $2 AND task_type = $3 AND task_id > $4 ORDER BY task_id LIMIT $5`
+		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id > $3 ORDER BY task_id LIMIT $4`
 
 	createTaskQry = `INSERT INTO ` +
-		`tasks(namespace_id, task_queue_name, task_type, task_id, data, data_encoding) ` +
-		`VALUES(:namespace_id, :task_queue_name, :task_type, :task_id, :data, :data_encoding)`
+		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
+		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
 
 	deleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE namespace_id = $1 AND task_queue_name = $2 AND task_type = $3 AND task_id = $4`
+		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id = $3`
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE namespace_id = $1 AND task_queue_name = $2 AND task_type = $3 AND task_id IN (SELECT task_id FROM
-		 tasks WHERE namespace_id = $1 AND task_queue_name = $2 AND task_type = $3 AND task_id <= $4 ` +
-		`ORDER BY namespace_id,task_queue_name,task_type,task_id LIMIT $5 )`
+		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id IN (SELECT task_id FROM
+		 tasks WHERE range_hash = $1 AND task_queue_id = $2 AND task_id <= $3 ` +
+		`ORDER BY task_queue_id,task_id LIMIT $4 )`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -104,11 +106,11 @@ func (pdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 	var rows []sqlplugin.TasksRow
 	switch {
 	case filter.MaxTaskID != nil:
-		err = pdb.conn.Select(&rows, getTaskMinMaxQry, filter.NamespaceID,
-			filter.TaskQueueName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+		err = pdb.conn.Select(&rows, getTaskMinMaxQry,
+			filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
 	default:
-		err = pdb.conn.Select(&rows, getTaskMinQry, filter.NamespaceID,
-			filter.TaskQueueName, filter.TaskType, *filter.MinTaskID, *filter.PageSize)
+		err = pdb.conn.Select(&rows, getTaskMinQry,
+			filter.RangeHash, filter.TaskQueueID, *filter.MinTaskID, *filter.PageSize)
 	}
 	if err != nil {
 		return nil, err
@@ -123,9 +125,9 @@ func (pdb *db) DeleteFromTasks(filter *sqlplugin.TasksFilter) (sql.Result, error
 			return nil, fmt.Errorf("missing limit parameter")
 		}
 		return pdb.conn.Exec(rangeDeleteTaskQry,
-			filter.NamespaceID, filter.TaskQueueName, filter.TaskType, *filter.TaskIDLessThanEquals, *filter.Limit)
+			filter.RangeHash, filter.TaskQueueID, *filter.TaskIDLessThanEquals, *filter.Limit)
 	}
-	return pdb.conn.Exec(deleteTaskQry, filter.NamespaceID, filter.TaskQueueName, filter.TaskType, *filter.TaskID)
+	return pdb.conn.Exec(deleteTaskQry, filter.RangeHash, filter.TaskQueueID, *filter.TaskID)
 }
 
 // InsertIntoTaskQueues inserts one or more rows into task_queues table

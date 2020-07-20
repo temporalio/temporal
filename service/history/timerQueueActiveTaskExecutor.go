@@ -437,6 +437,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		RunId:      task.GetRunId()}
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
 

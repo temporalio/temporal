@@ -336,7 +336,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	newTransferTasks = append(newTransferTasks,
 		&persistence.WorkflowTask{
 			NamespaceID: namespaceID,
-			TaskQueue:   workflowTask.TaskQueue,
+			TaskQueue:   workflowTask.TaskQueue.GetName(),
 			ScheduleID:  workflowTask.ScheduleID,
 		},
 		&persistence.RecordWorkflowStartedTask{},
@@ -983,9 +983,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 
-	// always enforce the attempt to zero so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
+	// always enforce the attempt to 1 so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
 	workflowTask, _ := newMsBuilder.GetInFlightWorkflowTask()
-	workflowTask.Attempt = 0
+	workflowTask.Attempt = 1
 	newMsBuilder.UpdateWorkflowTask(workflowTask)
 
 	// before this, the mutable state is in replay mode
@@ -1021,7 +1021,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	workflowTask, _ = newMsBuilder.GetWorkflowTaskInfo(workflowTaskScheduledID)
 	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,
-		TaskQueue:        workflowTask.TaskQueue,
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduleID:       workflowTask.ScheduleID,
 		RecordVisibility: true,
 	})

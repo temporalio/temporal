@@ -382,6 +382,7 @@ pollLoop:
 				WorkflowExecutionTaskQueue: mutableStateResp.TaskQueue,
 				BranchToken:                mutableStateResp.CurrentBranchToken,
 				StartedEventId:             common.EmptyEventID,
+				Attempt:                    1,
 			}
 			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 		}

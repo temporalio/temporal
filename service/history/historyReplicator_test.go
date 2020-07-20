@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -350,7 +351,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentworkflowTaskTimeout := int32(100)
 	currentWorkflowTaskStickyTimeout := int32(10)
 	currentWorkflowTaskQueue := "some random workflow task queue"
-	currentStickyWorkflowTaskQueue := "some random sticky workflow task queue"
+	currentStickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
 	req := &historyservice.ReplicateEventsRequest{
 		History: &historypb.History{
@@ -396,8 +397,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		RunID:                        currentRunID,
 		NextEventID:                  currentNextEventID,
 		TaskQueue:                    currentWorkflowTaskQueue,
-		StickyTaskQueue:              currentStickyWorkflowTaskQueue,
-		CurrentWorkflowTaskTimeout:   currentworkflowTaskTimeout,
+		StickyTaskQueue:              currentStickyWorkflowTaskQueue.GetName(),
+		WorkflowTaskTimeout:          currentworkflowTaskTimeout,
 		StickyScheduleToStartTimeout: currentWorkflowTaskStickyTimeout,
 		WorkflowTaskVersion:          common.EmptyVersion,
 		WorkflowTaskScheduleID:       common.EmptyEventID,
@@ -422,7 +423,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  currentStickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1062,7 +1063,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
+	stickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
@@ -1129,7 +1130,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1228,7 +1229,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
+	stickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
@@ -1266,7 +1267,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1674,7 +1675,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	workflowTaskTimeout := int32(100)
 	workflowTaskStickyTimeout := int32(10)
 	workflowTaskqueue := "some random workflow taskqueue"
-	stickyWorkflowTaskQueue := "some random sticky workflow task queue"
+	stickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
 	updateCondition := int64(1394)
 
@@ -1718,8 +1719,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		NamespaceID:                  namespaceID,
 		RunID:                        runID,
 		TaskQueue:                    workflowTaskqueue,
-		StickyTaskQueue:              stickyWorkflowTaskQueue,
-		CurrentWorkflowTaskTimeout:   workflowTaskTimeout,
+		StickyTaskQueue:              stickyWorkflowTaskQueue.GetName(),
+		WorkflowTaskTimeout:          workflowTaskTimeout,
 		StickyScheduleToStartTimeout: workflowTaskStickyTimeout,
 		State:                        currentState,
 		Status:                       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1733,7 +1734,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		ScheduleID: currentLastEventID + 2,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  stickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderIn.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -1857,7 +1858,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -1911,18 +1912,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         runTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -1977,7 +1978,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -2031,18 +2032,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         runTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2093,7 +2094,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	runTimeout := int32(3333)
@@ -2147,18 +2148,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         runTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2215,7 +2216,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -2276,18 +2277,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:               cronSchedule,
@@ -2367,7 +2368,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -2420,18 +2421,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        wti.Version,
 		WorkflowTaskScheduleID:     wti.ScheduleID,
 		WorkflowTaskStartedID:      wti.StartedID,
-		CurrentWorkflowTaskTimeout: wti.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        wti.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2504,7 +2505,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -2557,18 +2558,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2641,7 +2642,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -2694,18 +2695,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2791,7 +2792,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -2858,18 +2859,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -2968,7 +2969,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -3035,18 +3036,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3072,7 +3073,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentVersion := version + 1
 	currentRunID := uuid.New()
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	currentStickyWorkflowTaskQueue := "some random sticky workflow task queue"
+	currentStickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
 	errRet := &persistence.WorkflowExecutionAlreadyStartedError{
 		RunID:            currentRunID,
@@ -3139,7 +3140,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ScheduleID: 1234,
 		StartedID:  common.EmptyEventID,
 		TaskQueue:  currentStickyWorkflowTaskQueue,
-		Attempt:    0,
+		Attempt:    1,
 	}
 	msBuilderCurrent.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(newWorkflowTask, nil).Times(1)
 
@@ -3157,7 +3158,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -3210,18 +3211,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3312,7 +3313,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -3366,18 +3367,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
@@ -3469,7 +3470,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
-	taskqueue := "some random taskqueue"
+	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
 	workflowTimeout := int32(3721)
 	workflowTaskTimeout := int32(4411)
@@ -3530,18 +3531,18 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		ParentWorkflowID:           parentWorkflowID,
 		ParentRunID:                parentRunID,
 		InitiatedID:                initiatedID,
-		TaskQueue:                  taskqueue,
+		TaskQueue:                  taskqueue.GetName(),
 		WorkflowTypeName:           workflowType,
 		WorkflowExecutionTimeout:   workflowTimeout,
 		WorkflowRunTimeout:         workflowTimeout,
-		WorkflowTaskTimeout:        workflowTaskTimeout,
+		DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 		NextEventID:                nextEventID,
 		LastProcessedEvent:         common.EmptyEventID,
 		BranchToken:                []byte("some random branch token"),
 		WorkflowTaskVersion:        di.Version,
 		WorkflowTaskScheduleID:     di.ScheduleID,
 		WorkflowTaskStartedID:      di.StartedID,
-		CurrentWorkflowTaskTimeout: di.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:        di.WorkflowTaskTimeout,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:               cronSchedule,
