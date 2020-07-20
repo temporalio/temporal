@@ -242,9 +242,11 @@ forLoop:
 				// hoping for a local poller match
 				select {
 				case tm.taskC <- task:
+					cancel()
 					return nil
 				case <-childCtx.Done():
 				case <-ctx.Done():
+					cancel()
 					return ctx.Err()
 				}
 				cancel()
