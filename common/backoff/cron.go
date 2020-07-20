@@ -48,7 +48,7 @@ func ValidateSchedule(cronSchedule string) error {
 }
 
 // GetBackoffForNextSchedule calculates the backoff time for the next run given
-// a cronSchedule, workflow start time and workflow close time
+// a cronSchedule, current scheduled time, and now.
 func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now time.Time) time.Duration {
 	if len(cronSchedule) == 0 {
 		return NoBackoff
@@ -67,7 +67,7 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 		nextScheduleTime = scheduledUTCTime
 	} else {
 		nextScheduleTime = schedule.Next(scheduledUTCTime)
-		// Calculate the next schedule start time which is nearest to the close time
+		// Calculate the next schedule start time which is nearest to now (right after now).
 		for nextScheduleTime.Before(nowUTC) {
 			nextScheduleTime = schedule.Next(nextScheduleTime)
 		}
@@ -78,8 +78,8 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 	return roundedInterval
 }
 
-// GetBackoffForNextScheduleInSeconds calculates the backoff time in seconds for the
-// next run given a cronSchedule and current time
+// GetBackoffForNextScheduleInSeconds calculates the backoff time in seconds for the next run given
+// a cronSchedule, current scheduled time, and now.
 func GetBackoffForNextScheduleInSeconds(cronSchedule string, scheduledTime time.Time, now time.Time) int32 {
 	backoffDuration := GetBackoffForNextSchedule(cronSchedule, scheduledTime, now)
 	if backoffDuration == NoBackoff {
