@@ -697,8 +697,7 @@ func ListWorkflow2(c *cli.Context) {
 		return items, token, nil
 	}
 
-	// fields := []string{"Type.Name", "Execution.WorkflowId", "Execution.RunId", "TaskQueue", "StartTime", "ExecutionTime", "CloseTime"}
-	fields := []string{"Type", "Execution", "TaskQueue", "StartTime", "ExecutionTime", "CloseTime"}
+	fields := []string{"Type.Name", "Execution.WorkflowId", "Execution.RunId", "TaskQueue", "StartTime", "ExecutionTime", "CloseTime"}
 	paginate(c, paginationFunc, fields)
 }
 

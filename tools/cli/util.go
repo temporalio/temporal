@@ -966,12 +966,6 @@ func paginate(c *cli.Context, paginationFn collection.PaginationFn, fields []str
 }
 
 func printTable(items []interface{}, fields []string) error {
-	// func getField(v *Vertex, field string) int {
-	// 	r := reflect.ValueOf(v)
-	// 	f := reflect.Indirect(r).FieldByName(field)
-	// 	return int(f.Int())
-	// }
-
 	if len(fields) == 0 {
 		// dynamically examine fields
 		if len(items) == 0 {
@@ -992,15 +986,24 @@ func printTable(items []interface{}, fields []string) error {
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
 	table.SetHeaderLine(false)
-	for i := 0; i < len(items); i++ {
-		item := reflect.ValueOf(items[i])
-		for item.Type().Kind() == reflect.Ptr {
-			item = item.Elem()
-		}
+
+	for _, item := range items {
+		val := reflect.ValueOf(item)
 		var columns []string
-		for j := 0; j < len(fields); j++ {
-			col := item.FieldByName(fields[j])
-			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
+		for _, field := range fields {
+			nestedFields := strings.Split(field, ".") // results in ex. "Execution", "RunId"
+			var col interface{}
+			for _, nField := range nestedFields {
+				for val.Type().Kind() == reflect.Ptr {
+					// we want the struct value to be able to get a field by name
+					val = val.Elem()
+				}
+				val = val.FieldByName(nField)
+				col = val.Interface()
+				val = reflect.ValueOf(col)
+			}
+			columns = append(columns, fmt.Sprintf("%v", col))
+			val = reflect.ValueOf(item)
 		}
 		table.Append(columns)
 	}
