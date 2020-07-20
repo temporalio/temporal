@@ -155,7 +155,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: name,
-				Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),
+				Kind: fwdr.taskQueueKind,
 			},
 			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
@@ -169,7 +169,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Execution:         task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: name,
-				Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),
+				Kind: fwdr.taskQueueKind,
 			},
 			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
@@ -233,7 +233,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
-					Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),
+					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
@@ -250,7 +250,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: name,
-					Kind: enumspb.TaskQueueKind(fwdr.taskQueueKind),
+					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},

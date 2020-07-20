@@ -508,8 +508,11 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 }
 
 func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
-	taskQueue := func(name string) *taskqueuepb.TaskQueue {
-		return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	newTaskQueue := func(name string) *taskqueuepb.TaskQueue {
+		return &taskqueuepb.TaskQueue{
+			Name: name,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
 	}
 
 	testCases := []struct {
@@ -518,17 +521,17 @@ func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
 		output      *taskqueuepb.TaskQueue
 		isOutputErr bool
 	}{
-		{"tq-1", nil, &taskqueuepb.TaskQueue{Name: "tq-1"}, false},
-		{"", taskQueue("tq-1"), taskQueue("tq-1"), false},
-		{"tq-1", taskQueue("tq-1"), taskQueue("tq-1"), false},
-		{"", taskQueue("/tl-1"), taskQueue("/tl-1"), false},
-		{"", taskQueue("/__temporal_sys"), taskQueue("/__temporal_sys"), false},
-		{"", nil, &taskqueuepb.TaskQueue{}, true},
-		{"", taskQueue(""), taskQueue(""), true},
-		{"", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
-		{"tq-1", taskQueue(reservedTaskQueuePrefix), taskQueue(reservedTaskQueuePrefix), true},
-		{"", taskQueue(reservedTaskQueuePrefix + "tq-1"), taskQueue(reservedTaskQueuePrefix + "tq-1"), true},
-		{"tq-1", taskQueue(reservedTaskQueuePrefix + "tq-1"), taskQueue(reservedTaskQueuePrefix + "tq-1"), true},
+		{"tq-1", nil, newTaskQueue("tq-1"), false},
+		{"", newTaskQueue("tq-1"), newTaskQueue("tq-1"), false},
+		{"tq-1", newTaskQueue("tq-1"), newTaskQueue("tq-1"), false},
+		{"", newTaskQueue("/tl-1"), newTaskQueue("/tl-1"), false},
+		{"", newTaskQueue("/__temporal_sys"), newTaskQueue("/__temporal_sys"), false},
+		{"", nil, newTaskQueue(""), true},
+		{"", newTaskQueue(""), newTaskQueue(""), true},
+		{"", newTaskQueue(reservedTaskQueuePrefix), newTaskQueue(reservedTaskQueuePrefix), true},
+		{"tq-1", newTaskQueue(reservedTaskQueuePrefix), newTaskQueue(reservedTaskQueuePrefix), true},
+		{"", newTaskQueue(reservedTaskQueuePrefix + "tq-1"), newTaskQueue(reservedTaskQueuePrefix + "tq-1"), true},
+		{"tq-1", newTaskQueue(reservedTaskQueuePrefix + "tq-1"), newTaskQueue(reservedTaskQueuePrefix + "tq-1"), true},
 	}
 
 	for _, tc := range testCases {
