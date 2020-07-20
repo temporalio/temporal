@@ -63,11 +63,11 @@ const (
 		`AND start_time = ? ` +
 		`AND run_id = ?`
 
-	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions_v2 (` +
+	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
-	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions_v2 (` +
+	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -95,21 +95,21 @@ const (
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions_v2 ` +
+		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND workflow_id = ? ` +
 		`AND run_id = ? ALLOW FILTERING `
 
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions_v2 ` +
+		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition IN (?) ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? `
 
 	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions_v2 ` +
+		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
@@ -117,7 +117,7 @@ const (
 		`AND workflow_type_name = ? `
 
 	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions_v2 ` +
+		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
@@ -125,7 +125,7 @@ const (
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions_v2 ` +
+		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
