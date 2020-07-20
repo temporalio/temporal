@@ -51,6 +51,7 @@ import (
 type (
 	commandAttrValidator struct {
 		namespaceCache            cache.NamespaceCache
+		config                    *Config
 		maxIDLengthLimit          int
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
@@ -84,6 +85,7 @@ func newCommandAttrValidator(
 ) *commandAttrValidator {
 	return &commandAttrValidator{
 		namespaceCache:   namespaceCache,
+		config:           config,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
 			logger,
@@ -546,6 +548,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
+	targetNamespace string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
@@ -596,23 +599,11 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	parentSpecifiedExecutionTimeout := attributes.GetWorkflowExecutionTimeoutSeconds()
-	// Inherit workflow timeout from parent workflow execution if not provided on command
-	if parentSpecifiedExecutionTimeout <= 0 {
-		attributes.WorkflowExecutionTimeoutSeconds = parentInfo.WorkflowExecutionTimeout
-	}
+	attributes.WorkflowExecutionTimeoutSeconds = getWorkflowExecutionTimeout(targetNamespace,
+		attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
 
-	// Inherit workflow timeout from parent workflow execution if not provided on command
-	if attributes.GetWorkflowRunTimeoutSeconds() <= 0 {
-		if parentSpecifiedExecutionTimeout > 0 {
-			// Default to execution timeout specified by parent when starting child workflow execution
-			attributes.WorkflowRunTimeoutSeconds = parentSpecifiedExecutionTimeout
-		} else {
-			// Both execution timeout and run timeout are not specified on the command
-			// Default to run timeout of parent execution
-			attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
-		}
-	}
+	attributes.WorkflowRunTimeoutSeconds = getWorkflowRunTimeout(targetNamespace,
+		attributes.GetWorkflowRunTimeoutSeconds(), attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
