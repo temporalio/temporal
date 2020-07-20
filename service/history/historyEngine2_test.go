@@ -737,8 +737,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	}, nil).Once()
 
 	s.mockEventsCache.EXPECT().GetEvent(
-		domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
-		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(), gomock.Any(),
+		gomock.Any(), domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
+		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &h.RecordActivityTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),

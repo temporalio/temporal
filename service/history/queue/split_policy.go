@@ -23,8 +23,18 @@ package queue
 import (
 	"math/rand"
 
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/task"
+)
+
+const (
+	policyTypePendingTask int = iota + 1
+	policyTypeStuckTask
+	policyTypeSelectedDomain
+	policyTypeRandom
 )
 
 type (
@@ -34,16 +44,25 @@ type (
 		pendingTaskThreshold map[int]int // queue level -> threshold
 		maxNewQueueLevel     int
 		lookAheadFunc        lookAheadFunc
+
+		logger       log.Logger
+		metricsScope metrics.Scope
 	}
 
 	stuckTaskSplitPolicy struct {
 		attemptThreshold map[int]int // queue level -> threshold
 		maxNewQueueLevel int
+
+		logger       log.Logger
+		metricsScope metrics.Scope
 	}
 
 	selectedDomainSplitPolicy struct {
 		domainIDs     map[string]struct{}
 		newQueueLevel int
+
+		logger       log.Logger
+		metricsScope metrics.Scope
 	}
 
 	randomSplitPolicy struct {
@@ -51,6 +70,9 @@ type (
 		enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
 		maxNewQueueLevel  int
 		lookAheadFunc     lookAheadFunc
+
+		logger       log.Logger
+		metricsScope metrics.Scope
 	}
 
 	aggregatedSplitPolicy struct {
@@ -64,11 +86,15 @@ func NewPendingTaskSplitPolicy(
 	pendingTaskThreshold map[int]int,
 	lookAheadFunc lookAheadFunc,
 	maxNewQueueLevel int,
+	logger log.Logger,
+	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	return &pendingTaskSplitPolicy{
 		pendingTaskThreshold: pendingTaskThreshold,
 		lookAheadFunc:        lookAheadFunc,
 		maxNewQueueLevel:     maxNewQueueLevel,
+		logger:               logger,
+		metricsScope:         metricsScope,
 	}
 }
 
@@ -77,10 +103,14 @@ func NewPendingTaskSplitPolicy(
 func NewStuckTaskSplitPolicy(
 	attemptThreshold map[int]int,
 	maxNewQueueLevel int,
+	logger log.Logger,
+	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	return &stuckTaskSplitPolicy{
 		attemptThreshold: attemptThreshold,
 		maxNewQueueLevel: maxNewQueueLevel,
+		logger:           logger,
+		metricsScope:     metricsScope,
 	}
 }
 
@@ -89,10 +119,14 @@ func NewStuckTaskSplitPolicy(
 func NewSelectedDomainSplitPolicy(
 	domainIDs map[string]struct{},
 	newQueueLevel int,
+	logger log.Logger,
+	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	return &selectedDomainSplitPolicy{
 		domainIDs:     domainIDs,
 		newQueueLevel: newQueueLevel,
+		logger:        logger,
+		metricsScope:  metricsScope,
 	}
 }
 
@@ -103,12 +137,16 @@ func NewRandomSplitPolicy(
 	enabledByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter,
 	maxNewQueueLevel int,
 	lookAheadFunc lookAheadFunc,
+	logger log.Logger,
+	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	return &randomSplitPolicy{
 		splitProbability:  splitProbability,
 		enabledByDomainID: enabledByDomainID,
 		maxNewQueueLevel:  maxNewQueueLevel,
 		lookAheadFunc:     lookAheadFunc,
+		logger:            logger,
+		metricsScope:      metricsScope,
 	}
 }
 
@@ -152,10 +190,23 @@ func (p *pendingTaskSplitPolicy) Evaluate(
 		}
 	}
 
+	if len(domainToSplit) == 0 {
+		return nil
+	}
+
+	newQueueLevel := queueImpl.state.level + 1 // split stuck tasks to current level + 1
+	p.logger.Info("Split processing queue",
+		tag.QueueLevel(newQueueLevel),
+		tag.PreviousQueueLevel(queueImpl.state.level),
+		tag.WorkflowDomainIDs(domainToSplit),
+		tag.QueueSplitPolicyType(policyTypePendingTask),
+	)
+	p.metricsScope.IncCounter(metrics.ProcessingQueuePendingTaskSplitCounter)
+
 	return splitQueueHelper(
 		queueImpl,
 		domainToSplit,
-		queueImpl.state.level+1, // split stuck tasks to current level + 1
+		newQueueLevel,
 		p.lookAheadFunc,
 	)
 }
@@ -185,11 +236,24 @@ func (p *stuckTaskSplitPolicy) Evaluate(
 		}
 	}
 
+	if len(domainToSplit) == 0 {
+		return nil
+	}
+
+	newQueueLevel := queueImpl.state.level + 1 // split stuck tasks to current level + 1
+	p.logger.Info("Split processing queue",
+		tag.QueueLevel(newQueueLevel),
+		tag.PreviousQueueLevel(queueImpl.state.level),
+		tag.WorkflowDomainIDs(domainToSplit),
+		tag.QueueSplitPolicyType(policyTypeStuckTask),
+	)
+	p.metricsScope.IncCounter(metrics.ProcessingQueueStuckTaskSplitCounter)
+
 	return splitQueueHelper(
 		queueImpl,
 		domainToSplit,
-		queueImpl.state.level+1, // split stuck tasks to current level + 1
-		nil,                     // no need to look ahead
+		newQueueLevel,
+		nil, // no need to look ahead
 	)
 }
 
@@ -210,6 +274,14 @@ func (p *selectedDomainSplitPolicy) Evaluate(
 		// no split needed
 		return nil
 	}
+
+	p.logger.Info("Split processing queue",
+		tag.QueueLevel(currentQueueState.Level()),
+		tag.PreviousQueueLevel(p.newQueueLevel),
+		tag.WorkflowDomainIDs(p.domainIDs),
+		tag.QueueSplitPolicyType(policyTypeSelectedDomain),
+	)
+	p.metricsScope.IncCounter(metrics.ProcessingQueueSelectedDomainSplitCounter)
 
 	return []ProcessingQueueState{
 		newProcessingQueueState(
@@ -261,10 +333,23 @@ func (p *randomSplitPolicy) Evaluate(
 		domainToSplit[domainID] = struct{}{}
 	}
 
+	if len(domainToSplit) == 0 {
+		return nil
+	}
+
+	newQueueLevel := queueImpl.state.level + 1 // split stuck tasks to current level + 1
+	p.logger.Info("Split processing queue",
+		tag.QueueLevel(newQueueLevel),
+		tag.PreviousQueueLevel(queueImpl.state.level),
+		tag.WorkflowDomainIDs(domainToSplit),
+		tag.QueueSplitPolicyType(policyTypeRandom),
+	)
+	p.metricsScope.IncCounter(metrics.ProcessingQueueRandomSplitCounter)
+
 	return splitQueueHelper(
 		queueImpl,
 		domainToSplit,
-		queueImpl.state.level+1,
+		newQueueLevel,
 		p.lookAheadFunc,
 	)
 }
@@ -281,16 +366,13 @@ func (p *aggregatedSplitPolicy) Evaluate(
 	return nil
 }
 
+// splitQueueHelper assumes domainToSplit is not empty
 func splitQueueHelper(
 	queueImpl *processingQueueImpl,
 	domainToSplit map[string]struct{},
 	newQueueLevel int,
 	lookAheadFunc lookAheadFunc,
 ) []ProcessingQueueState {
-	if len(domainToSplit) == 0 {
-		return nil
-	}
-
 	newMaxLevel := queueImpl.state.readLevel
 	if lookAheadFunc != nil {
 		for domainID := range domainToSplit {

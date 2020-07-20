@@ -465,6 +465,21 @@ func ShardTimerAcks(shardTimerAcks interface{}) Tag {
 
 // task queue processor
 
+// QueueLevel returns tag for QueueLevel
+func QueueLevel(level int) Tag {
+	return newInt("queue-level", level)
+}
+
+// PreviousQueueLevel returns tag for PreviousQueueLevel
+func PreviousQueueLevel(level int) Tag {
+	return newInt("previous-queue-level", level)
+}
+
+// QueueSplitPolicyType returns tag for QueueSplitPolicyType
+func QueueSplitPolicyType(policyType int) Tag {
+	return newInt("split-policy-type", policyType)
+}
+
 // TaskID returns tag for TaskID
 func TaskID(taskID int64) Tag {
 	return newInt64("queue-task-id", taskID)

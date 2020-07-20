@@ -33,6 +33,10 @@ import (
 	"github.com/uber/cadence/service/history/task"
 )
 
+const (
+	warnPendingTasks = 2000
+)
+
 type (
 	updateMaxReadLevelFn    func() task.Key
 	updateClusterAckLevelFn func(task.Key) error
@@ -132,6 +136,7 @@ func initializeSplitPolicy(
 	options *queueProcessorOptions,
 	lookAheadFunc lookAheadFunc,
 	logger log.Logger,
+	metricsScope metrics.Scope,
 ) ProcessingQueueSplitPolicy {
 	if !options.EnableSplit() {
 		return nil
@@ -146,7 +151,7 @@ func initializeSplitPolicy(
 		if err != nil {
 			logger.Error("Failed to convert pending task threshold", tag.Error(err))
 		} else {
-			policies = append(policies, NewPendingTaskSplitPolicy(thresholds, lookAheadFunc, maxNewQueueLevel))
+			policies = append(policies, NewPendingTaskSplitPolicy(thresholds, lookAheadFunc, maxNewQueueLevel, logger, metricsScope))
 		}
 	}
 
@@ -155,7 +160,7 @@ func initializeSplitPolicy(
 		if err != nil {
 			logger.Error("Failed to convert stuck task threshold", tag.Error(err))
 		} else {
-			policies = append(policies, NewStuckTaskSplitPolicy(thresholds, maxNewQueueLevel))
+			policies = append(policies, NewStuckTaskSplitPolicy(thresholds, maxNewQueueLevel, logger, metricsScope))
 		}
 	}
 
@@ -166,6 +171,8 @@ func initializeSplitPolicy(
 			options.EnableRandomSplitByDomainID,
 			maxNewQueueLevel,
 			lookAheadFunc,
+			logger,
+			metricsScope,
 		))
 	}
 
@@ -210,4 +217,23 @@ func splitProcessingQueueCollection(
 	})
 
 	return processingQueueCollections
+}
+
+func getPendingTasksMetricIdx(
+	scopeIdx int,
+) int {
+	switch scopeIdx {
+	case metrics.TimerActiveQueueProcessorScope:
+		return metrics.ShardInfoTimerActivePendingTasksTimer
+	case metrics.TimerStandbyQueueProcessorScope:
+		return metrics.ShardInfoTimerStandbyPendingTasksTimer
+	case metrics.TransferActiveQueueProcessorScope:
+		return metrics.ShardInfoTransferActivePendingTasksTimer
+	case metrics.TransferStandbyQueueProcessorScope:
+		return metrics.ShardInfoTransferStandbyPendingTasksTimer
+	case metrics.ReplicatorQueueProcessorScope:
+		return metrics.ShardInfoReplicationPendingTasksTimer
+	default:
+		panic("unknown queue processor metric scope")
+	}
 }

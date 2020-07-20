@@ -144,8 +144,10 @@ func (s *processingQueueSuite) TestUpdateAckLevel_WithPendingTasks() {
 		tasks,
 	)
 
-	queue.UpdateAckLevel()
+	newAckLevel, pendingTasks := queue.UpdateAckLevel()
+	s.Equal(testKey{ID: 3}, newAckLevel)
 	s.Equal(testKey{ID: 3}, queue.state.ackLevel)
+	s.Equal(3, pendingTasks)
 }
 
 func (s *processingQueueSuite) TestUpdateAckLevel_NoPendingTasks() {
@@ -181,8 +183,10 @@ func (s *processingQueueSuite) TestUpdateAckLevel_NoPendingTasks() {
 		tasks,
 	)
 
-	queue.UpdateAckLevel()
+	newAckLevel, pendingTasks := queue.UpdateAckLevel()
+	s.Equal(readLevel, newAckLevel)
 	s.Equal(readLevel, queue.state.ackLevel)
+	s.Equal(0, pendingTasks)
 }
 
 func (s *processingQueueSuite) TestSplit() {

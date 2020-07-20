@@ -252,7 +252,7 @@ func (q *processingQueueImpl) AddTasks(
 	q.state.readLevel = newReadLevel
 }
 
-func (q *processingQueueImpl) UpdateAckLevel() {
+func (q *processingQueueImpl) UpdateAckLevel() (task.Key, int) {
 	keys := make([]task.Key, 0, len(q.outstandingTasks))
 	for key := range q.outstandingTasks {
 		keys = append(keys, key)
@@ -278,6 +278,8 @@ func (q *processingQueueImpl) UpdateAckLevel() {
 	if timerKey, ok := q.state.ackLevel.(timerTaskKey); ok {
 		q.state.ackLevel = newTimerTaskKey(timerKey.visibilityTimestamp, 0)
 	}
+
+	return q.state.ackLevel, len(q.outstandingTasks)
 }
 
 func splitProcessingQueue(

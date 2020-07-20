@@ -73,18 +73,28 @@ func (c *processingQueueCollection) AddTasks(
 	}
 }
 
-func (c *processingQueueCollection) UpdateAckLevels() {
+func (c *processingQueueCollection) UpdateAckLevels() (task.Key, int) {
 	remainingQueues := make([]ProcessingQueue, 0, len(c.queues))
+	totalPendingTasks := 0
+	var minAckLevel task.Key
 
 	for _, queue := range c.queues {
-		queue.UpdateAckLevel()
-		if !taskKeyEquals(queue.State().AckLevel(), queue.State().MaxLevel()) {
-			remainingQueues = append(remainingQueues, queue)
+		ackLevel, numPendingTasks := queue.UpdateAckLevel()
+		if taskKeyEquals(ackLevel, queue.State().MaxLevel()) {
 			continue
+		}
+
+		remainingQueues = append(remainingQueues, queue)
+		totalPendingTasks += numPendingTasks
+		if minAckLevel == nil {
+			minAckLevel = ackLevel
+		} else {
+			minAckLevel = minTaskKey(minAckLevel, ackLevel)
 		}
 	}
 
 	c.queues = remainingQueues
+	return minAckLevel, totalPendingTasks
 }
 
 func (c *processingQueueCollection) Split(

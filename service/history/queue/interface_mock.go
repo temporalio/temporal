@@ -207,9 +207,12 @@ func (mr *MockProcessingQueueMockRecorder) AddTasks(arg0, arg1 interface{}) *gom
 }
 
 // UpdateAckLevel mocks base method
-func (m *MockProcessingQueue) UpdateAckLevel() {
+func (m *MockProcessingQueue) UpdateAckLevel() (task.Key, int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateAckLevel")
+	ret := m.ctrl.Call(m, "UpdateAckLevel")
+	ret0, _ := ret[0].(task.Key)
+	ret1, _ := ret[1].(int)
+	return ret0, ret1
 }
 
 // UpdateAckLevel indicates an expected call of UpdateAckLevel
@@ -333,9 +336,12 @@ func (mr *MockProcessingQueueCollectionMockRecorder) AddTasks(arg0, arg1 interfa
 }
 
 // UpdateAckLevels mocks base method
-func (m *MockProcessingQueueCollection) UpdateAckLevels() {
+func (m *MockProcessingQueueCollection) UpdateAckLevels() (task.Key, int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateAckLevels")
+	ret := m.ctrl.Call(m, "UpdateAckLevels")
+	ret0, _ := ret[0].(task.Key)
+	ret1, _ := ret[1].(int)
+	return ret0, ret1
 }
 
 // UpdateAckLevels indicates an expected call of UpdateAckLevels

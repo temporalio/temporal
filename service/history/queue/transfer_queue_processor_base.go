@@ -381,17 +381,19 @@ func (t *transferQueueProcessorBase) updateAckLevel() (bool, error) {
 	// and update DB with that value.
 	// Once persistence layer is updated, we need to persist all queue states
 	// instead of only the min ack level
+	t.metricsScope.IncCounter(metrics.AckLevelUpdateCounter)
+
 	t.queueCollectionsLock.Lock()
 	var minAckLevel task.Key
+	totalPengingTasks := 0
 	for _, queueCollection := range t.processingQueueCollections {
-		queueCollection.UpdateAckLevels()
+		ackLevel, numPendingTasks := queueCollection.UpdateAckLevels()
 
-		for _, queue := range queueCollection.Queues() {
-			if minAckLevel == nil {
-				minAckLevel = queue.State().AckLevel()
-			} else {
-				minAckLevel = minTaskKey(minAckLevel, queue.State().AckLevel())
-			}
+		totalPengingTasks += numPendingTasks
+		if minAckLevel == nil {
+			minAckLevel = ackLevel
+		} else {
+			minAckLevel = minTaskKey(minAckLevel, ackLevel)
 		}
 	}
 	t.queueCollectionsLock.Unlock()
@@ -407,7 +409,11 @@ func (t *transferQueueProcessorBase) updateAckLevel() (bool, error) {
 		return true, nil
 	}
 
-	// TODO: emit metrics for total # of pending tasks
+	if totalPengingTasks > warnPendingTasks {
+		t.logger.Warn("Too many pending tasks.")
+	}
+	// TODO: consider move pendingTasksTime metrics from shardInfoScope to queue processor scope
+	t.metricsClient.RecordTimer(metrics.ShardInfoScope, getPendingTasksMetricIdx(t.options.MetricScope), time.Duration(totalPengingTasks))
 
 	if err := t.updateClusterAckLevel(minAckLevel); err != nil {
 		t.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
@@ -437,9 +443,10 @@ func (t *transferQueueProcessorBase) splitQueue() {
 		t.options,
 		func(key task.Key, domainID string) task.Key {
 			totalLookAhead := lookAhead * int64(t.options.SplitLookAheadDurationByDomainID(domainID))
-			return newTransferTaskKey(key.(timerTaskKey).taskID + totalLookAhead)
+			return newTransferTaskKey(key.(transferTaskKey).taskID + totalLookAhead)
 		},
 		t.logger,
+		t.metricsScope,
 	)
 	if splitPolicy == nil {
 		return

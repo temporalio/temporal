@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -59,18 +59,18 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetEvent mocks base method
-func (m *MockCache) GetEvent(shardID int, domainID string, workflowID string, runID string, firstEventID int64, eventID int64, branchToken []byte) (*shared.HistoryEvent, error) {
+func (m *MockCache) GetEvent(shardID int, domainID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*shared.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEvent", domainID, workflowID, runID, firstEventID, eventID, branchToken, shardID)
+	ret := m.ctrl.Call(m, "GetEvent", shardID, domainID, workflowID, runID, firstEventID, eventID, branchToken)
 	ret0, _ := ret[0].(*shared.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetEvent indicates an expected call of GetEvent
-func (mr *MockCacheMockRecorder) GetEvent(domainID, workflowID, runID, firstEventID, eventID, branchToken, shardID interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) GetEvent(shardID, domainID, workflowID, runID, firstEventID, eventID, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), domainID, workflowID, runID, firstEventID, eventID, branchToken, shardID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), shardID, domainID, workflowID, runID, firstEventID, eventID, branchToken)
 }
 
 // PutEvent mocks base method

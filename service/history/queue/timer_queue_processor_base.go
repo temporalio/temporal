@@ -414,6 +414,7 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 }
 
 func (t *timerQueueProcessorBase) updateAckLevel() (bool, error) {
+	t.metricsScope.IncCounter(metrics.AckLevelUpdateCounter)
 	t.queueCollectionsLock.Lock()
 
 	// TODO: only for now, find the min ack level across all processing queues
@@ -421,15 +422,15 @@ func (t *timerQueueProcessorBase) updateAckLevel() (bool, error) {
 	// Once persistence layer is updated, we need to persist all queue states
 	// instead of only the min ack level
 	var minAckLevel task.Key
+	totalPengingTasks := 0
 	for _, queueCollection := range t.processingQueueCollections {
-		queueCollection.UpdateAckLevels()
+		ackLevel, numPendingTasks := queueCollection.UpdateAckLevels()
 
-		for _, queue := range queueCollection.Queues() {
-			if minAckLevel == nil {
-				minAckLevel = queue.State().AckLevel()
-			} else {
-				minAckLevel = minTaskKey(minAckLevel, queue.State().AckLevel())
-			}
+		totalPengingTasks += numPendingTasks
+		if minAckLevel == nil {
+			minAckLevel = ackLevel
+		} else {
+			minAckLevel = minTaskKey(minAckLevel, ackLevel)
 		}
 	}
 	t.queueCollectionsLock.Unlock()
@@ -442,7 +443,11 @@ func (t *timerQueueProcessorBase) updateAckLevel() (bool, error) {
 		return true, nil
 	}
 
-	// TODO: emit metrics for total # of pending tasks
+	if totalPengingTasks > warnPendingTasks {
+		t.logger.Warn("Too many pending tasks.")
+	}
+	// TODO: consider move pendingTasksTime metrics from shardInfoScope to queue processor scope
+	t.metricsClient.RecordTimer(metrics.ShardInfoScope, getPendingTasksMetricIdx(t.options.MetricScope), time.Duration(totalPengingTasks))
 
 	if err := t.updateClusterAckLevel(minAckLevel); err != nil {
 		t.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
@@ -465,6 +470,7 @@ func (t *timerQueueProcessorBase) splitQueue() {
 			)
 		},
 		t.logger,
+		t.metricsScope,
 	)
 	if splitPolicy == nil {
 		return

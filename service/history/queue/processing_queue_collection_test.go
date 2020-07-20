@@ -163,14 +163,13 @@ func (s *processingQueueCollectionSuite) TestUpdateAckLevels() {
 	currentActiveIdx := 1
 	mockQueues := []*MockProcessingQueue{}
 	for i := 0; i != totalQueues; i++ {
-		mockQueue := NewMockProcessingQueue(s.controller)
-		mockQueue.EXPECT().UpdateAckLevel().Times(1)
-		mockQueues = append(mockQueues, mockQueue)
+		mockQueues = append(mockQueues, NewMockProcessingQueue(s.controller))
 	}
 
 	finishedQueueIdx := map[int]struct{}{0: {}, 2: {}, 3: {}}
 	for i := 0; i != totalQueues; i++ {
 		if _, ok := finishedQueueIdx[i]; ok {
+			mockQueues[i].EXPECT().UpdateAckLevel().Return(testKey{ID: i}, 0).Times(1)
 			mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 				s.level,
 				testKey{ID: i},
@@ -179,6 +178,7 @@ func (s *processingQueueCollectionSuite) TestUpdateAckLevels() {
 				DomainFilter{},
 			)).AnyTimes()
 		} else {
+			mockQueues[i].EXPECT().UpdateAckLevel().Return(testKey{ID: i - i}, 1).Times(1)
 			mockQueues[i].EXPECT().State().Return(newProcessingQueueState(
 				s.level,
 				testKey{ID: i - 1},
@@ -193,7 +193,9 @@ func (s *processingQueueCollectionSuite) TestUpdateAckLevels() {
 	queueCollection := s.newTestProcessingQueueCollection(s.level, mockQueues)
 	queueCollection.activeQueue = mockQueues[currentActiveIdx]
 
-	queueCollection.UpdateAckLevels()
+	ackLevel, totalPendingTasks := queueCollection.UpdateAckLevels()
+	s.Equal(testKey{ID: 0}, ackLevel)
+	s.Equal(totalQueues-len(finishedQueueIdx), totalPendingTasks)
 	s.Len(queueCollection.queues, totalQueues-len(finishedQueueIdx))
 	s.Equal(expectedActiveQueue.State(), queueCollection.ActiveQueue().State())
 }
