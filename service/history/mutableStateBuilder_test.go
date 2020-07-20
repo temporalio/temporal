@@ -281,7 +281,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         200,
-		WorkflowTaskTimeout:        100,
+		DefaultWorkflowTaskTimeout: 100,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(8),
@@ -290,7 +290,8 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		CurrentWorkflowTaskTimeout: 100,
+		WorkflowTaskTimeout:        100,
+		WorkflowTaskAttempt:        1,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -567,7 +568,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTimeoutSecond := int32(222)
 	runTimeoutSecond := int32(111)
 	workflowTaskTimeoutSecond := int32(11)
-	workflowTaskAttempt := int64(0)
+	workflowTaskAttempt := int64(1)
 
 	eventID := int64(1)
 	workflowStartEvent := &historypb.HistoryEvent{
@@ -639,7 +640,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	di, err := s.msBuilder.ReplicateWorkflowTaskScheduledEvent(
 		workflowTaskScheduleEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
-		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().TaskQueue.GetName(),
+		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
@@ -690,7 +691,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	di, err = s.msBuilder.ReplicateWorkflowTaskScheduledEvent(
 		newWorkflowTaskScheduleEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().TaskQueue.GetName(),
+		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
@@ -739,7 +740,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         200,
-		WorkflowTaskTimeout:        100,
+		DefaultWorkflowTaskTimeout: 100,
 		State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(101),
@@ -748,7 +749,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
-		CurrentWorkflowTaskTimeout: 100,
+		WorkflowTaskTimeout:        100,
+		WorkflowTaskAttempt:        1,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{

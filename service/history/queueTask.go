@@ -154,7 +154,7 @@ func newQueueTaskBase(
 		state:         task.TaskStatePending,
 		scope:         scope,
 		logger:        logger,
-		attempt:       0,
+		attempt:       1,
 		submitTime:    timeSource.Now(),
 		timeSource:    timeSource,
 		maxRetryCount: maxRetryCount,

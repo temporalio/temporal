@@ -113,7 +113,10 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		TaskQueue:                     &taskqueuepb.TaskQueue{Name: task.TaskQueue},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: task.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})

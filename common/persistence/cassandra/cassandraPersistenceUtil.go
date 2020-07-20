@@ -886,8 +886,8 @@ func createTimerTasks(
 ) error {
 
 	for _, task := range timerTasks {
-		var eventID int64
-		var attempt int64
+		eventID := int64(0)
+		attempt := int64(1)
 
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
