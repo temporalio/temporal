@@ -50,9 +50,10 @@ import (
 
 type (
 	commandAttrValidator struct {
-		namespaceCache            cache.NamespaceCache
-		maxIDLengthLimit          int
-		searchAttributesValidator *validator.SearchAttributesValidator
+		namespaceCache             cache.NamespaceCache
+		maxIDLengthLimit           int
+		searchAttributesValidator  *validator.SearchAttributesValidator
+		defaultActivityRetryPolicy *commonpb.RetryPolicy
 	}
 
 	workflowSizeChecker struct {
@@ -82,7 +83,7 @@ func newCommandAttrValidator(
 	config *Config,
 	logger log.Logger,
 ) *commandAttrValidator {
-	return &commandAttrValidator{
+	v := &commandAttrValidator{
 		namespaceCache:   namespaceCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
@@ -93,6 +94,9 @@ func newCommandAttrValidator(
 			config.SearchAttributesTotalSizeLimit,
 		),
 	}
+
+	v.defaultActivityRetryPolicy = fromConfigToActivityRetryPolicy(config.DefaultActivityRetryPolicy())
+	return v
 }
 
 func newWorkflowSizeChecker(
@@ -222,6 +226,10 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 
 	if attributes.ActivityType == nil || attributes.ActivityType.GetName() == "" {
 		return serviceerror.NewInvalidArgument("ActivityType is not set on command.")
+	}
+
+	if attributes.RetryPolicy == nil {
+		attributes.RetryPolicy = v.defaultActivityRetryPolicy
 	}
 
 	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {

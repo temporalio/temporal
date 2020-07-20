@@ -28,6 +28,7 @@ import (
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
@@ -125,4 +126,38 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		}
 	}
 	return true
+}
+
+func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
+	return map[string]interface{}{
+		"InitialRetryIntervalInSeconds": 1,
+		"MaximumRetryIntervalInSeconds": 100,
+		"ExponentialBackoffCoefficient": 2.0,
+		"MaximumAttempts":               0,
+	}
+}
+
+func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
+	retryPolicy := &commonpb.RetryPolicy{}
+	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
+	if ok {
+		retryPolicy.InitialIntervalInSeconds = initialRetryInterval.(int32)
+	}
+
+	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
+	if ok {
+		retryPolicy.MaximumIntervalInSeconds = maxRetryInterval.(int32)
+	}
+
+	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
+	if ok {
+		retryPolicy.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
+	}
+
+	maximumAttempts, ok := options["MaximumAttempts"]
+	if ok {
+		retryPolicy.MaximumAttempts = maximumAttempts.(int32)
+	}
+
+	return retryPolicy
 }
