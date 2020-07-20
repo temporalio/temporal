@@ -363,7 +363,14 @@ func (p *taskProcessorImpl) processSingleTask(replicationTask *r.ReplicationTask
 	retryTransientError := func() error {
 		return backoff.Retry(
 			func() error {
-				return p.processTaskOnce(replicationTask)
+				select {
+				case <-p.done:
+					// if the processor is stopping, skip the task
+					// the ack level will not update and the new shard owner will retry the task.
+					return nil
+				default:
+					return p.processTaskOnce(replicationTask)
+				}
 			},
 			p.taskRetryPolicy,
 			isTransientRetryableError)
@@ -377,13 +384,17 @@ func (p *taskProcessorImpl) processSingleTask(replicationTask *r.ReplicationTask
 	)
 
 	if err != nil {
-		p.logger.Error(
-			"Failed to apply replication task after retry. Putting task into DLQ.",
-			tag.TaskID(replicationTask.GetSourceTaskId()),
-			tag.Error(err),
-		)
-
-		return p.putReplicationTaskToDLQ(replicationTask)
+		select {
+		case <-p.done:
+			p.logger.Warn("Skip adding new messages to DLQ.", tag.Error(err))
+		default:
+			p.logger.Error(
+				"Failed to apply replication task after retry. Putting task into DLQ.",
+				tag.TaskID(replicationTask.GetSourceTaskId()),
+				tag.Error(err),
+			)
+			return p.putReplicationTaskToDLQ(replicationTask)
+		}
 	}
 
 	return nil
