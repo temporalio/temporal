@@ -141,12 +141,12 @@ func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.R
 	retryPolicy := &commonpb.RetryPolicy{}
 	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
 	if ok {
-		retryPolicy.InitialIntervalInSeconds = initialRetryInterval.(int32)
+		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
 	}
 
 	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
 	if ok {
-		retryPolicy.MaximumIntervalInSeconds = maxRetryInterval.(int32)
+		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
 	}
 
 	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
@@ -156,7 +156,7 @@ func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.R
 
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
-		retryPolicy.MaximumAttempts = maximumAttempts.(int32)
+		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
 	}
 
 	return retryPolicy

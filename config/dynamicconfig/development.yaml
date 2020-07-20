@@ -27,7 +27,7 @@ matching.numTaskqueueReadPartitions:
   constraints: {}
 history.defaultActivityRetryPolicy:
 - value:
-    InitialRetryInterval: 1
-    MaximumRetryInterval: 100
+    InitialRetryIntervalInSeconds: 1
+    MaximumRetryIntervalInSeconds: 120
     ExponentialBackoffCoefficient: 2.0
     MaximumAttempts: 0

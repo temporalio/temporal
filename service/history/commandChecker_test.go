@@ -85,6 +85,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
+		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFn(getDefaultActivityRetryPolicyConfigOptions()),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
