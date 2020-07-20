@@ -66,18 +66,16 @@ CREATE TABLE current_executions(
 );
 
 CREATE TABLE buffered_events (
-  id BIGSERIAL NOT NULL,
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   run_id BYTEA NOT NULL,
+  id BIGSERIAL NOT NULL UNIQUE,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (id)
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, id)
 );
-
-CREATE INDEX buffered_events_by_events_ids ON buffered_events(shard_id, namespace_id, workflow_id, run_id);
 
 CREATE TABLE tasks (
   namespace_id BYTEA NOT NULL,
