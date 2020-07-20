@@ -220,7 +220,7 @@ type (
 		WorkflowTypeName                       string
 		WorkflowRunTimeout                     int32
 		WorkflowExecutionTimeout               int32
-		WorkflowTaskTimeout                    int32
+		DefaultWorkflowTaskTimeout             int32
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
@@ -235,7 +235,7 @@ type (
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		CurrentWorkflowTaskTimeout             int32
+		WorkflowTaskTimeout                    int32
 		WorkflowTaskAttempt                    int64
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
@@ -745,7 +745,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		WorkflowTypeName:                            executionInfo.WorkflowTypeName,
 		WorkflowRunTimeoutSeconds:                   executionInfo.WorkflowRunTimeout,
 		WorkflowExecutionTimeoutSeconds:             executionInfo.WorkflowExecutionTimeout,
-		WorkflowTaskTimeoutSeconds:                  executionInfo.WorkflowTaskTimeout,
+		DefaultWorkflowTaskTimeoutSeconds:           executionInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:                            executionInfo.LastFirstEventID,
 		LastEventTaskId:                             executionInfo.LastEventTaskID,
 		LastProcessedEvent:                          executionInfo.LastProcessedEvent,
@@ -755,7 +755,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		WorkflowTaskScheduleId:                      executionInfo.WorkflowTaskScheduleID,
 		WorkflowTaskStartedId:                       executionInfo.WorkflowTaskStartedID,
 		WorkflowTaskRequestId:                       executionInfo.WorkflowTaskRequestID,
-		CurrentWorkflowTaskTimeout:                  executionInfo.CurrentWorkflowTaskTimeout,
+		WorkflowTaskTimeout:                         executionInfo.WorkflowTaskTimeout,
 		WorkflowTaskAttempt:                         executionInfo.WorkflowTaskAttempt,
 		WorkflowTaskStartedTimestampNanos:           executionInfo.WorkflowTaskStartedTimestamp,
 		WorkflowTaskScheduledTimestampNanos:         executionInfo.WorkflowTaskScheduledTimestamp,
@@ -833,7 +833,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTypeName:                       info.GetWorkflowTypeName(),
 		WorkflowExecutionTimeout:               info.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeout:                     info.GetWorkflowRunTimeoutSeconds(),
-		WorkflowTaskTimeout:                    info.GetWorkflowTaskTimeoutSeconds(),
+		DefaultWorkflowTaskTimeout:             info.GetDefaultWorkflowTaskTimeoutSeconds(),
 		State:                                  state.GetState(),
 		Status:                                 state.GetStatus(),
 		LastFirstEventID:                       info.GetLastFirstEventId(),
@@ -845,7 +845,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTaskScheduleID:                 info.GetWorkflowTaskScheduleId(),
 		WorkflowTaskStartedID:                  info.GetWorkflowTaskStartedId(),
 		WorkflowTaskRequestID:                  info.GetWorkflowTaskRequestId(),
-		CurrentWorkflowTaskTimeout:             info.GetCurrentWorkflowTaskTimeout(),
+		WorkflowTaskTimeout:                    info.GetWorkflowTaskTimeout(),
 		WorkflowTaskAttempt:                    info.GetWorkflowTaskAttempt(),
 		WorkflowTaskStartedTimestamp:           info.GetWorkflowTaskStartedTimestampNanos(),
 		WorkflowTaskScheduledTimestamp:         info.GetWorkflowTaskScheduledTimestampNanos(),
