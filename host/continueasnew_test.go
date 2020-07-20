@@ -270,7 +270,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		WorkflowType:                    workflowType,
 		TaskQueue:                       taskQueue,
 		Input:                           nil,
-		WorkflowExecutionTimeoutSeconds: 3,
+		WorkflowExecutionTimeoutSeconds: 5,
 		Identity:                        identity,
 	}
 
@@ -316,7 +316,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	s.False(workflowComplete)
 
 GetHistoryLoop:
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 200; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
