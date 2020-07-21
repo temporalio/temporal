@@ -128,7 +128,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{PageSize: 9, NextPageToken: nextPageToken})
 		s.NoError(err)
 		nextPageToken = resp.NextPageToken
-		for _, member := range resp.ActiveMembers  {
+		for _, member := range resp.ActiveMembers {
 			expectedIds[primitives.UUIDString(member.HostID)]--
 			hostCount++
 		}
@@ -140,7 +140,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 
 	s.Equal(100, hostCount)
 	for id, val := range expectedIds {
-		s.Zero(val, "identifier was either not found in db, or shouldn't be there - " + id)
+		s.Zero(val, "identifier was either not found in db, or shouldn't be there - "+id)
 	}
 
 	time.Sleep(time.Second * 2)

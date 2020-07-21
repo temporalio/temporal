@@ -75,7 +75,7 @@ cluster_membership WHERE membership_partition = $`
 	templateWithSessionStartSuffix   = ` AND session_start >= $`
 
 	// Generic SELECT Suffixes
-	templateWithLimitSuffix            = ` LIMIT $`
+	templateWithLimitSuffix               = ` LIMIT $`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
 
