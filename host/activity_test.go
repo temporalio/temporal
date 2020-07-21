@@ -946,6 +946,9 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    60,
 						HeartbeatTimeoutSeconds:       5,
+						RetryPolicy: &commonpb.RetryPolicy{
+							MaximumAttempts: 1,
+						},
 					}},
 				}
 

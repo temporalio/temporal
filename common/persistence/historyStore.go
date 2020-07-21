@@ -459,12 +459,12 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 			// In that case we don't validate history continuousness for the first page
 			// TODO: in this case, some events returned can be invalid(stale). application layer need to make sure it won't make any problems to XDC
 			if defaultLastEventID == 0 || token.LastEventID != defaultLastEventID {
-				logger.Error("Corrupted incontinouous event batch",
+				logger.Error("Corrupted non-continuous event batch",
 					tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
-				return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continouous"))
+				return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continuous"))
 			}
 		}
 

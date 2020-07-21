@@ -738,14 +738,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 	}
-	// now, there shall be 5 batches of events:
+	// now, there shall be 4 batches of events:
 	// 1. start event and workflow task scheduled;
 	// 2. workflow task started
-	// 3. workflow task completed and activity task scheduled
-	// 4. activity task started
-	// 5. activity task completed and workflow task scheduled
+	// 3. workflow task completed, activity task scheduled
+	// 4. activity task started, activity task completed and workflow task scheduled
 	events = convertBlob(blobs)
-	s.True(len(blobs) == 5)
+	s.True(len(blobs) == 4)
 	s.True(len(events) == 8)
 
 	// continue the workflow by processing command, after this, workflow shall end
@@ -760,16 +759,15 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 	}
-	// now, there shall be 7 batches of events:
+	// now, there shall be 6 batches of events:
 	// 1. start event and workflow task scheduled;
 	// 2. workflow task started
-	// 3. workflow task completed and activity task scheduled
-	// 4. activity task started
-	// 5. activity task completed and workflow task scheduled
-	// 6. workflow task started
-	// 7. workflow task completed and workflow execution completed
+	// 3. workflow task completed, activity task scheduled
+	// 4. activity task started, activity task completed and workflow task scheduled
+	// 5. workflow task started
+	// 6. workflow task completed, workflow execution completed
 	events = convertBlob(blobs)
-	s.True(len(blobs) == 7)
+	s.True(len(blobs) == 6)
 	s.True(len(events) == 11)
 
 	// get history in between
@@ -784,10 +782,10 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 	// should get the following events
 	// 1. workflow task completed and activity task scheduled
-	// 2. activity task started
+	// 2. activity task started, activity task completed, workflow task scheduled
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 2)
-	s.True(len(events) == 3)
+	s.True(len(events) == 5)
 }
 
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle() {
@@ -896,41 +894,64 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	// poll so workflow will make progress
 	poller.PollAndProcessWorkflowTask(false, false)
 
-	// now, there shall be 5 batches of events:
+	// now, there shall be 6 batches of events:
 	// 1. start event and workflow task scheduled;
 	// 2. workflow task started
-	// 3. workflow task completed and activity task scheduled
-	// 4. activity task started
-	// 5. activity task completed and workflow task scheduled
-	// 6. workflow task started
-	// 7. workflow task completed and workflow execution completed
+	// 3. workflow task completed, activity task scheduled
+	// 4. activity task started, activity task completed and workflow task scheduled
+	// 5. workflow task started
+	// 6. workflow task completed, workflow execution completed
 
 	// trying getting history from the middle to the end
-	firstEventID := int64(5)
+
+	serializer := persistence.NewPayloadSerializer()
+	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
+		var events []*historypb.HistoryEvent
+		for _, blob := range blobs {
+			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
+			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
+				Encoding: common.EncodingTypeProto3,
+				Data:     blob.Data,
+			})
+			s.NoError(err)
+			events = append(events, blobEvents...)
+		}
+		return events
+	}
+
+	firstEventID := int64(6)
 	var token []byte
 	// this should get the #4 batch, activity task started
 	resp, err := getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
+	events := convertBlob(resp.HistoryBatches)
+	s.Equal(3, len(events))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #5 batch, activity task completed and workflow task scheduled
+	// this should get the #5 batch, workflow task started
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
+	events = convertBlob(resp.HistoryBatches)
+	s.Equal(1, len(events))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #6 batch, workflow task started
+	// this should get the #6 batch, workflow task completed, workflow execution completed
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
+	events = convertBlob(resp.HistoryBatches)
+	s.Equal(2, len(events))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
-	// this should get the #7 batch, workflow task completed and workflow execution completed
+	// this should get no further batches
 	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
-	s.Equal(1, len(resp.HistoryBatches))
+	s.Equal(0, len(resp.HistoryBatches))
+	token = resp.NextPageToken
+	s.Empty(token)
 }
