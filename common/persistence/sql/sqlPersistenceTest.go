@@ -166,7 +166,7 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
-		s.logger.Fatal("loadDatabaseSchema", tag.Error(err))
+		s.logger.Fatal("loadDatabaseVisibilitySchema", tag.Error(err))
 	}
 }
 

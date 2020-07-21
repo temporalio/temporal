@@ -143,7 +143,7 @@ func (s *TestCluster) CreateSession() {
 
 // CreateDatabase from PersistenceTestCluster interface
 func (s *TestCluster) CreateDatabase() {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, false, s.logger)
+	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true, s.logger)
 	if err != nil {
 		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
@@ -173,7 +173,7 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		s.logger.Fatal("loadCassandraSchema", tag.Error(err))
+		s.logger.Fatal("loadCassandraVisibilitySchema", tag.Error(err))
 	}
 }
 

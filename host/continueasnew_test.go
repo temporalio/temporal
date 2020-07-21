@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 
 	"github.com/pborman/uuid"
@@ -326,10 +327,10 @@ GetHistoryLoop:
 			},
 		})
 		s.NoError(err)
-		history := historyResponse.History
+		h := historyResponse.History
 
-		firstEvent := history.Events[0]
-		lastEvent := history.Events[len(history.Events)-1]
+		firstEvent := h.Events[0]
+		lastEvent := h.Events[len(h.Events)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
 				// Ensure that timeout is not caused by runTimeout
@@ -341,7 +342,8 @@ GetHistoryLoop:
 				s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
 				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
 				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-				if err != matching.ErrNoTasks {
+				// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
+				if err != matching.ErrNoTasks && err != history.ErrWorkflowCompleted {
 					s.NoError(err)
 				}
 			}
@@ -351,7 +353,7 @@ GetHistoryLoop:
 		}
 
 		s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(h, s.Logger)
 
 		s.True(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds() < 5)
 		workflowComplete = true
