@@ -29,12 +29,10 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
@@ -62,38 +60,22 @@ type (
 	}
 
 	timerQueueProcessorBase struct {
-		clusterName     string
-		shard           shard.Context
-		taskProcessor   task.Processor
-		redispatchQueue collection.Queue
+		*processorBase
 
-		options               *queueProcessorOptions
-		updateMaxReadLevel    updateMaxReadLevelFn
-		updateClusterAckLevel updateClusterAckLevelFn
-		queueShutdown         queueShutdownFn
-		taskInitializer       task.Initializer
+		taskInitializer task.Initializer
 
-		logger        log.Logger
-		metricsClient metrics.Client
-		metricsScope  metrics.Scope
+		clusterName string
 
-		rateLimiter         quotas.Limiter
 		pollTimeLock        sync.Mutex
 		pollTimeUpdateTimer map[int]*time.Timer
 		nextPollTime        map[int]time.Time
 		timerGate           TimerGate
-
-		status     int32
-		shutdownWG sync.WaitGroup
-		shutdownCh chan struct{}
 
 		// timer notification
 		newTimerCh  chan struct{}
 		newTimeLock sync.Mutex
 		newTime     time.Time
 
-		queueCollectionsLock        sync.RWMutex
-		processingQueueCollections  []ProcessingQueueCollection
 		processingQueueReadProgress map[int]timeTaskReadProgress
 	}
 )
@@ -103,50 +85,63 @@ func newTimerQueueProcessorBase(
 	shard shard.Context,
 	processingQueueStates []ProcessingQueueState,
 	taskProcessor task.Processor,
-	redispatchQueue collection.Queue,
 	timerGate TimerGate,
 	options *queueProcessorOptions,
 	updateMaxReadLevel updateMaxReadLevelFn,
 	updateClusterAckLevel updateClusterAckLevelFn,
 	queueShutdown queueShutdownFn,
-	taskInitializer task.Initializer,
+	taskFilter task.Filter,
+	taskExecutor task.Executor,
 	logger log.Logger,
 	metricsClient metrics.Client,
 ) *timerQueueProcessorBase {
+	processorBase := newProcessorBase(
+		shard,
+		processingQueueStates,
+		taskProcessor,
+		options,
+		updateMaxReadLevel,
+		updateClusterAckLevel,
+		queueShutdown,
+		logger.WithTags(tag.ComponentTimerQueue),
+		metricsClient,
+	)
+
+	queueType := task.QueueTypeActiveTimer
+	if options.MetricScope == metrics.TimerStandbyQueueProcessorScope {
+		queueType = task.QueueTypeStandbyTimer
+	}
+
+	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config
+	emitDomainTag := shard.GetConfig().QueueProcessorEnableDomainTaggedMetrics()
+
 	return &timerQueueProcessorBase{
-		clusterName:     clusterName,
-		shard:           shard,
-		taskProcessor:   taskProcessor,
-		redispatchQueue: redispatchQueue,
+		processorBase: processorBase,
 
-		options:               options,
-		updateMaxReadLevel:    updateMaxReadLevel,
-		updateClusterAckLevel: updateClusterAckLevel,
-		queueShutdown:         queueShutdown,
-		taskInitializer:       taskInitializer,
+		taskInitializer: func(taskInfo task.Info) task.Task {
+			return task.NewTimerTask(
+				shard,
+				taskInfo,
+				queueType,
+				task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+				taskFilter,
+				taskExecutor,
+				processorBase.redispatchSingleTask,
+				shard.GetTimeSource(),
+				shard.GetConfig().TimerTaskMaxRetryCount,
+				emitDomainTag,
+				nil,
+			)
+		},
 
-		logger:        logger.WithTags(tag.ComponentTimerQueue),
-		metricsClient: metricsClient,
-		metricsScope:  metricsClient.Scope(options.MetricScope),
+		clusterName: clusterName,
 
-		rateLimiter: quotas.NewDynamicRateLimiter(
-			func() float64 {
-				return float64(options.MaxPollRPS())
-			},
-		),
 		pollTimeUpdateTimer: make(map[int]*time.Timer),
 		nextPollTime:        make(map[int]time.Time),
 		timerGate:           timerGate,
 
-		status:     common.DaemonStatusInitialized,
-		shutdownCh: make(chan struct{}),
 		newTimerCh: make(chan struct{}, 1),
 
-		processingQueueCollections: newProcessingQueueCollections(
-			processingQueueStates,
-			logger,
-			metricsClient,
-		),
 		processingQueueReadProgress: make(map[int]timeTaskReadProgress),
 	}
 }
@@ -161,8 +156,9 @@ func (t *timerQueueProcessorBase) Start() {
 
 	t.notifyNewTimer(time.Time{})
 
-	t.shutdownWG.Add(1)
+	t.shutdownWG.Add(2)
 	go t.processorPump()
+	go t.redispatchLoop()
 }
 
 func (t *timerQueueProcessorBase) Stop() {
@@ -195,12 +191,6 @@ func (t *timerQueueProcessorBase) processorPump() {
 	))
 	defer updateAckTimer.Stop()
 
-	redispatchTimer := time.NewTimer(backoff.JitDuration(
-		t.options.RedispatchInterval(),
-		t.options.RedispatchIntervalJitterCoefficient(),
-	))
-	defer redispatchTimer.Stop()
-
 	splitQueueTimer := time.NewTimer(backoff.JitDuration(
 		t.options.SplitQueueInterval(),
 		t.options.SplitQueueIntervalJitterCoefficient(),
@@ -214,13 +204,7 @@ processorPumpLoop:
 			break processorPumpLoop
 		case <-t.timerGate.FireChan():
 			if t.redispatchQueue.Len() > t.options.MaxRedispatchQueueSize() {
-				RedispatchTasks(
-					t.redispatchQueue,
-					t.taskProcessor,
-					t.logger,
-					t.metricsScope,
-					t.shutdownCh,
-				)
+				t.redispatchTasks()
 				t.timerGate.Update(time.Time{})
 				continue processorPumpLoop
 			}
@@ -258,18 +242,6 @@ processorPumpLoop:
 			// New Timer has arrived.
 			t.metricsScope.IncCounter(metrics.NewTimerNotifyCounter)
 			t.upsertPollTime(defaultProcessingQueueLevel, newTime)
-		case <-redispatchTimer.C:
-			RedispatchTasks(
-				t.redispatchQueue,
-				t.taskProcessor,
-				t.logger,
-				t.metricsScope,
-				t.shutdownCh,
-			)
-			redispatchTimer.Reset(backoff.JitDuration(
-				t.options.RedispatchInterval(),
-				t.options.RedispatchIntervalJitterCoefficient(),
-			))
 		case <-splitQueueTimer.C:
 			t.splitQueue()
 			splitQueueTimer.Reset(backoff.JitDuration(
@@ -413,54 +385,8 @@ func (t *timerQueueProcessorBase) processQueueCollections(levels map[int]struct{
 	}
 }
 
-func (t *timerQueueProcessorBase) updateAckLevel() (bool, error) {
-	t.metricsScope.IncCounter(metrics.AckLevelUpdateCounter)
-	t.queueCollectionsLock.Lock()
-
-	// TODO: only for now, find the min ack level across all processing queues
-	// and update DB with that value.
-	// Once persistence layer is updated, we need to persist all queue states
-	// instead of only the min ack level
-	var minAckLevel task.Key
-	totalPengingTasks := 0
-	for _, queueCollection := range t.processingQueueCollections {
-		ackLevel, numPendingTasks := queueCollection.UpdateAckLevels()
-
-		totalPengingTasks += numPendingTasks
-		if minAckLevel == nil {
-			minAckLevel = ackLevel
-		} else {
-			minAckLevel = minTaskKey(minAckLevel, ackLevel)
-		}
-	}
-	t.queueCollectionsLock.Unlock()
-
-	if minAckLevel == nil {
-		if err := t.queueShutdown(); err != nil {
-			t.logger.Error("Error shutdown queue", tag.Error(err))
-			return false, err
-		}
-		return true, nil
-	}
-
-	if totalPengingTasks > warnPendingTasks {
-		t.logger.Warn("Too many pending tasks.")
-	}
-	// TODO: consider move pendingTasksTime metrics from shardInfoScope to queue processor scope
-	t.metricsClient.RecordTimer(metrics.ShardInfoScope, getPendingTasksMetricIdx(t.options.MetricScope), time.Duration(totalPengingTasks))
-
-	if err := t.updateClusterAckLevel(minAckLevel); err != nil {
-		t.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
-		t.metricsScope.IncCounter(metrics.AckLevelUpdateFailedCounter)
-		return false, err
-	}
-
-	return false, nil
-}
-
 func (t *timerQueueProcessorBase) splitQueue() {
-	splitPolicy := initializeSplitPolicy(
-		t.options,
+	splitPolicy := t.initializeSplitPolicy(
 		func(key task.Key, domainID string) task.Key {
 			return newTimerTaskKey(
 				key.(timerTaskKey).visibilityTimestamp.Add(
@@ -469,25 +395,9 @@ func (t *timerQueueProcessorBase) splitQueue() {
 				0,
 			)
 		},
-		t.logger,
-		t.metricsScope,
-	)
-	if splitPolicy == nil {
-		return
-	}
-
-	t.queueCollectionsLock.Lock()
-	defer t.queueCollectionsLock.Unlock()
-
-	t.processingQueueCollections = splitProcessingQueueCollection(
-		t.processingQueueCollections,
-		splitPolicy,
 	)
 
-	// there can be new queue collections created or new queues added to an existing collection
-	for _, queueCollections := range t.processingQueueCollections {
-		t.upsertPollTime(queueCollections.Level(), time.Time{})
-	}
+	t.splitProcessingQueueCollection(splitPolicy, t.upsertPollTime)
 }
 
 func (t *timerQueueProcessorBase) readAndFilterTasks(
@@ -668,43 +578,6 @@ func (t *timerQueueProcessorBase) upsertPollTimeUpdateTimer(level int, delay tim
 		t.timerGate.Update(time.Time{})
 		delete(t.pollTimeUpdateTimer, level)
 	})
-}
-
-func (t *timerQueueProcessorBase) submitTask(
-	task task.Task,
-) (bool, error) {
-	submitted, err := t.taskProcessor.TrySubmit(task)
-	if err != nil {
-		select {
-		case <-t.shutdownCh:
-			// if error is due to shard shutdown
-			return false, err
-		default:
-			// otherwise it might be error from domain cache etc, add
-			// the task to redispatch queue so that it can be retried
-			t.logger.Error("Failed to submit task", tag.Error(err))
-		}
-	}
-	if err != nil || !submitted {
-		t.redispatchQueue.Add(task)
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func (t *timerQueueProcessorBase) getProcessingQueueStates() []ProcessingQueueState {
-	t.queueCollectionsLock.RLock()
-	defer t.queueCollectionsLock.RUnlock()
-
-	var queueStates []ProcessingQueueState
-	for _, queueCollection := range t.processingQueueCollections {
-		for _, queue := range queueCollection.Queues() {
-			queueStates = append(queueStates, copyQueueState(queue.State()))
-		}
-	}
-
-	return queueStates
 }
 
 func newTimerTaskKey(

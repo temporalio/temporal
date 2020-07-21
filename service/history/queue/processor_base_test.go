@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -35,45 +36,60 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
 
 type (
-	queueProcessorUtilSuite struct {
+	processorBaseSuite struct {
 		suite.Suite
 		*require.Assertions
 
 		controller        *gomock.Controller
+		mockShard         *shard.TestContext
 		mockTaskProcessor *task.MockProcessor
 
-		logger        log.Logger
-		metricsClient metrics.Client
-		metricsScope  metrics.Scope
+		redispatchQueue collection.Queue
+		logger          log.Logger
+		metricsClient   metrics.Client
+		metricsScope    metrics.Scope
 	}
 )
 
-func TestQueueProcessorUtilSuite(t *testing.T) {
-	s := new(queueProcessorUtilSuite)
+func TestProcessorBaseSuite(t *testing.T) {
+	s := new(processorBaseSuite)
 	suite.Run(t, s)
-
 }
 
-func (s *queueProcessorUtilSuite) SetupTest() {
+func (s *processorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockShard = shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          10,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		config.NewForTest(),
+	)
 	s.mockTaskProcessor = task.NewMockProcessor(s.controller)
 
+	s.redispatchQueue = collection.NewConcurrentQueue()
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.metricsScope = s.metricsClient.Scope(metrics.TransferQueueProcessorScope)
 }
 
-func (s *queueProcessorUtilSuite) TearDownTest() {
+func (s *processorBaseSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.Finish(s.T())
 }
 
-func (s *queueProcessorUtilSuite) TestRedispatchTask_ProcessorShutDown() {
+func (s *processorBaseSuite) TestRedispatchTask_ProcessorShutDown() {
 	redispatchQueue := collection.NewConcurrentQueue()
 
 	numTasks := 5
@@ -107,7 +123,7 @@ func (s *queueProcessorUtilSuite) TestRedispatchTask_ProcessorShutDown() {
 	s.Equal(numTasks-successfullyRedispatched-1, redispatchQueue.Len())
 }
 
-func (s *queueProcessorUtilSuite) TestRedispatchTask_Random() {
+func (s *processorBaseSuite) TestRedispatchTask_Random() {
 	redispatchQueue := collection.NewConcurrentQueue()
 
 	numTasks := 10
@@ -136,7 +152,7 @@ func (s *queueProcessorUtilSuite) TestRedispatchTask_Random() {
 	s.Equal(numTasks-dispatched, redispatchQueue.Len())
 }
 
-func (s *queueProcessorUtilSuite) TestRedispatchTask_Concurrent() {
+func (s *processorBaseSuite) TestRedispatchTask_Concurrent() {
 	redispatchQueue := collection.NewConcurrentQueue()
 
 	numTasks := 10
@@ -174,7 +190,7 @@ func (s *queueProcessorUtilSuite) TestRedispatchTask_Concurrent() {
 	s.Equal(numTasks-dispatched, redispatchQueue.Len())
 }
 
-func (s *queueProcessorUtilSuite) TestSplitQueue() {
+func (s *processorBaseSuite) TestSplitQueue() {
 	mockQueueSplitPolicy := NewMockProcessingQueueSplitPolicy(s.controller)
 
 	processingQueueStates := []ProcessingQueueState{
@@ -227,16 +243,22 @@ func (s *queueProcessorUtilSuite) TestSplitQueue() {
 		),
 	}).Times(1)
 
-	processingQueueCollections := newProcessingQueueCollections(
+	processorBase := s.newTestProcessorBase(
 		processingQueueStates,
-		s.logger,
-		s.metricsClient,
+		nil,
+		nil,
+		nil,
 	)
 
-	processingQueueCollections = splitProcessingQueueCollection(
-		processingQueueCollections,
+	nextPollTime := make(map[int]time.Time)
+	processorBase.splitProcessingQueueCollection(
 		mockQueueSplitPolicy,
+		func(level int, pollTime time.Time) {
+			nextPollTime[level] = pollTime
+		},
 	)
+
+	processingQueueCollections := processorBase.processingQueueCollections
 	s.Len(processingQueueCollections, 3)
 	s.Len(processingQueueCollections[0].Queues(), 2)
 	s.Len(processingQueueCollections[1].Queues(), 1)
@@ -247,4 +269,136 @@ func (s *queueProcessorUtilSuite) TestSplitQueue() {
 			processingQueueCollections[idx].Level(),
 		)
 	}
+	s.Len(nextPollTime, 3)
+	for _, nextPollTime := range nextPollTime {
+		s.Zero(nextPollTime)
+	}
+}
+
+func (s *processorBaseSuite) TestUpdateAckLevel_Transfer_ProcessedFinished() {
+	processingQueueStates := []ProcessingQueueState{
+		NewProcessingQueueState(
+			2,
+			newTransferTaskKey(100),
+			newTransferTaskKey(100),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			0,
+			newTransferTaskKey(1000),
+			newTransferTaskKey(1000),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}, "testDomain2": {}}, true),
+		),
+	}
+	queueShutdown := false
+	queueShutdownFn := func() error {
+		queueShutdown = true
+		return nil
+	}
+
+	processorBase := s.newTestProcessorBase(
+		processingQueueStates,
+		nil,
+		nil,
+		queueShutdownFn,
+	)
+
+	processFinished, err := processorBase.updateAckLevel()
+	s.NoError(err)
+	s.True(processFinished)
+	s.True(queueShutdown)
+}
+
+func (s *processorBaseSuite) TestUpdateAckLevel_Tranfer_ProcessNotFinished() {
+	processingQueueStates := []ProcessingQueueState{
+		NewProcessingQueueState(
+			2,
+			newTransferTaskKey(5),
+			newTransferTaskKey(100),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			1,
+			newTransferTaskKey(2),
+			newTransferTaskKey(100),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			0,
+			newTransferTaskKey(100),
+			newTransferTaskKey(1000),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}, "testDomain2": {}}, true),
+		),
+	}
+	updateAckLevel := int64(0)
+	updateTransferAckLevelFn := func(ackLevel task.Key) error {
+		updateAckLevel = ackLevel.(transferTaskKey).taskID
+		return nil
+	}
+
+	processorBase := s.newTestProcessorBase(
+		processingQueueStates,
+		nil,
+		updateTransferAckLevelFn,
+		nil,
+	)
+
+	processFinished, err := processorBase.updateAckLevel()
+	s.NoError(err)
+	s.False(processFinished)
+	s.Equal(int64(2), updateAckLevel)
+}
+
+func (s *processorBaseSuite) TestUpdateAckLevel_Timer() {
+	now := time.Now()
+	processingQueueStates := []ProcessingQueueState{
+		NewProcessingQueueState(
+			2,
+			newTimerTaskKey(now.Add(-5*time.Second), 0),
+			newTimerTaskKey(now, 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			1,
+			newTimerTaskKey(now.Add(-3*time.Second), 0),
+			newTimerTaskKey(now.Add(5*time.Second), 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}}, false),
+		),
+		NewProcessingQueueState(
+			0,
+			newTimerTaskKey(now.Add(-1*time.Second), 0),
+			newTimerTaskKey(now.Add(100*time.Second), 0),
+			NewDomainFilter(map[string]struct{}{"testDomain1": {}, "testDomain2": {}}, true),
+		),
+	}
+	updateAckLevel := time.Time{}
+	updateTransferAckLevelFn := func(ackLevel task.Key) error {
+		updateAckLevel = ackLevel.(timerTaskKey).visibilityTimestamp
+		return nil
+	}
+
+	timerQueueProcessBase := s.newTestProcessorBase(processingQueueStates, nil, updateTransferAckLevelFn, nil)
+	processFinished, err := timerQueueProcessBase.updateAckLevel()
+	s.NoError(err)
+	s.False(processFinished)
+	s.Equal(now.Add(-5*time.Second), updateAckLevel)
+}
+
+func (s *processorBaseSuite) newTestProcessorBase(
+	processingQueueStates []ProcessingQueueState,
+	maxReadLevel updateMaxReadLevelFn,
+	updateTransferAckLevel updateClusterAckLevelFn,
+	transferQueueShutdown queueShutdownFn,
+) *processorBase {
+	return newProcessorBase(
+		s.mockShard,
+		processingQueueStates,
+		s.mockTaskProcessor,
+		newTransferQueueProcessorOptions(s.mockShard.GetConfig(), true, false),
+		maxReadLevel,
+		updateTransferAckLevel,
+		transferQueueShutdown,
+		s.logger,
+		s.metricsClient,
+	)
 }
