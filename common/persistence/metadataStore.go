@@ -162,7 +162,6 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 				RetentionDays:           common.SystemNamespaceRetentionDays,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
-				EmitMetric:              true,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
