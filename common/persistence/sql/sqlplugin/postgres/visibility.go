@@ -66,6 +66,20 @@ const (
 		 AND start_time <= $4
  		 AND (run_id > $5 OR start_time < $6)
          ORDER BY start_time DESC, run_id
+		 LIMIT $7`
+
+	templateConditionsClosedWorkflow1 = ` AND namespace_id = $1
+		 AND close_time >= $2
+		 AND close_time <= $3
+ 		 AND (run_id > $4 OR close_time < $5)
+         ORDER BY close_time DESC, run_id
+         LIMIT $6`
+
+	templateConditionsClosedWorkflow2 = ` AND namespace_id = $2
+		 AND close_time >= $3
+		 AND close_time <= $4
+ 		 AND (run_id > $5 OR close_time < $6)
+         ORDER BY close_time DESC, run_id
          LIMIT $7`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
@@ -76,17 +90,17 @@ const (
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions1
 
-	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditions1
+	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflow1
 
 	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = $1` + templateConditionsClosedWorkflow2
 
 	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = $1` + templateConditionsClosedWorkflow2
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditionsClosedWorkflow2
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility

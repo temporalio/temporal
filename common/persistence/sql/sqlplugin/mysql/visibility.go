@@ -47,7 +47,14 @@ const (
 		 AND start_time <= ?
  		 AND (run_id > ? OR start_time < ?)
          ORDER BY start_time DESC, run_id
-         LIMIT ?`
+		 LIMIT ?`
+
+	templateConditionsClosedWorkflows = ` AND namespace_id = ?
+	AND close_time >= ?
+	AND close_time <= ?
+	 AND (run_id > ? OR close_time < ?)
+	ORDER BY close_time DESC, run_id
+	LIMIT ?`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
@@ -57,17 +64,17 @@ const (
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
-	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditions
+	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflows
 
 	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditionsClosedWorkflows
 
 	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
