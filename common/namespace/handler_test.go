@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -268,7 +267,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	description1 := "some random description 1"
 	email1 := "some random email 1"
 	retention1 := int32(1)
-	emitMetric1 := true
 	data1 := map[string]string{"some random key 1": "some random value 1"}
 	isGlobalNamespace1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
@@ -283,7 +281,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		Description:                          description1,
 		OwnerEmail:                           email1,
 		WorkflowExecutionRetentionPeriodDays: retention1,
-		EmitMetric:                           emitMetric1,
 		Data:                                 data1,
 		IsGlobalNamespace:                    isGlobalNamespace1,
 	})
@@ -294,7 +291,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	description2 := "some random description 2"
 	email2 := "some random email 2"
 	retention2 := int32(2)
-	emitMetric2 := false
 	data2 := map[string]string{"some random key 2": "some random value 2"}
 	isGlobalNamespace2 := true
 	activeClusterName2 := ""
@@ -313,7 +309,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		Description:                          description2,
 		OwnerEmail:                           email2,
 		WorkflowExecutionRetentionPeriodDays: retention2,
-		EmitMetric:                           emitMetric2,
 		Clusters:                             cluster2,
 		ActiveClusterName:                    activeClusterName2,
 		Data:                                 data2,
@@ -352,7 +347,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
-				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
 				HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:                     "",
 				VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -377,7 +371,6 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
-				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
 				HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:                     "",
 				VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,

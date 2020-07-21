@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -210,7 +209,6 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 	config := &persistenceblobs.NamespaceConfig{
 		RetentionDays:           registerRequest.GetWorkflowExecutionRetentionPeriodDays(),
-		EmitMetric:              registerRequest.GetEmitMetric(),
 		HistoryArchivalState:    nextHistoryArchivalState.State,
 		HistoryArchivalUri:      nextHistoryArchivalState.URI,
 		VisibilityArchivalState: nextVisibilityArchivalState.State,
@@ -440,10 +438,6 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 	if updateRequest.Config != nil {
 		updatedConfig := updateRequest.Config
-		if updatedConfig.EmitMetric != nil {
-			configurationChanged = true
-			config.EmitMetric = updatedConfig.GetEmitMetric().GetValue()
-		}
 		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
 			configurationChanged = true
 			config.RetentionDays = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
@@ -644,7 +638,6 @@ func (d *HandlerImpl) createResponse(
 	}
 
 	configResult := &namespacepb.NamespaceConfig{
-		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 		HistoryArchivalState:                   config.HistoryArchivalState,
 		HistoryArchivalUri:                     config.HistoryArchivalUri,

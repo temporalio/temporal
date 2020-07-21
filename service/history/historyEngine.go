@@ -1232,9 +1232,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				Name: executionInfo.TaskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
-			WorkflowTaskTimeoutSeconds:      executionInfo.DefaultWorkflowTaskTimeout,
+			WorkflowExecutionTimeoutSeconds:   executionInfo.WorkflowExecutionTimeout,
+			WorkflowRunTimeoutSeconds:         executionInfo.WorkflowRunTimeout,
+			DefaultWorkflowTaskTimeoutSeconds: executionInfo.DefaultWorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
@@ -2657,13 +2657,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	metricsScope int,
 ) {
 	namespace := namespaceEntry.GetInfo().Name
-
-	executionTimeoutSeconds := request.GetWorkflowExecutionTimeoutSeconds()
-	if executionTimeoutSeconds == 0 {
-		executionTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowExecutionTimeout(namespace).Seconds())
-	}
-	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxWorkflowExecutionTimeout(namespace).Seconds())
-	executionTimeoutSeconds = common.MinInt32(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+	executionTimeoutSeconds := getWorkflowExecutionTimeout(namespace, request.GetWorkflowExecutionTimeoutSeconds(), e.config)
 	if executionTimeoutSeconds != request.GetWorkflowExecutionTimeoutSeconds() {
 		request.WorkflowExecutionTimeoutSeconds = executionTimeoutSeconds
 		e.metricsClient.Scope(
@@ -2672,13 +2666,8 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		).IncCounter(metrics.WorkflowExecutionTimeoutOverrideCount)
 	}
 
-	runTimeoutSeconds := request.GetWorkflowRunTimeoutSeconds()
-	if runTimeoutSeconds == 0 {
-		runTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowRunTimeout(namespace).Seconds())
-	}
-	maxWorkflowRunTimeout := convert.Int32Ceil(e.config.MaxWorkflowRunTimeout(namespace).Seconds())
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, maxWorkflowRunTimeout)
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, executionTimeoutSeconds)
+	runTimeoutSeconds := getWorkflowRunTimeout(namespace, request.GetWorkflowRunTimeoutSeconds(),
+		executionTimeoutSeconds, e.config)
 	if runTimeoutSeconds != request.GetWorkflowRunTimeoutSeconds() {
 		request.WorkflowRunTimeoutSeconds = runTimeoutSeconds
 		e.metricsClient.Scope(
