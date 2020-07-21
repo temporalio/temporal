@@ -945,7 +945,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						ScheduleToCloseTimeoutSeconds: 60,
 						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    60,
-						HeartbeatTimeoutSeconds:       5,
+						HeartbeatTimeoutSeconds:       3,
 					}},
 				}
 
@@ -986,7 +986,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						lastHeartbeatMap[scheduleID] = lastHeartbeat
 					default:
 						failWorkflow = true
-						failReason = "Expected Heartbeat timeout but recieved another timeout"
+						failReason = fmt.Sprintf("Expected Heartbeat timeout but recieved another timeout: %v", timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 						break ProcessLoop
 					}
 				}
