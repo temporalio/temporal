@@ -198,6 +198,10 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
+	// none is configured on the Activity by the user.
+	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFn
+
 	// Workflow task settings
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	// TODO https://go.temporal.io/server/issues/2357
@@ -372,6 +376,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
+		DefaultActivityRetryPolicy:                       dc.GetMapProperty(dynamicconfig.DefaultActivityRetryPolicy, getDefaultActivityRetryPolicyConfigOptions()),
 		ValidSearchAttributes:                            dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),

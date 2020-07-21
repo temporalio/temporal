@@ -25,12 +25,15 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -125,4 +128,47 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		}
 	}
 	return true
+}
+
+func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
+	return map[string]interface{}{
+		"InitialRetryIntervalInSeconds": 1,
+		"MaximumRetryIntervalInSeconds": 100,
+		"ExponentialBackoffCoefficient": 2.0,
+		"MaximumAttempts":               0,
+	}
+}
+
+func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
+	retryPolicy := &commonpb.RetryPolicy{}
+	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
+	if ok {
+		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
+	}
+
+	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
+	if ok {
+		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
+	}
+
+	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
+	if ok {
+		retryPolicy.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
+	}
+
+	maximumAttempts, ok := options["MaximumAttempts"]
+	if ok {
+		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
+	}
+
+	err := common.ValidateRetryPolicy(retryPolicy)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Bad Default Activity Retry Policy defined: %+v failed validation %v",
+				retryPolicy,
+				err))
+	}
+
+	return retryPolicy
 }
