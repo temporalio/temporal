@@ -373,6 +373,11 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		// nil policy is valid which means no retry
 		return nil
 	}
+	if policy.GetMaximumAttempts() == 1 {
+		// One maximum attempt effectively disable retries. Validating the
+		// rest of the arguments is pointless
+		return nil
+	}
 	if policy.GetInitialIntervalInSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
 	}

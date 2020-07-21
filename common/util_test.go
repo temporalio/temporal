@@ -21,7 +21,16 @@ func TestValidateRetryPolicy(t *testing.T) {
 			wantErrString: "",
 		},
 		{
-			name: "coefficient < 1",
+			name: "maxAttempts is 1, coefficient < 1",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: 0.5,
+				MaximumAttempts:    1,
+			},
+			wantErr:       false,
+			wantErrString: "",
+		},
+		{
+			name: "initial interval negative",
 			input: &commonpb.RetryPolicy{
 				InitialIntervalInSeconds: -22,
 			},
