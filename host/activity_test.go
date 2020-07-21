@@ -36,6 +36,7 @@ import (
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
+	"go.uber.org/atomic"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -911,7 +912,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		WorkflowType:               workflowType,
 		TaskQueue:                  taskQueue,
 		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  70,
+		WorkflowRunTimeoutSeconds:  90,
 		WorkflowTaskTimeoutSeconds: 2,
 		Identity:                   identity,
 	}
@@ -921,7 +922,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	workflowComplete := false
+	workflowComplete := &atomic.Bool{}
 	activitiesScheduled := false
 	lastHeartbeatMap := make(map[int64]int)
 	failWorkflow := false
@@ -945,7 +946,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						ScheduleToCloseTimeoutSeconds: 60,
 						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    60,
-						HeartbeatTimeoutSeconds:       3,
+						HeartbeatTimeoutSeconds:       4,
 					}},
 				}
 
@@ -995,7 +996,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 		if failWorkflow {
 			s.Logger.Error("Failing workflow", tag.Value(failReason))
-			workflowComplete = true
+			workflowComplete.Store(true)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
@@ -1006,7 +1007,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 		if activitiesTimedout == activityCount {
 			s.Logger.Info("Completing Workflow")
-			workflowComplete = true
+			workflowComplete.Store(true)
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -1022,7 +1023,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Logger.Info("Starting heartbeat activity", tag.WorkflowActivityID(activityID))
 		for i := 0; i < 10; i++ {
-			if !workflowComplete {
+			if !workflowComplete.Load() {
 				s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 				_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: payloads.EncodeString(strconv.Itoa(i))})
@@ -1037,10 +1038,10 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		}
 		s.Logger.Info("End Heartbeating", tag.WorkflowActivityID(activityID))
 
-		s.Logger.Info("Sleeping activity before completion", tag.WorkflowActivityID(activityID))
-		time.Sleep(7 * time.Second)
+		s.Logger.Info("Sleeping activity before completion (should timeout)", tag.WorkflowActivityID(activityID))
+		time.Sleep(5 * time.Second)
 
-		return payloads.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Should never reach this point"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1070,12 +1071,12 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		_, err := poller.PollAndProcessWorkflowTask(false, false)
 		s.NoError(err, "Poll for workflow task failed")
 
-		if workflowComplete {
+		if workflowComplete.Load() {
 			break
 		}
 	}
 
-	s.True(workflowComplete)
+	s.True(workflowComplete.Load())
 	s.False(failWorkflow, failReason)
 	s.Equal(activityCount, activitiesTimedout)
 	s.Equal(activityCount, len(lastHeartbeatMap))
