@@ -629,6 +629,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
 					HeartbeatTimeoutSeconds:       25,
+					RetryPolicy: &commonpb.RetryPolicy{
+						MaximumAttempts: 1,
+					},
 				}},
 			}}, nil
 		}
@@ -846,6 +849,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
 					HeartbeatTimeoutSeconds:       25,
+					RetryPolicy: &commonpb.RetryPolicy{
+						MaximumAttempts: 1,
+					},
 				}},
 			}}, nil
 		}
