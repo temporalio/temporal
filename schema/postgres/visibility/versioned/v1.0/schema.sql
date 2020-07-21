@@ -10,12 +10,16 @@ CREATE TABLE executions_visibility (
   history_length       BIGINT,
   memo                 BYTEA,
   encoding             VARCHAR(64) NOT NULL,
-  task_queue            VARCHAR(255) DEFAULT '' NOT NULL,
+  task_queue           VARCHAR(255) DEFAULT '' NOT NULL,
 
   PRIMARY KEY  (namespace_id, run_id)
 );
 
 CREATE INDEX by_type_start_time ON executions_visibility (namespace_id, workflow_type_name, status, start_time DESC, run_id);
 CREATE INDEX by_workflow_id_start_time ON executions_visibility (namespace_id, workflow_id, status, start_time DESC, run_id);
-CREATE INDEX by_status_by_close_time ON executions_visibility (namespace_id, status, start_time DESC, run_id);
+CREATE INDEX by_status_by_start_time ON executions_visibility (namespace_id, status, start_time DESC, run_id);
+CREATE INDEX by_type_close_time ON executions_visibility (namespace_id, workflow_type_name, status, close_time DESC, run_id);
+CREATE INDEX by_workflow_id_close_time ON executions_visibility (namespace_id, workflow_id, status, close_time DESC, run_id);
+CREATE INDEX by_status_by_close_time ON executions_visibility (namespace_id, status, close_time DESC, run_id);
+
 
