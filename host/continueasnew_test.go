@@ -44,6 +44,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 )
@@ -316,7 +317,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	s.False(workflowComplete)
 
 GetHistoryLoop:
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 25; i++ {
+		s.Logger.Info(fmt.Sprintf("Running Iteration `%v` for Making ContinueAsNew Command", i))
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -333,15 +335,23 @@ GetHistoryLoop:
 				// Ensure that timeout is not caused by runTimeout
 				s.True(time.Duration(lastEvent.Timestamp-firstEvent.Timestamp) < 5*time.Second)
 			}
-			s.Logger.Warn(fmt.Sprintf("Execution not timed out yet. Last event is %v", lastEvent))
-			time.Sleep(200 * time.Millisecond)
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
-			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-			if err != matching.ErrNoTasks {
-				s.NoError(err)
+
+			// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled
+			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
+				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
+				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+				if err != matching.ErrNoTasks {
+					s.NoError(err)
+				}
 			}
+
+			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
+
+		s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
+		common.PrettyPrintHistory(history, s.Logger)
 
 		s.True(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds() < 5)
 		workflowComplete = true
