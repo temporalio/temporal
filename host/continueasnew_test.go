@@ -340,7 +340,7 @@ GetHistoryLoop:
 				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
 				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 				// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
-				if err != matching.ErrNoTasks && err.Error() != history.ErrWorkflowCompleted.Error() {
+				if err != nil && err != matching.ErrNoTasks && err.Error() != history.ErrWorkflowCompleted.Error() {
 					s.NoError(err)
 				}
 			}
