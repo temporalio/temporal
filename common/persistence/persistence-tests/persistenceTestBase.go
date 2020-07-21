@@ -123,8 +123,12 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
-	return newTestBase(options, testCluster)
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
+	return newTestBase(options, testCluster, logger)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -132,8 +136,12 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
-	return newTestBase(options, testCluster)
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
+	return newTestBase(options, testCluster, logger)
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
@@ -148,7 +156,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
+func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster, logger log.Logger) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
 		metadata = cluster.GetTestClusterMetadata(false, false)
@@ -158,10 +166,6 @@ func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) T
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
 		ClusterMetadata:       metadata,
-	}
-	logger, err := loggerimpl.NewDevelopment()
-	if err != nil {
-		panic(err)
 	}
 	base.logger = logger
 	return base

@@ -911,7 +911,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		WorkflowType:               workflowType,
 		TaskQueue:                  taskQueue,
 		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  70,
+		WorkflowRunTimeoutSeconds:  90,
 		WorkflowTaskTimeoutSeconds: 2,
 		Identity:                   identity,
 	}
@@ -943,9 +943,8 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
 						Input:                         payloads.EncodeString("Heartbeat"),
 						ScheduleToCloseTimeoutSeconds: 60,
-						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    60,
-						HeartbeatTimeoutSeconds:       5,
+						HeartbeatTimeoutSeconds:       4,
 						RetryPolicy: &commonpb.RetryPolicy{
 							MaximumAttempts: 1,
 						},
@@ -989,7 +988,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						lastHeartbeatMap[scheduleID] = lastHeartbeat
 					default:
 						failWorkflow = true
-						failReason = "Expected Heartbeat timeout but recieved another timeout"
+						failReason = fmt.Sprintf("Expected Heartbeat timeout but got another timeout: %v", timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 						break ProcessLoop
 					}
 				}
@@ -1040,10 +1039,10 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		}
 		s.Logger.Info("End Heartbeating", tag.WorkflowActivityID(activityID))
 
-		s.Logger.Info("Sleeping activity before completion", tag.WorkflowActivityID(activityID))
-		time.Sleep(7 * time.Second)
+		s.Logger.Info("Sleeping activity before completion (should timeout)", tag.WorkflowActivityID(activityID))
+		time.Sleep(5 * time.Second)
 
-		return payloads.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Should never reach this point"), false, nil
 	}
 
 	poller := &TaskPoller{
