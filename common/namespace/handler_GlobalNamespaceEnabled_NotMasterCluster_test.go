@@ -30,7 +30,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -160,7 +159,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	}, resp.NamespaceInfo)
 	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 		HistoryArchivalUri:                     "",
 		VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -180,7 +178,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*replicationpb.ClusterReplicationConfig{
 		&replicationpb.ClusterReplicationConfig{
@@ -202,7 +199,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 		Description:                          description,
 		OwnerEmail:                           email,
 		WorkflowExecutionRetentionPeriodDays: retention,
-		EmitMetric:                           emitMetric,
 		Clusters:                             clusters,
 		ActiveClusterName:                    activeClusterName,
 		Data:                                 data,
@@ -228,7 +224,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	}, resp.NamespaceInfo)
 	s.Equal(&namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 		HistoryArchivalUri:                     "",
 		VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -248,7 +243,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*replicationpb.ClusterReplicationConfig
 	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
@@ -264,7 +258,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		Description:                          description,
 		OwnerEmail:                           email,
 		WorkflowExecutionRetentionPeriodDays: retention,
-		EmitMetric:                           emitMetric,
 		Clusters:                             clusters,
 		ActiveClusterName:                    s.ClusterMetadata.GetCurrentClusterName(),
 		Data:                                 data,
@@ -287,7 +280,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		}, info)
 		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
 			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -341,7 +333,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*replicationpb.ClusterReplicationConfig
 	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
@@ -364,7 +355,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		}, info)
 		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
 			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -388,7 +378,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		},
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
 			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -454,7 +443,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	activeClusterName := ""
 	clusters := []*replicationpb.ClusterReplicationConfig{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
@@ -475,7 +463,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 		Description:                          description,
 		OwnerEmail:                           email,
 		WorkflowExecutionRetentionPeriodDays: retention,
-		EmitMetric:                           emitMetric,
 		Clusters:                             clusters,
 		ActiveClusterName:                    activeClusterName,
 		Data:                                 data,
@@ -498,7 +485,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	activeClusterName := ""
 	clusters := []string{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
@@ -524,7 +510,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:           retention,
-				EmitMetric:              emitMetric,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -554,7 +539,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	activeClusterName := ""
 	clusters := []*replicationpb.ClusterReplicationConfig{}
 	clustersDB := []string{}
@@ -585,7 +569,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:           0,
-				EmitMetric:              false,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -611,7 +594,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		},
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
 			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,
@@ -633,7 +615,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
-	emitMetric := true
 	prevActiveClusterName := ""
 	nextActiveClusterName := s.ClusterMetadata.GetCurrentClusterName()
 	clusters := []*replicationpb.ClusterReplicationConfig{}
@@ -665,7 +646,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:           retention,
-				EmitMetric:              emitMetric,
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -696,7 +676,6 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		}, info)
 		s.Equal(&namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:                     "",
 			VisibilityArchivalState:                enumspb.ARCHIVAL_STATE_DISABLED,

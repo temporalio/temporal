@@ -1366,7 +1366,6 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:           1,
-				EmitMetric:              true,
 				HistoryArchivalState:    historyArchivalState.State,
 				HistoryArchivalUri:      historyArchivalState.URI,
 				VisibilityArchivalState: visibilityArchivalState.State,
@@ -1398,7 +1397,6 @@ func registerNamespaceRequest(
 		Description:                          "test-description",
 		OwnerEmail:                           "test-owner-email",
 		WorkflowExecutionRetentionPeriodDays: 10,
-		EmitMetric:                           true,
 		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: cluster.TestCurrentClusterName,
