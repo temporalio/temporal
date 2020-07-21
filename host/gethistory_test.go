@@ -741,7 +741,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// now, there shall be 4 batches of events:
 	// 1. start event and workflow task scheduled;
 	// 2. workflow task started
-	// 3. workflow task completed and activity task scheduled
+	// 3. workflow task completed, activity task scheduled
 	// 4. activity task started, activity task completed and workflow task scheduled
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 4)
@@ -762,10 +762,10 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// now, there shall be 6 batches of events:
 	// 1. start event and workflow task scheduled;
 	// 2. workflow task started
-	// 3. workflow task completed and activity task scheduled
-	// 4. activity task started
-	// 5. activity task completed and workflow task scheduled
-	// 6. workflow task started, workflow task completed and workflow execution completed
+	// 3. workflow task completed, activity task scheduled
+	// 4. activity task started, activity task completed and workflow task scheduled
+	// 5. workflow task started
+	// 6. workflow task completed, workflow execution completed
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 6)
 	s.True(len(events) == 11)
@@ -774,7 +774,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	blobs = nil // clear existing blobs
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.namespace, execution, 3, 6, token)
+		resp, err = getHistory(s.namespace, execution, 4, 7, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
@@ -782,10 +782,10 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 	// should get the following events
 	// 1. workflow task completed and activity task scheduled
-	// 2. activity task started
+	// 2. activity task started, activity task completed, workflow task scheduled
 	events = convertBlob(blobs)
 	s.True(len(blobs) == 2)
-	s.True(len(events) == 3)
+	s.True(len(events) == 5)
 }
 
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle() {
