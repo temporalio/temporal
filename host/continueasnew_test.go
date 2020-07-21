@@ -31,23 +31,20 @@ import (
 	"strconv"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/service/history"
-	"go.temporal.io/server/service/matching"
-
 	"github.com/pborman/uuid"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/matching"
 )
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {
@@ -343,7 +340,7 @@ GetHistoryLoop:
 				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
 				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 				// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
-				if err != matching.ErrNoTasks && err != history.ErrWorkflowCompleted {
+				if err != matching.ErrNoTasks && err.Error() != history.ErrWorkflowCompleted.Error() {
 					s.NoError(err)
 				}
 			}
