@@ -835,9 +835,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 	wt := "integration-wf-cron-type"
 	tl := "integration-wf-cron-taskqueue"
 	identity := "worker1"
-	cronSchedule := "@every 5s"
+	cronSchedule := "@every 3s"
 
-	targetBackoffDuration := time.Second * 5
+	targetBackoffDuration := time.Second * 3
 	backoffDurationTolerance := time.Millisecond * 500
 
 	memo := &commonpb.Memo{
@@ -911,7 +911,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	startFilter.LatestTime = time.Now().UnixNano()
 
 	// Sleep some time before checking the open executions.
-	// This will not cost extra time as the polling for first workflow task will be blocked for 5 seconds.
+	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
 	time.Sleep(2 * time.Second)
 	resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace:       s.namespace,
@@ -929,7 +929,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil, err)
 
-	// Make sure the cron workflow start running at a proper time, in this case 5 seconds after the
+	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
 	backoffDuration := time.Now().Sub(startWorkflowTS)
 	s.True(backoffDuration > targetBackoffDuration)
@@ -1014,7 +1014,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		},
 	})
 	s.NoError(err)
-	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().GetValue() + 5*time.Second.Nanoseconds()
+	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().GetValue() + 3*time.Second.Nanoseconds()
 	s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
 	sort.Slice(closedExecutions, func(i, j int) bool {
@@ -1030,7 +1030,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		// This code is to remove the diff between current start time and last execution close time
 		// TODO: Remove this line once we unify the time source
 		executionTimeDiff := int((time.Duration(executionInfo.GetStartTime().GetValue()).Round(time.Second) - time.Duration(lastExecution.GetCloseTime().GetValue()).Round(time.Second)).Seconds())
-		// The backoff between any two executions should be multiplier of the target backoff duration which is 5 in this test
+		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
 		s.Equal(0, (expectedBackoff-executionTimeDiff)%int(targetBackoffDuration.Round(time.Second).Seconds()), "exected backof %v-%v should be multiplier of target backoff %v", expectedBackoff, executionTimeDiff, int(targetBackoffDuration.Round(time.Second).Seconds()))
 		lastExecution = executionInfo
 	}
