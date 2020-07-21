@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -85,6 +86,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
+		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFn(getDefaultActivityRetryPolicyConfigOptions()),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
@@ -542,13 +544,59 @@ func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
 			key += "nil"
 		}
 		s.Run(key, func() {
-			output, err := s.validator.validatedTaskQueue(tc.input, tc.defaultVal)
+			output, err := s.validator.validateTaskQueue(tc.input, tc.defaultVal)
 			if tc.isOutputErr {
 				s.Error(err)
 			} else {
 				s.NoError(err)
 			}
 			s.EqualValues(tc.output, output)
+		})
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
+	testCases := []struct {
+		name  string
+		input *commonpb.RetryPolicy
+		want  *commonpb.RetryPolicy
+	}{
+		{
+			name:  "override non-set policy",
+			input: nil,
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 1,
+				BackoffCoefficient:       2,
+				MaximumIntervalInSeconds: 100,
+				MaximumAttempts:          0,
+			},
+		},
+		{
+			name: "do not override set policy",
+			input: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 5,
+				BackoffCoefficient:       10,
+				MaximumIntervalInSeconds: 20,
+				MaximumAttempts:          8,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 5,
+				BackoffCoefficient:       10,
+				MaximumIntervalInSeconds: 20,
+				MaximumAttempts:          8,
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+				RetryPolicy: tt.input,
+			}
+
+			err := s.validator.validateActivityRetryPolicy(attr)
+			assert.Nil(s.T(), err, "expected no error")
+			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})
 	}
 }

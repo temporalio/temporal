@@ -57,16 +57,30 @@ const (
 	templateConditions1 = ` AND namespace_id = $1
 		 AND start_time >= $2
 		 AND start_time <= $3
- 		 AND (run_id > $4 OR start_time < $5)
+		 AND ((run_id > $4 and start_time = $5) OR (start_time < $6))
          ORDER BY start_time DESC, run_id
-         LIMIT $6`
+         LIMIT $7`
 
 	templateConditions2 = ` AND namespace_id = $2
 		 AND start_time >= $3
 		 AND start_time <= $4
- 		 AND (run_id > $5 OR start_time < $6)
+		 AND ((run_id > $5 and start_time = $6) OR (start_time < $7))
          ORDER BY start_time DESC, run_id
+		 LIMIT $8`
+
+	templateConditionsClosedWorkflow1 = ` AND namespace_id = $1
+		 AND close_time >= $2
+		 AND close_time <= $3
+		 AND ((run_id > $4 and close_time = $5) OR (close_time < $6))
+         ORDER BY close_time DESC, run_id
          LIMIT $7`
+
+	templateConditionsClosedWorkflow2 = ` AND namespace_id = $2
+		 AND close_time >= $3
+		 AND close_time <= $4
+ 		 AND ((run_id > $5 and close_time = $6) OR (close_time < $7))
+         ORDER BY close_time DESC, run_id
+         LIMIT $8`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
@@ -76,17 +90,17 @@ const (
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions1
 
-	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditions1
+	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflow1
 
 	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = $1` + templateConditionsClosedWorkflow2
 
 	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = $1` + templateConditionsClosedWorkflow2
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditionsClosedWorkflow2
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
@@ -172,7 +186,8 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
 			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
 			*filter.RunID,
-			*filter.MinStartTime,
+			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
@@ -187,6 +202,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
 			*filter.RunID,
 			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = pdb.conn.Select(&rows,
@@ -196,6 +212,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
 			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
 			*filter.RunID,
+			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
 			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	case filter.MinStartTime != nil:
@@ -211,6 +228,7 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			minSt,
 			maxSt,
 			*filter.RunID,
+			maxSt,
 			maxSt,
 			*filter.PageSize)
 	default:
