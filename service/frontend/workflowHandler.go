@@ -525,7 +525,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -1957,7 +1957,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2009,7 +2009,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, wh.error(errNamespaceTooLong, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2233,7 +2233,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2281,7 +2281,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2915,7 +2915,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2960,7 +2960,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.GetNamespace() == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -3037,7 +3037,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -3414,7 +3414,7 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, scope met
 	return nil
 }
 
-func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateExecution(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
 	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)

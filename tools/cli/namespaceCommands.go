@@ -32,7 +32,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -192,7 +191,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		description := resp.NamespaceInfo.GetDescription()
 		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
 		retentionDays := resp.Config.GetWorkflowExecutionRetentionPeriodInDays()
-		emitMetric := resp.Config.GetEmitMetric().GetValue()
 		var clusters []*replicationpb.ClusterReplicationConfig
 
 		if c.IsSet(FlagDescription) {
@@ -254,7 +252,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		}
 		updateConfig := &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
-			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalState:                   archivalState(c, FlagHistoryArchivalState),
 			HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
 			VisibilityArchivalState:                archivalState(c, FlagVisibilityArchivalState),
@@ -313,7 +310,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 
 func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nState: %v\nRetentionInDays: %v\n" +
-		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalState: %v\n"
+		"ActiveClusterName: %v\nClusters: %v\nHistoryArchivalState: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),
 		resp.NamespaceInfo.GetId(),
@@ -322,7 +319,6 @@ func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 		resp.NamespaceInfo.Data,
 		resp.NamespaceInfo.GetState(),
 		resp.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-		resp.Config.GetEmitMetric().GetValue(),
 		resp.ReplicationConfig.GetActiveClusterName(),
 		clustersToString(resp.ReplicationConfig.Clusters),
 		resp.Config.GetHistoryArchivalState().String(),
