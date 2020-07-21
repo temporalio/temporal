@@ -9,7 +9,7 @@ persistence:
         databaseName: "temporal"
         connectAddr: "127.0.0.1:5432"
         connectProtocol: "tcp"
-        user: "postgres"
+        user: "temporal"
         password: "temporal"
         maxConns: 20
         maxIdleConns: 20
@@ -20,7 +20,7 @@ persistence:
         databaseName: "temporal_visibility"
         connectAddr: "127.0.0.1:5432"
         connectProtocol: "tcp"
-        user: "postgres"
+        user: "temporal"
         password: "temporal"
         maxConns: 2
         maxIdleConns: 2

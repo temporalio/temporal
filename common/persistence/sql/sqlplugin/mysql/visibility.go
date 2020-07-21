@@ -45,9 +45,16 @@ const (
 	templateConditions = ` AND namespace_id = ?
 		 AND start_time >= ?
 		 AND start_time <= ?
- 		 AND (run_id > ? OR start_time < ?)
+ 		 AND ((run_id > ? and start_time = ?) OR (start_time < ?))
          ORDER BY start_time DESC, run_id
-         LIMIT ?`
+		 LIMIT ?`
+
+	templateConditionsClosedWorkflows = ` AND namespace_id = ?
+	AND close_time >= ?
+	AND close_time <= ?
+	 AND ((run_id > ? and close_time = ?) OR (close_time < ?))
+	ORDER BY close_time DESC, run_id
+	LIMIT ?`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
@@ -57,17 +64,17 @@ const (
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
-	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditions
+	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflows
 
 	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditionsClosedWorkflows
 
 	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
@@ -153,7 +160,8 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
-			*filter.MinStartTime,
+			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
@@ -168,6 +176,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
 			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = mdb.conn.Select(&rows,
@@ -177,6 +186,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
+			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	case filter.MinStartTime != nil:
@@ -190,6 +200,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
+			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	default:
