@@ -258,6 +258,7 @@ var keys = map[Key]string{
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
+	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -634,6 +635,9 @@ const (
 	NumArchiveSystemWorkflows
 	// ArchiveRequestRPS is the rate limit on the number of archive request per second
 	ArchiveRequestRPS
+	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
+	// the user has not specified an explicit RetryPolicy
+	DefaultActivityRetryPolicy
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
