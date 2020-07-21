@@ -632,3 +632,102 @@ func (s *workflowsSuite) TestGetCorruptedKeys_Error() {
 	s.True(env.IsWorkflowCompleted())
 	s.Error(env.GetWorkflowError())
 }
+
+func (s *workflowsSuite) TestFlattenShards() {
+	testCases := []struct {
+		input        Shards
+		expectedList []int
+		expectedMin  int
+		expectedMax  int
+		msg          string
+	}{
+		{
+			input: Shards{
+				List: []int{1, 2, 3},
+			},
+			expectedList: []int{1, 2, 3},
+			expectedMin:  1,
+			expectedMax:  3,
+			msg:          "Shard list provided",
+		},
+		{
+			input: Shards{
+				Range: &ShardRange{
+					Min: 5,
+					Max: 10,
+				},
+			},
+			expectedList: []int{5, 6, 7, 8, 9},
+			expectedMin:  5,
+			expectedMax:  9,
+			msg:          "Shard range provided",
+		},
+		{
+			input: Shards{
+				List: []int{1, 90, 2, 3},
+			},
+			expectedList: []int{1, 90, 2, 3},
+			expectedMin:  1,
+			expectedMax:  90,
+			msg:          "Unordered shard list provided",
+		},
+	}
+	for _, tc := range testCases {
+		shardList, min, max := tc.input.Flatten()
+		s.Equal(tc.expectedList, shardList)
+		s.Equal(tc.expectedMin, min)
+		s.Equal(tc.expectedMax, max)
+	}
+}
+
+func (s *workflowsSuite) TestValidateShards() {
+	testCases := []struct {
+		shards    Shards
+		expectErr bool
+	}{
+		{
+			shards:    Shards{},
+			expectErr: true,
+		},
+		{
+			shards: Shards{
+				List:  []int{},
+				Range: &ShardRange{},
+			},
+			expectErr: true,
+		},
+		{
+			shards: Shards{
+				List: []int{},
+			},
+			expectErr: true,
+		},
+		{
+			shards: Shards{
+				Range: &ShardRange{
+					Min: 0,
+					Max: 0,
+				},
+			},
+			expectErr: true,
+		},
+		{
+			shards: Shards{
+				Range: &ShardRange{
+					Min: 0,
+					Max: 1,
+				},
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		err := tc.shards.Validate()
+		if tc.expectErr {
+			s.Error(err)
+		} else {
+			s.NoError(err)
+		}
+	}
+}

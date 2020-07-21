@@ -196,15 +196,53 @@ var (
 	errQueryNotReady = errors.New("query is not yet ready to be handled, please try again shortly")
 )
 
+func (s Shards) Validate() error {
+	if s.List == nil && s.Range == nil {
+		return errors.New("must provide either List or Range")
+	}
+	if s.List != nil && s.Range != nil {
+		return errors.New("only one of List or Range can be provided")
+	}
+	if s.List != nil && len(s.List) == 0 {
+		return errors.New("empty List provided")
+	}
+	if s.Range != nil && s.Range.Max <= s.Range.Min {
+		return errors.New("empty Range provided")
+	}
+	return nil
+}
+
+func (s Shards) Flatten() ([]int, int, int) {
+	shardList := s.List
+	if len(shardList) == 0 {
+		shardList = []int{}
+		for i := s.Range.Min; i < s.Range.Max; i++ {
+			shardList = append(shardList, i)
+		}
+	}
+	min := shardList[0]
+	max := shardList[0]
+	for i := 1; i < len(shardList); i++ {
+		if shardList[i] < min {
+			min = shardList[i]
+		}
+		if shardList[i] > max {
+			max = shardList[i]
+		}
+	}
+
+	return shardList, min, max
+}
+
 // ScannerWorkflow is the workflow that scans over all concrete executions
 func ScannerWorkflow(
 	ctx workflow.Context,
 	params ScannerWorkflowParams,
 ) error {
-	if err := validateShards(params.Shards); err != nil {
+	if err := params.Shards.Validate(); err != nil {
 		return err
 	}
-	shards, minShard, maxShard := flattenShards(params.Shards)
+	shards, minShard, maxShard := params.Shards.Flatten()
 	aggregator := newShardScanResultAggregator(shards, minShard, maxShard)
 	if err := workflow.SetQueryHandler(ctx, ShardReportQuery, func(shardID int) (*common.ShardScanReport, error) {
 		return aggregator.getReport(shardID)

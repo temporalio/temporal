@@ -23,50 +23,12 @@
 package executions
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/workflow"
 )
-
-func validateShards(shards Shards) error {
-	if shards.List == nil && shards.Range == nil {
-		return errors.New("must provide either List or Range")
-	}
-	if shards.List != nil && shards.Range != nil {
-		return errors.New("only one of List or Range can be provided")
-	}
-	if shards.List != nil && len(shards.List) == 0 {
-		return errors.New("empty List provided")
-	}
-	if shards.Range != nil && shards.Range.Max <= shards.Range.Min {
-		return errors.New("empty Range provided")
-	}
-	return nil
-}
-
-func flattenShards(shards Shards) ([]int, int, int) {
-	shardList := shards.List
-	if len(shardList) == 0 {
-		shardList = []int{}
-		for i := shards.Range.Min; i < shards.Range.Max; i++ {
-			shardList = append(shardList, i)
-		}
-	}
-	min := shardList[0]
-	max := shardList[0]
-	for i := 1; i < len(shardList); i++ {
-		if shardList[i] < min {
-			min = shardList[i]
-		}
-		if shardList[i] > max {
-			max = shardList[i]
-		}
-	}
-	return shardList, min, max
-}
 
 func resolveFixerConfig(overwrites FixerWorkflowConfigOverwrites) ResolvedFixerWorkflowConfig {
 	resolvedConfig := ResolvedFixerWorkflowConfig{

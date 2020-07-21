@@ -24,49 +24,6 @@ package executions
 
 import "github.com/uber/cadence/common"
 
-func (s *workflowsSuite) TestFlattenShards() {
-	testCases := []struct {
-		input        Shards
-		expectedList []int
-		expectedMin  int
-		expectedMax  int
-	}{
-		{
-			input: Shards{
-				List: []int{1, 2, 3},
-			},
-			expectedList: []int{1, 2, 3},
-			expectedMin:  1,
-			expectedMax:  3,
-		},
-		{
-			input: Shards{
-				Range: &ShardRange{
-					Min: 5,
-					Max: 10,
-				},
-			},
-			expectedList: []int{5, 6, 7, 8, 9},
-			expectedMin:  5,
-			expectedMax:  9,
-		},
-		{
-			input: Shards{
-				List: []int{90, 1, 2, 3},
-			},
-			expectedList: []int{90, 1, 2, 3},
-			expectedMin:  1,
-			expectedMax:  90,
-		},
-	}
-	for _, tc := range testCases {
-		shardList, min, max := flattenShards(tc.input)
-		s.Equal(tc.expectedList, shardList)
-		s.Equal(tc.expectedMin, min)
-		s.Equal(tc.expectedMax, max)
-	}
-}
-
 func (s *workflowsSuite) TestResolveFixerConfig() {
 	result := resolveFixerConfig(FixerWorkflowConfigOverwrites{
 		Concurrency: common.IntPtr(1000),
@@ -80,58 +37,6 @@ func (s *workflowsSuite) TestResolveFixerConfig() {
 			InvariantCollectionHistory:      true,
 		},
 	}, result)
-}
-
-func (s *workflowsSuite) TestValidateShards() {
-	testCases := []struct {
-		shards    Shards
-		expectErr bool
-	}{
-		{
-			shards:    Shards{},
-			expectErr: true,
-		},
-		{
-			shards: Shards{
-				List:  []int{},
-				Range: &ShardRange{},
-			},
-			expectErr: true,
-		},
-		{
-			shards: Shards{
-				List: []int{},
-			},
-			expectErr: true,
-		},
-		{
-			shards: Shards{
-				Range: &ShardRange{
-					Min: 0,
-					Max: 0,
-				},
-			},
-			expectErr: true,
-		},
-		{
-			shards: Shards{
-				Range: &ShardRange{
-					Min: 0,
-					Max: 1,
-				},
-			},
-			expectErr: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		err := validateShards(tc.shards)
-		if tc.expectErr {
-			s.Error(err)
-		} else {
-			s.NoError(err)
-		}
-	}
 }
 
 func (s *workflowsSuite) TestGetBatchIndices() {
