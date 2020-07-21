@@ -349,13 +349,12 @@ message NamespaceReplicationConfig {
 
 message NamespaceConfig {
     int32 retention_days = 1;
-    bool emit_metric = 2;
-    string archival_bucket = 3;
-    temporal.api.namespace.v1.BadBinaries bad_binaries = 16;
-    temporal.api.enums.v1.ArchivalState history_archival_state = 18;
-    string history_archival_uri = 19;
-    temporal.api.enums.v1.ArchivalState visibility_archival_state = 20;
-    string visibility_archival_uri = 21;
+    string archival_bucket = 2;
+    temporal.api.namespace.v1.BadBinaries bad_binaries = 3;
+    temporal.api.enums.v1.ArchivalState history_archival_state = 4;
+    string history_archival_uri = 5;
+    temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
+    string visibility_archival_uri = 7;
 }
 
 // ReplicationData represents mutable state information for global namespaces.

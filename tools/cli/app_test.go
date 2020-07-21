@@ -166,7 +166,6 @@ var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse
 	},
 	Config: &namespacepb.NamespaceConfig{
 		WorkflowExecutionRetentionPeriodInDays: 3,
-		EmitMetric:                             &types.BoolValue{Value: true},
 	},
 	ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: "active",
