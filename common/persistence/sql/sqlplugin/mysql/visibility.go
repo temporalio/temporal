@@ -45,14 +45,14 @@ const (
 	templateConditions = ` AND namespace_id = ?
 		 AND start_time >= ?
 		 AND start_time <= ?
- 		 AND (run_id > ? OR start_time < ?)
+ 		 AND ((run_id > ? and start_time = ?) OR (start_time < ?))
          ORDER BY start_time DESC, run_id
 		 LIMIT ?`
 
 	templateConditionsClosedWorkflows = ` AND namespace_id = ?
 	AND close_time >= ?
 	AND close_time <= ?
-	 AND (run_id > ? OR close_time < ?)
+	 AND ((run_id > ? and close_time = ?) OR (close_time < ?))
 	ORDER BY close_time DESC, run_id
 	LIMIT ?`
 
@@ -160,7 +160,8 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
-			*filter.MinStartTime,
+			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.WorkflowTypeName != nil:
 		qry := templateGetOpenWorkflowExecutionsByType
@@ -175,6 +176,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
 			*filter.MaxStartTime,
+			*filter.MaxStartTime,
 			*filter.PageSize)
 	case filter.MinStartTime != nil && filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
 		err = mdb.conn.Select(&rows,
@@ -184,6 +186,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
+			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	case filter.MinStartTime != nil:
@@ -197,6 +200,7 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.RunID,
+			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),
 			*filter.PageSize)
 	default:
