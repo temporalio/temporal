@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 )
 
 type workflowContext interface {
@@ -221,4 +222,27 @@ func terminateWorkflow(
 		terminateIdentity,
 	)
 	return err
+}
+
+func getWorkflowExecutionTimeout(namespace string, requestedTimeout int32, serviceConfig *Config) int32 {
+	executionTimeoutSeconds := requestedTimeout
+	if executionTimeoutSeconds == 0 {
+		executionTimeoutSeconds = convert.Int32Ceil(serviceConfig.DefaultWorkflowExecutionTimeout(namespace).Seconds())
+	}
+	maxWorkflowExecutionTimeout := convert.Int32Ceil(serviceConfig.MaxWorkflowExecutionTimeout(namespace).Seconds())
+	executionTimeoutSeconds = common.MinInt32(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+
+	return executionTimeoutSeconds
+}
+
+func getWorkflowRunTimeout(namespace string, requestedTimeout, executionTimeout int32, serviceConfig *Config) int32 {
+	runTimeoutSeconds := requestedTimeout
+	if runTimeoutSeconds == 0 {
+		runTimeoutSeconds = convert.Int32Ceil(serviceConfig.DefaultWorkflowRunTimeout(namespace).Seconds())
+	}
+	maxWorkflowRunTimeout := convert.Int32Ceil(serviceConfig.MaxWorkflowRunTimeout(namespace).Seconds())
+	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, maxWorkflowRunTimeout)
+	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, executionTimeout)
+
+	return runTimeoutSeconds
 }
