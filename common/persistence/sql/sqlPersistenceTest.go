@@ -31,9 +31,9 @@ import (
 	"path"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
@@ -44,11 +44,13 @@ type TestCluster struct {
 	dbName    string
 	schemaDir string
 	cfg       config.SQL
+	logger    log.Logger
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(pluginName, dbName, username, password, host string, port int, schemaDir string) *TestCluster {
+func NewTestCluster(pluginName, dbName, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
 	var result TestCluster
+	result.logger = logger
 	result.dbName = dbName
 	if port == 0 {
 		port = environment.GetMySQLPort()
@@ -82,7 +84,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
 		temporalPackageDir, err := getTemporalPackageDir()
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
 		}
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
@@ -155,7 +157,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("loadDatabaseSchema", tag.Error(err))
 	}
 }
 
@@ -164,7 +166,7 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("loadDatabaseVisibilitySchema", tag.Error(err))
 	}
 }
 
