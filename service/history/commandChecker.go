@@ -649,6 +649,7 @@ func (v *commandAttrValidator) validateTaskQueue(
 func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb.ScheduleActivityTaskCommandAttributes) error {
 	if attributes.RetryPolicy == nil {
 		attributes.RetryPolicy = v.defaultActivityRetryPolicy
+		return nil
 	}
 
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)

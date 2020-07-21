@@ -25,6 +25,7 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -157,6 +159,15 @@ func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.R
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
 		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
+	}
+
+	err := common.ValidateRetryPolicy(retryPolicy)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Bad Default Activity Retry Policy defined: %+v failed validation %v",
+				retryPolicy,
+				err))
 	}
 
 	return retryPolicy
