@@ -544,7 +544,7 @@ func (s *commandAttrValidatorSuite) TestValidateTaskQueueName() {
 			key += "nil"
 		}
 		s.Run(key, func() {
-			output, err := s.validator.validatedTaskQueue(tc.input, tc.defaultVal)
+			output, err := s.validator.validateTaskQueue(tc.input, tc.defaultVal)
 			if tc.isOutputErr {
 				s.Error(err)
 			} else {

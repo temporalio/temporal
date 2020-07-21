@@ -214,7 +214,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	defaultTaskQueueName := ""
-	if _, err := v.validatedTaskQueue(attributes.TaskQueue, defaultTaskQueueName); err != nil {
+	if _, err := v.validateTaskQueue(attributes.TaskQueue, defaultTaskQueueName); err != nil {
 		return err
 	}
 
@@ -506,7 +506,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	}
 
 	// Inherit Taskqueue from previous execution if not provided on command
-	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
+	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
 	if err != nil {
 		return err
 	}
@@ -592,7 +592,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command
-	taskQueue, err := v.validatedTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
+	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
 		return err
 	}
@@ -616,7 +616,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	return nil
 }
 
-func (v *commandAttrValidator) validatedTaskQueue(
+func (v *commandAttrValidator) validateTaskQueue(
 	taskQueue *taskqueuepb.TaskQueue,
 	defaultVal string,
 ) (*taskqueuepb.TaskQueue, error) {
