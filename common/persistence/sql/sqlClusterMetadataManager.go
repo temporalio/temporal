@@ -25,7 +25,6 @@
 package sql
 
 import (
-	"encoding/binary"
 	"net"
 	"time"
 
@@ -97,10 +96,13 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
-	pageToken := uint64(0)
-	if len(request.NextPageToken) > 0 {
-		pageToken = binary.LittleEndian.Uint64(request.NextPageToken)
+	var lastSeenHostId []byte
+	if len(request.NextPageToken) == 16 {
+		lastSeenHostId = request.NextPageToken
+	} else if len(request.NextPageToken) > 0 {
+		return nil, serviceerror.NewInternal("page token is corrupted.")
 	}
+
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
 		HostIDEquals:        request.HostIDEquals,
@@ -110,16 +112,16 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 		MaxRecordCount:      request.PageSize,
 	}
 
+	if lastSeenHostId != nil && filter.HostIDEquals == nil {
+		filter.HostIDGreaterThan = lastSeenHostId
+	}
+
 	if request.LastHeartbeatWithin > 0 {
 		filter.LastHeartbeatAfter = now.Add(-request.LastHeartbeatWithin)
 	}
 
 	if request.RPCAddressEquals != nil {
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
-	}
-
-	if pageToken > 0 {
-		filter.InsertionOrderGreaterThan = pageToken
 	}
 
 	rows, err := s.db.GetClusterMembers(filter)
@@ -143,8 +145,8 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 
 	var nextPageToken []byte
 	if request.PageSize > 0 && len(rows) == request.PageSize {
-		nextPageToken = make([]byte, 8)
-		binary.LittleEndian.PutUint64(nextPageToken, rows[len(rows)-1].InsertionOrder)
+		lastRow := rows[len(rows)-1]
+		nextPageToken = lastRow.HostID
 	}
 
 	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows, NextPageToken: nextPageToken}, nil

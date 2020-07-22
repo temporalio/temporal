@@ -63,14 +63,14 @@ type (
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
-		RPCAddressEquals          string
-		HostIDEquals              []byte
-		RoleEquals                persistence.ServiceType
-		LastHeartbeatAfter        time.Time
-		RecordExpiryAfter         time.Time
-		SessionStartedAfter       time.Time
-		MaxRecordCount            int
-		InsertionOrderGreaterThan uint64
+		RPCAddressEquals    string
+		HostIDEquals        []byte
+		HostIDGreaterThan   []byte
+		RoleEquals          persistence.ServiceType
+		LastHeartbeatAfter  time.Time
+		RecordExpiryAfter   time.Time
+		SessionStartedAfter time.Time
+		MaxRecordCount      int
 	}
 
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
