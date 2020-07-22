@@ -352,7 +352,7 @@ func newAdminNamespaceCommands() []cli.Command {
 		{
 			Name:  "list",
 			Usage: "List namespaces",
-			Flags: append(getDBFlags(), getFlagsForList()...),
+			Flags: append(getDBFlags(), flagsForPagination...),
 			Action: func(c *cli.Context) {
 				AdminListNamespaces(c)
 			},
@@ -538,7 +538,7 @@ clusters:
 			Usage: "List replication tasks from dlq",
 			Flags: append(append(
 				getDBFlags(),
-				getFlagsForList()...),
+				flagsForPagination...),
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardId",

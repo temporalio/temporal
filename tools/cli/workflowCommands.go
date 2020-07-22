@@ -56,6 +56,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	sdkclient "go.temporal.io/sdk/client"
 
 	clispb "go.temporal.io/server/api/cli/v1"
 	"go.temporal.io/server/common"
@@ -569,55 +570,11 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 
 // ListWorkflow list workflow executions based on filters
 func ListWorkflow(c *cli.Context) {
-	more := c.Bool(FlagMore)
 	queryOpen := c.Bool(FlagOpen)
-
-	printJSON := c.Bool(FlagPrintJSON)
-	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
-
-	if printJSON || printDecodedRaw {
-		if !more {
-			results, _ := getListResultInRaw(c, queryOpen, nil)
-			fmt.Println("[")
-			printListResults(results, printJSON, false)
-			fmt.Println("]")
-		} else {
-			ErrorAndExit("Not support printJSON in more mode", nil)
-		}
-		return
-	}
-
-	table := createTableForListWorkflow(c, false, queryOpen)
-	prepareTable := listWorkflow(c, table, queryOpen)
-
-	if !more { // default mode only show one page items
-		prepareTable(nil)
-		table.Render()
-	} else { // require input Enter to view next page
-		var nextPageToken []byte
-		for {
-			nextPageToken, _ = prepareTable(nextPageToken)
-			table.Render()
-			table.ClearRows()
-
-			if len(nextPageToken) == 0 {
-				break
-			}
-
-			if !showNextPage() {
-				break
-			}
-		}
-	}
-}
-
-// ListWorkflow2 list workflow executions based on filters
-func ListWorkflow2(c *cli.Context) {
-	queryOpen := c.Bool(FlagOpen)
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
+	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
 
 	wfStatusInt, err := stringToEnum(c.String(FlagWorkflowStatus), enumspb.WorkflowExecutionStatus_value)
 	if err != nil {
@@ -631,67 +588,16 @@ func ListWorkflow2(c *cli.Context) {
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		ctx, cancel := newContextForLongPoll(c)
 		defer cancel()
+		var err error
 		if c.IsSet(FlagListQuery) {
-			// query ListWorkflow API
-			req := &workflowservice.ListWorkflowExecutionsRequest{
-				Query: c.String(FlagListQuery),
-			}
-			resp, err := client.ListWorkflow(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, e := range resp.Executions {
-				items = append(items, e)
-			}
-			token = resp.NextPageToken
+			items, token, err = listWorkflows(ctx, c, client)
 		} else if queryOpen {
-			// query ListOpenWorkflow API
-			req := &workflowservice.ListOpenWorkflowExecutionsRequest{
-				StartTimeFilter: &filterpb.StartTimeFilter{
-					EarliestTime: earliestTime,
-					LatestTime:   latestTime,
-				},
-			}
-			if len(workflowID) > 0 {
-				req.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
-
-			}
-			if len(workflowType) > 0 {
-				req.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
-			}
-			resp, err := client.ListOpenWorkflow(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, e := range resp.Executions {
-				items = append(items, e)
-			}
-			token = resp.NextPageToken
+			items, token, err = listOpenWorkflows(ctx, c, client, earliestTime, latestTime, workflowID, workflowType)
 		} else {
-			// query ListClosedWorkflow API
-			req := &workflowservice.ListClosedWorkflowExecutionsRequest{
-				StartTimeFilter: &filterpb.StartTimeFilter{
-					EarliestTime: earliestTime,
-					LatestTime:   latestTime,
-				},
-			}
-			if len(workflowID) > 0 {
-				req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
-			}
-			if len(workflowType) > 0 {
-				req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
-			}
-			if wfStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
-				req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: wfStatus}}
-			}
-			resp, err := client.ListClosedWorkflow(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, e := range resp.Executions {
-				items = append(items, e)
-			}
-			token = resp.NextPageToken
+			items, token, err = listClosedWorkflows(ctx, c, client, earliestTime, latestTime, workflowID, workflowType, wfStatus)
+		}
+		if err != nil {
+			return nil, nil, err
 		}
 
 		return items, token, nil
@@ -699,40 +605,6 @@ func ListWorkflow2(c *cli.Context) {
 
 	fields := []string{"Type.Name", "Execution.WorkflowId", "Execution.RunId", "TaskQueue", "StartTime", "ExecutionTime", "CloseTime"}
 	paginate(c, paginationFunc, fields)
-}
-
-// ListAllWorkflow list all workflow executions based on filters
-func ListAllWorkflow(c *cli.Context) {
-	queryOpen := c.Bool(FlagOpen)
-
-	printJSON := c.Bool(FlagPrintJSON)
-	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
-
-	if printJSON || printDecodedRaw {
-		var results []*workflowpb.WorkflowExecutionInfo
-		var nextPageToken []byte
-		fmt.Println("[")
-		for {
-			results, nextPageToken = getListResultInRaw(c, queryOpen, nextPageToken)
-			printListResults(results, printJSON, nextPageToken != nil)
-			if len(nextPageToken) == 0 {
-				break
-			}
-		}
-		fmt.Println("]")
-		return
-	}
-
-	table := createTableForListWorkflow(c, true, queryOpen)
-	prepareTable := listWorkflow(c, table, queryOpen)
-	var nextPageToken []byte
-	for {
-		nextPageToken, _ = prepareTable(nextPageToken)
-		if len(nextPageToken) == 0 {
-			break
-		}
-	}
-	table.Render()
 }
 
 // ScanAllWorkflow list all workflow executions using Scan API.
@@ -795,107 +667,42 @@ func CountWorkflow(c *cli.Context) {
 
 // ListArchivedWorkflow lists archived workflow executions based on filters
 func ListArchivedWorkflow(c *cli.Context) {
-	wfClient := getWorkflowClient(c)
-
-	printJSON := c.Bool(FlagPrintJSON)
-	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
-	pageSize := c.Int(FlagPageSize)
-	listQuery := getRequiredOption(c, FlagListQuery)
-	printAll := c.Bool(FlagAll)
-	if pageSize <= 0 {
-		pageSize = defaultPageSizeForList
-	}
-
-	request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
-		PageSize: int32(pageSize),
-		Query:    listQuery,
-	}
-
+	query := getRequiredOption(c, FlagListQuery)
 	contextTimeout := defaultContextTimeoutForListArchivedWorkflow
 	if c.GlobalIsSet(FlagContextTimeout) {
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
 
-	var result *workflowservice.ListArchivedWorkflowExecutionsResponse
+	client := getWorkflowClient(c)
+	req := &workflowservice.ListArchivedWorkflowExecutionsRequest{
+		Query: query,
+	}
+	var resp *workflowservice.ListArchivedWorkflowExecutionsResponse
 	var err error
-	for result == nil || (len(result.Executions) == 0 && result.NextPageToken != nil) {
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		// the executions will be empty if the query is still running before timeout
 		// so keep calling the API until some results are returned (query completed)
-		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
-
-		result, err = wfClient.ListArchivedWorkflow(ctx, request)
-		if err != nil {
+		for resp == nil || (len(resp.Executions) == 0 && resp.NextPageToken != nil) {
+			ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+			resp, err = client.ListArchivedWorkflow(ctx, req)
+			if err != nil {
+				cancel()
+				ErrorAndExit("Failed to list archived workflow.", err)
+			}
 			cancel()
-			ErrorAndExit("Failed to list archived workflow.", err)
 		}
-		request.NextPageToken = result.NextPageToken
-		cancel()
+
+		var items []interface{}
+		for _, e := range resp.Executions {
+			items = append(items, e)
+		}
+		token := resp.NextPageToken
+
+		return items, token, nil
 	}
 
-	var table *tablewriter.Table
-	var printFn func([]*workflowpb.WorkflowExecutionInfo, bool)
-	var prePrintFn func()
-	var postPrintFn func()
-	printRawTime := c.Bool(FlagPrintRawTime)
-	printDateTime := c.Bool(FlagPrintDateTime)
-	printMemo := c.Bool(FlagPrintMemo)
-	printSearchAttr := c.Bool(FlagPrintSearchAttr)
-	if printJSON || printDecodedRaw {
-		prePrintFn = func() { fmt.Println("[") }
-		printFn = func(execution []*workflowpb.WorkflowExecutionInfo, more bool) {
-			printListResults(execution, printJSON, more)
-		}
-		postPrintFn = func() { fmt.Println("]") }
-	} else {
-		table = createTableForListWorkflow(c, false, false)
-		prePrintFn = func() { table.ClearRows() }
-		printFn = func(execution []*workflowpb.WorkflowExecutionInfo, _ bool) {
-			appendWorkflowExecutionsToTable(
-				table,
-				execution,
-				false,
-				printRawTime,
-				printDateTime,
-				printMemo,
-				printSearchAttr,
-			)
-		}
-		postPrintFn = func() { table.Render() }
-	}
-
-	prePrintFn()
-	printFn(result.Executions, result.NextPageToken != nil)
-	for len(result.NextPageToken) != 0 {
-		if !printAll {
-			postPrintFn()
-		}
-
-		if !printAll && !showNextPage() {
-			break
-		}
-
-		request.NextPageToken = result.NextPageToken
-		// create a new context for each new request as each request may take a long time
-		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
-		result, err = wfClient.ListArchivedWorkflow(ctx, request)
-		if err != nil {
-			cancel()
-			ErrorAndExit("Failed to list archived workflow", err)
-		}
-		cancel()
-
-		if !printAll {
-			prePrintFn()
-		}
-		printFn(result.Executions, result.NextPageToken != nil)
-	}
-
-	// if next page token is not nil here, then it means we are not in all mode,
-	// and user doesn't want to view the next page. In that case the post
-	// operation has already been done and we don't want to perform it again.
-	if len(result.NextPageToken) == 0 {
-		postPrintFn()
-	}
+	fields := []string{"Type.Name", "Execution.WorkflowId", "Execution.RunId", "TaskQueue", "StartTime", "ExecutionTime", "CloseTime"}
+	paginate(c, paginationFunc, fields)
 }
 
 // DescribeWorkflow show information about the specified workflow execution
@@ -1095,63 +902,6 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 	return table
 }
 
-func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
-	wfClient := getWorkflowClient(c)
-
-	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
-	workflowID := c.String(FlagWorkflowID)
-	workflowType := c.String(FlagWorkflowType)
-	printRawTime := c.Bool(FlagPrintRawTime)
-	printDateTime := c.Bool(FlagPrintDateTime)
-	printMemo := c.Bool(FlagPrintMemo)
-	printSearchAttr := c.Bool(FlagPrintSearchAttr)
-	pageSize := c.Int(FlagPageSize)
-	if pageSize <= 0 {
-		pageSize = defaultPageSizeForList
-	}
-
-	var workflowStatus enumspb.WorkflowExecutionStatus
-	if c.IsSet(FlagWorkflowStatus) {
-		if queryOpen {
-			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
-		}
-		workflowStatus = getWorkflowStatus(c.String(FlagWorkflowStatus))
-	} else {
-		workflowStatus = workflowStatusNotSet
-	}
-
-	if len(workflowID) > 0 && len(workflowType) > 0 {
-		ErrorAndExit(optionErr, errors.New("you can filter on workflow_id or workflow_type, but not on both"))
-	}
-
-	prepareTable := func(next []byte) ([]byte, int) {
-		var result []*workflowpb.WorkflowExecutionInfo
-		var nextPageToken []byte
-		if c.IsSet(FlagListQuery) {
-			listQuery := c.String(FlagListQuery)
-			result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, next, listQuery, c)
-		} else if queryOpen {
-			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, c)
-		} else {
-			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, c)
-		}
-
-		appendWorkflowExecutionsToTable(
-			table,
-			result,
-			queryOpen,
-			printRawTime,
-			printDateTime,
-			printMemo,
-			printSearchAttr,
-		)
-
-		return nextPageToken, len(result)
-	}
-	return prepareTable
-}
-
 func appendWorkflowExecutionsToTable(
 	table *tablewriter.Table,
 	executions []*workflowpb.WorkflowExecutionInfo,
@@ -1220,119 +970,75 @@ func trimWorkflowType(str string) string {
 	return res
 }
 
-func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) (
-	[]*workflowpb.WorkflowExecutionInfo, []byte) {
-
-	request := &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize:      int32(pageSize),
-		NextPageToken: nextPageToken,
-		Query:         query,
+func listWorkflows(ctx context.Context, c *cli.Context, client sdkclient.Client) ([]interface{}, []byte, error) {
+	req := &workflowservice.ListWorkflowExecutionsRequest{
+		Query: c.String(FlagListQuery),
 	}
-
-	ctx, cancel := newContextForLongPoll(c)
-	defer cancel()
-	response, err := client.ListWorkflow(ctx, request)
+	resp, err := client.ListWorkflow(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to list workflow.", err)
+		return nil, nil, err
 	}
-	return response.Executions, response.NextPageToken
+
+	var items []interface{}
+	for _, e := range resp.Executions {
+		items = append(items, e)
+	}
+
+	return items, resp.NextPageToken, nil
 }
 
-func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
-	nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
-
-	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		MaximumPageSize: int32(pageSize),
-		NextPageToken:   nextPageToken,
+func listOpenWorkflows(ctx context.Context, c *cli.Context, client sdkclient.Client, earliestTime, latestTime int64, wfID, wfType string) ([]interface{}, []byte, error) {
+	req := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: &earliestTime,
 			LatestTime:   &latestTime,
 		},
 	}
-	if len(workflowID) > 0 {
-		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
-
+	if len(wfID) > 0 {
+		req.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: wfID}}
 	}
-	if len(workflowType) > 0 {
-		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
+	if len(wfType) > 0 {
+		req.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: wfType}}
 	}
-
-	ctx, cancel := newContextForLongPoll(c)
-	defer cancel()
-	response, err := client.ListOpenWorkflow(ctx, request)
+	resp, err := client.ListOpenWorkflow(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to list open workflow.", err)
+		return nil, nil, err
 	}
-	return response.Executions, response.NextPageToken
+	var items []interface{}
+	for _, e := range resp.Executions {
+		items = append(items, e)
+	}
+
+	return items, resp.NextPageToken, nil
 }
 
-func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
-	workflowStatus enumspb.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
-
-	request := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		MaximumPageSize: int32(pageSize),
-		NextPageToken:   nextPageToken,
+func listClosedWorkflows(ctx context.Context, c *cli.Context, client sdkclient.Client, earliestTime, latestTime int64, wfID, wfType string,
+	wfStatus enumspb.WorkflowExecutionStatus) ([]interface{}, []byte, error) {
+	req := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: &earliestTime,
 			LatestTime:   &latestTime,
 		},
 	}
-	if len(workflowID) > 0 {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
+	if len(wfID) > 0 {
+		req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: wfID}}
 	}
-	if len(workflowType) > 0 {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
+	if len(wfType) > 0 {
+		req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: wfType}}
 	}
-	if workflowStatus != workflowStatusNotSet {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: workflowStatus}}
+	if wfStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		req.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: wfStatus}}
 	}
-
-	ctx, cancel := newContextForLongPoll(c)
-	defer cancel()
-	response, err := client.ListClosedWorkflow(ctx, request)
+	resp, err := client.ListClosedWorkflow(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to list closed workflow.", err)
+		return nil, nil, err
 	}
-	return response.Executions, response.NextPageToken
-}
-
-func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
-	wfClient := getWorkflowClient(c)
-
-	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UTC(), time.Now().UTC())
-	workflowID := c.String(FlagWorkflowID)
-	workflowType := c.String(FlagWorkflowType)
-	pageSize := c.Int(FlagPageSize)
-	if pageSize <= 0 {
-		pageSize = defaultPageSizeForList
+	var items []interface{}
+	for _, e := range resp.Executions {
+		items = append(items, e)
 	}
 
-	var workflowStatus enumspb.WorkflowExecutionStatus
-	if c.IsSet(FlagWorkflowStatus) {
-		if queryOpen {
-			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
-		}
-		workflowStatus = getWorkflowStatus(c.String(FlagWorkflowStatus))
-	} else {
-		workflowStatus = workflowStatusNotSet
-	}
-
-	if len(workflowID) > 0 && len(workflowType) > 0 {
-		ErrorAndExit(optionErr, errors.New("you can filter on workflow_id or workflow_type, but not on both"))
-	}
-
-	var result []*workflowpb.WorkflowExecutionInfo
-	if c.IsSet(FlagListQuery) {
-		listQuery := c.String(FlagListQuery)
-		result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, nextPageToken, listQuery, c)
-	} else if queryOpen {
-		result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, nextPageToken, c)
-	} else {
-		result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, nextPageToken, c)
-	}
-
-	return result, nextPageToken
+	return items, resp.NextPageToken, nil
 }
 
 func getScanResultInRaw(c *cli.Context, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {

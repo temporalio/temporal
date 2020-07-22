@@ -128,37 +128,23 @@ func newWorkflowCommands() []cli.Command {
 		},
 		{
 			Name:        "list",
-			Aliases:     []string{"l"},
+			Aliases:     []string{"ls"},
 			Usage:       "list open or closed workflow executions",
 			Description: "list one page (default size 10 items) by default, use flag --pagesize to change page size",
-			Flags:       getFlagsForList(),
+			Flags:       append(append(flagsForPagination, flagsForWorkflowFiltering...), flagsForVisibility...),
 			Action: func(c *cli.Context) {
 				ListWorkflow(c)
 			},
 		},
 		{
-			Name:        "list2",
-			Aliases:     []string{"ls"},
-			Usage:       "list open or closed workflow executions",
-			Description: "list one page (default size 10 items) by default, use flag --pagesize to change page size",
-			Flags:       getFlagsForList(),
-			Action: func(c *cli.Context) {
-				ListWorkflow2(c)
-			},
-		},
-		{
-			Name:    "listall",
-			Aliases: []string{"la"},
-			Usage:   "list all open or closed workflow executions",
-			Flags:   getFlagsForListAll(),
-			Action: func(c *cli.Context) {
-				ListAllWorkflow(c)
-			},
-		},
-		{
 			Name:  "listarchived",
 			Usage: "list archived workflow executions",
-			Flags: getFlagsForListArchived(),
+			Flags: append(append(flagsForPagination, flagsForVisibility...),
+				cli.StringFlag{
+					Name:  FlagListQueryWithAlias,
+					Usage: "SQL like query. Please check the documentation of the visibility archiver used by your namespace for detailed instructions",
+				},
+			),
 			Action: func(c *cli.Context) {
 				ListArchivedWorkflow(c)
 			},
