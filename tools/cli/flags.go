@@ -249,7 +249,7 @@ var flagsForPagination = []cli.Flag{
 	},
 	cli.BoolFlag{
 		Name:  FlagMoreWithAlias,
-		Usage: "Keep interactively listing pages by pressing Enter. Default: prints first page and exits",
+		Usage: "Interactively list pages by pressing Enter. Default: prints first page and exits",
 	},
 	cli.IntFlag{
 		Name:  FlagPageSizeWithAlias,
