@@ -121,7 +121,7 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
 			ReReplicationContextTimeout:        dc.GetDurationPropertyFilteredByDomainID(dynamicconfig.WorkerReReplicationContextTimeout, 0*time.Second),
 			EnableRPCReplication:               dc.GetBoolProperty(dynamicconfig.WorkerEnableRPCReplication, false),
-			EnableKafkaReplication:             dc.GetBoolProperty(dynamicconfig.WorkerEnableKafkaReplication, false),
+			EnableKafkaReplication:             dc.GetBoolProperty(dynamicconfig.WorkerEnableKafkaReplication, true),
 		},
 		ArchiverConfig: &archiver.Config{
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
