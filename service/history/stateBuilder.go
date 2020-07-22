@@ -199,7 +199,7 @@ func (b *stateBuilderImpl) applyEvents(
 			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
-				attributes.TaskQueue.GetName(),
+				attributes.TaskQueue,
 				attributes.GetStartToCloseTimeoutSeconds(),
 				attributes.GetAttempt(),
 				event.GetTimestamp(),
@@ -352,9 +352,6 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_REQUEST_CANCEL_ACTIVITY_TASK_FAILED:
-			// No mutable state action is needed
-
 		case enumspb.EVENT_TYPE_TIMER_STARTED:
 			if _, err := b.mutableState.ReplicateTimerStartedEvent(
 				event,
@@ -375,9 +372,6 @@ func (b *stateBuilderImpl) applyEvents(
 			); err != nil {
 				return nil, err
 			}
-
-		case enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED:
-			// no mutable state action is needed
 
 		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 			if _, err := b.mutableState.ReplicateStartChildWorkflowExecutionInitiatedEvent(

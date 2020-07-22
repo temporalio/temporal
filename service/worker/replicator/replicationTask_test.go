@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/service/dynamicconfig"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -250,7 +251,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				),
 				taskID:        replicationAttr.GetScheduledId(),
 				state:         task.TaskStatePending,
-				attempt:       0,
+				attempt:       1,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
 				timeSource:    s.mockTimeSource,
@@ -345,7 +346,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		s.mockRereplicator,
 		s.mockNDCResender)
 	task.attempt = s.config.ReplicatorActivityBufferRetryCount() + 1
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
@@ -398,7 +399,7 @@ func (s *activityReplicationTaskSuite) TestRetryErr_Retryable() {
 		s.metricsClient,
 		s.mockRereplicator,
 		s.mockNDCResender)
-	task.attempt = 0
+	task.attempt = 1
 	s.True(task.RetryErr(err))
 }
 
@@ -496,7 +497,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				),
 				taskID:        replicationAttr.GetFirstEventId(),
 				state:         task.TaskStatePending,
-				attempt:       0,
+				attempt:       1,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
 				timeSource:    s.mockTimeSource,
@@ -560,7 +561,7 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = s.config.ReplicatorHistoryBufferRetryCount() + 1
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
@@ -597,7 +598,7 @@ func (s *historyReplicationTaskSuite) TestRetryErr_Retryable() {
 	err := serviceerror.NewInternal("")
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
-	task.attempt = 0
+	task.attempt = 1
 	s.True(task.RetryErr(err))
 	s.False(task.req.GetForceBufferEvents())
 }
@@ -665,7 +666,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 				),
 				taskID:        replicationAttr.GetFirstEventId(),
 				state:         task.TaskStatePending,
-				attempt:       0,
+				attempt:       1,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
 				timeSource:    s.mockTimeSource,
@@ -711,7 +712,7 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
-	retryErr := serviceerror.NewRetryTask(
+	retryErr := serviceerrors.NewRetryTask(
 		"",
 		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
@@ -752,7 +753,7 @@ func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable() {
 	err := serviceerror.NewInternal("")
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
-	task.attempt = 0
+	task.attempt = 1
 	s.True(task.RetryErr(err))
 }
 

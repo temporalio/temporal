@@ -225,6 +225,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		return err
 	}
 
+	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
+
 	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.workflowTaskCompletedID, attr)
 	switch err.(type) {
 	case nil:
@@ -510,12 +512,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 		handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
 		return nil
 	case *serviceerror.InvalidArgument:
-		_, err = handler.mutableState.AddCancelTimerFailedEvent(
-			handler.workflowTaskCompletedID,
-			attr,
-			handler.identity,
-		)
-		return err
+		return handler.handlerFailCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES,
+			err.Error())
 	default:
 		return err
 	}
@@ -728,12 +726,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceID
+	parentNamespace := handler.namespaceEntry.GetInfo().GetName()
 	targetNamespaceID := namespaceID
+	targetNamespace := parentNamespace
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
+		targetNamespace = targetNamespaceEntry.GetInfo().Name
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
@@ -742,6 +743,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 			return handler.attrValidator.validateStartChildExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
+				targetNamespace,
 				attr,
 				executionInfo,
 			)

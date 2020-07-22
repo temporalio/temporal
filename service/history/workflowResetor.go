@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -335,7 +336,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	newTransferTasks = append(newTransferTasks,
 		&persistence.WorkflowTask{
 			NamespaceID: namespaceID,
-			TaskQueue:   workflowTask.TaskQueue,
+			TaskQueue:   workflowTask.TaskQueue.GetName(),
 			ScheduleID:  workflowTask.ScheduleID,
 		},
 		&persistence.RecordWorkflowStartedTask{},
@@ -800,7 +801,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	}
 	if baseMutableState.GetNextEventID() < workflowTaskFinishEventID {
 		// re-replicate the whole new run
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		return serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 	}
 
 	if currentRunID == resetAttr.GetBaseRunId() {
@@ -963,7 +964,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 	if lastEvent.GetEventId() != workflowTaskFinishEventID-1 || lastEvent.GetVersion() != forkEventVersion {
 		// re-replicate the whole new run
-		retError = newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		retError = serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 		return
 	}
 	startTime := time.Unix(0, firstEvent.GetTimestamp())
@@ -982,9 +983,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 
-	// always enforce the attempt to zero so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
+	// always enforce the attempt to 1 so that we can always schedule a new workflow task(skip trasientWorkflowTask logic)
 	workflowTask, _ := newMsBuilder.GetInFlightWorkflowTask()
-	workflowTask.Attempt = 0
+	workflowTask.Attempt = 1
 	newMsBuilder.UpdateWorkflowTask(workflowTask)
 
 	// before this, the mutable state is in replay mode
@@ -1020,7 +1021,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	workflowTask, _ = newMsBuilder.GetWorkflowTaskInfo(workflowTaskScheduledID)
 	transferTasks = append(transferTasks, &persistence.WorkflowTask{
 		NamespaceID:      namespaceID,
-		TaskQueue:        workflowTask.TaskQueue,
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduleID:       workflowTask.ScheduleID,
 		RecordVisibility: true,
 	})

@@ -63,7 +63,6 @@ var keys = map[Key]string{
 	EnableNDC:                              "system.enableNDC",
 	EnableNewKafkaClient:                   "system.enableNewKafkaClient",
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
-	EnableReadFromClosedExecutionV2:        "system.enableReadFromClosedExecutionV2",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
 	HistoryArchivalState:                   "system.historyArchivalState",
@@ -259,6 +258,7 @@ var keys = map[Key]string{
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
+	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -318,8 +318,6 @@ const (
 	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
-	// EnableReadFromClosedExecutionV2 is key for enable read from temporal_visibility.closed_executions_v2
-	EnableReadFromClosedExecutionV2
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
 	// EmitShardDiffLog whether emit the shard diff log
@@ -637,6 +635,9 @@ const (
 	NumArchiveSystemWorkflows
 	// ArchiveRequestRPS is the rate limit on the number of archive request per second
 	ArchiveRequestRPS
+	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
+	// the user has not specified an explicit RetryPolicy
+	DefaultActivityRetryPolicy
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
@@ -813,7 +814,7 @@ const (
 	TaskQueueName
 	// TaskType is the task type (0:Workflow, 1:Activity)
 	TaskType
-	// ShardID is the shard id
+	// RangeHash is the shard id
 	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose

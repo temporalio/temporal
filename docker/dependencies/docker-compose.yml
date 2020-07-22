@@ -53,6 +53,12 @@ services:
       - temporal-dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
+    # Make ES available both on _local_ and _site_,
+    # and use use _local_ for the publish_host.
+    #
+    # See here for details on network configuration:
+    # https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-network.html
+    command: elasticsearch -Enetwork.host=_local_,_site_ -Enetwork.publish_host=_local_
     container_name: temporal-elasticsearch
     ports:
       - "9200:9200"

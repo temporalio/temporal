@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -336,7 +337,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, namespaceID, workflowID, runID, nextEventID), err)
+	s.Equal(serviceerrors.NewRetryTask(ErrRetrySyncActivityMsg, namespaceID, workflowID, runID, nextEventID), err)
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVersionSmaller_DiscardTask() {
@@ -488,7 +489,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(newNDCRetryTaskErrorWithHint(
+	s.Equal(serviceerrors.NewRetryTaskV2(
 		resendHigherVersionMessage,
 		namespaceID,
 		workflowID,
@@ -577,7 +578,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(newNDCRetryTaskErrorWithHint(
+	s.Equal(serviceerrors.NewRetryTaskV2(
 		resendMissingEventMessage,
 		namespaceID,
 		workflowID,
@@ -861,7 +862,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(0)
+	attempt := int32(1)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 

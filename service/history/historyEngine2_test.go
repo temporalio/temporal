@@ -47,6 +47,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -395,7 +396,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&serviceerror.EventAlreadyStarted{}, err)
+	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
 	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
 
@@ -569,7 +570,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&serviceerror.EventAlreadyStarted{}, err)
+	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
 	s.logger.Info("Failed with error", tag.Error(err))
 }
 
@@ -850,9 +851,10 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
-		WorkflowId: "wId",
-		RunId:      we.GetRunId(),
-		ScheduleId: 2,
+		ScheduleAttempt: 1,
+		WorkflowId:      "wId",
+		RunId:           we.GetRunId(),
+		ScheduleId:      2,
 	}
 	serializedTaskToken, _ := taskToken.Marshal()
 	identity := "testIdentity"
@@ -912,6 +914,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
+		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                       namespaceID,
@@ -950,6 +953,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	}).Once()
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
+		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                       namespaceID,
@@ -986,6 +990,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	}).Once()
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
+		Attempt:     1,
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                       namespaceID,
@@ -1049,6 +1054,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		}
 
 		resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
 			NamespaceId: namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:                       namespaceID,
@@ -1130,6 +1136,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			}
 
 			resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
+				Attempt:     1,
 				NamespaceId: namespaceID,
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 					Namespace:                       namespaceID,

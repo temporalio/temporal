@@ -30,12 +30,12 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common/cassandra"
-
 	"github.com/gocql/gocql"
-	log "github.com/sirupsen/logrus"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
@@ -52,11 +52,13 @@ type TestCluster struct {
 	cluster   *gocql.ClusterConfig
 	session   *gocql.Session
 	cfg       config.Cassandra
+	logger    log.Logger
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string) *TestCluster {
+func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
 	var result TestCluster
+	result.logger = logger
 	result.keyspace = keyspace
 	if port == 0 {
 		port = environment.GetCassandraPort()
@@ -106,7 +108,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
 		temporalPackageDir, err := getTemporalPackageDir()
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
 		}
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
@@ -135,15 +137,15 @@ func (s *TestCluster) CreateSession() {
 	var err error
 	s.session, err = s.cluster.CreateSession()
 	if err != nil {
-		log.Fatal(`CreateSession`, err)
+		s.logger.Fatal("CreateSession", tag.Error(err))
 	}
 }
 
 // CreateDatabase from PersistenceTestCluster interface
 func (s *TestCluster) CreateDatabase() {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true)
+	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true, s.logger)
 	if err != nil {
-		log.Fatal(err)
+		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
 
 	s.cluster.Keyspace = s.DatabaseName()
@@ -151,9 +153,9 @@ func (s *TestCluster) CreateDatabase() {
 
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
-	err := DropCassandraKeyspace(s.session, s.DatabaseName())
+	err := DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}
 }
 
@@ -162,7 +164,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("loadCassandraSchema", tag.Error(err))
 	}
 }
 
@@ -171,7 +173,7 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
+		s.logger.Fatal("loadCassandraVisibilitySchema", tag.Error(err))
 	}
 }
 

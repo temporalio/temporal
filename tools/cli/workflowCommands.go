@@ -212,6 +212,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: int32(et),
@@ -558,11 +559,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if queryResponse.QueryRejected != nil {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
-		var queryResult string
-		err = payloads.Decode(queryResponse.QueryResult, &queryResult)
-		if err != nil {
-			ErrorAndExit("Unable to decode query result.", err)
-		}
+		queryResult := payloads.ToString(queryResponse.QueryResult)
 		fmt.Printf("Query result:\n%v\n", queryResult)
 	}
 }
@@ -1086,11 +1083,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
-		var result string
-		err := payloads.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionCompletedEventAttributes.Result.", err)
-		}
+		result := payloads.ToString(event.GetWorkflowExecutionCompletedEventAttributes().GetResult())
 		fmt.Printf("  Output: %s\n", result)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
@@ -1100,11 +1093,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
-		var details string
-		err := payloads.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionCanceledEventAttributes.Details.", err)
-		}
+		details := payloads.ToString(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails())
 		fmt.Printf("  Detail: %s\n", details)
 	}
 }

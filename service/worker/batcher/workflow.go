@@ -211,7 +211,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	if params.Concurrency <= 0 {
 		params.Concurrency = DefaultConcurrency
 	}
-	if params.AttemptsOnRetryableError <= 0 {
+	if params.AttemptsOnRetryableError <= 1 {
 		params.AttemptsOnRetryableError = DefaultAttemptsOnRetryableError
 	}
 	if params.ActivityHeartBeatTimeout <= 0 {
@@ -285,7 +285,7 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		for _, wf := range resp.Executions {
 			taskCh <- taskDetail{
 				execution: *wf.Execution,
-				attempts:  0,
+				attempts:  1,
 				hbd:       hbd,
 			}
 		}
@@ -397,7 +397,7 @@ func startTaskProcessor(
 				getActivityLogger(ctx).Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
-				if ok || task.attempts >= batchParams.AttemptsOnRetryableError {
+				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError

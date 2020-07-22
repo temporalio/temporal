@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -210,7 +211,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 				// Looks like WorkflowTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, serviceerror.NewEventAlreadyStarted("Workflow task already started.")
+				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(scheduleID, requestID, req.PollRequest)
@@ -306,7 +307,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	defer func() { release(retError) }()
 
 Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		msBuilder, err := weContext.loadWorkflowExecution()
 		if err != nil {
 			return nil, err
@@ -490,7 +491,7 @@ Update_History_Loop:
 				// start the new workflow task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(newWorkflowTask.ScheduleID, "request-from-RespondWorkflowTaskCompleted", &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: &taskqueuepb.TaskQueue{Name: newWorkflowTask.TaskQueue},
+					TaskQueue: newWorkflowTask.TaskQueue,
 					Identity:  request.Identity,
 				})
 				if err != nil {
@@ -610,7 +611,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTimestamp = workflowTask.ScheduledTimestamp
 	response.StartedTimestamp = workflowTask.StartedTimestamp
 
-	if workflowTask.Attempt > 0 {
+	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)

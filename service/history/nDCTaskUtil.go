@@ -94,7 +94,7 @@ func loadMutableStateForTransferTask(
 	// there will be no event generated, thus making the workflow task schedule ID == next event ID
 	isWorkflowTaskRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
 		executionInfo.WorkflowTaskScheduleID == transferTask.GetScheduleId() &&
-		executionInfo.WorkflowTaskAttempt > 0
+		executionInfo.WorkflowTaskAttempt > 1
 
 	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
@@ -139,7 +139,7 @@ func loadMutableStateForTimerTask(
 	// there will be no event generated, thus making the workflow task schedule ID == next event ID
 	isWorkflowTaskRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
 		executionInfo.WorkflowTaskScheduleID == timerTask.GetEventId() &&
-		executionInfo.WorkflowTaskAttempt > 0
+		executionInfo.WorkflowTaskAttempt > 1
 
 	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)

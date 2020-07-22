@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/config"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -756,7 +757,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		request.CurrentBranchToken = response.CurrentBranchToken
 	}
 	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-		return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
+		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
@@ -782,7 +783,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		}
 		// check again if the current branch token changed
 		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-			return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
+			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return response, nil
@@ -803,7 +804,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
-					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
+					return nil, serviceerrors.NewCurrentBranchChanged(event.currentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
@@ -1074,13 +1075,19 @@ func (e *historyEngineImpl) getMutableState(
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	retResp = &historyservice.GetMutableStateResponse{
-		Execution:                             &execution,
-		WorkflowType:                          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:                      mutableState.GetLastFirstEventID(),
-		NextEventId:                           mutableState.GetNextEventID(),
-		PreviousStartedEventId:                mutableState.GetPreviousStartedEventID(),
-		TaskQueue:                             &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
-		StickyTaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.StickyTaskQueue},
+		Execution:              &execution,
+		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+		LastFirstEventId:       mutableState.GetLastFirstEventID(),
+		NextEventId:            mutableState.GetNextEventID(),
+		PreviousStartedEventId: mutableState.GetPreviousStartedEventID(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: executionInfo.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		StickyTaskQueue: &taskqueuepb.TaskQueue{
+			Name: executionInfo.StickyTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		},
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
@@ -1221,10 +1228,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: executionInfo.TaskQueue},
-			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
-			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: executionInfo.TaskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			WorkflowExecutionTimeoutSeconds:   executionInfo.WorkflowExecutionTimeout,
+			WorkflowRunTimeoutSeconds:         executionInfo.WorkflowRunTimeout,
+			DefaultWorkflowTaskTimeoutSeconds: executionInfo.DefaultWorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
@@ -1308,6 +1318,8 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				if ai.LastWorkerIdentity != "" {
 					p.LastWorkerIdentity = ai.LastWorkerIdentity
 				}
+			} else {
+				p.Attempt = 1
 			}
 			result.PendingActivities = append(result.PendingActivities, p)
 		}
@@ -1394,7 +1406,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
 				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK))
-				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
+				return serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(
@@ -1913,14 +1925,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	var prevMutableState mutableState
-	attempt := 0
+	attempt := 1
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 
 	if err0 == nil {
 		defer func() { release(retError) }()
 	Just_Signal_Loop:
-		for ; attempt < conditionalRetryCount; attempt++ {
+		for ; attempt <= conditionalRetryCount; attempt++ {
 			// workflow not exist, will create workflow then signal
 			mutableState, err1 := context.loadWorkflowExecution()
 			if err1 != nil {
@@ -1970,7 +1982,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 			return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.getExecution().RunId}, nil
 		} // end for Just_Signal_Loop
-		if attempt == conditionalRetryCount {
+		if attempt == conditionalRetryCount+1 {
 			return nil, ErrMaxAttemptsExceeded
 		}
 	} else {
@@ -2448,7 +2460,7 @@ func (e *historyEngineImpl) updateWorkflowHelper(
 ) (retError error) {
 
 UpdateHistoryLoop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		weContext := workflowContext.getContext()
 		mutableState := workflowContext.getMutableState()
 
@@ -2459,7 +2471,7 @@ UpdateHistoryLoop:
 				// Handler detected that cached workflow mutable could potentially be stale
 				// Reload workflow execution history
 				workflowContext.getContext().clear()
-				if attempt != conditionalRetryCount-1 {
+				if attempt != conditionalRetryCount {
 					_, err = workflowContext.reloadMutableState()
 					if err != nil {
 						return err
@@ -2487,7 +2499,7 @@ UpdateHistoryLoop:
 
 		err = workflowContext.getContext().updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
 		if err == ErrConflict {
-			if attempt != conditionalRetryCount-1 {
+			if attempt != conditionalRetryCount {
 				_, err = workflowContext.reloadMutableState()
 				if err != nil {
 					return err
@@ -2645,13 +2657,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	metricsScope int,
 ) {
 	namespace := namespaceEntry.GetInfo().Name
-
-	executionTimeoutSeconds := request.GetWorkflowExecutionTimeoutSeconds()
-	if executionTimeoutSeconds == 0 {
-		executionTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowExecutionTimeout(namespace).Seconds())
-	}
-	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxWorkflowExecutionTimeout(namespace).Seconds())
-	executionTimeoutSeconds = common.MinInt32(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+	executionTimeoutSeconds := getWorkflowExecutionTimeout(namespace, request.GetWorkflowExecutionTimeoutSeconds(), e.config)
 	if executionTimeoutSeconds != request.GetWorkflowExecutionTimeoutSeconds() {
 		request.WorkflowExecutionTimeoutSeconds = executionTimeoutSeconds
 		e.metricsClient.Scope(
@@ -2660,13 +2666,8 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		).IncCounter(metrics.WorkflowExecutionTimeoutOverrideCount)
 	}
 
-	runTimeoutSeconds := request.GetWorkflowRunTimeoutSeconds()
-	if runTimeoutSeconds == 0 {
-		runTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowRunTimeout(namespace).Seconds())
-	}
-	maxWorkflowRunTimeout := convert.Int32Ceil(e.config.MaxWorkflowRunTimeout(namespace).Seconds())
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, maxWorkflowRunTimeout)
-	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, executionTimeoutSeconds)
+	runTimeoutSeconds := getWorkflowRunTimeout(namespace, request.GetWorkflowRunTimeoutSeconds(),
+		executionTimeoutSeconds, e.config)
 	if runTimeoutSeconds != request.GetWorkflowRunTimeoutSeconds() {
 		request.WorkflowRunTimeoutSeconds = runTimeoutSeconds
 		e.metricsClient.Scope(
@@ -3190,7 +3191,7 @@ func (e *historyEngineImpl) loadWorkflow(
 		return e.loadWorkflowOnce(ctx, namespaceID, workflowID, runID)
 	}
 
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 
 		workflowContext, err := e.loadWorkflowOnce(ctx, namespaceID, workflowID, "")
 		if err != nil {

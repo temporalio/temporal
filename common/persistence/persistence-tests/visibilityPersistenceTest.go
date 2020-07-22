@@ -123,7 +123,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 		NamespaceID:       testNamespaceUUID,
 		PageSize:          1,
 		EarliestStartTime: startTime,
-		LatestStartTime:   startTime,
+		LatestStartTime:   time.Now().UnixNano(),
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -179,8 +179,8 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
 		PageSize:          1,
-		EarliestStartTime: startTime,
-		LatestStartTime:   startTime,
+		EarliestStartTime: startTime - (15 * time.Second).Nanoseconds(),
+		LatestStartTime:   time.Now().UnixNano(),
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -331,7 +331,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
-			LatestStartTime:   startTime,
+			LatestStartTime:   time.Now().UnixNano(),
 		},
 		WorkflowTypeName: "visibility-workflow-2",
 	})
@@ -411,7 +411,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
-			LatestStartTime:   startTime,
+			LatestStartTime:   time.Now().UnixNano(),
 		},
 		WorkflowID: "visibility-filtering-test2",
 	})
@@ -479,7 +479,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
-			LatestStartTime:   startTime,
+			LatestStartTime:   time.Now().UnixNano(),
 		},
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	})

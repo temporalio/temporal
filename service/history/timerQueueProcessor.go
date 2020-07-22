@@ -274,7 +274,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 			return
 		case <-timer.C:
 		CompleteLoop:
-			for attempt := 0; attempt < t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
+			for attempt := 1; attempt <= t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timers.", tag.Error(err))
@@ -283,7 +283,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 						go t.Stop()
 						return
 					}
-					backoff := time.Duration(attempt * 100)
+					backoff := time.Duration((attempt - 1) * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {
 					break CompleteLoop

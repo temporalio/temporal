@@ -223,11 +223,12 @@ func newMutableStateBuilder(
 		metricsClient:   shard.GetMetricsClient(),
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
-		WorkflowTaskVersion:        common.EmptyVersion,
-		WorkflowTaskScheduleID:     common.EmptyEventID,
-		WorkflowTaskStartedID:      common.EmptyEventID,
-		WorkflowTaskRequestID:      emptyUUID,
-		CurrentWorkflowTaskTimeout: 0,
+		WorkflowTaskVersion:    common.EmptyVersion,
+		WorkflowTaskScheduleID: common.EmptyEventID,
+		WorkflowTaskStartedID:  common.EmptyEventID,
+		WorkflowTaskRequestID:  emptyUUID,
+		WorkflowTaskTimeout:    0,
+		WorkflowTaskAttempt:    1,
 
 		NextEventID:        common.FirstEventID,
 		State:              enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -961,10 +962,9 @@ func (e *mutableStateBuilder) shouldBufferEvent(
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_TIMER_STARTED,
 		// CommandTypeCancelTimer is an exception. This command will be mapped
-		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-		// So both should not be buffered. Ref: historyEngine, search for "workflow.CommandTypeCancelTimer"
+		// to workflow.EventTypeTimerCanceled.
+		// This event should not be buffered. Ref: historyEngine, search for "workflow.CommandTypeCancelTimer"
 		enumspb.EVENT_TYPE_TIMER_CANCELED,
-		enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED,
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_MARKER_RECORDED,
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
@@ -1462,16 +1462,21 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 // nolint:unused
 func (e *mutableStateBuilder) getWorkflowTaskInfo() *workflowTaskInfo {
 
-	taskQueue := e.executionInfo.TaskQueue
+	taskQueue := &taskqueuepb.TaskQueue{}
 	if e.IsStickyTaskQueueEnabled() {
-		taskQueue = e.executionInfo.StickyTaskQueue
+		taskQueue.Name = e.executionInfo.StickyTaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+	} else {
+		taskQueue.Name = e.executionInfo.TaskQueue
+		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
+
 	return &workflowTaskInfo{
 		Version:                    e.executionInfo.WorkflowTaskVersion,
 		ScheduleID:                 e.executionInfo.WorkflowTaskScheduleID,
 		StartedID:                  e.executionInfo.WorkflowTaskStartedID,
 		RequestID:                  e.executionInfo.WorkflowTaskRequestID,
-		WorkflowTaskTimeout:        e.executionInfo.CurrentWorkflowTaskTimeout,
+		WorkflowTaskTimeout:        e.executionInfo.WorkflowTaskTimeout,
 		Attempt:                    e.executionInfo.WorkflowTaskAttempt,
 		StartedTimestamp:           e.executionInfo.WorkflowTaskStartedTimestamp,
 		ScheduledTimestamp:         e.executionInfo.WorkflowTaskScheduledTimestamp,
@@ -1653,8 +1658,10 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	if attributes.TaskQueue != nil {
 		taskQueue = attributes.TaskQueue.GetName()
 	}
-	tl := &taskqueuepb.TaskQueue{}
-	tl.Name = taskQueue
+	tq := &taskqueuepb.TaskQueue{
+		Name: taskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	workflowType := previousExecutionInfo.WorkflowTypeName
 	if attributes.WorkflowType != nil {
@@ -1665,7 +1672,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var taskTimeout int32
 	if attributes.GetWorkflowTaskTimeoutSeconds() == 0 {
-		taskTimeout = previousExecutionInfo.WorkflowTaskTimeout
+		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
 	} else {
 		taskTimeout = attributes.GetWorkflowTaskTimeoutSeconds()
 	}
@@ -1678,7 +1685,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		RequestId:                       uuid.New(),
 		Namespace:                       e.namespaceEntry.GetInfo().Name,
 		WorkflowId:                      execution.WorkflowId,
-		TaskQueue:                       tl,
+		TaskQueue:                       tq,
 		WorkflowType:                    wType,
 		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
@@ -1702,6 +1709,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
+	} else {
+		req.Attempt = 1
 	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
 	if !workflowTimeoutTime.IsZero() {
@@ -1815,7 +1824,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeoutSeconds()
 	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeoutSeconds()
-	e.executionInfo.WorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
+	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1830,7 +1839,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskScheduleID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskStartedID = common.EmptyEventID
 	e.executionInfo.WorkflowTaskRequestID = emptyUUID
-	e.executionInfo.CurrentWorkflowTaskTimeout = 0
+	e.executionInfo.WorkflowTaskTimeout = 0
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
 	e.executionInfo.ParentNamespaceID = parentNamespaceID
@@ -1916,7 +1925,7 @@ func (e *mutableStateBuilder) ReplicateTransientWorkflowTaskScheduled() (*workfl
 func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
 	scheduleID int64,
-	taskQueue string,
+	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
 	scheduleTimestamp int64,
@@ -2191,6 +2200,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		TimerTaskStatus:          timerTaskStatusNone,
 		TaskQueue:                attributes.TaskQueue.GetName(),
 		HasRetryPolicy:           attributes.RetryPolicy != nil,
+		Attempt:                  1,
 	}
 	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 	if ai.HasRetryPolicy {
@@ -3191,23 +3201,6 @@ func (e *mutableStateBuilder) ReplicateTimerCanceledEvent(
 	timerID := attributes.GetTimerId()
 
 	return e.DeleteUserTimer(timerID)
-}
-
-func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
-	workflowTaskCompletedEventID int64,
-	attributes *commandpb.CancelTimerCommandAttributes,
-	identity string,
-) (*historypb.HistoryEvent, error) {
-
-	opTag := tag.WorkflowActionTimerCancelFailed
-	if err := e.checkMutability(opTag); err != nil {
-		return nil, err
-	}
-
-	// No Operation: We couldn't cancel it probably TIMER_ID_UNKNOWN
-	timerID := attributes.GetTimerId()
-	return e.hBuilder.AddCancelTimerFailedEvent(timerID, workflowTaskCompletedEventID,
-		timerCancellationMsgTimerIDUnknown, identity), nil
 }
 
 func (e *mutableStateBuilder) AddRecordMarkerEvent(

@@ -87,14 +87,14 @@ func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *historyservic
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddWorkflowTaskScheduledEvent(taskQueue string,
+func (b *historyBuilder) AddWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
 	event := b.newWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddTransientWorkflowTaskScheduledEvent(taskQueue string,
+func (b *historyBuilder) AddTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32, attempt int64, timestamp int64) *historypb.HistoryEvent {
 	event := b.newTransientWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt, timestamp)
 
@@ -283,21 +283,6 @@ func (b *historyBuilder) AddTimerCanceledEvent(startedEventID int64,
 
 	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_TIMER_CANCELED)
 	event.Attributes = &historypb.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: attributes}
-
-	return b.addEventToHistory(event)
-}
-
-func (b *historyBuilder) AddCancelTimerFailedEvent(timerID string, workflowTaskCompletedEventID int64,
-	cause string, identity string) *historypb.HistoryEvent {
-
-	attributes := &historypb.CancelTimerFailedEventAttributes{}
-	attributes.TimerId = timerID
-	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
-	attributes.Cause = cause
-	attributes.Identity = identity
-
-	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_CANCEL_TIMER_FAILED)
-	event.Attributes = &historypb.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: attributes}
 
 	return b.addEventToHistory(event)
 }
@@ -511,14 +496,14 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	return historyEvent
 }
 
-func (b *historyBuilder) newWorkflowTaskScheduledEvent(taskQueue string, startToCloseTimeoutSeconds int32,
+func (b *historyBuilder) newWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
 	attempt int64) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
-func (b *historyBuilder) newTransientWorkflowTaskScheduledEvent(taskQueue string, startToCloseTimeoutSeconds int32,
+func (b *historyBuilder) newTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
 	attempt int64, timestamp int64) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEventWithTimestamp(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, timestamp)
 
@@ -1023,7 +1008,7 @@ func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string
 	return historyEvent
 }
 
-func newWorkflowTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue string, startToCloseTimeoutSeconds int32,
+func newWorkflowTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
 	attempt int64) *historypb.HistoryEvent {
 	historyEvent := createNewHistoryEvent(eventID, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, timestamp)
 
@@ -1046,11 +1031,10 @@ func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, timestamp
 	return historyEvent
 }
 
-func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskQueue string,
+func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
 	attributes := &historypb.WorkflowTaskScheduledEventAttributes{}
-	attributes.TaskQueue = &taskqueuepb.TaskQueue{}
-	attributes.TaskQueue.Name = taskQueue
+	attributes.TaskQueue = taskQueue
 	attributes.StartToCloseTimeoutSeconds = startToCloseTimeoutSeconds
 	attributes.Attempt = attempt
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: attributes}

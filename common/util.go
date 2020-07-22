@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -226,7 +227,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.ResourceExhausted,
-		*serviceerror.ShardOwnershipLost,
+		*serviceerrors.ShardOwnershipLost,
 		*serviceerror.DeadlineExceeded,
 		*serviceerror.Unavailable:
 		return true
@@ -372,6 +373,11 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		// nil policy is valid which means no retry
 		return nil
 	}
+	if policy.GetMaximumAttempts() == 1 {
+		// One maximum attempt effectively disable retries. Validating the
+		// rest of the arguments is pointless
+		return nil
+	}
 	if policy.GetInitialIntervalInSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
 	}
@@ -400,6 +406,7 @@ func CreateHistoryStartWorkflowRequest(
 		NamespaceId:            namespaceID,
 		StartRequest:           startRequest,
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Attempt:                1,
 	}
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
 		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()

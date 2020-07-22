@@ -25,7 +25,6 @@
 package namespace
 
 import (
-	"github.com/gogo/protobuf/types"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 
@@ -85,7 +84,6 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 				HistoryArchivalState:                   config.HistoryArchivalState,
 				HistoryArchivalUri:                     config.HistoryArchivalUri,
 				VisibilityArchivalState:                config.VisibilityArchivalState,

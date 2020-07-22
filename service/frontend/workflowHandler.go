@@ -525,7 +525,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -1262,11 +1262,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1466,11 +1467,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1663,11 +1665,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1858,11 +1861,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId: namespaceID,
-		RunId:       runID,
-		WorkflowId:  workflowID,
-		ScheduleId:  common.EmptyEventID,
-		ActivityId:  activityID,
+		NamespaceId:     namespaceID,
+		RunId:           runID,
+		WorkflowId:      workflowID,
+		ScheduleId:      common.EmptyEventID,
+		ActivityId:      activityID,
+		ScheduleAttempt: 1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1953,7 +1957,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2005,7 +2009,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, wh.error(errNamespaceTooLong, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2229,7 +2233,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2277,7 +2281,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecution(request.WorkflowExecution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2866,8 +2870,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		NamespaceId:      queryTaskToken.GetNamespaceId(),
-		TaskQueue:        &taskqueuepb.TaskQueue{Name: queryTaskToken.GetTaskQueue()},
+		NamespaceId: queryTaskToken.GetNamespaceId(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: queryTaskToken.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
 		TaskId:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}
@@ -2908,7 +2915,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2953,7 +2960,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	if request.GetNamespace() == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -3030,7 +3037,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -3085,10 +3092,6 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 
 	if err := wh.validateTaskQueue(request.TaskQueue, scope); err != nil {
 		return nil, err
-	}
-
-	if request.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return nil, wh.error(errTaskQueueTypeNotSet, scope)
 	}
 
 	var matchingResponse *matchingservice.DescribeTaskQueueResponse
@@ -3411,7 +3414,7 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, scope met
 	return nil
 }
 
-func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateExecution(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
 	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)

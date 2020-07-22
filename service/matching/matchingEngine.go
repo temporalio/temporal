@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 // Implements matching.Engine
@@ -381,6 +382,7 @@ pollLoop:
 				WorkflowExecutionTaskQueue: mutableStateResp.TaskQueue,
 				BranchToken:                mutableStateResp.CurrentBranchToken,
 				StartedEventId:             common.EmptyEventID,
+				Attempt:                    1,
 			}
 			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
 		}
@@ -388,7 +390,7 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug(fmt.Sprintf("Duplicated workflow task taskQueue=%v, taskID=%v",
 					taskQueueName, task.event.GetTaskId()))
 				task.finish(nil)
@@ -455,7 +457,7 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.Name(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
@@ -615,23 +617,24 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 		*request.TaskQueue,
 		taskQueueType,
 	)
-	if err != nil {
-		return nil, err
-	}
-	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
 
 	if err != nil {
 		return nil, err
 	}
-	for _, partition := range partitions {
-		if host, err := e.getHostInfo(partition); err != nil {
-			partitionHostInfo = append(partitionHostInfo,
-				&taskqueuepb.TaskQueuePartitionMetadata{
-					Key:           partition,
-					OwnerHostName: host,
-				})
+
+	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
+	for i, partition := range partitions {
+		host, err := e.getHostInfo(partition)
+		if err != nil {
+			return nil, err
+		}
+
+		partitionHostInfo[i] = &taskqueuepb.TaskQueuePartitionMetadata{
+			Key:           partition,
+			OwnerHostName: host,
 		}
 	}
+
 	return partitionHostInfo, nil
 }
 
@@ -810,7 +813,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true
@@ -839,7 +842,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true

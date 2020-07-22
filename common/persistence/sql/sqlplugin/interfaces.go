@@ -63,14 +63,14 @@ type (
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
-		RPCAddressEquals          string
-		HostIDEquals              []byte
-		RoleEquals                persistence.ServiceType
-		LastHeartbeatAfter        time.Time
-		RecordExpiryAfter         time.Time
-		SessionStartedAfter       time.Time
-		MaxRecordCount            int
-		InsertionOrderGreaterThan uint64
+		RPCAddressEquals    string
+		HostIDEquals        []byte
+		HostIDGreaterThan   []byte
+		RoleEquals          persistence.ServiceType
+		LastHeartbeatAfter  time.Time
+		RecordExpiryAfter   time.Time
+		SessionStartedAfter time.Time
+		MaxRecordCount      int
 	}
 
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
@@ -205,20 +205,18 @@ type (
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		NamespaceID   primitives.UUID
-		TaskType      int64
-		TaskID        int64
-		TaskQueueName string
-		Data          []byte
-		DataEncoding  string
+		RangeHash    uint32
+		TaskQueueID  []byte
+		TaskID       int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		NamespaceID          primitives.UUID
-		TaskQueueName        string
-		TaskType             int64
+		RangeHash            uint32
+		TaskQueueID          []byte
 		TaskID               *int64
 		MinTaskID            *int64
 		MaxTaskID            *int64
@@ -229,10 +227,8 @@ type (
 
 	// TaskQueuesRow represents a row in task_queues table
 	TaskQueuesRow struct {
-		ShardID      int
-		NamespaceID  primitives.UUID
-		Name         string
-		TaskType     int64
+		RangeHash    uint32
+		TaskQueueID  []byte
 		RangeID      int64
 		Data         []byte
 		DataEncoding string
@@ -241,15 +237,13 @@ type (
 	// TaskQueuesFilter contains the column names within task_queues table that
 	// can be used to filter results through a WHERE clause
 	TaskQueuesFilter struct {
-		ShardID                int
-		NamespaceID            *primitives.UUID
-		Name                   *string
-		TaskType               *int64
-		NamespaceIDGreaterThan *primitives.UUID
-		NameGreaterThan        *string
-		TaskTypeGreaterThan    *int64
-		RangeID                *int64
-		PageSize               *int
+		RangeHash                   uint32
+		RangeHashGreaterThanEqualTo uint32
+		RangeHashLessThanEqualTo    uint32
+		TaskQueueID                 []byte
+		TaskQueueIDGreaterThan      []byte
+		RangeID                     *int64
+		PageSize                    *int
 	}
 
 	// ReplicationTasksRow represents a row in replication_tasks table

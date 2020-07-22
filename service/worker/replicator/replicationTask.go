@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
 )
@@ -128,7 +129,7 @@ func newActivityReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetScheduledId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -185,7 +186,7 @@ func newHistoryReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -243,7 +244,7 @@ func newHistoryMetadataReplicationTask(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -285,7 +286,7 @@ func newHistoryReplicationV2Task(
 				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetTaskId(),
-			attempt:       0,
+			attempt:       1,
 			kafkaMsg:      msg,
 			logger:        logger,
 			state:         task.TaskStatePending,
@@ -318,12 +319,12 @@ func (t *activityReplicationTask) Execute() error {
 func (t *activityReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorActivityBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorActivityBufferRetryCount() {
 		return err
 	}
 
-	retryV1Err, okV1 := t.convertRetryTaskError(err)
-	retryV2Err, okV2 := t.convertRetryTaskV2Error(err)
+	retryV1Err, okV1 := err.(*serviceerrors.RetryTask)
+	retryV2Err, okV2 := err.(*serviceerrors.RetryTaskV2)
 
 	if !okV1 && !okV2 {
 		return err
@@ -387,11 +388,11 @@ func (t *historyReplicationTask) Execute() error {
 func (t *historyReplicationTask) HandleErr(
 	err error,
 ) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -444,7 +445,7 @@ func (t *historyMetadataReplicationTask) Execute() error {
 func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
-	retryErr, ok := t.convertRetryTaskError(err)
+	retryErr, ok := err.(*serviceerrors.RetryTask)
 	if !ok || retryErr.RunId == "" {
 		return err
 	}
@@ -479,11 +480,11 @@ func (t *historyReplicationV2Task) Execute() error {
 }
 
 func (t *historyReplicationV2Task) HandleErr(err error) error {
-	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
+	if t.attempt <= t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
 
-	retryErr, ok := t.convertRetryTaskV2Error(err)
+	retryErr, ok := err.(*serviceerrors.RetryTaskV2)
 	if !ok {
 		return err
 	}
@@ -557,20 +558,4 @@ func (t *workflowReplicationTask) Nack() {
 	if err != nil {
 		t.logger.Error("Unable to nack.")
 	}
-}
-
-func (t *workflowReplicationTask) convertRetryTaskError(
-	err error,
-) (*serviceerror.RetryTask, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTask)
-	return retError, ok
-}
-
-func (t *workflowReplicationTask) convertRetryTaskV2Error(
-	err error,
-) (*serviceerror.RetryTaskV2, bool) {
-
-	retError, ok := err.(*serviceerror.RetryTaskV2)
-	return retError, ok
 }

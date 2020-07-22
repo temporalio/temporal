@@ -51,21 +51,20 @@ import (
 type Config struct {
 	NumberOfShards int
 
-	EnableNDC                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RPS                             dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS         dynamicconfig.IntPropertyFn
-	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
-	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
-	VisibilityOpenMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	VisibilityClosedMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	AdvancedVisibilityWritingMode   dynamicconfig.StringPropertyFn
-	EmitShardDiffLog                dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS                 dynamicconfig.IntPropertyFn
-	EnableStickyQuery               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
+	EnableNDC                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RPS                           dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
+	EnableVisibilitySampling      dynamicconfig.BoolPropertyFn
+	VisibilityOpenMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	VisibilityClosedMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	AdvancedVisibilityWritingMode dynamicconfig.StringPropertyFn
+	EmitShardDiffLog              dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS               dynamicconfig.IntPropertyFn
+	EnableStickyQuery             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration         dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -199,6 +198,10 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
+	// none is configured on the Activity by the user.
+	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFn
+
 	// Workflow task settings
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
 	// TODO https://go.temporal.io/server/issues/2357
@@ -264,7 +267,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
 		ShutdownDrainDuration:                dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
 		EnableVisibilitySampling:             dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2:      dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityOpenMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
 		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, defaultHistoryMaxAutoResetPoints),
@@ -374,6 +376,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
+		DefaultActivityRetryPolicy:                       dc.GetMapProperty(dynamicconfig.DefaultActivityRetryPolicy, getDefaultActivityRetryPolicyConfigOptions()),
 		ValidSearchAttributes:                            dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
@@ -439,10 +442,9 @@ func NewService(
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:            serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS:          serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
+		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
+		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
+		EnableSampling:         serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
