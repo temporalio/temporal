@@ -254,7 +254,7 @@ var flagsForPagination = []cli.Flag{
 	cli.IntFlag{
 		Name:  FlagPageSizeWithAlias,
 		Value: 10,
-		Usage: "Items per size. Default: 10",
+		Usage: "Items per page. Default: 10",
 	},
 }
 
