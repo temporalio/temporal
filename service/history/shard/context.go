@@ -515,7 +515,7 @@ Create_Loop:
 							tag.Error(err),
 						)
 						s.closeShard()
-						break Create_Loop
+						return nil, err
 					}
 				}
 			default:
