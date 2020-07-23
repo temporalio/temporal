@@ -58,7 +58,7 @@ func init() {
 }
 
 func visibilityArchivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64) error {
-	profile, err := beginWorkflow(ctx, wfTypeHistoryArchival, scheduledTimeNanos)
+	profile, err := beginWorkflow(ctx, wfTypeVisibilityArchival, scheduledTimeNanos)
 	if err != nil {
 		return err
 	}
