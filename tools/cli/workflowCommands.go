@@ -969,11 +969,11 @@ func convertFailure(failure *failurepb.Failure) *clispb.Failure {
 	}
 
 	return &clispb.Failure{
-		Message:         failure.GetMessage(),
-		Source:          failure.GetSource(),
-		StackTrace:      failure.GetStackTrace(),
-		Cause:           convertFailure(failure.GetCause()),
-		FailureInfoType: reflect.TypeOf(failure.GetFailureInfo()).Elem().Name(),
+		Message:     failure.GetMessage(),
+		Source:      failure.GetSource(),
+		StackTrace:  failure.GetStackTrace(),
+		Cause:       convertFailure(failure.GetCause()),
+		FailureType: reflect.TypeOf(failure.GetFailureInfo()).Elem().Name(),
 	}
 }
 
@@ -1628,7 +1628,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	if resp.WorkflowExecutionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
-			//skip and not terminate current if open
+			// skip and not terminate current if open
 			return nil
 		}
 	}

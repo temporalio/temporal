@@ -74,5 +74,5 @@ message Failure {
     string source = 2;
     string stack_trace = 3;
     Failure cause = 4;
-    string failure_info_type = 5;
+    string failure_type = 5;
 }
