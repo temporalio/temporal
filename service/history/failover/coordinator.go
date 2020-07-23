@@ -269,6 +269,13 @@ func (c *coordinatorImpl) handleFailoverMarkers(
 			return
 		}
 		delete(c.recorder, domainID)
+		now := c.timeSource.Now()
+		c.metrics.Scope(
+			metrics.HistoryFailoverMarkerScope,
+		).RecordTimer(
+			metrics.GracefulFailoverLatency,
+			now.Sub(time.Unix(0, marker.GetCreationTime())),
+		)
 	}
 }
 
