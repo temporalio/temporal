@@ -617,23 +617,24 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 		*request.TaskQueue,
 		taskQueueType,
 	)
-	if err != nil {
-		return nil, err
-	}
-	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
 
 	if err != nil {
 		return nil, err
 	}
-	for _, partition := range partitions {
-		if host, err := e.getHostInfo(partition); err != nil {
-			partitionHostInfo = append(partitionHostInfo,
-				&taskqueuepb.TaskQueuePartitionMetadata{
-					Key:           partition,
-					OwnerHostName: host,
-				})
+
+	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
+	for i, partition := range partitions {
+		host, err := e.getHostInfo(partition)
+		if err != nil {
+			return nil, err
+		}
+
+		partitionHostInfo[i] = &taskqueuepb.TaskQueuePartitionMetadata{
+			Key:           partition,
+			OwnerHostName: host,
 		}
 	}
+
 	return partitionHostInfo, nil
 }
 

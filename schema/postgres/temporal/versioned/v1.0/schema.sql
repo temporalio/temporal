@@ -243,6 +243,7 @@ CREATE TABLE cluster_metadata (
 
 CREATE TABLE cluster_membership
 (
+    membership_partition INTEGER NOT NULL,
     host_id              BYTEA NOT NULL,
     rpc_address          VARCHAR(15) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
@@ -250,8 +251,7 @@ CREATE TABLE cluster_membership
     session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-    insertion_order      BIGSERIAL NOT NULL UNIQUE,
-    PRIMARY KEY (host_id)
+    PRIMARY KEY (membership_partition, host_id)
 );
 
 CREATE UNIQUE INDEX cm_idx_rolehost ON cluster_membership (role, host_id);
