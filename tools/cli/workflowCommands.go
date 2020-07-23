@@ -33,6 +33,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -913,7 +914,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			Attempt:                pa.GetAttempt(),
 			MaximumAttempts:        pa.GetMaximumAttempts(),
 			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
-			LastFailure:            pa.GetLastFailure().String(),
+			LastFailure:            convertFailure(pa.GetLastFailure()),
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 
@@ -960,6 +961,20 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	}
 
 	return result
+}
+
+func convertFailure(failure *failurepb.Failure) *clispb.Failure {
+	if failure == nil {
+		return nil
+	}
+
+	return &clispb.Failure{
+		Message:     failure.GetMessage(),
+		Source:      failure.GetSource(),
+		StackTrace:  failure.GetStackTrace(),
+		Cause:       convertFailure(failure.GetCause()),
+		FailureType: reflect.TypeOf(failure.GetFailureInfo()).Elem().Name(),
+	}
 }
 
 func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *tablewriter.Table {
@@ -1087,7 +1102,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Output: %s\n", result)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
-		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
+		fmt.Printf("  Failure: %s\n", convertFailure(event.GetWorkflowExecutionFailedEventAttributes().GetFailure()).String())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
 		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
@@ -1613,7 +1628,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	if resp.WorkflowExecutionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
-			//skip and not terminate current if open
+			// skip and not terminate current if open
 			return nil
 		}
 	}
