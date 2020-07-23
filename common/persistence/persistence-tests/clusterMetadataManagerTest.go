@@ -26,12 +26,9 @@ package persistencetests
 
 import (
 	"net"
-	"os"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 
@@ -52,9 +49,6 @@ type (
 
 // SetupSuite implementation
 func (s *ClusterMetadataManagerSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // SetupTest implementation
@@ -101,7 +95,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	// Expire previous records
 	// Todo: MetaMgr should provide api to clear all members
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 3)
 	err := s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
 	s.Nil(err)
 
@@ -115,7 +109,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 			RPCPort:      123,
 			Role:         p.Frontend,
 			SessionStart: time.Now().UTC(),
-			RecordExpiry: time.Second,
+			RecordExpiry: 3 * time.Second,
 		}
 
 		err := s.ClusterMetadataManager.UpsertClusterMembership(req)
@@ -143,7 +137,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		s.Zero(val, "identifier was either not found in db, or shouldn't be there - "+id)
 	}
 
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 3)
 	err = s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
 	s.NoError(err)
 }
