@@ -61,10 +61,18 @@ message PendingActivityInfo {
     int32 maximum_attempts = 8;
     string scheduled_timestamp = 9;
     string expiration_timestamp = 10;
-    string last_failure = 11;
+    Failure last_failure = 11;
     string last_worker_identity = 12;
 }
 
 message SearchAttributes {
     map<string, string> indexed_fields = 1;
+}
+
+message Failure {
+    string message = 1;
+    string source = 2;
+    string stack_trace = 3;
+    Failure cause = 4;
+    string failure_type = 5;
 }
