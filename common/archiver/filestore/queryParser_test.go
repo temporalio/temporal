@@ -159,6 +159,27 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			},
 		},
 		{
+			query:     "ExecutionStatus = \"failed\"",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+			},
+		},
+		{
+			query:     "ExecutionStatus = \"canceled\"",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
+			},
+		},
+		{
+			query:     "ExecutionStatus = \"terminated\"",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED),
+			},
+		},
+		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{

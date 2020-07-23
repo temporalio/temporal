@@ -256,6 +256,8 @@ func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error)
 		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
 	case "canceled", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "terminated", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
 	case "continuedasnew", "continued_as_new", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
 	case "timedout", "timed_out", strconv.Itoa(int(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
