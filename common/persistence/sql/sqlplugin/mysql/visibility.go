@@ -37,9 +37,11 @@ const (
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
+	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+		`ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
+		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
