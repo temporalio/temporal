@@ -51,7 +51,7 @@ func (s *OpenCurrentExecutionSuite) SetupTest() {
 
 func (s *OpenCurrentExecutionSuite) TestCheck() {
 	testCases := []struct {
-		execution       common.Execution
+		execution       common.ConcreteExecution
 		getCurrentResp  *persistence.GetCurrentExecutionResponse
 		getCurrentErr   error
 		getConcreteResp *persistence.GetWorkflowExecutionResponse

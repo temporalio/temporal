@@ -1,17 +1,17 @@
 // The MIT License (MIT)
-// 
+//
 // Copyright (c) 2017-2020 Uber Technologies Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -27,9 +27,10 @@
 package common
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/uber/cadence/common/persistence"
-	reflect "reflect"
 )
 
 // MockPersistenceRetryer is a mock of PersistenceRetryer interface
@@ -167,7 +168,7 @@ func (m *MockInvariantManager) EXPECT() *MockInvariantManagerMockRecorder {
 }
 
 // RunChecks mocks base method
-func (m *MockInvariantManager) RunChecks(arg0 Execution) ManagerCheckResult {
+func (m *MockInvariantManager) RunChecks(arg0 interface{}) ManagerCheckResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunChecks", arg0)
 	ret0, _ := ret[0].(ManagerCheckResult)
@@ -181,7 +182,7 @@ func (mr *MockInvariantManagerMockRecorder) RunChecks(arg0 interface{}) *gomock.
 }
 
 // RunFixes mocks base method
-func (m *MockInvariantManager) RunFixes(arg0 Execution) ManagerFixResult {
+func (m *MockInvariantManager) RunFixes(arg0 interface{}) ManagerFixResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunFixes", arg0)
 	ret0, _ := ret[0].(ManagerFixResult)
@@ -232,7 +233,7 @@ func (m *MockInvariant) EXPECT() *MockInvariantMockRecorder {
 }
 
 // Check mocks base method
-func (m *MockInvariant) Check(arg0 Execution) CheckResult {
+func (m *MockInvariant) Check(arg0 interface{}) CheckResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Check", arg0)
 	ret0, _ := ret[0].(CheckResult)
@@ -246,7 +247,7 @@ func (mr *MockInvariantMockRecorder) Check(arg0 interface{}) *gomock.Call {
 }
 
 // Fix mocks base method
-func (m *MockInvariant) Fix(arg0 Execution) FixResult {
+func (m *MockInvariant) Fix(arg0 interface{}) FixResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Fix", arg0)
 	ret0, _ := ret[0].(FixResult)
@@ -297,10 +298,10 @@ func (m *MockExecutionIterator) EXPECT() *MockExecutionIteratorMockRecorder {
 }
 
 // Next mocks base method
-func (m *MockExecutionIterator) Next() (*Execution, error) {
+func (m *MockExecutionIterator) Next() (interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(*Execution)
+	ret0, _ := ret[0].(interface{})
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

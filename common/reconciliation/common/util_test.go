@@ -65,113 +65,133 @@ func (s *UtilSuite) SetupTest() {
 
 func (s *UtilSuite) TestValidateExecution() {
 	testCases := []struct {
-		execution   *Execution
+		execution   *ConcreteExecution
 		expectError bool
 	}{
 		{
-			execution:   &Execution{},
+			execution:   &ConcreteExecution{},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID: -1,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID: -1,
+				},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID: 0,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID: 0,
+				},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:  0,
-				DomainID: domainID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:  0,
+					DomainID: domainID,
+				},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:    0,
-				DomainID:   domainID,
-				WorkflowID: workflowID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+				},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:    0,
-				DomainID:   domainID,
-				WorkflowID: workflowID,
-				RunID:      runID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+				},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:     0,
-				DomainID:    domainID,
-				WorkflowID:  workflowID,
-				RunID:       runID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+				},
 				BranchToken: []byte{1, 2, 3},
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:     0,
-				DomainID:    domainID,
-				WorkflowID:  workflowID,
-				RunID:       runID,
-				BranchToken: []byte{1, 2, 3},
-				TreeID:      treeID,
-			},
-			expectError: true,
-		},
-		{
-			execution: &Execution{
-				ShardID:     0,
-				DomainID:    domainID,
-				WorkflowID:  workflowID,
-				RunID:       runID,
-				BranchToken: []byte{1, 2, 3},
-				TreeID:      treeID,
-				BranchID:    branchID,
-				State:       persistence.WorkflowStateCreated - 1,
-			},
-			expectError: true,
-		},
-		{
-			execution: &Execution{
-				ShardID:     0,
-				DomainID:    domainID,
-				WorkflowID:  workflowID,
-				RunID:       runID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+				},
 				BranchToken: []byte{1, 2, 3},
 				TreeID:      treeID,
-				BranchID:    branchID,
-				State:       persistence.WorkflowStateCorrupted + 1,
 			},
 			expectError: true,
 		},
 		{
-			execution: &Execution{
-				ShardID:     0,
-				DomainID:    domainID,
-				WorkflowID:  workflowID,
-				RunID:       runID,
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+					State:      persistence.WorkflowStateCreated - 1,
+				},
 				BranchToken: []byte{1, 2, 3},
 				TreeID:      treeID,
 				BranchID:    branchID,
-				State:       persistence.WorkflowStateCreated,
+			},
+			expectError: true,
+		},
+		{
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+					State:      persistence.WorkflowStateCorrupted + 1,
+				},
+				BranchToken: []byte{1, 2, 3},
+				TreeID:      treeID,
+				BranchID:    branchID,
+			},
+			expectError: true,
+		},
+		{
+			execution: &ConcreteExecution{
+				Execution: Execution{
+					ShardID:    0,
+					DomainID:   domainID,
+					WorkflowID: workflowID,
+					RunID:      runID,
+					State:      persistence.WorkflowStateCreated,
+				},
+				BranchToken: []byte{1, 2, 3},
+				TreeID:      treeID,
+				BranchID:    branchID,
 			},
 			expectError: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		err := ValidateExecution(tc.execution)
+		err := ValidateConcreteExecution(tc.execution)
 		if tc.expectError {
 			s.Error(err)
 		} else {

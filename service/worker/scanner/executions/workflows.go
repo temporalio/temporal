@@ -85,6 +85,7 @@ type (
 	ScannerWorkflowParams struct {
 		Shards                          Shards
 		ScannerWorkflowConfigOverwrites ScannerWorkflowConfigOverwrites
+		ScanType                        common.ScanType
 	}
 
 	// FixerWorkflowParams are the parameters to the fix workflow
@@ -300,6 +301,7 @@ func ScannerWorkflow(
 					ExecutionsPageSize:      resolvedConfig.ExecutionsPageSize,
 					BlobstoreFlushThreshold: resolvedConfig.BlobstoreFlushThreshold,
 					InvariantCollections:    resolvedConfig.InvariantCollections,
+					ScanType:                params.ScanType,
 				}).Get(ctx, &reports); err != nil {
 					errStr := err.Error()
 					shardReportChan.Send(ctx, ScanReportError{

@@ -38,8 +38,8 @@ type (
 	// InvariantManager represents a manager of several invariants.
 	// It can be used to run a group of invariant checks or fixes.
 	InvariantManager interface {
-		RunChecks(Execution) ManagerCheckResult
-		RunFixes(Execution) ManagerFixResult
+		RunChecks(interface{}) ManagerCheckResult
+		RunFixes(interface{}) ManagerFixResult
 		InvariantTypes() []InvariantType
 	}
 
@@ -47,8 +47,8 @@ type (
 	// It can be used to check that the execution satisfies the invariant.
 	// It can also be used to fix the invariant for an execution.
 	Invariant interface {
-		Check(Execution) CheckResult
-		Fix(Execution) FixResult
+		Check(interface{}) CheckResult
+		Fix(interface{}) FixResult
 		InvariantType() InvariantType
 	}
 
@@ -56,7 +56,7 @@ type (
 	ExecutionIterator interface {
 		// Next returns the next execution found. Any error reading from underlying store
 		// or converting store entry to Execution will result in an error after which iterator cannot be used.
-		Next() (*Execution, error)
+		Next() (interface{}, error)
 		// HasNext indicates if the iterator has a next element. If HasNext is true
 		// it is guaranteed that Next will return a nil error and a non-nil Execution.
 		HasNext() bool

@@ -44,7 +44,7 @@ func NewInvariantManager(
 }
 
 // RunChecks runs all enabled checks.
-func (i *invariantManager) RunChecks(execution common.Execution) common.ManagerCheckResult {
+func (i *invariantManager) RunChecks(execution interface{}) common.ManagerCheckResult {
 	result := common.ManagerCheckResult{
 		CheckResultType:          common.CheckResultTypeHealthy,
 		DeterminingInvariantType: nil,
@@ -63,7 +63,7 @@ func (i *invariantManager) RunChecks(execution common.Execution) common.ManagerC
 }
 
 // RunFixes runs all enabled fixes.
-func (i *invariantManager) RunFixes(execution common.Execution) common.ManagerFixResult {
+func (i *invariantManager) RunFixes(execution interface{}) common.ManagerFixResult {
 	result := common.ManagerFixResult{
 		FixResultType:            common.FixResultTypeSkipped,
 		DeterminingInvariantType: nil,

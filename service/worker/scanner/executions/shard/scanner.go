@@ -52,11 +52,12 @@ func NewScanner(
 	blobstoreFlushThreshold int,
 	invariantCollections []common.InvariantCollection,
 	progressReportFn func(),
+	scanType common.ScanType,
 ) common.Scanner {
 	id := uuid.New()
 	return &scanner{
 		shardID:          shardID,
-		itr:              common.NewPersistenceIterator(pr, persistencePageSize, shardID),
+		itr:              common.NewPersistenceIterator(pr, persistencePageSize, shardID, scanType),
 		failedWriter:     common.NewBlobstoreWriter(id, common.FailedExtension, blobstoreClient, blobstoreFlushThreshold),
 		corruptedWriter:  common.NewBlobstoreWriter(id, common.CorruptedExtension, blobstoreClient, blobstoreFlushThreshold),
 		invariantManager: invariants.NewInvariantManager(invariantCollections, pr),
@@ -83,14 +84,14 @@ func (s *scanner) Scan() common.ShardScanReport {
 			}
 			return result
 		}
-		checkResult := s.invariantManager.RunChecks(*exec)
+		checkResult := s.invariantManager.RunChecks(exec)
 		result.Stats.ExecutionsCount++
 		switch checkResult.CheckResultType {
 		case common.CheckResultTypeHealthy:
 			// do nothing if execution is healthy
 		case common.CheckResultTypeCorrupted:
 			if err := s.corruptedWriter.Add(common.ScanOutputEntity{
-				Execution: *exec,
+				Execution: exec,
 				Result:    checkResult,
 			}); err != nil {
 				result.Result.ControlFlowFailure = &common.ControlFlowFailure{
@@ -101,12 +102,12 @@ func (s *scanner) Scan() common.ShardScanReport {
 			}
 			result.Stats.CorruptedCount++
 			result.Stats.CorruptionByType[*checkResult.DeterminingInvariantType]++
-			if common.Open(exec.State) {
+			if common.ExecutionOpen(exec) {
 				result.Stats.CorruptedOpenExecutionCount++
 			}
 		case common.CheckResultTypeFailed:
 			if err := s.failedWriter.Add(common.ScanOutputEntity{
-				Execution: *exec,
+				Execution: exec,
 				Result:    checkResult,
 			}); err != nil {
 				result.Result.ControlFlowFailure = &common.ControlFlowFailure{

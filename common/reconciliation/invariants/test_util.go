@@ -42,28 +42,32 @@ var (
 	branchToken = []byte{1, 2, 3}
 )
 
-func getOpenExecution() common.Execution {
-	return common.Execution{
-		ShardID:     shardID,
-		DomainID:    domainID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+func getOpenExecution() common.ConcreteExecution {
+	return common.ConcreteExecution{
+		Execution: common.Execution{
+			ShardID:    shardID,
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			RunID:      runID,
+			State:      openState,
+		},
 		BranchToken: branchToken,
 		TreeID:      treeID,
 		BranchID:    branchID,
-		State:       openState,
 	}
 }
 
-func getClosedExecution() common.Execution {
-	return common.Execution{
-		ShardID:     shardID,
-		DomainID:    domainID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+func getClosedExecution() common.ConcreteExecution {
+	return common.ConcreteExecution{
+		Execution: common.Execution{
+			ShardID:    shardID,
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			RunID:      runID,
+			State:      closedState,
+		},
 		BranchToken: branchToken,
 		TreeID:      treeID,
 		BranchID:    branchID,
-		State:       closedState,
 	}
 }

@@ -28,7 +28,7 @@ import (
 
 func checkBeforeFix(
 	invariant common.Invariant,
-	execution common.Execution,
+	execution interface{},
 ) (*common.FixResult, *common.CheckResult) {
 	checkResult := invariant.Check(execution)
 	if checkResult.CheckResultType == common.CheckResultTypeHealthy {

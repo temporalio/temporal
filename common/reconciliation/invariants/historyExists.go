@@ -49,17 +49,25 @@ func NewHistoryExists(
 	}
 }
 
-func (h *historyExists) Check(execution common.Execution) common.CheckResult {
+func (h *historyExists) Check(execution interface{}) common.CheckResult {
+	concreteExecution, ok := execution.(common.ConcreteExecution)
+	if !ok {
+		return common.CheckResult{
+			CheckResultType: common.CheckResultTypeFailed,
+			InvariantType:   h.InvariantType(),
+			Info:            "failed to check: expected concrete execution",
+		}
+	}
 	readHistoryBranchReq := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   execution.BranchToken,
+		BranchToken:   concreteExecution.BranchToken,
 		MinEventID:    c.FirstEventID,
 		MaxEventID:    c.FirstEventID + 1,
 		PageSize:      historyPageSize,
 		NextPageToken: nil,
-		ShardID:       c.IntPtr(execution.ShardID),
+		ShardID:       c.IntPtr(concreteExecution.ShardID),
 	}
 	readHistoryBranchResp, readHistoryBranchErr := h.pr.ReadHistoryBranch(readHistoryBranchReq)
-	stillExists, existsCheckError := common.ExecutionStillExists(&execution, h.pr)
+	stillExists, existsCheckError := common.ExecutionStillExists(&concreteExecution.Execution, h.pr)
 	if existsCheckError != nil {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeFailed,
@@ -106,7 +114,7 @@ func (h *historyExists) Check(execution common.Execution) common.CheckResult {
 	}
 }
 
-func (h *historyExists) Fix(execution common.Execution) common.FixResult {
+func (h *historyExists) Fix(execution interface{}) common.FixResult {
 	fixResult, checkResult := checkBeforeFix(h, execution)
 	if fixResult != nil {
 		return *fixResult

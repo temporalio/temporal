@@ -60,7 +60,7 @@ func (s *WriterIteratorSuite) SetupTest() {
 
 func (s *WriterIteratorSuite) TestWriterIterator() {
 	pr := NewPersistenceRetryer(getMockExecutionManager(10, 10), nil)
-	pItr := NewPersistenceIterator(pr, executionPageSize, testShardID)
+	pItr := NewPersistenceIterator(pr, executionPageSize, testShardID, ConcreteExecutionType)
 	uuid := "uuid"
 	extension := Extension("test")
 	outputDir, err := ioutil.TempDir("", "TestWriterIterator")
@@ -77,7 +77,7 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 		exec, err := pItr.Next()
 		s.NoError(err)
 		soe := &ScanOutputEntity{
-			Execution: *exec,
+			Execution: exec,
 		}
 		outputs = append(outputs, soe)
 		s.NoError(blobstoreWriter.Add(soe))

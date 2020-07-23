@@ -34,22 +34,29 @@ type (
 	}
 )
 
+var scanTypeFetchFnMap = map[ScanType]func(PersistenceRetryer, *codec.ThriftRWEncoder, int, int) pagination.FetchFn{
+	ConcreteExecutionType: getConcreteExecutionsPersistenceFetchPageFn,
+	CurrentExecutionType:  getCurrentExecutionsPersistenceFetchPageFn,
+}
+
 // NewPersistenceIterator returns a new paginated iterator over persistence
 func NewPersistenceIterator(
 	pr PersistenceRetryer,
 	pageSize int,
 	shardID int,
+	scanType ScanType,
 ) ExecutionIterator {
 	return &persistenceIterator{
-		itr: pagination.NewIterator(nil, getPersistenceFetchPageFn(pr, codec.NewThriftRWEncoder(), pageSize, shardID)),
+		itr: pagination.NewIterator(nil, scanTypeFetchFnMap[scanType](pr, codec.NewThriftRWEncoder(), pageSize, shardID)),
 	}
 }
 
 // Next returns the next execution
-func (i *persistenceIterator) Next() (*Execution, error) {
+func (i *persistenceIterator) Next() (interface{}, error) {
 	exec, err := i.itr.Next()
+	// TODO consider to remove the ExecutionIterator
 	if exec != nil {
-		return exec.(*Execution), nil
+		return exec, nil
 	}
 	return nil, err
 }
@@ -59,7 +66,7 @@ func (i *persistenceIterator) HasNext() bool {
 	return i.itr.HasNext()
 }
 
-func getPersistenceFetchPageFn(
+func getConcreteExecutionsPersistenceFetchPageFn(
 	pr PersistenceRetryer,
 	encoder *codec.ThriftRWEncoder,
 	pageSize int,
@@ -82,20 +89,22 @@ func getPersistenceFetchPageFn(
 			if err != nil {
 				return pagination.Page{}, err
 			}
-			exec := &Execution{
-				ShardID:     shardID,
-				DomainID:    e.ExecutionInfo.DomainID,
-				WorkflowID:  e.ExecutionInfo.WorkflowID,
-				RunID:       e.ExecutionInfo.RunID,
+			concreteExec := &ConcreteExecution{
 				BranchToken: branchToken,
 				TreeID:      treeID,
 				BranchID:    branchID,
-				State:       e.ExecutionInfo.State,
+				Execution: Execution{
+					ShardID:    shardID,
+					DomainID:   e.ExecutionInfo.DomainID,
+					WorkflowID: e.ExecutionInfo.WorkflowID,
+					RunID:      e.ExecutionInfo.RunID,
+					State:      e.ExecutionInfo.State,
+				},
 			}
-			if err := ValidateExecution(exec); err != nil {
+			if err := ValidateConcreteExecution(concreteExec); err != nil {
 				return pagination.Page{}, err
 			}
-			executions[i] = exec
+			executions[i] = concreteExec
 		}
 		var nextToken interface{} = resp.PageToken
 		if len(resp.PageToken) == 0 {
@@ -108,4 +117,13 @@ func getPersistenceFetchPageFn(
 		}
 		return page, nil
 	}
+}
+
+func getCurrentExecutionsPersistenceFetchPageFn(
+	pr PersistenceRetryer,
+	encoder *codec.ThriftRWEncoder,
+	pageSize int,
+	shardID int,
+) pagination.FetchFn {
+	panic("not implemented yet")
 }

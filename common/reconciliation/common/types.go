@@ -83,16 +83,21 @@ const (
 
 // The following are types related to Invariant.
 type (
-	// Execution is an execution which should be checked or fixed.
+	// Execution is a base type for executions which should be checked or fixed.
 	Execution struct {
-		ShardID     int
-		DomainID    string
-		WorkflowID  string
-		RunID       string
+		ShardID    int
+		DomainID   string
+		WorkflowID string
+		RunID      string
+		State      int
+	}
+
+	// ConcreteExecution is a concrete execution.
+	ConcreteExecution struct {
 		BranchToken []byte
 		TreeID      string
 		BranchID    string
-		State       int
+		Execution
 	}
 
 	// CheckResult is the result of running Check.
@@ -213,15 +218,27 @@ type (
 type (
 	// ScanOutputEntity represents a single execution that should be durably recorded by Scan.
 	ScanOutputEntity struct {
-		Execution Execution
+		Execution interface{}
 		Result    ManagerCheckResult
 	}
 
 	// FixOutputEntity represents a single execution that should be durably recorded by fix.
 	// It contains the ScanOutputEntity that was given as input to fix.
 	FixOutputEntity struct {
-		Execution Execution
+		Execution interface{}
 		Input     ScanOutputEntity
 		Result    ManagerFixResult
 	}
+)
+
+type (
+	// ScanType is the enum for representing different entity types to scan
+	ScanType int
+)
+
+const (
+	// ConcreteExecutionType concrete execution entity
+	ConcreteExecutionType ScanType = iota
+	// CurrentExecutionType current execution entity
+	CurrentExecutionType
 )

@@ -55,6 +55,11 @@ const (
 	ErrSerialization = "encountered serialization error"
 )
 
+var scanTypePrefixMap = map[common.ScanType]string{
+	common.ConcreteExecutionType: "", // leave it empty for now to be backwards compatible
+	common.CurrentExecutionType:  "current_executions_",
+}
+
 type (
 	// ScannerConfigActivityParams is the parameter for ScannerConfigActivity
 	ScannerConfigActivityParams struct {
@@ -67,6 +72,7 @@ type (
 		ExecutionsPageSize      int
 		BlobstoreFlushThreshold int
 		InvariantCollections    InvariantCollections
+		ScanType                common.ScanType
 	}
 
 	// ScannerEmitMetricsActivityParams is the parameter for ScannerEmitMetricsActivity
@@ -75,6 +81,7 @@ type (
 		ShardControlFlowFailureCount int
 		AggregateReportResult        AggregateScanReportResult
 		ShardDistributionStats       ShardDistributionStats
+		ScanType                     common.ScanType
 	}
 
 	// ShardDistributionStats contains stats on the distribution of executions in shards.
@@ -134,7 +141,8 @@ func ScannerEmitMetricsActivity(
 	activityCtx context.Context,
 	params ScannerEmitMetricsActivityParams,
 ) error {
-	scope := activityCtx.Value(ScannerContextKey).(ScannerContext).Scope.Tagged(metrics.ActivityTypeTag(ScannerEmitMetricsActivityName))
+	scope := activityCtx.Value(ScannerContextKey).(ScannerContext).Scope.
+		Tagged(metrics.ActivityTypeTag(scanTypePrefixMap[params.ScanType] + ScannerEmitMetricsActivityName))
 	scope.UpdateGauge(metrics.CadenceShardSuccessGauge, float64(params.ShardSuccessCount))
 	scope.UpdateGauge(metrics.CadenceShardFailureGauge, float64(params.ShardControlFlowFailureCount))
 
@@ -173,7 +181,7 @@ func ScanShardActivity(
 	}
 	for i := heartbeatDetails.LastShardIndexHandled + 1; i < len(params.Shards); i++ {
 		currentShardID := params.Shards[i]
-		shardReport, err := scanShard(activityCtx, params, currentShardID, heartbeatDetails)
+		shardReport, err := scanShard(activityCtx, params, currentShardID, heartbeatDetails, params.ScanType)
 		if err != nil {
 			return nil, err
 		}
@@ -190,10 +198,11 @@ func scanShard(
 	params ScanShardActivityParams,
 	shardID int,
 	heartbeatDetails ScanShardHeartbeatDetails,
+	scanType common.ScanType,
 ) (*common.ShardScanReport, error) {
 	ctx := activityCtx.Value(ScannerContextKey).(ScannerContext)
 	resources := ctx.Resource
-	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(ScannerScanShardActivityName))
+	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(scanTypePrefixMap[params.ScanType] + ScannerScanShardActivityName))
 	sw := scope.StartTimer(metrics.CadenceLatency)
 	defer sw.Stop()
 	execManager, err := resources.GetExecutionManager(shardID)
@@ -216,7 +225,8 @@ func scanShard(
 		resources.GetBlobstoreClient(),
 		params.BlobstoreFlushThreshold,
 		collections,
-		func() { activity.RecordHeartbeat(activityCtx, heartbeatDetails) })
+		func() { activity.RecordHeartbeat(activityCtx, heartbeatDetails) },
+		scanType)
 	report := scanner.Scan()
 	if report.Result.ControlFlowFailure != nil {
 		scope.IncCounter(metrics.CadenceFailures)

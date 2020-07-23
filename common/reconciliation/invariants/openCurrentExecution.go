@@ -45,18 +45,26 @@ func NewOpenCurrentExecution(
 	}
 }
 
-func (o *openCurrentExecution) Check(execution common.Execution) common.CheckResult {
-	if !common.Open(execution.State) {
+func (o *openCurrentExecution) Check(execution interface{}) common.CheckResult {
+	concreteExecution, ok := execution.(common.ConcreteExecution)
+	if !ok {
+		return common.CheckResult{
+			CheckResultType: common.CheckResultTypeFailed,
+			InvariantType:   o.InvariantType(),
+			Info:            "failed to check: expected concrete execution",
+		}
+	}
+	if !common.Open(concreteExecution.State) {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeHealthy,
 			InvariantType:   o.InvariantType(),
 		}
 	}
 	currentExecResp, currentExecErr := o.pr.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-		DomainID:   execution.DomainID,
-		WorkflowID: execution.WorkflowID,
+		DomainID:   concreteExecution.DomainID,
+		WorkflowID: concreteExecution.WorkflowID,
 	})
-	stillOpen, stillOpenErr := common.ExecutionStillOpen(&execution, o.pr)
+	stillOpen, stillOpenErr := common.ExecutionStillOpen(&concreteExecution.Execution, o.pr)
 	if stillOpenErr != nil {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeFailed,
@@ -89,7 +97,7 @@ func (o *openCurrentExecution) Check(execution common.Execution) common.CheckRes
 			}
 		}
 	}
-	if currentExecResp.RunID != execution.RunID {
+	if currentExecResp.RunID != concreteExecution.RunID {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeCorrupted,
 			InvariantType:   o.InvariantType(),
@@ -103,7 +111,7 @@ func (o *openCurrentExecution) Check(execution common.Execution) common.CheckRes
 	}
 }
 
-func (o *openCurrentExecution) Fix(execution common.Execution) common.FixResult {
+func (o *openCurrentExecution) Fix(execution interface{}) common.FixResult {
 	fixResult, checkResult := checkBeforeFix(o, execution)
 	if fixResult != nil {
 		return *fixResult

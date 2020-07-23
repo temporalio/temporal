@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	c "github.com/uber/cadence/common/reconciliation/common"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -146,6 +147,7 @@ func (s *Scanner) Start() error {
 					Max: s.context.cfg.Persistence.NumHistoryShards,
 				},
 			},
+			ScanType: c.ConcreteExecutionType,
 		})
 	}
 

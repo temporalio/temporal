@@ -32,7 +32,7 @@ import (
 )
 
 // ValidateExecution returns an error if Execution is not valid, nil otherwise.
-func ValidateExecution(execution *Execution) error {
+func validateExecution(execution *Execution) error {
 	if execution.ShardID < 0 {
 		return fmt.Errorf("invalid ShardID: %v", execution.ShardID)
 	}
@@ -45,17 +45,26 @@ func ValidateExecution(execution *Execution) error {
 	if len(execution.RunID) == 0 {
 		return errors.New("empty RunID")
 	}
-	if len(execution.BranchToken) == 0 {
-		return errors.New("empty BranchToken")
-	}
-	if len(execution.TreeID) == 0 {
-		return errors.New("empty TreeID")
-	}
-	if len(execution.BranchID) == 0 {
-		return errors.New("empty BranchID")
-	}
 	if execution.State < persistence.WorkflowStateCreated || execution.State > persistence.WorkflowStateCorrupted {
 		return fmt.Errorf("unknown workflow state: %v", execution.State)
+	}
+	return nil
+}
+
+// ValidateConcreteExecution returns an error if ConcreteExecution is not valid, nil otherwise.
+func ValidateConcreteExecution(concreteExecution *ConcreteExecution) error {
+	err := validateExecution(&concreteExecution.Execution)
+	if err != nil {
+		return err
+	}
+	if len(concreteExecution.BranchToken) == 0 {
+		return errors.New("empty BranchToken")
+	}
+	if len(concreteExecution.TreeID) == 0 {
+		return errors.New("empty TreeID")
+	}
+	if len(concreteExecution.BranchID) == 0 {
+		return errors.New("empty BranchID")
 	}
 	return nil
 }
@@ -135,16 +144,34 @@ func Open(state int) bool {
 	return state == persistence.WorkflowStateCreated || state == persistence.WorkflowStateRunning
 }
 
+// Open returns true if execution state is open false if workflow is closed
+func ExecutionOpen(execution interface{}) bool {
+	return Open(getExecution(execution).State)
+}
+
+// getExecution returns base Execution
+func getExecution(execution interface{}) *Execution {
+	switch e := execution.(type) {
+	case *Execution:
+		return e
+	case *ConcreteExecution:
+		return &e.Execution
+	default:
+		panic("unexpected execution type")
+	}
+}
+
 // DeleteExecution deletes concrete execution and
 // current execution conditionally on matching runID.
 func DeleteExecution(
-	exec *Execution,
+	exec interface{},
 	pr PersistenceRetryer,
 ) *FixResult {
+	execution := getExecution(exec)
 	if err := pr.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-		DomainID:   exec.DomainID,
-		WorkflowID: exec.WorkflowID,
-		RunID:      exec.RunID,
+		DomainID:   execution.DomainID,
+		WorkflowID: execution.WorkflowID,
+		RunID:      execution.RunID,
 	}); err != nil {
 		return &FixResult{
 			FixResultType: FixResultTypeFailed,
@@ -153,9 +180,9 @@ func DeleteExecution(
 		}
 	}
 	if err := pr.DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-		DomainID:   exec.DomainID,
-		WorkflowID: exec.WorkflowID,
-		RunID:      exec.RunID,
+		DomainID:   execution.DomainID,
+		WorkflowID: execution.WorkflowID,
+		RunID:      execution.RunID,
 	}); err != nil {
 		return &FixResult{
 			FixResultType: FixResultTypeFailed,
