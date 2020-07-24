@@ -791,9 +791,7 @@ func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
 
 		var inputsRaw [][]byte
 		for _, i := range *inputs {
-			if i == "nil" {
-				ErrorAndExit("Empty input flag. Pass \"null\" for nil parameter value.", nil)
-			} else if i == "null" {
+			if strings.EqualFold(i, "null") {
 				inputsRaw = append(inputsRaw, []byte(nil))
 			} else {
 				inputsRaw = append(inputsRaw, []byte(i))
