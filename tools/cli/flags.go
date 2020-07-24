@@ -162,6 +162,7 @@ const (
 	FlagSecurityToken                     = "security_token"
 	FlagSecurityTokenWithAlias            = FlagSecurityToken + ", st"
 	FlagSkipErrorMode                     = "skip_errors"
+	FlagTimerType                         = "timer_type"
 	FlagSkipErrorModeWithAlias            = FlagSkipErrorMode + ", serr"
 	FlagHeadersMode                       = "headers"
 	FlagHeadersModeWithAlias              = FlagHeadersMode + ", he"
@@ -234,6 +235,8 @@ const (
 	FlagHeaderKey                         = "header_key"
 	FlagHeaderValue                       = "header_value"
 	FlagHeaderFile                        = "header_file"
+	FlagStartDate                         = "start_date"
+	FlagEndDate                           = "end_date"
 )
 
 var flagsForExecution = []cli.Flag{

@@ -511,6 +511,14 @@ func mapKeysToArray(m map[string]string) []string {
 	return out
 }
 
+func intSliceToSet(s []int) map[int]struct{} {
+	var ret = make(map[int]struct{}, len(s))
+	for _, v := range s {
+		ret[v] = struct{}{}
+	}
+	return ret
+}
+
 func printError(msg string, err error) {
 	if err != nil {
 		fmt.Printf("%s %s\n%s %+v\n", colorRed("Error:"), msg, colorMagenta("Error Details:"), err)
@@ -670,6 +678,18 @@ func parseTimeRange(timeRange string) (time.Time, error) {
 		res = epochTime
 	}
 	return res, nil
+}
+
+func parseSingleTs(ts string) (time.Time, error) {
+	var tsOut time.Time
+	var err error
+	formats := []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02", "2006-01-02T15:04:05+0700", time.RFC3339}
+	for _, format := range formats {
+		if tsOut, err = time.Parse(format, ts); err == nil {
+			return tsOut, err
+		}
+	}
+	return tsOut, err
 }
 
 // parseTimeDuration parses the given time duration in either short or long convention

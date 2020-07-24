@@ -21,7 +21,11 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"time"
+
+	"github.com/urfave/cli"
+)
 
 func newAdminWorkflowCommands() []cli.Command {
 	return []cli.Command{
@@ -167,6 +171,54 @@ func newAdminShardManagementCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				AdminRemoveTask(c)
+			},
+		},
+		{
+			Name:  "timers",
+			Usage: "get timers from multiple shards for given time range",
+			Flags: append(getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "shardID",
+				},
+				cli.IntFlag{
+					Name:  FlagPageSize,
+					Usage: "page size used to query db executions table",
+					Value: 500,
+				},
+				cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "target rps of database queries",
+					Value: 100,
+				},
+				cli.StringFlag{
+					Name:  FlagStartDate,
+					Usage: "start date",
+					Value: time.Now().UTC().Format(time.RFC3339),
+				},
+				cli.StringFlag{
+					Name:  FlagEndDate,
+					Usage: "end date",
+					Value: time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+				},
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "filter tasks by DomainID",
+				},
+				cli.IntSliceFlag{
+					Name: FlagTimerType,
+					Usage: "timer types: 0 - DecisionTimeoutTask, 1 - TaskTypeActivityTimeout, " +
+						"2 - TaskTypeUserTimer, 3 - TaskTypeWorkflowTimeout, 4 - TaskTypeDeleteHistoryEvent, " +
+						"5 - TaskTypeActivityRetryTimer, 6 - TaskTypeWorkflowBackoffTimer",
+					Value: &cli.IntSlice{-1},
+				},
+				cli.BoolFlag{
+					Name:  FlagSkipErrorMode,
+					Usage: "skip errors",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminTimers(c)
 			},
 		},
 	}
