@@ -335,9 +335,10 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Configure if the same workflow Id is allowed for use in new workflow execution. " +
 				"Options: AllowDuplicate, AllowDuplicateFailedOnly, RejectDuplicate",
 		},
-		cli.StringFlag{
-			Name:  FlagInputWithAlias,
-			Usage: "Optional input for the workflow, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
+		cli.StringSliceFlag{
+			Name: FlagInputWithAlias,
+			Usage: "Optional input for the workflow in JSON format. If there are multiple parameters, pass each as a separate input flag. " +
+				"Pass \"null\" for null values",
 		},
 		cli.StringFlag{
 			Name: FlagInputFileWithAlias,
