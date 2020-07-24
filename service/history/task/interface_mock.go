@@ -625,3 +625,88 @@ func (mr *MockProcessorMockRecorder) TrySubmit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySubmit", reflect.TypeOf((*MockProcessor)(nil).TrySubmit), arg0)
 }
+
+// MockRedispatcher is a mock of Redispatcher interface
+type MockRedispatcher struct {
+	ctrl     *gomock.Controller
+	recorder *MockRedispatcherMockRecorder
+}
+
+// MockRedispatcherMockRecorder is the mock recorder for MockRedispatcher
+type MockRedispatcherMockRecorder struct {
+	mock *MockRedispatcher
+}
+
+// NewMockRedispatcher creates a new mock instance
+func NewMockRedispatcher(ctrl *gomock.Controller) *MockRedispatcher {
+	mock := &MockRedispatcher{ctrl: ctrl}
+	mock.recorder = &MockRedispatcherMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockRedispatcher) EXPECT() *MockRedispatcherMockRecorder {
+	return m.recorder
+}
+
+// Start mocks base method
+func (m *MockRedispatcher) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start
+func (mr *MockRedispatcherMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRedispatcher)(nil).Start))
+}
+
+// Stop mocks base method
+func (m *MockRedispatcher) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop
+func (mr *MockRedispatcherMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRedispatcher)(nil).Stop))
+}
+
+// AddTask mocks base method
+func (m *MockRedispatcher) AddTask(arg0 Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddTask", arg0)
+}
+
+// AddTask indicates an expected call of AddTask
+func (mr *MockRedispatcherMockRecorder) AddTask(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTask", reflect.TypeOf((*MockRedispatcher)(nil).AddTask), arg0)
+}
+
+// Redispatch mocks base method
+func (m *MockRedispatcher) Redispatch(targetSize int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Redispatch", targetSize)
+}
+
+// Redispatch indicates an expected call of Redispatch
+func (mr *MockRedispatcherMockRecorder) Redispatch(targetSize interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Redispatch", reflect.TypeOf((*MockRedispatcher)(nil).Redispatch), targetSize)
+}
+
+// Size mocks base method
+func (m *MockRedispatcher) Size() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Size")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Size indicates an expected call of Size
+func (mr *MockRedispatcherMockRecorder) Size() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockRedispatcher)(nil).Size))
+}

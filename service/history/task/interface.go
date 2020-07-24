@@ -80,6 +80,15 @@ type (
 		TrySubmit(Task) (bool, error)
 	}
 
+	// Redispatcher buffers tasks and periodically redispatch them to Processor
+	// redispatch can also be triggered immediately by calling the Redispatch method
+	Redispatcher interface {
+		common.Daemon
+		AddTask(Task)
+		Redispatch(targetSize int)
+		Size() int
+	}
+
 	// QueueType is the type of task queue
 	QueueType int
 )

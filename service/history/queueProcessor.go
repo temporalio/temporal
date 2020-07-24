@@ -30,14 +30,12 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/execution"
-	"github.com/uber/cadence/service/history/queue"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -72,13 +70,12 @@ type (
 		ackMgr               *queueAckMgrImpl
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   task.Processor
-		redispatchQueue      collection.Queue
+		redispatcher         task.Redispatcher
 		queueTaskInitializer task.Initializer
 
 		lastPollTime time.Time
 
-		notifyCh           chan struct{}
-		redispatchNotifyCh chan struct{}
+		notifyCh chan struct{}
 
 		status     int32
 		shutdownWG sync.WaitGroup
@@ -126,7 +123,6 @@ func newQueueProcessorBase(
 			},
 		),
 		status:             common.DaemonStatusInitialized,
-		redispatchNotifyCh: make(chan struct{}, 1),
 		notifyCh:           make(chan struct{}, 1),
 		shutdownCh:         make(chan struct{}),
 		logger:             logger,
@@ -135,7 +131,15 @@ func newQueueProcessorBase(
 		lastPollTime:       time.Time{},
 		taskProcessor:      taskProcessor,
 		queueTaskProcessor: queueTaskProcessor,
-		redispatchQueue:    collection.NewConcurrentQueue(),
+		redispatcher: task.NewRedispatcher(
+			queueTaskProcessor,
+			&task.RedispatcherOptions{
+				TaskRedispatchInterval:                  options.RedispatchInterval,
+				TaskRedispatchIntervalJitterCoefficient: options.RedispatchIntervalJitterCoefficient,
+			},
+			logger,
+			metricsScope,
+		),
 	}
 
 	if options.QueueType != task.QueueTypeReplication {
@@ -149,7 +153,7 @@ func newQueueProcessorBase(
 				task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 				taskFilter,
 				taskExecutor,
-				p.redispatchSingleTask,
+				p.redispatcher.AddTask,
 				p.timeSource,
 				options.MaxRetryCount,
 				emitDomainTag,
@@ -166,21 +170,18 @@ func (p *queueProcessorBase) Start() {
 		return
 	}
 
-	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
-	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
+	p.logger.Info("", tag.LifeCycleStarting)
+	defer p.logger.Info("", tag.LifeCycleStarted)
 
 	if p.taskProcessor != nil {
 		p.taskProcessor.start()
 	}
+	p.redispatcher.Start()
+
 	p.notifyNewTask()
 
 	p.shutdownWG.Add(1)
 	go p.processorPump()
-
-	if p.isPriorityTaskProcessorEnabled() {
-		p.shutdownWG.Add(1)
-		go p.redispatchLoop()
-	}
 }
 
 func (p *queueProcessorBase) Stop() {
@@ -188,19 +189,20 @@ func (p *queueProcessorBase) Stop() {
 		return
 	}
 
-	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentTransferQueue)
-	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentTransferQueue)
+	p.logger.Info("", tag.LifeCycleStopping)
+	defer p.logger.Info("", tag.LifeCycleStopped)
 
 	close(p.shutdownCh)
 	p.retryTasks()
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
+		p.logger.Warn("", tag.LifeCycleStopTimedout)
 	}
 
 	if p.taskProcessor != nil {
 		p.taskProcessor.stop()
 	}
+	p.redispatcher.Stop()
 }
 
 func (p *queueProcessorBase) notifyNewTask() {
@@ -208,18 +210,6 @@ func (p *queueProcessorBase) notifyNewTask() {
 	select {
 	case p.notifyCh <- event:
 	default: // channel already has an event, don't block
-	}
-}
-
-func (p *queueProcessorBase) redispatchSingleTask(task task.Task) {
-	p.redispatchQueue.Add(task)
-	p.notifyRedispatch()
-}
-
-func (p *queueProcessorBase) notifyRedispatch() {
-	select {
-	case p.redispatchNotifyCh <- struct{}{}:
-	default:
 	}
 }
 
@@ -247,13 +237,20 @@ processorPumpLoop:
 			// use a separate goroutine since the caller hold the shutdownWG
 			go p.Stop()
 		case <-p.notifyCh:
-			if !p.isPriorityTaskProcessorEnabled() || p.redispatchQueue.Len() <= p.options.MaxRedispatchQueueSize() {
+			maxRedispatchQueueSize := p.options.MaxRedispatchQueueSize()
+			if !p.isPriorityTaskProcessorEnabled() || p.redispatcher.Size() <= maxRedispatchQueueSize {
 				p.processBatch()
 				continue
 			}
 
 			// has too many pending tasks in re-dispatch queue, block loading tasks from persistence
-			p.redispatchTasks()
+			p.redispatcher.Redispatch(maxRedispatchQueueSize)
+			if p.redispatcher.Size() > maxRedispatchQueueSize {
+				// if redispatcher still has a large number of tasks
+				// this only happens when system is under very high load
+				// we should backoff here instead of keeping submitting tasks to task processor
+				time.Sleep(loadQueueTaskThrottleRetryDelay)
+			}
 			// re-enqueue the event to see if we need keep re-dispatching or load new tasks from persistence
 			p.notifyNewTask()
 		case <-pollTimer.C:
@@ -278,42 +275,6 @@ processorPumpLoop:
 	}
 
 	p.logger.Info("Queue processor pump shut down.")
-}
-
-func (p *queueProcessorBase) redispatchLoop() {
-	defer p.shutdownWG.Done()
-
-redispatchTaskLoop:
-	for {
-		select {
-		case <-p.shutdownCh:
-			break redispatchTaskLoop
-		case <-p.redispatchNotifyCh:
-			// TODO: revisit the cpu usage and gc activity caused by
-			// creating timers and reading dynamicconfig if it becomes a problem.
-			backoffTimer := time.NewTimer(backoff.JitDuration(
-				p.options.RedispatchInterval(),
-				p.options.RedispatchIntervalJitterCoefficient(),
-			))
-			select {
-			case <-p.shutdownCh:
-				backoffTimer.Stop()
-				break redispatchTaskLoop
-			case <-backoffTimer.C:
-			}
-			backoffTimer.Stop()
-
-			// drain redispatchNotifyCh again
-			select {
-			case <-p.redispatchNotifyCh:
-			default:
-			}
-
-			p.redispatchTasks()
-		}
-	}
-
-	p.logger.Info("Queue processor task redispatch loop shut down.")
 }
 
 func (p *queueProcessorBase) processBatch() {
@@ -385,28 +346,10 @@ func (p *queueProcessorBase) submitTask(
 		}
 	}
 	if err != nil || !submitted {
-		p.redispatchSingleTask(queueTask)
+		p.redispatcher.AddTask(queueTask)
 	}
 
 	return true
-}
-
-func (p *queueProcessorBase) redispatchTasks() {
-	if !p.isPriorityTaskProcessorEnabled() {
-		return
-	}
-
-	queue.RedispatchTasks(
-		p.redispatchQueue,
-		p.queueTaskProcessor,
-		p.logger,
-		p.metricsScope,
-		p.shutdownCh,
-	)
-
-	if !p.redispatchQueue.IsEmpty() {
-		p.notifyRedispatch()
-	}
 }
 
 func (p *queueProcessorBase) retryTasks() {

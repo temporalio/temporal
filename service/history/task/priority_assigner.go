@@ -69,6 +69,10 @@ func NewPriorityAssigner(
 func (a *priorityAssignerImpl) Assign(
 	queueTask Task,
 ) error {
+	if queueTask.Priority() != task.NoPriority {
+		return nil
+	}
+
 	queueType := queueTask.GetQueueType()
 
 	if queueType == QueueTypeReplication {

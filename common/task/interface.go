@@ -108,8 +108,3 @@ const (
 	// TaskStateNacked is the state for a task if it can not be processed
 	TaskStateNacked
 )
-
-const (
-	// NoPriority is the value returned if no priority is ever assigned to the task
-	NoPriority = -1
-)

@@ -25,6 +25,11 @@ const (
 )
 
 const (
+	// NoPriority is the value returned if no priority is ever assigned to the task
+	NoPriority = -1
+)
+
+const (
 	// HighPriorityClass is the priority class for high priority tasks
 	HighPriorityClass = iota << numBitsPerLevel
 	// DefaultPriorityClass is the priority class for default priority tasks

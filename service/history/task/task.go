@@ -182,6 +182,7 @@ func newQueueTaskBase(
 		Info:          taskInfo,
 		shard:         shard,
 		state:         ctask.TaskStatePending,
+		priority:      ctask.NoPriority,
 		queueType:     queueType,
 		scopeIdx:      scopeIdx,
 		emitDomainTag: emitDomainTag,

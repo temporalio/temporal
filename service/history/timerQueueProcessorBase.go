@@ -29,7 +29,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -46,7 +45,6 @@ var (
 	emptyTime = time.Time{}
 
 	loadDomainEntryForTimerTaskRetryDelay = 100 * time.Millisecond
-	loadTimerTaskThrottleRetryDelay       = 5 * time.Second
 )
 
 type (
@@ -69,8 +67,7 @@ type (
 		lastPollTime         time.Time
 		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
 		queueTaskProcessor   task.Processor
-		redispatchNotifyCh   chan struct{}
-		redispatchQueue      collection.Queue
+		redispatcher         task.Redispatcher
 		queueTaskInitializer task.Initializer
 
 		// timer notification
@@ -124,8 +121,15 @@ func newTimerQueueProcessorBase(
 		lastPollTime:       time.Time{},
 		taskProcessor:      taskProcessor,
 		queueTaskProcessor: queueTaskProcessor,
-		redispatchQueue:    collection.NewConcurrentQueue(),
-		redispatchNotifyCh: make(chan struct{}, 1),
+		redispatcher: task.NewRedispatcher(
+			queueTaskProcessor,
+			&task.RedispatcherOptions{
+				TaskRedispatchInterval:                  config.TaskRedispatchInterval,
+				TaskRedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
+			},
+			logger,
+			metricsScope,
+		),
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(maxPollRPS())
@@ -148,7 +152,7 @@ func newTimerQueueProcessorBase(
 			task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			taskFilter,
 			taskExecutor,
-			base.redispatchSingleTask,
+			base.redispatcher.AddTask,
 			shard.GetTimeSource(),
 			config.TimerTaskMaxRetryCount,
 			emitDomainTag,
@@ -167,16 +171,13 @@ func (t *timerQueueProcessorBase) Start() {
 	if t.taskProcessor != nil {
 		t.taskProcessor.start()
 	}
+	t.redispatcher.Start()
+
 	// notify a initial scan
 	t.notifyNewTimer(time.Time{})
 
 	t.shutdownWG.Add(1)
 	go t.processorPump()
-
-	if t.isPriorityTaskProcessorEnabled() {
-		t.shutdownWG.Add(1)
-		go t.redispatchLoop()
-	}
 
 	t.logger.Info("Timer queue processor started.")
 }
@@ -197,6 +198,8 @@ func (t *timerQueueProcessorBase) Stop() {
 	if t.taskProcessor != nil {
 		t.taskProcessor.stop()
 	}
+	t.redispatcher.Stop()
+
 	t.logger.Info("Timer queue processor stopped.")
 }
 
@@ -217,42 +220,6 @@ RetryProcessor:
 	}
 
 	t.logger.Info("Timer queue processor pump shutting down.")
-}
-
-func (t *timerQueueProcessorBase) redispatchLoop() {
-	defer t.shutdownWG.Done()
-
-redispatchTaskLoop:
-	for {
-		select {
-		case <-t.shutdownCh:
-			break redispatchTaskLoop
-		case <-t.redispatchNotifyCh:
-			// TODO: revisit the cpu usage and gc activity caused by
-			// creating timers and reading dynamicconfig if it becomes a problem.
-			backoffTimer := time.NewTimer(backoff.JitDuration(
-				t.config.TimerProcessorRedispatchInterval(),
-				t.config.TimerProcessorRedispatchIntervalJitterCoefficient(),
-			))
-			select {
-			case <-t.shutdownCh:
-				backoffTimer.Stop()
-				break redispatchTaskLoop
-			case <-backoffTimer.C:
-			}
-			backoffTimer.Stop()
-
-			// drain redispatchNotifyCh again
-			select {
-			case <-t.redispatchNotifyCh:
-			default:
-			}
-
-			t.redispatchTasks()
-		}
-	}
-
-	t.logger.Info("Timer queue processor redispatch loop shut down.")
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
@@ -298,18 +265,6 @@ func (t *timerQueueProcessorBase) notifyNewTimer(
 	}
 }
 
-func (t *timerQueueProcessorBase) redispatchSingleTask(task task.Task) {
-	t.redispatchQueue.Add(task)
-	t.notifyRedispatch()
-}
-
-func (t *timerQueueProcessorBase) notifyRedispatch() {
-	select {
-	case t.redispatchNotifyCh <- struct{}{}:
-	default:
-	}
-}
-
 func (t *timerQueueProcessorBase) internalProcessor() error {
 	pollTimer := time.NewTimer(backoff.JitDuration(
 		t.config.TimerProcessorMaxPollInterval(),
@@ -341,7 +296,8 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			go t.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
-			if !t.isPriorityTaskProcessorEnabled() || t.redispatchQueue.Len() <= t.config.TimerProcessorMaxRedispatchQueueSize() {
+			maxRedispatchQueueSize := t.config.TimerProcessorMaxRedispatchQueueSize()
+			if !t.isPriorityTaskProcessorEnabled() || t.redispatcher.Size() <= maxRedispatchQueueSize {
 				lookAheadTimer, err := t.readAndFanoutTimerTasks()
 				if err != nil {
 					return err
@@ -353,7 +309,15 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			}
 
 			// has too many pending tasks in re-dispatch queue, block loading tasks from persistence
-			t.redispatchTasks()
+			t.redispatcher.Redispatch(maxRedispatchQueueSize)
+			if t.redispatcher.Size() > maxRedispatchQueueSize {
+				// if redispatcher still has a large number of tasks
+				// this only happens when system is under very high load
+				// we should backoff here instead of keeping submitting tasks to task processor
+				// don't call t.notifyNewTime(time.Now() + loadQueueTaskThrottleRetryDelay) as the time in
+				// standby timer processor is not real time and is managed separately
+				time.Sleep(loadQueueTaskThrottleRetryDelay)
+			}
 			// re-enqueue the event to see if we need keep re-dispatching or load new tasks from persistence
 			t.notifyNewTimer(time.Time{})
 		case <-pollTimer.C:
@@ -393,7 +357,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), loadTimerTaskThrottleRetryDelay)
+	ctx, cancel := ctx.WithTimeout(ctx.Background(), loadQueueTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
@@ -453,28 +417,10 @@ func (t *timerQueueProcessorBase) submitTask(
 		}
 	}
 	if err != nil || !submitted {
-		t.redispatchSingleTask(timerQueueTask)
+		t.redispatcher.AddTask(timerQueueTask)
 	}
 
 	return true
-}
-
-func (t *timerQueueProcessorBase) redispatchTasks() {
-	if !t.isPriorityTaskProcessorEnabled() {
-		return
-	}
-
-	queue.RedispatchTasks(
-		t.redispatchQueue,
-		t.queueTaskProcessor,
-		t.logger,
-		t.metricsScope,
-		t.shutdownCh,
-	)
-
-	if !t.redispatchQueue.IsEmpty() {
-		t.notifyRedispatch()
-	}
 }
 
 func (t *timerQueueProcessorBase) retryTasks() {
@@ -496,28 +442,4 @@ func (t *timerQueueProcessorBase) isPriorityTaskProcessorEnabled() bool {
 
 func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 	return atomic.LoadUint64(&t.timerFiredCount)
-}
-
-//nolint:unused
-func (t *timerQueueProcessorBase) getTimerTaskType(
-	taskType int,
-) string {
-
-	switch taskType {
-	case persistence.TaskTypeUserTimer:
-		return "UserTimer"
-	case persistence.TaskTypeActivityTimeout:
-		return "ActivityTimeout"
-	case persistence.TaskTypeDecisionTimeout:
-		return "DecisionTimeout"
-	case persistence.TaskTypeWorkflowTimeout:
-		return "WorkflowTimeout"
-	case persistence.TaskTypeDeleteHistoryEvent:
-		return "DeleteHistoryEvent"
-	case persistence.TaskTypeActivityRetryTimer:
-		return "ActivityRetryTimerTask"
-	case persistence.TaskTypeWorkflowBackoffTimer:
-		return "WorkflowBackoffTimerTask"
-	}
-	return "UnKnown"
 }

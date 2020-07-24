@@ -108,7 +108,7 @@ func newTransferQueueProcessorBase(
 				task.InitializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 				taskFilter,
 				taskExecutor,
-				processorBase.redispatchSingleTask,
+				processorBase.redispatcher.AddTask,
 				shard.GetTimeSource(),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				emitDomainTag,
@@ -133,13 +133,14 @@ func (t *transferQueueProcessorBase) Start() {
 	t.logger.Info("", tag.LifeCycleStarting)
 	defer t.logger.Info("", tag.LifeCycleStarted)
 
+	t.redispatcher.Start()
+
 	for _, queueCollections := range t.processingQueueCollections {
 		t.upsertPollTime(queueCollections.Level(), time.Time{})
 	}
 
-	t.shutdownWG.Add(2)
+	t.shutdownWG.Add(1)
 	go t.processorPump()
-	go t.redispatchLoop()
 }
 
 func (t *transferQueueProcessorBase) Stop() {
@@ -156,6 +157,8 @@ func (t *transferQueueProcessorBase) Stop() {
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("", tag.LifeCycleStopTimedout)
 	}
+
+	t.redispatcher.Stop()
 }
 
 func (t *transferQueueProcessorBase) notifyNewTask() {
@@ -195,9 +198,16 @@ processorPumpLoop:
 		case <-t.notifyCh:
 			t.upsertPollTime(defaultProcessingQueueLevel, time.Time{})
 		case <-t.nextPollTimer.FireChan():
-			if t.redispatchQueue.Len() > t.options.MaxRedispatchQueueSize() {
+			maxRedispatchQueueSize := t.options.MaxRedispatchQueueSize()
+			if t.redispatcher.Size() > maxRedispatchQueueSize {
 				// has too many pending tasks in re-dispatch queue, block loading tasks from persistence
-				t.redispatchTasks()
+				t.redispatcher.Redispatch(maxRedispatchQueueSize)
+				if t.redispatcher.Size() > maxRedispatchQueueSize {
+					// if redispatcher still has a large number of tasks
+					// this only happens when system is under very high load
+					// we should backoff here instead of keeping submitting tasks to task processor
+					time.Sleep(loadQueueTaskThrottleRetryDelay)
+				}
 				// re-enqueue the event to see if we need keep re-dispatching or load new tasks from persistence
 				t.nextPollTimer.Update(time.Time{})
 				continue processorPumpLoop
@@ -416,8 +426,8 @@ func newTransferQueueProcessorOptions(
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		RedispatchInterval:                  config.TaskRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
 		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
 		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
 		SplitQueueIntervalJitterCoefficient: config.TransferProcessorSplitQueueIntervalJitterCoefficient,
