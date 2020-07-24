@@ -742,17 +742,17 @@ func processJSONInput(c *cli.Context) *commonpb.Payloads {
 
 	var jsons []interface{}
 	for _, jsonRaw := range jsonsRaw {
-		if len(jsonRaw) == 0 {
-			continue
+		if jsonRaw == nil {
+			jsons = append(jsons, nil)
+		} else {
+			var j interface{}
+			if err := json.Unmarshal(jsonRaw, &j); err != nil {
+				ErrorAndExit("Input is not a valid JSON.", err)
+			}
+			jsons = append(jsons, j)
 		}
 
-		var j interface{}
-		if err := json.Unmarshal(jsonRaw, &j); err != nil {
-			ErrorAndExit("Input is not a valid JSON.", err)
-		}
-		jsons = append(jsons, j)
 	}
-
 	p, err := payloads.Encode(jsons...)
 	if err != nil {
 		ErrorAndExit("Unable to encode Input.", err)
@@ -791,8 +791,15 @@ func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
 
 		var inputsRaw [][]byte
 		for _, i := range *inputs {
-			inputsRaw = append(inputsRaw, []byte(i))
+			if i == "nil" {
+				ErrorAndExit("Empty input flag. Pass \"null\" for nil parameter value.", nil)
+			} else if i == "null" {
+				inputsRaw = append(inputsRaw, []byte(nil))
+			} else {
+				inputsRaw = append(inputsRaw, []byte(i))
+			}
 		}
+
 		return inputsRaw
 	} else if c.IsSet(flagInputFileName) {
 		inputFile := c.String(flagInputFileName)
