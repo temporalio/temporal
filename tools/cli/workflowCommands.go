@@ -322,10 +322,11 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		memoKeys = strings.Split(rawMemoKey, " ")
 	}
 
-	rawMemoValue := string(processJSONInputHelper(c, jsonTypeMemo))
-	if rawMemoValue == "" {
+	jsonsRaw := readJSONInputs(c, jsonTypeMemo)
+	if len(jsonsRaw) == 0 {
 		return nil
 	}
+	rawMemoValue := string(jsonsRaw[0]) // StringFlag may contain up to one json
 
 	if err := validateJSONs(rawMemoValue); err != nil {
 		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
