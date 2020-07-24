@@ -222,7 +222,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
@@ -231,7 +231,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
@@ -442,7 +442,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
@@ -451,7 +451,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
@@ -770,7 +770,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending() {
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
@@ -779,7 +779,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending() {
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
@@ -913,7 +913,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending(
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
@@ -922,7 +922,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending(
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(s.discardDuration))
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
@@ -1031,7 +1031,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
@@ -1040,7 +1040,7 @@ func (s *timerStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(ErrTaskRedispatch, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	err = s.timerStandbyTaskExecutor.Execute(timerTask, true)

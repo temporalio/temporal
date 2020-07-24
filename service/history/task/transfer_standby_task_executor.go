@@ -486,7 +486,7 @@ func (t *transferStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	defer func() {
-		if retError == ErrTaskRetry {
+		if retError == ErrTaskRedispatch {
 			release(nil)
 		} else {
 			release(retError)
@@ -602,7 +602,7 @@ func (t *transferStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return ErrTaskRedispatch
 }
 
 func (t *transferStandbyTaskExecutor) getCurrentTime() time.Time {

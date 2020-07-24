@@ -144,7 +144,7 @@ func Open(state int) bool {
 	return state == persistence.WorkflowStateCreated || state == persistence.WorkflowStateRunning
 }
 
-// Open returns true if execution state is open false if workflow is closed
+// ExecutionOpen returns true if execution state is open false if workflow is closed
 func ExecutionOpen(execution interface{}) bool {
 	return Open(getExecution(execution).State)
 }

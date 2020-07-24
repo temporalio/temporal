@@ -167,7 +167,8 @@ var keys = map[Key]string{
 	TaskSchedulerShardQueueSize:                           "history.taskSchedulerShardQueueSize",
 	TaskSchedulerDispatcherCount:                          "history.taskSchedulerDispatcherCount",
 	TaskSchedulerRoundRobinWeights:                        "history.taskSchedulerRoundRobinWeight",
-	TaskRedispatchInterval:                                "history.taskRedispatchInterval",
+	ActiveTaskRedispatchInterval:                          "history.activeTaskRedispatchInterval",
+	StandbyTaskRedispatchInterval:                         "history.standbyTaskRedispatchInterval",
 	TaskRedispatchIntervalJitterCoefficient:               "history.taskRedispatchIntervalJitterCoefficient",
 	QueueProcessorEnableDomainTaggedMetrics:               "history.queueProcessorEnableDomainTaggedMetrics",
 	QueueProcessorEnableSplit:                             "history.queueProcessorEnableSplit",
@@ -558,8 +559,10 @@ const (
 	TaskSchedulerDispatcherCount
 	// TaskSchedulerRoundRobinWeights is the priority weight for weighted round robin task scheduler
 	TaskSchedulerRoundRobinWeights
-	// TaskRedispatchInterval is the task redispatch interval
-	TaskRedispatchInterval
+	// ActiveTaskRedispatchInterval is the active task redispatch interval
+	ActiveTaskRedispatchInterval
+	// StandbyTaskRedispatchInterval is the active task redispatch interval
+	StandbyTaskRedispatchInterval
 	// TaskRedispatchIntervalJitterCoefficient is the task redispatch interval jitter coefficient
 	TaskRedispatchIntervalJitterCoefficient
 	// QueueProcessorEnableDomainTaggedMetrics indicates whether task processing metrics should include domain tag

@@ -44,10 +44,10 @@ const (
 var (
 	// ErrTaskDiscarded is the error indicating that the timer / transfer task is pending for too long and discarded.
 	ErrTaskDiscarded = errors.New("passive task pending for too long")
-	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
-	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
-	// ErrTaskRedispatch is the error indicating that the task should be re-dispatch
-	ErrTaskRedispatch = errors.New("redispatch the task while the domain is pending-acitve")
+	// ErrTaskRedispatch is the error indicating that the timer / transfer task should be re0dispatched and retried.
+	ErrTaskRedispatch = errors.New("passive task should be redispatched due to condition in mutable state is not met")
+	// ErrTaskPendingActive is the error indicating that the task should be re-dispatched
+	ErrTaskPendingActive = errors.New("redispatch the task while the domain is pending-active")
 )
 
 type (
@@ -291,7 +291,7 @@ func (t *taskBase) HandleErr(
 	}
 
 	// this is a transient error
-	if err == ErrTaskRetry {
+	if err == ErrTaskRedispatch {
 		t.scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		return err
 	}
@@ -327,7 +327,7 @@ func (t *taskBase) HandleErr(
 func (t *taskBase) RetryErr(
 	err error,
 ) bool {
-	if err == ErrTaskRedispatch {
+	if err == ErrTaskRedispatch || err == ErrTaskPendingActive {
 		return false
 	}
 

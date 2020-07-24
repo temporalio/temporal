@@ -175,7 +175,7 @@ func (t *taskAllocatorImpl) checkDomainPendingActive(
 	if domainEntry.IsGlobalDomain() && domainEntry.GetFailoverEndTime() != nil {
 		// the domain is pending active, pause on processing this task
 		t.logger.Debug("Domain is not in pending active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
-		return htask.ErrTaskRedispatch
+		return htask.ErrTaskPendingActive
 	}
 	return nil
 }

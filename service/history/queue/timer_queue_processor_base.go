@@ -624,7 +624,6 @@ func newTimerQueueProcessorOptions(
 		MaxPollIntervalJitterCoefficient:    config.TimerProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TimerProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-		RedispatchInterval:                  config.TaskRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
 		MaxRedispatchQueueSize:              config.TimerProcessorMaxRedispatchQueueSize,
 		SplitQueueInterval:                  config.TimerProcessorSplitQueueInterval,
@@ -648,8 +647,10 @@ func newTimerQueueProcessorOptions(
 
 	if isActive {
 		options.MetricScope = metrics.TimerActiveQueueProcessorScope
+		options.RedispatchInterval = config.ActiveTaskRedispatchInterval
 	} else {
 		options.MetricScope = metrics.TimerStandbyQueueProcessorScope
+		options.RedispatchInterval = config.StandbyTaskRedispatchInterval
 	}
 
 	return options

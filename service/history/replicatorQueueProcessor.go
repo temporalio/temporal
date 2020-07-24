@@ -92,7 +92,7 @@ func newReplicatorQueueProcessor(
 		UpdateAckInterval:                   config.ReplicatorProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.ReplicatorProcessorUpdateAckIntervalJitterCoefficient,
 		MaxRetryCount:                       config.ReplicatorTaskMaxRetryCount,
-		RedispatchInterval:                  config.TaskRedispatchInterval,
+		RedispatchInterval:                  config.StandbyTaskRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
 		MaxRedispatchQueueSize:              config.ReplicatorProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.ReplicatorProcessorEnablePriorityTaskProcessor,

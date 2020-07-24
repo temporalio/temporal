@@ -280,7 +280,7 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	// this is a transient error
-	if err == task.ErrTaskRetry {
+	if err == task.ErrTaskRedispatch {
 		scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		select {
 		case <-notificationChan:

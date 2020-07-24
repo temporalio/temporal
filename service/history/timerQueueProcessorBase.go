@@ -104,6 +104,16 @@ func newTimerQueueProcessorBase(
 		taskProcessor = newTaskProcessor(options, shard, historyService.executionCache, logger)
 	}
 
+	queueType := task.QueueTypeActiveTimer
+	redispatcherOptions := &task.RedispatcherOptions{
+		TaskRedispatchInterval:                  config.ActiveTaskRedispatchInterval,
+		TaskRedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
+	}
+	if scope == metrics.TimerStandbyQueueProcessorScope {
+		queueType = task.QueueTypeStandbyTimer
+		redispatcherOptions.TaskRedispatchInterval = config.StandbyTaskRedispatchInterval
+	}
+
 	base := &timerQueueProcessorBase{
 		scope:              scope,
 		shard:              shard,
@@ -123,10 +133,7 @@ func newTimerQueueProcessorBase(
 		queueTaskProcessor: queueTaskProcessor,
 		redispatcher: task.NewRedispatcher(
 			queueTaskProcessor,
-			&task.RedispatcherOptions{
-				TaskRedispatchInterval:                  config.TaskRedispatchInterval,
-				TaskRedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
-			},
+			redispatcherOptions,
 			logger,
 			metricsScope,
 		),
@@ -135,11 +142,6 @@ func newTimerQueueProcessorBase(
 				return float64(maxPollRPS())
 			},
 		),
-	}
-
-	queueType := task.QueueTypeActiveTimer
-	if scope == metrics.TimerStandbyQueueProcessorScope {
-		queueType = task.QueueTypeStandbyTimer
 	}
 
 	// read dynamic config only once on startup to avoid gc pressure caused by keeping reading dynamic config

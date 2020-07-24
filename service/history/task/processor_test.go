@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
@@ -211,6 +212,7 @@ func (s *queueTaskProcessorSuite) TestNewSchedulerOptions_UnknownSchedulerType()
 
 func (s *queueTaskProcessorSuite) newTestQueueTaskProcessor() *processorImpl {
 	config := config.NewForTest()
+	config.TaskSchedulerShardWorkerCount = dynamicconfig.GetIntPropertyFn(1)
 	processor, err := NewProcessor(
 		s.mockPriorityAssigner,
 		config,

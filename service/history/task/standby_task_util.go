@@ -49,7 +49,7 @@ func standbyTaskPostActionNoOp(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return ErrTaskRedispatch
 }
 
 func standbyTransferTaskPostActionTaskDiscarded(

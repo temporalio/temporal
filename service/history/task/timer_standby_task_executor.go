@@ -410,7 +410,7 @@ func (t *timerStandbyTaskExecutor) processTimer(
 		return err
 	}
 	defer func() {
-		if retError == ErrTaskRetry {
+		if retError == ErrTaskRedispatch {
 			release(nil)
 		} else {
 			release(retError)
@@ -492,7 +492,7 @@ func (t *timerStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return ErrTaskRedispatch
 }
 
 func (t *timerStandbyTaskExecutor) getCurrentTime() time.Time {

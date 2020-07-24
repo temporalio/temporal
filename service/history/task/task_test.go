@@ -136,8 +136,8 @@ func (s *taskSuite) TestHandleErr_ErrTaskRetry() {
 		return true, nil
 	})
 
-	err := ErrTaskRetry
-	s.Equal(ErrTaskRetry, taskBase.HandleErr(err))
+	err := ErrTaskRedispatch
+	s.Equal(ErrTaskRedispatch, taskBase.HandleErr(err))
 }
 
 func (s *taskSuite) TestHandleErr_ErrTaskDiscarded() {

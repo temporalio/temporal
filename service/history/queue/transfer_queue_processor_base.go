@@ -426,7 +426,6 @@ func newTransferQueueProcessorOptions(
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		RedispatchInterval:                  config.TaskRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.TaskRedispatchIntervalJitterCoefficient,
 		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
 		SplitQueueInterval:                  config.TransferProcessorSplitQueueInterval,
@@ -450,8 +449,10 @@ func newTransferQueueProcessorOptions(
 
 	if isActive {
 		options.MetricScope = metrics.TransferActiveQueueProcessorScope
+		options.RedispatchInterval = config.ActiveTaskRedispatchInterval
 	} else {
 		options.MetricScope = metrics.TransferStandbyQueueProcessorScope
+		options.RedispatchInterval = config.StandbyTaskRedispatchInterval
 	}
 
 	return options
