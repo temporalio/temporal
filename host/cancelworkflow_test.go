@@ -700,7 +700,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		})
 	}
 	s.Logger.Error("Describe error", tag.Error(err))
-	s.NotNil(err, "Child workflow execution started instead of getting cancelled")
+	s.Error(err, "Child workflow execution started instead of getting cancelled")
 	s.IsType(&serviceerror.NotFound{}, err, "Error is not of type 'NotFound'")
 
 	s.True(workflowComplete)
