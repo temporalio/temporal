@@ -54,5 +54,5 @@ func Decode(p *commonpb.Payload, valuePtr interface{}) error {
 }
 
 func ToString(p *commonpb.Payload) string {
-	return string(p.GetData())
+	return payloadConverter.ToString(p)
 }

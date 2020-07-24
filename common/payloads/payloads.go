@@ -26,7 +26,6 @@ package payloads
 
 import (
 	"bytes"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/encoded"
@@ -37,13 +36,13 @@ var (
 )
 
 func EncodeString(str string) *commonpb.Payloads {
-	// Error can be safely ignored here becase string always can be converted to JSON.
+	// Error can be safely ignored here becase string always can be converted.
 	ps, _ := dataConverter.ToPayloads(str)
 	return ps
 }
 
 func EncodeInt(i int) *commonpb.Payloads {
-	// Error can be safely ignored here becase int always can be converted to JSON.
+	// Error can be safely ignored here becase int always can be converted.
 	ps, _ := dataConverter.ToPayloads(i)
 	return ps
 }
@@ -63,19 +62,8 @@ func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
 }
 
 func ToString(ps *commonpb.Payloads) string {
-	str, err := toString(ps)
-	if err != nil {
-		return fmt.Sprintf("Unable to decode payloads. %+v", err)
-	}
-	return str
-}
-
-func toString(ps *commonpb.Payloads) (string, error) {
 	var buf bytes.Buffer
-	details, err := dataConverter.ToStrings(ps)
-	if err != nil {
-		return "", err
-	}
+	details := dataConverter.ToStrings(ps)
 
 	buf.WriteString("[")
 	for _, d := range details {
@@ -88,5 +76,5 @@ func toString(ps *commonpb.Payloads) (string, error) {
 	}
 
 	buf.WriteString("]")
-	return buf.String(), nil
+	return buf.String()
 }
