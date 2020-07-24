@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/cluster"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -123,7 +124,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           retention,
+			Retention:               timestamp.DurationFromDays(retention),
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -150,7 +151,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.Equal(retention, resp1.Namespace.Config.RetentionDays)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
@@ -174,7 +175,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 			Data:        map[string]string{},
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           100,
+			Retention:               timestamp.DurationFromDays(100),
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:      "",
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -235,7 +236,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           retention,
+			Retention:               timestamp.DurationFromDays(retention),
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -263,7 +264,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(description, resp2.Namespace.Info.Description)
 	m.Equal(owner, resp2.Namespace.Info.Owner)
 	m.Equal(data, resp2.Namespace.Info.Data)
-	m.Equal(retention, resp2.Namespace.Config.RetentionDays)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp2.Namespace.Config.Retention)
 	m.Equal(historyArchivalState, resp2.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp2.Namespace.Config.VisibilityArchivalState)
@@ -288,7 +289,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 	m.Equal(data, resp3.Namespace.Info.Data)
-	m.Equal(retention, resp3.Namespace.Config.RetentionDays)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp3.Namespace.Config.Retention)
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
@@ -360,7 +361,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 					Data:        data,
 				},
 				&persistenceblobs.NamespaceConfig{
-					RetentionDays:           retention,
+					Retention:               timestamp.DurationFromDays(retention),
 					HistoryArchivalState:    historyArchivalState,
 					HistoryArchivalUri:      historyArchivalURI,
 					VisibilityArchivalState: visibilityArchivalState,
@@ -391,7 +392,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	m.Equal(state, resp.Namespace.Info.State)
 	m.Equal(description, resp.Namespace.Info.Description)
 	m.Equal(owner, resp.Namespace.Info.Owner)
-	m.Equal(retention, resp.Namespace.Config.RetentionDays)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	m.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -446,7 +447,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           retention,
+			Retention:               timestamp.DurationFromDays(retention),
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -497,7 +498,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 					Data:        updatedData,
 				},
 				&persistenceblobs.NamespaceConfig{
-					RetentionDays:           resp2.Namespace.Config.RetentionDays,
+					Retention:               resp2.Namespace.Config.Retention,
 					HistoryArchivalState:    resp2.Namespace.Config.HistoryArchivalState,
 					HistoryArchivalUri:      resp2.Namespace.Config.HistoryArchivalUri,
 					VisibilityArchivalState: resp2.Namespace.Config.VisibilityArchivalState,
@@ -533,7 +534,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 
-	m.Equal(retention, resp3.Namespace.Config.RetentionDays)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp3.Namespace.Config.Retention)
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
@@ -588,7 +589,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           retention,
+			Retention:               timestamp.DurationFromDays(retention),
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -616,7 +617,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	updatedOwner := "owner-updated"
 	// This will overriding the previous key-value pair
 	updatedData := map[string]string{"k1": "v2"}
-	updatedRetention := int32(20)
+	updatedRetention := timestamp.DurationFromDays(20)
 	updatedHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updatedHistoryArchivalURI := ""
 	updatedVisibilityArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
@@ -649,7 +650,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			Data:        updatedData,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           updatedRetention,
+			Retention:               updatedRetention,
 			HistoryArchivalState:    updatedHistoryArchivalState,
 			HistoryArchivalUri:      updatedHistoryArchivalURI,
 			VisibilityArchivalState: updatedVisibilityArchivalState,
@@ -678,7 +679,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp4.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp4.Namespace.Info.Owner)
 	m.Equal(updatedData, resp4.Namespace.Info.Data)
-	m.Equal(updatedRetention, resp4.Namespace.Config.RetentionDays)
+	m.EqualValues(*updatedRetention, *resp4.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp4.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp4.Namespace.Config.VisibilityArchivalState)
@@ -705,7 +706,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp5.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp5.Namespace.Info.Owner)
 	m.Equal(updatedData, resp5.Namespace.Info.Data)
-	m.Equal(updatedRetention, resp5.Namespace.Config.RetentionDays)
+	m.EqualValues(*updatedRetention, *resp5.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp5.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp5.Namespace.Config.VisibilityArchivalState)
@@ -732,7 +733,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			Data:        updatedData,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           updatedRetention,
+			Retention:               updatedRetention,
 			HistoryArchivalState:    updatedHistoryArchivalState,
 			HistoryArchivalUri:      updatedHistoryArchivalURI,
 			VisibilityArchivalState: updatedVisibilityArchivalState,
@@ -761,7 +762,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp6.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp6.Namespace.Info.Owner)
 	m.Equal(updatedData, resp6.Namespace.Info.Data)
-	m.Equal(updatedRetention, resp6.Namespace.Config.RetentionDays)
+	m.EqualValues(*updatedRetention, *resp6.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp6.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp6.Namespace.Config.VisibilityArchivalState)
@@ -787,7 +788,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	description := "delete-namespace-test-description"
 	owner := "delete-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
-	retention := 10
+	retention := timestamp.DurationFromDays(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
@@ -810,7 +811,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           int32(retention),
+			Retention:               retention,
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -855,7 +856,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 			Data:        data,
 		},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays:           int32(retention),
+			Retention:               retention,
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
@@ -927,7 +928,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					Data:        map[string]string{"k1": "v1"},
 				},
 				Config: &persistenceblobs.NamespaceConfig{
-					RetentionDays:           109,
+					Retention:               timestamp.DurationFromDays(109),
 					HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 					HistoryArchivalUri:      "test://history/uri",
 					VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
@@ -955,7 +956,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					Data:        map[string]string{"k1": "v2"},
 				},
 				Config: &persistenceblobs.NamespaceConfig{
-					RetentionDays:           326,
+					Retention:               timestamp.DurationFromDays(326),
 					HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 					HistoryArchivalUri:      "",
 					VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,

@@ -481,7 +481,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
+	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -544,7 +544,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	// set the sticky taskqueue attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTaskQueueName
-	executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
+	executionInfo.StickyScheduleToStartTimeout = int64(stickyTaskQueueTimeout)
 
 	// make another round of workflow task
 	taskID := int64(59)
@@ -1912,7 +1912,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: ai.ScheduleToStartTimeout,
+		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout),
 	}
 }
 
@@ -1941,7 +1941,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Execution:                     &execution,
 		TaskQueue:                     taskQueue,
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: timeout,
+		ScheduleToStartTimeoutSeconds: int32(timeout),
 	}
 }
 

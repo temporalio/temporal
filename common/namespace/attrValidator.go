@@ -26,6 +26,7 @@ package namespace
 
 import (
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -55,7 +56,7 @@ func newAttrValidator(
 }
 
 func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistenceblobs.NamespaceConfig) error {
-	if config.RetentionDays < int32(d.minRetentionDays) {
+	if config.Retention != nil && *config.Retention < time.Hour*24*time.Duration(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
 	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {

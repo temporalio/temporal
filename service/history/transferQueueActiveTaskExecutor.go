@@ -154,7 +154,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return err
 	}
 
-	timeout := common.MinInt32(ai.ScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(ai.ScheduleToStartTimeout, common.MaxTaskTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -193,7 +193,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	runTimeout := executionInfo.WorkflowRunTimeout
-	taskTimeout := common.MinInt32(runTimeout, common.MaxTaskTimeout)
+	taskTimeout := common.MinInt64(runTimeout, common.MaxTaskTimeout)
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
@@ -674,7 +674,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	runTimeout := executionInfo.WorkflowRunTimeout
+	runTimeout := int32(executionInfo.WorkflowRunTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {

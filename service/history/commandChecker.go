@@ -523,16 +523,16 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		if attributes.GetWorkflowRunTimeoutSeconds() > 0 {
 			runTimeout = common.MinInt32(runTimeout, attributes.GetWorkflowRunTimeoutSeconds())
 		} else {
-			runTimeout = common.MinInt32(runTimeout, executionInfo.WorkflowRunTimeout)
+			runTimeout = common.MinInt32(runTimeout, int32(executionInfo.WorkflowRunTimeout))
 		}
 		attributes.WorkflowRunTimeoutSeconds = runTimeout
 	} else if attributes.GetWorkflowRunTimeoutSeconds() == 0 {
-		attributes.WorkflowRunTimeoutSeconds = executionInfo.WorkflowRunTimeout
+		attributes.WorkflowRunTimeoutSeconds = int32(executionInfo.WorkflowRunTimeout)
 	}
 
 	// Inherit workflow task timeout from previous execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
-		attributes.WorkflowTaskTimeoutSeconds = executionInfo.DefaultWorkflowTaskTimeout
+		attributes.WorkflowTaskTimeoutSeconds = int32(executionInfo.DefaultWorkflowTaskTimeout)
 	}
 
 	// Check next run workflow task delay
@@ -609,7 +609,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
-		attributes.WorkflowTaskTimeoutSeconds = parentInfo.DefaultWorkflowTaskTimeout
+		attributes.WorkflowTaskTimeoutSeconds = int32(parentInfo.DefaultWorkflowTaskTimeout)
 	}
 
 	return nil

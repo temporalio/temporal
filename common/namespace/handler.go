@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -208,7 +209,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		Data:        registerRequest.Data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           registerRequest.GetWorkflowExecutionRetentionPeriodDays(),
+		Retention:               timestamp.DurationFromDays(registerRequest.GetWorkflowExecutionRetentionPeriodDays()),
 		HistoryArchivalState:    nextHistoryArchivalState.State,
 		HistoryArchivalUri:      nextHistoryArchivalState.URI,
 		VisibilityArchivalState: nextVisibilityArchivalState.State,
@@ -440,7 +441,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		updatedConfig := updateRequest.Config
 		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
 			configurationChanged = true
-			config.RetentionDays = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+			config.Retention = timestamp.DurationFromDays(updatedConfig.GetWorkflowExecutionRetentionPeriodInDays())
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
@@ -638,7 +639,7 @@ func (d *HandlerImpl) createResponse(
 	}
 
 	configResult := &namespacepb.NamespaceConfig{
-		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
+		WorkflowExecutionRetentionPeriodInDays: int32(config.Retention.Hours() / 24),
 		HistoryArchivalState:                   config.HistoryArchivalState,
 		HistoryArchivalUri:                     config.HistoryArchivalUri,
 		VisibilityArchivalState:                config.VisibilityArchivalState,
