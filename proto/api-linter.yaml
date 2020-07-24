@@ -38,7 +38,7 @@
     - 'core::0131::response-message-name'
 
 - included_paths:
-    - '**/gogo.proto'
+    - 'dependencies/gogoproto/v1/gogo.proto'
   disabled_rules:
     - 'core::0215::versioned-packages'
     - 'core::0191::proto-version'

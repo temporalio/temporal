@@ -31,8 +31,6 @@ package gogoproto;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
-
 extend google.protobuf.EnumOptions {
 	optional bool goproto_enum_prefix = 62001;
 	optional bool goproto_enum_stringer = 62021;

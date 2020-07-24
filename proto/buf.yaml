@@ -5,7 +5,7 @@ build:
 lint:
   ignore:
     - temporal/api # do not lint public api
-    - temporal/server/api/gogoproto
+    - dependencies
   use:
     - DEFAULT
   except:
