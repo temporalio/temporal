@@ -40,7 +40,9 @@ const (
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
-	replaceTaskQueueQry = `REPLACE ` + taskQueueCreatePart
+	replaceTaskQueueQry = `INSERT ` + taskQueueCreatePart + `
+ON DUPLICATE KEY UPDATE
+range_id=VALUES(range_id), data=VALUES(data), data_encoding=VALUES(data_encoding)`
 
 	updateTaskQueueQry = `UPDATE task_queues SET
 range_id = :range_id,
