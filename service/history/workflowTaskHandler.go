@@ -54,13 +54,13 @@ type (
 		namespaceEntry          *cache.NamespaceCacheEntry
 
 		// internal state
-		hasBufferedEvents                 bool
-		failWorkflowTaskInfo              *failWorkflowTaskInfo
-		activityNotStartedCancelled       bool
-		continueAsNewBuilder              mutableState
-		stopProcessing                    bool // should stop processing any more commands
-		mutableState                      mutableState
-		initiatedChildExecutionsInSession map[string]struct{} // Set of initiated child executions in the workflow task
+		hasBufferedEvents               bool
+		failWorkflowTaskInfo            *failWorkflowTaskInfo
+		activityNotStartedCancelled     bool
+		continueAsNewBuilder            mutableState
+		stopProcessing                  bool // should stop processing any more commands
+		mutableState                    mutableState
+		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
 		attrValidator    *commandAttrValidator
@@ -97,13 +97,13 @@ func newWorkflowTaskHandler(
 		namespaceEntry:          namespaceEntry,
 
 		// internal state
-		hasBufferedEvents:                 mutableState.HasBufferedEvents(),
-		failWorkflowTaskInfo:              nil,
-		activityNotStartedCancelled:       false,
-		continueAsNewBuilder:              nil,
-		stopProcessing:                    false,
-		mutableState:                      mutableState,
-		initiatedChildExecutionsInSession: make(map[string]struct{}),
+		hasBufferedEvents:               mutableState.HasBufferedEvents(),
+		failWorkflowTaskInfo:            nil,
+		activityNotStartedCancelled:     false,
+		continueAsNewBuilder:            nil,
+		stopProcessing:                  false,
+		mutableState:                    mutableState,
+		initiatedChildExecutionsInBatch: make(map[string]struct{}),
 
 		// validation
 		attrValidator:    attrValidator,
@@ -584,7 +584,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 			return handler.attrValidator.validateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
-				handler.initiatedChildExecutionsInSession,
+				handler.initiatedChildExecutionsInBatch,
 				attr,
 			)
 		},
@@ -782,7 +782,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands
-		handler.initiatedChildExecutionsInSession[attr.GetWorkflowId()] = struct{}{}
+		handler.initiatedChildExecutionsInBatch[attr.GetWorkflowId()] = struct{}{}
 	}
 	return err
 }
