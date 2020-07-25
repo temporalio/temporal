@@ -163,7 +163,7 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 
 	replayer := worker.NewWorkflowReplayer()
 	s.registerWorkflowsForReplayer(replayer)
-	err := replayer.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archival_workflow_history_v1.json")
+	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewZapAdapter(logger), "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 
