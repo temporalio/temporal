@@ -22,37 +22,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package payload
+package log
 
 import (
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/sdk/encoded"
+	"fmt"
+
+	"go.temporal.io/sdk/client"
+	"go.uber.org/zap"
 )
 
-var (
-	payloadConverter = encoded.GetDefaultDataConverter()
-)
-
-func EncodeString(str string) *commonpb.Payload {
-	// Error can be safely ignored here becase string always can be converted to JSON
-	p, _ := payloadConverter.ToPayload(str)
-	return p
+type ZapAdapter struct {
+	zl *zap.Logger
 }
 
-func EncodeBytes(bytes []byte) *commonpb.Payload {
-	// Error can be safely ignored here becase []byte always can be raw encoded
-	p, _ := payloadConverter.ToPayload(bytes)
-	return p
+func NewZapAdapter(zapLogger *zap.Logger) *ZapAdapter {
+	return &ZapAdapter{
+		zl: zapLogger.WithOptions(zap.AddCallerSkip(1)),
+	}
 }
 
-func Encode(value interface{}) (*commonpb.Payload, error) {
-	return payloadConverter.ToPayload(value)
+func (log *ZapAdapter) fields(keyvals []interface{}) []zap.Field {
+	if len(keyvals)%2 != 0 {
+		return []zap.Field{zap.Error(fmt.Errorf("odd number of keyvals pairs: %v", keyvals))}
+	}
+
+	var fields []zap.Field
+	for i := 0; i < len(keyvals); i += 2 {
+		key, ok := keyvals[i].(string)
+		if !ok {
+			key = fmt.Sprintf("%v", keyvals[i])
+		}
+		fields = append(fields, zap.Any(key, keyvals[i+1]))
+	}
+
+	return fields
 }
 
-func Decode(p *commonpb.Payload, valuePtr interface{}) error {
-	return payloadConverter.FromPayload(p, valuePtr)
+func (log *ZapAdapter) Debug(msg string, keyvals ...interface{}) {
+	log.zl.Debug(msg, log.fields(keyvals)...)
 }
 
-func ToString(p *commonpb.Payload) string {
-	return payloadConverter.ToString(p)
+func (log *ZapAdapter) Info(msg string, keyvals ...interface{}) {
+	log.zl.Info(msg, log.fields(keyvals)...)
+}
+
+func (log *ZapAdapter) Warn(msg string, keyvals ...interface{}) {
+	log.zl.Warn(msg, log.fields(keyvals)...)
+}
+
+func (log *ZapAdapter) Error(msg string, keyvals ...interface{}) {
+	log.zl.Error(msg, log.fields(keyvals)...)
+}
+
+func (log *ZapAdapter) With(keyvals ...interface{}) client.Logger {
+	return NewZapAdapter(log.zl.With(log.fields(keyvals)...))
 }

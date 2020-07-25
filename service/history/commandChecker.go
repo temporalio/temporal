@@ -399,6 +399,7 @@ func (v *commandAttrValidator) validateCancelWorkflowExecutionAttributes(
 func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
+	initiatedChildExecutionsInSession map[string]struct{},
 	attributes *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -424,6 +425,9 @@ func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes
 	runID := attributes.GetRunId()
 	if runID != "" && uuid.Parse(runID) == nil {
 		return serviceerror.NewInvalidArgument("Invalid RunId set on command.")
+	}
+	if _, ok := initiatedChildExecutionsInSession[attributes.GetWorkflowId()]; ok {
+		return serviceerror.NewInvalidArgument("Start and RequestCancel for child workflow is not allowed in same workflow task.")
 	}
 
 	return nil

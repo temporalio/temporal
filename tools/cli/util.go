@@ -738,17 +738,22 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 
 // process and validate input provided through cmd or file
 func processJSONInput(c *cli.Context) *commonpb.Payloads {
-	rawJson := processJSONInputHelper(c, jsonTypeInput)
-	if len(rawJson) == 0 {
-		return nil
-	}
+	jsonsRaw := readJSONInputs(c, jsonTypeInput)
 
-	var v interface{}
-	if err := json.Unmarshal(rawJson, &v); err != nil {
-		ErrorAndExit("Input is not a valid JSON.", err)
-	}
+	var jsons []interface{}
+	for _, jsonRaw := range jsonsRaw {
+		if jsonRaw == nil {
+			jsons = append(jsons, nil)
+		} else {
+			var j interface{}
+			if err := json.Unmarshal(jsonRaw, &j); err != nil {
+				ErrorAndExit("Input is not a valid JSON.", err)
+			}
+			jsons = append(jsons, j)
+		}
 
-	p, err := payloads.Encode(v)
+	}
+	p, err := payloads.Encode(jsons...)
 	if err != nil {
 		ErrorAndExit("Unable to encode Input.", err)
 	}
@@ -756,33 +761,53 @@ func processJSONInput(c *cli.Context) *commonpb.Payloads {
 	return p
 }
 
-// process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) []byte {
-	var flagNameOfRawInput string
-	var flagNameOfInputFileName string
+// read multiple inputs presented in json format
+func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
+	var flagRawInput string
+	var flagInputFileName string
 
 	switch jType {
 	case jsonTypeInput:
-		flagNameOfRawInput = FlagInput
-		flagNameOfInputFileName = FlagInputFile
+		flagRawInput = FlagInput
+		flagInputFileName = FlagInputFile
 	case jsonTypeMemo:
-		flagNameOfRawInput = FlagMemo
-		flagNameOfInputFileName = FlagMemoFile
+		flagRawInput = FlagMemo
+		flagInputFileName = FlagMemoFile
 	default:
 		return nil
 	}
 
-	if c.IsSet(flagNameOfRawInput) {
-		return []byte(c.String(flagNameOfRawInput))
-	} else if c.IsSet(flagNameOfInputFileName) {
-		inputFile := c.String(flagNameOfInputFileName)
+	if c.IsSet(flagRawInput) {
+		inputsG := c.Generic(flagRawInput)
+
+		var inputs *cli.StringSlice
+		var ok bool
+		if inputs, ok = inputsG.(*cli.StringSlice); !ok {
+			// input could be provided as StringFlag instead of StringSliceFlag
+			ss := make(cli.StringSlice, 1)
+			ss[0] = fmt.Sprintf("%v", inputsG)
+			inputs = &ss
+		}
+
+		var inputsRaw [][]byte
+		for _, i := range *inputs {
+			if strings.EqualFold(i, "null") {
+				inputsRaw = append(inputsRaw, []byte(nil))
+			} else {
+				inputsRaw = append(inputsRaw, []byte(i))
+			}
+		}
+
+		return inputsRaw
+	} else if c.IsSet(flagInputFileName) {
+		inputFile := c.String(flagInputFileName)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
 		// #nosec
 		data, err := ioutil.ReadFile(inputFile)
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
-		return data
+		return [][]byte{data}
 	}
 	return nil
 }

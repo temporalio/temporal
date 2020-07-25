@@ -173,18 +173,13 @@ func (tdc *testDataConverter) FromPayload(payload *commonpb.Payload, valuePtr in
 	return decodeGob(payload, valuePtr)
 }
 
-func (tdc *testDataConverter) ToStrings(payloads *commonpb.Payloads) ([]string, error) {
+func (tdc *testDataConverter) ToStrings(payloads *commonpb.Payloads) []string {
 	var result []string
 	for _, p := range payloads.GetPayloads() {
-		str, err := toString(p)
-		if err != nil {
-			return result, err
-		}
-
-		result = append(result, str)
+		result = append(result, tdc.ToString(p))
 	}
 
-	return result, nil
+	return result
 }
 
 func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
@@ -192,24 +187,24 @@ func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
 	return dec.Decode(valuePtr)
 }
 
-func toString(payload *commonpb.Payload) (string, error) {
+func (tdc *testDataConverter) ToString(payload *commonpb.Payload) string {
 	encoding, ok := payload.GetMetadata()["encoding"]
 	if !ok {
-		return "", ErrEncodingIsNotSet
+		return ErrEncodingIsNotSet.Error()
 	}
 
 	e := string(encoding)
 	if e != "gob" {
-		return "", ErrEncodingIsNotSupported
+		return ErrEncodingIsNotSupported.Error()
 	}
 
 	var value interface{}
 	err := decodeGob(payload, &value)
 	if err != nil {
-		return "", err
+		return err.Error()
 	}
 
-	return fmt.Sprintf("%+v", value), nil
+	return fmt.Sprintf("%+v", value)
 }
 
 func newTestDataConverter() encoded.DataConverter {

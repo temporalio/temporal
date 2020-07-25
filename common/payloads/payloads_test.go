@@ -61,7 +61,7 @@ func TestToString(t *testing.T) {
 	}, 10, "str")
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal("[map[Bytes:MzQ1 Int:10 String:str], 10, str]", result)
+	assert.Equal("[{Bytes:MzQ1 Int:10 String:str}, 10, str]", result)
 
 	result = ToString(nil)
 	assert.Equal("[]", result)
