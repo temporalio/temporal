@@ -194,7 +194,7 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_archival/development"
     visibility:
       state: "enabled"
-      URI: "file:///tmp/cadence_vis_archival/development"
+      URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
     tls:
