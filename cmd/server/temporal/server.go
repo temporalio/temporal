@@ -193,7 +193,7 @@ func (s *server) startService() common.Daemon {
 			HostPort:          s.cfg.PublicClient.HostPort,
 			Namespace:         common.SystemLocalNamespace,
 			MetricsScope:      params.MetricScope,
-			Logger:            zapLogger,
+			Logger:            l.NewZapAdapter(zapLogger),
 			ConnectionOptions: sdkclient.ConnectionOptions{TLS: options},
 		})
 		if err != nil {
