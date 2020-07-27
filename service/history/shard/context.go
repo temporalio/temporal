@@ -1335,6 +1335,7 @@ func (s *contextImpl) ValidateAndUpdateFailoverMarkers() ([]*replicator.Failover
 	}
 
 	if len(completedFailoverMarkers) == 0 {
+		s.RUnlock()
 		return s.pendingFailoverMarkers, nil
 	}
 	s.RUnlock()

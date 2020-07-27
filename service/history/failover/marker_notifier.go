@@ -97,11 +97,14 @@ func (m *markerNotifierImpl) Stop() {
 
 func (m *markerNotifierImpl) notifyPendingFailoverMarker() {
 
+	ticker := time.NewTicker(m.config.NotifyFailoverMarkerInterval())
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-m.shutdownCh:
 			return
-		default:
+		case <-ticker.C:
 			markers, err := m.shard.ValidateAndUpdateFailoverMarkers()
 			if err != nil {
 				m.logger.Error("Failed to update pending failover markers in shard info.", tag.Error(err))
@@ -110,7 +113,6 @@ func (m *markerNotifierImpl) notifyPendingFailoverMarker() {
 			if len(markers) > 0 {
 				m.failoverCoordinator.NotifyFailoverMarkers(int32(m.shard.GetShardID()), markers)
 			}
-			time.Sleep(m.config.NotifyFailoverMarkerInterval())
 		}
 	}
 }
