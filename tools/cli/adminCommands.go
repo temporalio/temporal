@@ -358,7 +358,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"
-		tmplV2 := "select namespace from namespaces_by_name_v2 where namespaces_partition=0 and name = ?"
+		tmplV2 := "select namespace from namespaces where namespaces_partition=0 and name = ?"
 
 		query := session.Query(tmpl, namespace)
 		res, err := readOneRow(query)

@@ -45,26 +45,26 @@ const (
 )
 
 const (
-	templateCreateNamespaceQuery = `INSERT INTO namespaces (` +
+	templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
 		`id, name) ` +
 		`VALUES(?, ?) IF NOT EXISTS`
 
 	templateGetNamespaceQuery = `SELECT name ` +
-		`FROM namespaces ` +
+		`FROM namespaces_by_id ` +
 		`WHERE id = ?`
 
-	templateDeleteNamespaceQuery = `DELETE FROM namespaces ` +
+	templateDeleteNamespaceQuery = `DELETE FROM namespaces_by_id ` +
 		`WHERE id = ?`
 
 	templateNamespaceColumns = `id, name, detail, detail_encoding, notification_version, is_global_namespace`
 
-	templateCreateNamespaceByNameQueryWithinBatchV2 = `INSERT INTO namespaces_by_name_v2 ` +
+	templateCreateNamespaceByNameQueryWithinBatchV2 = `INSERT INTO namespaces ` +
 		`( namespaces_partition, ` + templateNamespaceColumns + `) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetNamespaceByNameQueryV2 = templateListNamespaceQueryV2 + `and name = ?`
 
-	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
+	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces ` +
 		`SET detail = ? ,` +
 		`detail_encoding = ? ,` +
 		`notification_version = ? ` +
@@ -72,23 +72,23 @@ const (
 		`and name = ?`
 
 	templateGetMetadataQueryV2 = `SELECT notification_version ` +
-		`FROM namespaces_by_name_v2 ` +
+		`FROM namespaces ` +
 		`WHERE namespaces_partition = ? ` +
 		`and name = ? `
 
-	templateUpdateMetadataQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
+	templateUpdateMetadataQueryWithinBatchV2 = `UPDATE namespaces ` +
 		`SET notification_version = ? ` +
 		`WHERE namespaces_partition = ? ` +
 		`and name = ? ` +
 		`IF notification_version = ? `
 
-	templateDeleteNamespaceByNameQueryV2 = `DELETE FROM namespaces_by_name_v2 ` +
+	templateDeleteNamespaceByNameQueryV2 = `DELETE FROM namespaces ` +
 		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
 
 	templateListNamespaceQueryV2 = `SELECT ` +
 		templateNamespaceColumns +
-		` FROM namespaces_by_name_v2 ` +
+		` FROM namespaces ` +
 		`WHERE namespaces_partition = ? `
 )
 
@@ -171,7 +171,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 	}()
 
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces_by_name_v2 table. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 
 	if !applied {
@@ -362,7 +362,7 @@ func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, 
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			// this error can be thrown in the very beginning,
-			// i.e. when namespaces_by_name_v2 is initialized
+			// i.e. when namespaces is initialized
 			return &p.GetMetadataResponse{NotificationVersion: 0}, nil
 		}
 		return nil, err

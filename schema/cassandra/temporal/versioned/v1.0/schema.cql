@@ -93,15 +93,15 @@ CREATE TABLE tasks (
   };
 
 -- this table is only used for storage of mapping of namespace uuid to namespace name
-CREATE TABLE namespaces (
+CREATE TABLE namespaces_by_id (
   id     uuid,
   name   text,
   PRIMARY KEY (id)
 ) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'  };
 
-CREATE TABLE namespaces_by_name_v2 (
+
+CREATE TABLE namespaces (
   namespaces_partition          int,
   name                          text,
   id                            uuid,
