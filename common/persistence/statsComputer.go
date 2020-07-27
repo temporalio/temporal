@@ -193,10 +193,10 @@ func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int 
 func computeActivityInfoSize(ai *InternalActivityInfo) int {
 	size := len(ai.ActivityID)
 	if ai.ScheduledEvent != nil {
-		size += len(ai.ScheduledEvent.Data)
+		size += ai.ScheduledEvent.Size()
 	}
 	if ai.StartedEvent != nil {
-		size += len(ai.StartedEvent.Data)
+		size += ai.StartedEvent.Size()
 	}
 	if ai.Details != nil {
 		size += ai.Details.Size()

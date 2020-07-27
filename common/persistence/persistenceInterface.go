@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -288,10 +289,10 @@ type (
 		Version                 int64
 		ScheduleID              int64
 		ScheduledEventBatchID   int64
-		ScheduledEvent          *serialization.DataBlob
+		ScheduledEvent          *historypb.HistoryEvent
 		ScheduledTime           time.Time
 		StartedID               int64
-		StartedEvent            *serialization.DataBlob
+		StartedEvent            *historypb.HistoryEvent
 		StartedTime             time.Time
 		ActivityID              string
 		RequestID               string
@@ -916,7 +917,7 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		LastHeartbeatUpdateTime: *timestamp.TimestampFromProto(decoded.GetLastHeartbeatUpdateTime()).ToTime(),
 		Version:                 decoded.GetVersion(),
 		ScheduledEventBatchID:   decoded.GetScheduledEventBatchId(),
-		ScheduledEvent:          NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
+		ScheduledEvent:          decoded.ScheduledEvent,
 		ScheduledTime:           *timestamp.TimestampFromProto(decoded.GetScheduledTime()).ToTime(),
 		StartedID:               decoded.GetStartedId(),
 		StartedTime:             *timestamp.TimestampFromProto(decoded.GetStartedTime()).ToTime(),
@@ -945,14 +946,12 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		info.ExpirationTime = *timestamp.TimestampFromProto(decoded.GetRetryExpirationTime()).ToTime()
 	}
 	if decoded.StartedEvent != nil {
-		info.StartedEvent = NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
+		info.StartedEvent = decoded.StartedEvent
 	}
 	return info
 }
 
 func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
-	scheduledEvent, scheduledEncoding := FromDataBlob(v.ScheduledEvent)
-	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
 
 	info := &persistenceblobs.ActivityInfo{
 		NamespaceId:                 v.NamespaceID,
@@ -961,12 +960,10 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		LastHeartbeatUpdateTime:     timestamp.TimestampFromTimePtr(&v.LastHeartbeatUpdateTime).ToProto(),
 		Version:                     v.Version,
 		ScheduledEventBatchId:       v.ScheduledEventBatchID,
-		ScheduledEvent:              scheduledEvent,
-		ScheduledEventEncoding:      scheduledEncoding,
+		ScheduledEvent:              v.ScheduledEvent,
 		ScheduledTime:               timestamp.TimestampFromTimePtr(&v.ScheduledTime).ToProto(),
 		StartedId:                   v.StartedID,
-		StartedEvent:                startEvent,
-		StartedEventEncoding:        startEncoding,
+		StartedEvent:                v.StartedEvent,
 		StartedTime:                 timestamp.TimestampFromTimePtr(&v.StartedTime).ToProto(),
 		ActivityId:                  v.ActivityID,
 		RequestId:                   v.RequestID,

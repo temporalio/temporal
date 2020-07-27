@@ -33,6 +33,7 @@ import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
 
 import "dependencies/gogoproto/v1/gogo.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -49,12 +50,10 @@ message ImmutableClusterMetadata {
 message ActivityInfo {
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
-    bytes scheduled_event = 3;
-    string scheduled_event_encoding = 4;
+    temporal.api.history.v1.HistoryEvent scheduled_event = 3;
     google.protobuf.Timestamp scheduled_time = 5;
     int64 started_id = 6;
-    bytes started_event = 7;
-    string started_event_encoding = 8;
+    temporal.api.history.v1.HistoryEvent started_event = 7;
     google.protobuf.Timestamp started_time = 9;
     string activity_id = 10;
     string request_id = 11;

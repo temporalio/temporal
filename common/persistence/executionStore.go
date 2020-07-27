@@ -245,18 +245,9 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 
 	newInfos := make(map[int64]*ActivityInfo, 0)
 	for k, v := range infos {
-		scheduledEvent, err := m.serializer.DeserializeEvent(v.ScheduledEvent)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.DeserializeEvent(v.StartedEvent)
-		if err != nil {
-			return nil, err
-		}
 		a := &ActivityInfo{
-			ScheduledEvent: scheduledEvent,
-			StartedEvent:   startedEvent,
-
+			ScheduledEvent: 						 v.ScheduledEvent,
+			StartedEvent:   						 v.StartedEvent,
 			Version:                                 v.Version,
 			ScheduleID:                              v.ScheduleID,
 			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
@@ -366,22 +357,14 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 
 	newInfos := make([]*InternalActivityInfo, 0)
 	for _, v := range infos {
-		scheduledEvent, err := m.serializer.SerializeEvent(v.ScheduledEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.SerializeEvent(v.StartedEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
 		i := &InternalActivityInfo{
 			Version:                                 v.Version,
 			ScheduleID:                              v.ScheduleID,
 			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
-			ScheduledEvent:                          scheduledEvent,
+			ScheduledEvent:                          v.ScheduledEvent,
 			ScheduledTime:                           v.ScheduledTime,
 			StartedID:                               v.StartedID,
-			StartedEvent:                            startedEvent,
+			StartedEvent:                            v.StartedEvent,
 			StartedTime:                             v.StartedTime,
 			ActivityID:                              v.ActivityID,
 			RequestID:                               v.RequestID,
