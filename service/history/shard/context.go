@@ -453,7 +453,7 @@ func (s *contextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 		currentTime = s.remoteClusterCurrentTime[cluster]
 	}
 
-	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift())
+	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
 	return s.timerMaxReadLevelMap[cluster]
 }
 
@@ -1441,6 +1441,8 @@ func acquireShard(
 		} else { // active cluster
 			timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
 		}
+
+		timerMaxReadLevelMap[clusterName] = timerMaxReadLevelMap[clusterName].Truncate(time.Millisecond)
 	}
 
 	executionMgr, err := shardItem.GetExecutionManager(shardItem.shardID)
