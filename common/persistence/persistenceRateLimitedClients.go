@@ -263,6 +263,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetCurrentExecution(requ
 	return response, err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) IsWorkflowExecutionExists(request *IsWorkflowExecutionExistsRequest) (*IsWorkflowExecutionExistsResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.IsWorkflowExecutionExists(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded

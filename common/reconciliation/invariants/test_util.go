@@ -28,22 +28,23 @@ import (
 )
 
 const (
-	domainID    = "test-domain-id"
-	workflowID  = "test-workflow-id"
-	runID       = "test-run-id"
-	shardID     = 0
-	treeID      = "test-tree-id"
-	branchID    = "test-branch-id"
-	openState   = persistence.WorkflowStateCreated
-	closedState = persistence.WorkflowStateCompleted
+	domainID     = "test-domain-id"
+	workflowID   = "test-workflow-id"
+	runID        = "test-run-id"
+	shardID      = 0
+	treeID       = "test-tree-id"
+	branchID     = "test-branch-id"
+	openState    = persistence.WorkflowStateCreated
+	closedState  = persistence.WorkflowStateCompleted
+	currentRunID = "test-current-run-id"
 )
 
 var (
 	branchToken = []byte{1, 2, 3}
 )
 
-func getOpenExecution() common.ConcreteExecution {
-	return common.ConcreteExecution{
+func getOpenConcreteExecution() *common.ConcreteExecution {
+	return &common.ConcreteExecution{
 		Execution: common.Execution{
 			ShardID:    shardID,
 			DomainID:   domainID,
@@ -57,8 +58,8 @@ func getOpenExecution() common.ConcreteExecution {
 	}
 }
 
-func getClosedExecution() common.ConcreteExecution {
-	return common.ConcreteExecution{
+func getClosedConcreteExecution() *common.ConcreteExecution {
+	return &common.ConcreteExecution{
 		Execution: common.Execution{
 			ShardID:    shardID,
 			DomainID:   domainID,
@@ -69,5 +70,31 @@ func getClosedExecution() common.ConcreteExecution {
 		BranchToken: branchToken,
 		TreeID:      treeID,
 		BranchID:    branchID,
+	}
+}
+
+func getOpenCurrentExecution() *common.CurrentExecution {
+	return &common.CurrentExecution{
+		Execution: common.Execution{
+			ShardID:    shardID,
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			RunID:      runID,
+			State:      openState,
+		},
+		CurrentRunID: currentRunID,
+	}
+}
+
+func getClosedCurrentExecution() *common.CurrentExecution {
+	return &common.CurrentExecution{
+		Execution: common.Execution{
+			ShardID:    shardID,
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			RunID:      runID,
+			State:      closedState,
+		},
+		CurrentRunID: currentRunID,
 	}
 }

@@ -50,7 +50,7 @@ func NewHistoryExists(
 }
 
 func (h *historyExists) Check(execution interface{}) common.CheckResult {
-	concreteExecution, ok := execution.(common.ConcreteExecution)
+	concreteExecution, ok := execution.(*common.ConcreteExecution)
 	if !ok {
 		return common.CheckResult{
 			CheckResultType: common.CheckResultTypeFailed,

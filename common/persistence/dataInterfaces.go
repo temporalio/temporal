@@ -795,6 +795,13 @@ type (
 		WorkflowID string
 	}
 
+	// IsWorkflowExecutionExistsRequest is used to check if the concrete execution exists
+	IsWorkflowExecutionExistsRequest struct {
+		DomainID   string
+		WorkflowID string
+		RunID      string
+	}
+
 	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
 	ListConcreteExecutionsRequest struct {
 		PageSize  int
@@ -820,6 +827,11 @@ type (
 		State            int
 		CloseStatus      int
 		LastWriteVersion int64
+	}
+
+	// IsWorkflowExecutionExistsResponse is the response to IsWorkflowExecutionExists
+	IsWorkflowExecutionExistsResponse struct {
+		Exists bool
 	}
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
@@ -1521,6 +1533,7 @@ type (
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		IsWorkflowExecutionExists(request *IsWorkflowExecutionExistsRequest) (*IsWorkflowExecutionExistsResponse, error)
 
 		// Transfer task related methods
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)

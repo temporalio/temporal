@@ -134,7 +134,7 @@ func (s *HistoryExistsSuite) TestCheck() {
 		execManager.On("GetWorkflowExecution", mock.Anything).Return(tc.getExecResp, tc.getExecErr)
 		historyManager.On("ReadHistoryBranch", mock.Anything).Return(tc.getHistoryResp, tc.getHistoryErr)
 		i := NewHistoryExists(common.NewPersistenceRetryer(execManager, historyManager))
-		result := i.Check(getOpenExecution())
+		result := i.Check(getOpenConcreteExecution())
 		s.Equal(tc.expectedResult, result)
 	}
 }

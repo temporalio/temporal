@@ -440,6 +440,16 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateIsWorkflowExecutionExistsQuery = `SELECT shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ?`
+
 	templateListWorkflowExecutionQuery = `SELECT run_id, execution, version_histories, version_histories_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -2051,6 +2061,34 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		CloseStatus:      executionInfo.CloseStatus,
 		LastWriteVersion: replicationState.LastWriteVersion,
 	}, nil
+}
+
+func (d *cassandraPersistence) IsWorkflowExecutionExists(request *p.IsWorkflowExecutionExistsRequest) (*p.IsWorkflowExecutionExistsResponse,
+	error) {
+	query := d.session.Query(templateIsWorkflowExecutionExistsQuery,
+		d.shardID,
+		rowTypeExecution,
+		request.DomainID,
+		request.WorkflowID,
+		request.RunID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID)
+
+	result := make(map[string]interface{})
+	if err := query.MapScan(result); err != nil {
+		if err == gocql.ErrNotFound {
+			return &p.IsWorkflowExecutionExistsResponse{Exists: false}, nil
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("IsWorkflowExecutionExists operation failed. Error: %v", err),
+			}
+		}
+
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("IsWorkflowExecutionExists operation failed. Error: %v", err),
+		}
+	}
+	return &p.IsWorkflowExecutionExistsResponse{Exists: true}, nil
 }
 
 func (d *cassandraPersistence) ListConcreteExecutions(

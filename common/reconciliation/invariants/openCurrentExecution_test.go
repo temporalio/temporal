@@ -51,7 +51,7 @@ func (s *OpenCurrentExecutionSuite) SetupTest() {
 
 func (s *OpenCurrentExecutionSuite) TestCheck() {
 	testCases := []struct {
-		execution       common.ConcreteExecution
+		execution       *common.ConcreteExecution
 		getCurrentResp  *persistence.GetCurrentExecutionResponse
 		getCurrentErr   error
 		getConcreteResp *persistence.GetWorkflowExecutionResponse
@@ -59,14 +59,14 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 		expectedResult  common.CheckResult
 	}{
 		{
-			execution: getClosedExecution(),
+			execution: getClosedConcreteExecution(),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeHealthy,
 				InvariantType:   common.OpenCurrentExecutionInvariantType,
 			},
 		},
 		{
-			execution:      getOpenExecution(),
+			execution:      getOpenConcreteExecution(),
 			getConcreteErr: errors.New("got error checking if concrete is open"),
 			expectedResult: common.CheckResult{
 				CheckResultType: common.CheckResultTypeFailed,
@@ -76,7 +76,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 		},
 		{
-			execution: getOpenExecution(),
+			execution: getOpenConcreteExecution(),
 			getConcreteResp: &persistence.GetWorkflowExecutionResponse{
 				State: &persistence.WorkflowMutableState{
 					ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -91,7 +91,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 		},
 		{
-			execution: getOpenExecution(),
+			execution: getOpenConcreteExecution(),
 			getConcreteResp: &persistence.GetWorkflowExecutionResponse{
 				State: &persistence.WorkflowMutableState{
 					ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -109,7 +109,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 		},
 		{
-			execution: getOpenExecution(),
+			execution: getOpenConcreteExecution(),
 			getConcreteResp: &persistence.GetWorkflowExecutionResponse{
 				State: &persistence.WorkflowMutableState{
 					ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -127,7 +127,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 		},
 		{
-			execution: getOpenExecution(),
+			execution: getOpenConcreteExecution(),
 			getConcreteResp: &persistence.GetWorkflowExecutionResponse{
 				State: &persistence.WorkflowMutableState{
 					ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -148,7 +148,7 @@ func (s *OpenCurrentExecutionSuite) TestCheck() {
 			},
 		},
 		{
-			execution: getOpenExecution(),
+			execution: getOpenConcreteExecution(),
 			getConcreteResp: &persistence.GetWorkflowExecutionResponse{
 				State: &persistence.WorkflowMutableState{
 					ExecutionInfo: &persistence.WorkflowExecutionInfo{

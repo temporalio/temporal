@@ -65,6 +65,8 @@ const (
 	HistoryExistsInvariantType InvariantType = "history_exists"
 	// OpenCurrentExecutionInvariantType asserts that an open concrete execution must have a valid current execution
 	OpenCurrentExecutionInvariantType InvariantType = "open_current_execution"
+	// ConcreteExecutionExistsInvariantType asserts that an open current execution must have a valid concrete execution
+	ConcreteExecutionExistsInvariantType InvariantType = "concrete_execution_exists"
 
 	// InvariantCollectionMutableState is the collection of invariants relating to mutable state
 	InvariantCollectionMutableState InvariantCollection = 0
@@ -97,6 +99,12 @@ type (
 		BranchToken []byte
 		TreeID      string
 		BranchID    string
+		Execution
+	}
+
+	// CurrentExecution is a current execution.
+	CurrentExecution struct {
+		CurrentRunID string
 		Execution
 	}
 
