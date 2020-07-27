@@ -218,9 +218,9 @@ type (
 		CompletionEvent                        *serialization.DataBlob
 		TaskQueue                              string
 		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int32
-		WorkflowExecutionTimeout               int32
-		DefaultWorkflowTaskTimeout             int32
+		WorkflowRunTimeout                     int64
+		WorkflowExecutionTimeout               int64
+		DefaultWorkflowTaskTimeout             int64
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
@@ -235,7 +235,7 @@ type (
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int32
+		WorkflowTaskTimeout                    int64
 		WorkflowTaskAttempt                    int64
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
@@ -243,7 +243,7 @@ type (
 		CancelRequested                        bool
 		CancelRequestID                        string
 		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int32
+		StickyScheduleToStartTimeout           int64
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string
@@ -251,9 +251,9 @@ type (
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		ExpirationTime         time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
@@ -296,10 +296,10 @@ type (
 		ActivityID              string
 		RequestID               string
 		Details                 *commonpb.Payloads
-		ScheduleToStartTimeout  int32
-		ScheduleToCloseTimeout  int32
-		StartToCloseTimeout     int32
-		HeartbeatTimeout        int32
+		ScheduleToStartTimeout  int64
+		ScheduleToCloseTimeout  int64
+		StartToCloseTimeout     int64
+		HeartbeatTimeout        int64
 		CancelRequested         bool
 		CancelRequestID         int64
 		LastHeartbeatUpdateTime time.Time
@@ -310,9 +310,9 @@ type (
 		StartedIdentity        string
 		TaskQueue              string
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		ExpirationTime         time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
@@ -730,6 +730,10 @@ func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	}
 }
 
+func truncateDurationToSecondsInt64(d *time.Duration) int64 {
+	return int64(d.Truncate(time.Second).Seconds())
+}
+
 func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
@@ -739,53 +743,53 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	}
 
 	info := &persistenceblobs.WorkflowExecutionInfo{
-		NamespaceId:                                 executionInfo.NamespaceID,
-		WorkflowId:                                  executionInfo.WorkflowID,
-		TaskQueue:                                   executionInfo.TaskQueue,
-		WorkflowTypeName:                            executionInfo.WorkflowTypeName,
-		WorkflowRunTimeoutSeconds:                   executionInfo.WorkflowRunTimeout,
-		WorkflowExecutionTimeoutSeconds:             executionInfo.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeoutSeconds:           executionInfo.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                            executionInfo.LastFirstEventID,
-		LastEventTaskId:                             executionInfo.LastEventTaskID,
-		LastProcessedEvent:                          executionInfo.LastProcessedEvent,
-		StartTimeNanos:                              executionInfo.StartTimestamp.UnixNano(),
-		LastUpdateTimeNanos:                         executionInfo.LastUpdateTimestamp.UnixNano(),
-		WorkflowTaskVersion:                         executionInfo.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:                      executionInfo.WorkflowTaskScheduleID,
-		WorkflowTaskStartedId:                       executionInfo.WorkflowTaskStartedID,
-		WorkflowTaskRequestId:                       executionInfo.WorkflowTaskRequestID,
-		WorkflowTaskTimeout:                         executionInfo.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:                         executionInfo.WorkflowTaskAttempt,
-		WorkflowTaskStartedTimestampNanos:           executionInfo.WorkflowTaskStartedTimestamp,
-		WorkflowTaskScheduledTimestampNanos:         executionInfo.WorkflowTaskScheduledTimestamp,
-		WorkflowTaskOriginalScheduledTimestampNanos: executionInfo.WorkflowTaskOriginalScheduledTimestamp,
-		StickyTaskQueue:                             executionInfo.StickyTaskQueue,
-		StickyScheduleToStartTimeout:                int64(executionInfo.StickyScheduleToStartTimeout),
-		ClientLibraryVersion:                        executionInfo.ClientLibraryVersion,
-		ClientFeatureVersion:                        executionInfo.ClientFeatureVersion,
-		ClientImpl:                                  executionInfo.ClientImpl,
-		SignalCount:                                 int64(executionInfo.SignalCount),
-		HistorySize:                                 executionInfo.HistorySize,
-		CronSchedule:                                executionInfo.CronSchedule,
-		CompletionEventBatchId:                      executionInfo.CompletionEventBatchID,
-		HasRetryPolicy:                              executionInfo.HasRetryPolicy,
-		RetryAttempt:                                int64(executionInfo.Attempt),
-		RetryInitialIntervalSeconds:                 executionInfo.InitialInterval,
-		RetryBackoffCoefficient:                     executionInfo.BackoffCoefficient,
-		RetryMaximumIntervalSeconds:                 executionInfo.MaximumInterval,
-		RetryMaximumAttempts:                        executionInfo.MaximumAttempts,
-		RetryNonRetryableErrorTypes:                 executionInfo.NonRetryableErrorTypes,
-		EventStoreVersion:                           EventStoreVersion,
-		EventBranchToken:                            executionInfo.BranchToken,
-		AutoResetPoints:                             executionInfo.AutoResetPoints.Data,
-		AutoResetPointsEncoding:                     executionInfo.AutoResetPoints.GetEncoding().String(),
-		SearchAttributes:                            executionInfo.SearchAttributes,
-		Memo:                                        executionInfo.Memo,
+		NamespaceId:                       executionInfo.NamespaceID,
+		WorkflowId:                        executionInfo.WorkflowID,
+		TaskQueue:                         executionInfo.TaskQueue,
+		WorkflowTypeName:                  executionInfo.WorkflowTypeName,
+		WorkflowRunTimeout:                timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout),
+		WorkflowExecutionTimeout:          timestamp.DurationFromSeconds(executionInfo.WorkflowExecutionTimeout),
+		DefaultWorkflowTaskTimeout:        timestamp.DurationFromSeconds(executionInfo.DefaultWorkflowTaskTimeout),
+		LastFirstEventId:                  executionInfo.LastFirstEventID,
+		LastEventTaskId:                   executionInfo.LastEventTaskID,
+		LastProcessedEvent:                executionInfo.LastProcessedEvent,
+		StartTime:                         timestamp.TimestampFromTimePtr(&executionInfo.StartTimestamp).ToProto(),
+		LastUpdateTime:                    timestamp.TimestampFromTimePtr(&executionInfo.LastUpdateTimestamp).ToProto(),
+		WorkflowTaskVersion:               executionInfo.WorkflowTaskVersion,
+		WorkflowTaskScheduleId:            executionInfo.WorkflowTaskScheduleID,
+		WorkflowTaskStartedId:             executionInfo.WorkflowTaskStartedID,
+		WorkflowTaskRequestId:             executionInfo.WorkflowTaskRequestID,
+		WorkflowTaskTimeout:               timestamp.DurationFromSeconds(executionInfo.WorkflowTaskTimeout),
+		WorkflowTaskAttempt:               executionInfo.WorkflowTaskAttempt,
+		WorkflowTaskStartedTime:           timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskStartedTimestamp)).ToProto(),
+		WorkflowTaskScheduledTime:         timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskScheduledTimestamp)).ToProto(),
+		WorkflowTaskOriginalScheduledTime: timestamp.TimestampFromTime(time.Unix(0, executionInfo.WorkflowTaskOriginalScheduledTimestamp)).ToProto(),
+		StickyTaskQueue:                   executionInfo.StickyTaskQueue,
+		StickyScheduleToStartTimeout:      timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout),
+		ClientLibraryVersion:              executionInfo.ClientLibraryVersion,
+		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
+		ClientImpl:                        executionInfo.ClientImpl,
+		SignalCount:                       int64(executionInfo.SignalCount),
+		HistorySize:                       executionInfo.HistorySize,
+		CronSchedule:                      executionInfo.CronSchedule,
+		CompletionEventBatchId:            executionInfo.CompletionEventBatchID,
+		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
+		RetryAttempt:                      int64(executionInfo.Attempt),
+		RetryInitialInterval:              timestamp.DurationFromSeconds(executionInfo.InitialInterval),
+		RetryBackoffCoefficient:           executionInfo.BackoffCoefficient,
+		RetryMaximumInterval:              timestamp.DurationFromSeconds(executionInfo.MaximumInterval),
+		RetryMaximumAttempts:              executionInfo.MaximumAttempts,
+		RetryNonRetryableErrorTypes:       executionInfo.NonRetryableErrorTypes,
+		EventStoreVersion:                 EventStoreVersion,
+		EventBranchToken:                  executionInfo.BranchToken,
+		AutoResetPoints:                   executionInfo.AutoResetPoints.Data,
+		AutoResetPointsEncoding:           executionInfo.AutoResetPoints.GetEncoding().String(),
+		SearchAttributes:                  executionInfo.SearchAttributes,
+		Memo:                              executionInfo.Memo,
 	}
 
 	if !executionInfo.ExpirationTime.IsZero() {
-		info.RetryExpirationTimeNanos = executionInfo.ExpirationTime.UnixNano()
+		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.ExpirationTime).ToProto()
 	}
 
 	completionEvent := executionInfo.CompletionEvent
@@ -831,27 +835,27 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NextEventID:                            nextEventID,
 		TaskQueue:                              info.GetTaskQueue(),
 		WorkflowTypeName:                       info.GetWorkflowTypeName(),
-		WorkflowExecutionTimeout:               info.GetWorkflowExecutionTimeoutSeconds(),
-		WorkflowRunTimeout:                     info.GetWorkflowRunTimeoutSeconds(),
-		DefaultWorkflowTaskTimeout:             info.GetDefaultWorkflowTaskTimeoutSeconds(),
+		WorkflowExecutionTimeout:               truncateDurationToSecondsInt64(info.GetWorkflowExecutionTimeout()),
+		WorkflowRunTimeout:                     truncateDurationToSecondsInt64(info.GetWorkflowRunTimeout()),
+		DefaultWorkflowTaskTimeout:             truncateDurationToSecondsInt64(info.GetDefaultWorkflowTaskTimeout()),
 		State:                                  state.GetState(),
 		Status:                                 state.GetStatus(),
 		LastFirstEventID:                       info.GetLastFirstEventId(),
 		LastProcessedEvent:                     info.GetLastProcessedEvent(),
-		StartTimestamp:                         time.Unix(0, info.GetStartTimeNanos()),
-		LastUpdateTimestamp:                    time.Unix(0, info.GetLastUpdateTimeNanos()),
+		StartTimestamp:                         *timestamp.TimestampFromProto(info.GetStartTime()).ToTime(),
+		LastUpdateTimestamp:                    *timestamp.TimestampFromProto(info.GetLastUpdateTime()).ToTime(),
 		CreateRequestID:                        state.GetCreateRequestId(),
 		WorkflowTaskVersion:                    info.GetWorkflowTaskVersion(),
 		WorkflowTaskScheduleID:                 info.GetWorkflowTaskScheduleId(),
 		WorkflowTaskStartedID:                  info.GetWorkflowTaskStartedId(),
 		WorkflowTaskRequestID:                  info.GetWorkflowTaskRequestId(),
-		WorkflowTaskTimeout:                    info.GetWorkflowTaskTimeout(),
+		WorkflowTaskTimeout:                    truncateDurationToSecondsInt64(info.GetWorkflowTaskTimeout()),
 		WorkflowTaskAttempt:                    info.GetWorkflowTaskAttempt(),
-		WorkflowTaskStartedTimestamp:           info.GetWorkflowTaskStartedTimestampNanos(),
-		WorkflowTaskScheduledTimestamp:         info.GetWorkflowTaskScheduledTimestampNanos(),
-		WorkflowTaskOriginalScheduledTimestamp: info.GetWorkflowTaskOriginalScheduledTimestampNanos(),
+		WorkflowTaskStartedTimestamp:           timestamp.TimestampFromProto(info.GetWorkflowTaskStartedTime()).UnixNano(),
+		WorkflowTaskScheduledTimestamp:         timestamp.TimestampFromProto(info.GetWorkflowTaskScheduledTime()).UnixNano(),
+		WorkflowTaskOriginalScheduledTimestamp: timestamp.TimestampFromProto(info.GetWorkflowTaskOriginalScheduledTime()).UnixNano(),
 		StickyTaskQueue:                        info.GetStickyTaskQueue(),
-		StickyScheduleToStartTimeout:           int32(info.GetStickyScheduleToStartTimeout()),
+		StickyScheduleToStartTimeout:           truncateDurationToSecondsInt64(info.GetStickyScheduleToStartTimeout()),
 		ClientLibraryVersion:                   info.GetClientLibraryVersion(),
 		ClientFeatureVersion:                   info.GetClientFeatureVersion(),
 		ClientImpl:                             info.GetClientImpl(),
@@ -861,9 +865,9 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		CompletionEventBatchID:                 common.EmptyEventID,
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
 		Attempt:                                int32(info.GetRetryAttempt()),
-		InitialInterval:                        info.GetRetryInitialIntervalSeconds(),
+		InitialInterval:                        truncateDurationToSecondsInt64(info.GetRetryInitialInterval()),
 		BackoffCoefficient:                     info.GetRetryBackoffCoefficient(),
-		MaximumInterval:                        info.GetRetryMaximumIntervalSeconds(),
+		MaximumInterval:                        truncateDurationToSecondsInt64(info.GetRetryMaximumInterval()),
 		MaximumAttempts:                        info.GetRetryMaximumAttempts(),
 		BranchToken:                            info.GetEventBranchToken(),
 		NonRetryableErrorTypes:                 info.GetRetryNonRetryableErrorTypes(),
@@ -871,8 +875,8 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		Memo:                                   info.GetMemo(),
 	}
 
-	if info.GetRetryExpirationTimeNanos() != 0 {
-		executionInfo.ExpirationTime = time.Unix(0, info.GetRetryExpirationTimeNanos())
+	if info.GetRetryExpirationTime() != nil {
+		executionInfo.ExpirationTime = *timestamp.TimestampFromProto(info.GetRetryExpirationTime()).ToTime()
 	}
 
 	if info.ParentNamespaceId != "" {
@@ -913,15 +917,15 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		Version:                 decoded.GetVersion(),
 		ScheduledEventBatchID:   decoded.GetScheduledEventBatchId(),
 		ScheduledEvent:          NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
-		ScheduledTime:           time.Unix(0, decoded.GetScheduledTimeNanos()),
+		ScheduledTime:           *timestamp.TimestampFromProto(decoded.GetScheduledTime()).ToTime(),
 		StartedID:               decoded.GetStartedId(),
-		StartedTime:             time.Unix(0, decoded.GetStartedTimeNanos()),
+		StartedTime:             *timestamp.TimestampFromProto(decoded.GetStartedTime()).ToTime(),
 		ActivityID:              decoded.GetActivityId(),
 		RequestID:               decoded.GetRequestId(),
-		ScheduleToStartTimeout:  decoded.GetScheduleToStartTimeoutSeconds(),
-		ScheduleToCloseTimeout:  decoded.GetScheduleToCloseTimeoutSeconds(),
-		StartToCloseTimeout:     decoded.GetStartToCloseTimeoutSeconds(),
-		HeartbeatTimeout:        decoded.GetHeartbeatTimeoutSeconds(),
+		ScheduleToStartTimeout:  truncateDurationToSecondsInt64(decoded.GetScheduleToStartTimeout()),
+		ScheduleToCloseTimeout:  truncateDurationToSecondsInt64(decoded.GetScheduleToCloseTimeout()),
+		StartToCloseTimeout:     truncateDurationToSecondsInt64(decoded.GetStartToCloseTimeout()),
+		HeartbeatTimeout:        truncateDurationToSecondsInt64(decoded.GetHeartbeatTimeout()),
 		CancelRequested:         decoded.GetCancelRequested(),
 		CancelRequestID:         decoded.GetCancelRequestId(),
 		TimerTaskStatus:         decoded.GetTimerTaskStatus(),
@@ -929,16 +933,16 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		StartedIdentity:         decoded.GetStartedIdentity(),
 		TaskQueue:               decoded.GetTaskQueue(),
 		HasRetryPolicy:          decoded.GetHasRetryPolicy(),
-		InitialInterval:         decoded.GetRetryInitialIntervalSeconds(),
+		InitialInterval:         truncateDurationToSecondsInt64(decoded.GetRetryInitialInterval()),
 		BackoffCoefficient:      decoded.GetRetryBackoffCoefficient(),
-		MaximumInterval:         decoded.GetRetryMaximumIntervalSeconds(),
+		MaximumInterval:         truncateDurationToSecondsInt64(decoded.GetRetryMaximumInterval()),
 		MaximumAttempts:         decoded.GetRetryMaximumAttempts(),
 		NonRetryableErrorTypes:  decoded.GetRetryNonRetryableErrorTypes(),
 		LastFailure:             decoded.GetRetryLastFailure(),
 		LastWorkerIdentity:      decoded.GetRetryLastWorkerIdentity(),
 	}
-	if decoded.GetRetryExpirationTimeNanos() != 0 {
-		info.ExpirationTime = time.Unix(0, decoded.GetRetryExpirationTimeNanos())
+	if decoded.GetRetryExpirationTime() != nil {
+		info.ExpirationTime = *timestamp.TimestampFromProto(decoded.GetRetryExpirationTime()).ToTime()
 	}
 	if decoded.StartedEvent != nil {
 		info.StartedEvent = NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
@@ -951,42 +955,42 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
 
 	info := &persistenceblobs.ActivityInfo{
-		NamespaceId:                   v.NamespaceID,
-		ScheduleId:                    v.ScheduleID,
-		LastHeartbeatDetails:          v.Details,
-		LastHeartbeatUpdateTime:       timestamp.TimestampFromTime(&v.LastHeartbeatUpdateTime).ToProto(),
-		Version:                       v.Version,
-		ScheduledEventBatchId:         v.ScheduledEventBatchID,
-		ScheduledEvent:                scheduledEvent,
-		ScheduledEventEncoding:        scheduledEncoding,
-		ScheduledTimeNanos:            v.ScheduledTime.UnixNano(),
-		StartedId:                     v.StartedID,
-		StartedEvent:                  startEvent,
-		StartedEventEncoding:          startEncoding,
-		StartedTimeNanos:              v.StartedTime.UnixNano(),
-		ActivityId:                    v.ActivityID,
-		RequestId:                     v.RequestID,
-		ScheduleToStartTimeoutSeconds: v.ScheduleToStartTimeout,
-		ScheduleToCloseTimeoutSeconds: v.ScheduleToCloseTimeout,
-		StartToCloseTimeoutSeconds:    v.StartToCloseTimeout,
-		HeartbeatTimeoutSeconds:       v.HeartbeatTimeout,
-		CancelRequested:               v.CancelRequested,
-		CancelRequestId:               v.CancelRequestID,
-		TimerTaskStatus:               v.TimerTaskStatus,
-		Attempt:                       v.Attempt,
-		TaskQueue:                     v.TaskQueue,
-		StartedIdentity:               v.StartedIdentity,
-		HasRetryPolicy:                v.HasRetryPolicy,
-		RetryInitialIntervalSeconds:   v.InitialInterval,
-		RetryBackoffCoefficient:       v.BackoffCoefficient,
-		RetryMaximumIntervalSeconds:   v.MaximumInterval,
-		RetryMaximumAttempts:          v.MaximumAttempts,
-		RetryNonRetryableErrorTypes:   v.NonRetryableErrorTypes,
-		RetryLastFailure:              v.LastFailure,
-		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
+		NamespaceId:                 v.NamespaceID,
+		ScheduleId:                  v.ScheduleID,
+		LastHeartbeatDetails:        v.Details,
+		LastHeartbeatUpdateTime:     timestamp.TimestampFromTimePtr(&v.LastHeartbeatUpdateTime).ToProto(),
+		Version:                     v.Version,
+		ScheduledEventBatchId:       v.ScheduledEventBatchID,
+		ScheduledEvent:              scheduledEvent,
+		ScheduledEventEncoding:      scheduledEncoding,
+		ScheduledTime:               timestamp.TimestampFromTimePtr(&v.ScheduledTime).ToProto(),
+		StartedId:                   v.StartedID,
+		StartedEvent:                startEvent,
+		StartedEventEncoding:        startEncoding,
+		StartedTime:                 timestamp.TimestampFromTimePtr(&v.StartedTime).ToProto(),
+		ActivityId:                  v.ActivityID,
+		RequestId:                   v.RequestID,
+		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(v.ScheduleToStartTimeout),
+		ScheduleToCloseTimeout:      timestamp.DurationFromSeconds(v.ScheduleToCloseTimeout),
+		StartToCloseTimeout:         timestamp.DurationFromSeconds(v.StartToCloseTimeout),
+		HeartbeatTimeout:            timestamp.DurationFromSeconds(v.HeartbeatTimeout),
+		CancelRequested:             v.CancelRequested,
+		CancelRequestId:             v.CancelRequestID,
+		TimerTaskStatus:             v.TimerTaskStatus,
+		Attempt:                     v.Attempt,
+		TaskQueue:                   v.TaskQueue,
+		StartedIdentity:             v.StartedIdentity,
+		HasRetryPolicy:              v.HasRetryPolicy,
+		RetryInitialInterval:        timestamp.DurationFromSeconds(v.InitialInterval),
+		RetryBackoffCoefficient:     v.BackoffCoefficient,
+		RetryMaximumInterval:        timestamp.DurationFromSeconds(v.MaximumInterval),
+		RetryMaximumAttempts:        v.MaximumAttempts,
+		RetryNonRetryableErrorTypes: v.NonRetryableErrorTypes,
+		RetryLastFailure:            v.LastFailure,
+		RetryLastWorkerIdentity:     v.LastWorkerIdentity,
 	}
 	if !v.ExpirationTime.IsZero() {
-		info.RetryExpirationTimeNanos = v.ExpirationTime.UnixNano()
+		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&v.ExpirationTime).ToProto()
 	}
 	return info
 }
@@ -1025,7 +1029,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		CreateRequestID:       rowInfo.GetCreateRequestId(),
 		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     enumspb.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		ParentClosePolicy:     rowInfo.GetParentClosePolicy(),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}

@@ -1091,7 +1091,7 @@ func (e *historyEngineImpl) getMutableState(
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
-		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
+		StickyTaskQueueScheduleToStartTimeout: int32(executionInfo.StickyScheduleToStartTimeout),
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
@@ -1232,9 +1232,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				Name: executionInfo.TaskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeoutSeconds:   executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeoutSeconds:         executionInfo.WorkflowRunTimeout,
-			DefaultWorkflowTaskTimeoutSeconds: executionInfo.DefaultWorkflowTaskTimeout,
+			WorkflowExecutionTimeoutSeconds:   int32(executionInfo.WorkflowExecutionTimeout),
+			WorkflowRunTimeoutSeconds:         int32(executionInfo.WorkflowRunTimeout),
+			DefaultWorkflowTaskTimeoutSeconds: int32(executionInfo.DefaultWorkflowTaskTimeout),
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{

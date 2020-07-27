@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -101,7 +102,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           retention,
+		Retention:               timestamp.DurationFromDays(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -176,7 +177,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           retention,
+		Retention:               timestamp.DurationFromDays(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -222,7 +223,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           retention,
+		Retention:               timestamp.DurationFromDays(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -296,7 +297,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
-		RetentionDays:           retention,
+		Retention:               timestamp.DurationFromDays(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,

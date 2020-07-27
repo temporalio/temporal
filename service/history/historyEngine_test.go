@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	cconfig "go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -120,7 +121,7 @@ var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
-	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 	cluster.TestCurrentClusterName,
 	nil,
 )
@@ -128,7 +129,7 @@ var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
 	&persistenceblobs.NamespaceConfig{
-		RetentionDays:           1,
+		Retention:               timestamp.DurationFromDays(1),
 		VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 		VisibilityArchivalUri:   "test:///visibility/archival",
 	},
@@ -145,7 +146,7 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 
 var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceID, Name: testParentNamespace},
-	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
@@ -159,7 +160,7 @@ var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 
 var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceID, Name: testTargetNamespace},
-	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
@@ -173,7 +174,7 @@ var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 
 var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceID, Name: testChildNamespace},
-	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []string{
@@ -1148,7 +1149,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 
 	di, ok := executionBuilder.GetWorkflowTaskInfo(15)
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 }
 
 func (s *engineSuite) TestValidateSignalRequest() {
@@ -1605,7 +1606,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
 		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: testNamespace},
 		&persistenceblobs.NamespaceConfig{
-			RetentionDays: 2,
+			Retention: timestamp.DurationFromDays(2),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{
 					"test-bad-binary": {},
@@ -2623,7 +2624,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(10), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -2732,7 +2733,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -2794,7 +2795,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3174,7 +3175,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
 	s.True(ok)
-	s.Equal(int32(25), di.WorkflowTaskTimeout)
+	s.Equal(int64(25), di.WorkflowTaskTimeout)
 	s.Equal(int64(10), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3281,7 +3282,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3343,7 +3344,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(8), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3599,7 +3600,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(9), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
@@ -3661,7 +3662,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(9))
 	s.True(ok)
-	s.Equal(int32(100), di.WorkflowTaskTimeout)
+	s.Equal(int64(100), di.WorkflowTaskTimeout)
 	s.Equal(int64(9), di.ScheduleID)
 	s.Equal(common.EmptyEventID, di.StartedID)
 }

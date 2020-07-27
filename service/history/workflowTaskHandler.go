@@ -209,7 +209,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 				namespaceID,
 				targetNamespaceID,
 				attr,
-				executionInfo.WorkflowRunTimeout,
+				int32(executionInfo.WorkflowRunTimeout),
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
