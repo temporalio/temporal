@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -1365,7 +1366,7 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 				Data:        make(map[string]string),
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           1,
+				Retention:               timestamp.DurationFromDays(1),
 				HistoryArchivalState:    historyArchivalState.State,
 				HistoryArchivalUri:      historyArchivalState.URI,
 				VisibilityArchivalState: visibilityArchivalState.State,

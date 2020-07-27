@@ -1672,7 +1672,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var taskTimeout int32
 	if attributes.GetWorkflowTaskTimeoutSeconds() == 0 {
-		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
+		taskTimeout = int32(previousExecutionInfo.DefaultWorkflowTaskTimeout)
 	} else {
 		taskTimeout = attributes.GetWorkflowTaskTimeoutSeconds()
 	}
@@ -1687,7 +1687,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowId:                      execution.WorkflowId,
 		TaskQueue:                       tq,
 		WorkflowType:                    wType,
-		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowExecutionTimeoutSeconds: int32(previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout),
 		WorkflowRunTimeoutSeconds:       runTimeout,
 		WorkflowTaskTimeoutSeconds:      taskTimeout,
 		Input:                           attributes.Input,
@@ -1822,9 +1822,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
-	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeoutSeconds()
-	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeoutSeconds()
-	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
+	e.executionInfo.WorkflowRunTimeout = int64(event.GetWorkflowRunTimeoutSeconds())
+	e.executionInfo.WorkflowExecutionTimeout = int64(event.GetWorkflowExecutionTimeoutSeconds())
+	e.executionInfo.DefaultWorkflowTaskTimeout = int64(event.GetWorkflowTaskTimeoutSeconds())
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1862,9 +1862,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
+		e.executionInfo.InitialInterval = int64(event.RetryPolicy.GetInitialIntervalInSeconds())
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
-		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
+		e.executionInfo.MaximumInterval = int64(event.RetryPolicy.GetMaximumIntervalInSeconds())
 		e.executionInfo.NonRetryableErrorTypes = event.RetryPolicy.GetNonRetryableErrorTypes()
 	}
 
@@ -2190,10 +2190,10 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		StartedTime:              time.Time{},
 		ActivityID:               attributes.ActivityId,
 		NamespaceID:              targetNamespaceID,
-		ScheduleToStartTimeout:   attributes.GetScheduleToStartTimeoutSeconds(),
-		ScheduleToCloseTimeout:   scheduleToCloseTimeout,
-		StartToCloseTimeout:      attributes.GetStartToCloseTimeoutSeconds(),
-		HeartbeatTimeout:         attributes.GetHeartbeatTimeoutSeconds(),
+		ScheduleToStartTimeout:   int64(attributes.GetScheduleToStartTimeoutSeconds()),
+		ScheduleToCloseTimeout:   int64(scheduleToCloseTimeout),
+		StartToCloseTimeout:      int64(attributes.GetStartToCloseTimeoutSeconds()),
+		HeartbeatTimeout:         int64(attributes.GetHeartbeatTimeoutSeconds()),
 		CancelRequested:          false,
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
@@ -2204,9 +2204,9 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	}
 	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 	if ai.HasRetryPolicy {
-		ai.InitialInterval = attributes.RetryPolicy.GetInitialIntervalInSeconds()
+		ai.InitialInterval = int64(attributes.RetryPolicy.GetInitialIntervalInSeconds())
 		ai.BackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
-		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
+		ai.MaximumInterval = int64(attributes.RetryPolicy.GetMaximumIntervalInSeconds())
 		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.NonRetryableErrorTypes = attributes.RetryPolicy.NonRetryableErrorTypes
 	}

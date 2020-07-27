@@ -107,7 +107,7 @@ const (
 	// SystemNamespaceID is namespace id for all temporal system workflows
 	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
 	// SystemNamespaceRetentionDays is retention config for all temporal system workflows
-	SystemNamespaceRetentionDays = 7
+	SystemNamespaceRetentionDays = time.Hour * 24 * 7
 	// DefaultAdminOperationToken is the default dynamic config value for AdminOperationToken
 	DefaultAdminOperationToken = "TemporalTeamONLY"
 )

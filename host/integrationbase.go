@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
 )
@@ -225,7 +226,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           0,
+				Retention:               timestamp.DurationFromDays(0),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 				HistoryArchivalUri:      s.testCluster.archiverBase.historyURI,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,

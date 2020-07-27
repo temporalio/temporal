@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -348,8 +349,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version + 1
 	currentNextEventID := int64(2333)
-	currentworkflowTaskTimeout := int32(100)
-	currentWorkflowTaskStickyTimeout := int32(10)
+	currentworkflowTaskTimeout := int64(100)
+	currentWorkflowTaskStickyTimeout := int64(10)
 	currentWorkflowTaskQueue := "some random workflow task queue"
 	currentStickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
@@ -460,7 +461,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -532,7 +533,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -677,7 +678,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -747,7 +748,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -821,7 +822,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -1672,8 +1673,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	incomingVersion := currentLastWriteVersion + 10
 	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
 	incomingReplicationInfoLastEventID := currentLastEventID
-	workflowTaskTimeout := int32(100)
-	workflowTaskStickyTimeout := int32(10)
+	workflowTaskTimeout := int64(100)
+	workflowTaskStickyTimeout := int64(10)
 	workflowTaskqueue := "some random workflow taskqueue"
 	stickyWorkflowTaskQueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY, Name: "some random sticky workflow task queue"}
 
@@ -1860,9 +1861,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	runTimeout := int32(3333)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	runTimeout := int64(3333)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -1956,7 +1957,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -1980,9 +1981,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	runTimeout := int32(3333)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	runTimeout := int64(3333)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2072,7 +2073,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2096,9 +2097,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	runTimeout := int32(3333)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	runTimeout := int64(3333)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2194,7 +2195,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2218,8 +2219,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 	cronSchedule := "some random cron scredule"
 	retryPolicy := &commonpb.RetryPolicy{
 		InitialIntervalInSeconds: 1,
@@ -2293,10 +2294,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:               cronSchedule,
 		HasRetryPolicy:             true,
-		InitialInterval:            retryPolicy.GetInitialIntervalInSeconds(),
+		InitialInterval:            int64(retryPolicy.GetInitialIntervalInSeconds()),
 		BackoffCoefficient:         retryPolicy.GetBackoffCoefficient(),
 		MaximumAttempts:            retryPolicy.GetMaximumAttempts(),
-		MaximumInterval:            retryPolicy.GetMaximumIntervalInSeconds(),
+		MaximumInterval:            int64(retryPolicy.GetMaximumIntervalInSeconds()),
 		NonRetryableErrorTypes:     retryPolicy.GetNonRetryableErrorTypes(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -2346,7 +2347,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2370,8 +2371,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2483,7 +2484,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2507,8 +2508,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2620,7 +2621,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2644,8 +2645,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2748,7 +2749,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2794,8 +2795,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -2907,7 +2908,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -2971,8 +2972,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -3086,7 +3087,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -3160,8 +3161,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -3291,7 +3292,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -3315,8 +3316,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 
 	initiatedID := int64(4810)
 	parentNamespaceID := testNamespaceID
@@ -3448,7 +3449,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -3472,8 +3473,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	version := int64(144)
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	workflowType := "some random workflow type"
-	workflowTimeout := int32(3721)
-	workflowTaskTimeout := int32(4411)
+	workflowTimeout := int64(3721)
+	workflowTaskTimeout := int64(4411)
 	cronSchedule := "some random cron scredule"
 	retryPolicy := &commonpb.RetryPolicy{
 		InitialIntervalInSeconds: 1,
@@ -3547,9 +3548,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		CronSchedule:               cronSchedule,
 		HasRetryPolicy:             true,
-		InitialInterval:            retryPolicy.GetInitialIntervalInSeconds(),
+		InitialInterval:            int64(retryPolicy.GetInitialIntervalInSeconds()),
 		BackoffCoefficient:         retryPolicy.GetBackoffCoefficient(),
-		MaximumInterval:            retryPolicy.GetMaximumIntervalInSeconds(),
+		MaximumInterval:            int64(retryPolicy.GetMaximumIntervalInSeconds()),
 		MaximumAttempts:            retryPolicy.GetMaximumAttempts(),
 		NonRetryableErrorTypes:     retryPolicy.GetNonRetryableErrorTypes(),
 	}
@@ -3605,7 +3606,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: namespace},
-			&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+			&persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{

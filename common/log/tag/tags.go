@@ -157,8 +157,8 @@ func WorkflowEndingRunID(endingRunID string) Tag {
 }
 
 // WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
-func WorkflowTaskTimeoutSeconds(s int32) Tag {
-	return newInt32("workflow-task-timeout", s)
+func WorkflowTaskTimeoutSeconds(s int64) Tag {
+	return newInt64("workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
