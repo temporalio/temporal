@@ -31,6 +31,8 @@ package gogoproto;
 
 import "google/protobuf/descriptor.proto";
 
+option go_package = "go.temporal.io/server/api/dependencies/gogoproto/v1;gogoproto";
+
 extend google.protobuf.EnumOptions {
 	optional bool goproto_enum_prefix = 62001;
 	optional bool goproto_enum_stringer = 62021;

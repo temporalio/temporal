@@ -5,7 +5,6 @@ package persistenceblobs
 
 import (
 	bytes "bytes"
-	_ "dependencies/gogoproto/v1"
 	encoding_binary "encoding/binary"
 	fmt "fmt"
 	io "io"
@@ -23,6 +22,7 @@ import (
 	v14 "go.temporal.io/api/enums/v1"
 	v1 "go.temporal.io/api/failure/v1"
 	v15 "go.temporal.io/api/namespace/v1"
+	_ "go.temporal.io/server/api/dependencies/gogoproto/v1"
 	v12 "go.temporal.io/server/api/enums/v1"
 	v13 "go.temporal.io/server/api/replication/v1"
 )
