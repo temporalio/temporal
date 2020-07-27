@@ -384,6 +384,7 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 		return nil, nil
 	}
 
+	// This should not pass proto struct down to JSON section.
 	if p, ok := input.(proto.Marshaler); ok {
 		return t.serializeProto(p, encodingType)
 	}
@@ -394,6 +395,7 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	switch encodingType {
 	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
 		encodingType = common.EncodingTypeJSON
+		// input should never be a proto struct.
 		data, err = json.Marshal(input)
 	default:
 		return nil, NewUnknownEncodingTypeError(encodingType)
@@ -404,30 +406,6 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	}
 
 	return NewDataBlob(data, encodingType), nil
-}
-
-func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interface{}) error {
-	if data == nil {
-		return nil
-	}
-	if len(data.Data) == 0 {
-		return NewDeserializationError("DeserializeEvent empty data")
-	}
-	var err error
-
-	switch data.GetEncoding() {
-	case common.EncodingTypeProto3:
-		return NewDeserializationError(fmt.Sprintf("proto requires proto specific deserialization"))
-	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
-		err = json.Unmarshal(data.Data, target)
-	default:
-		return NewUnknownEncodingTypeError(data.GetEncoding())
-	}
-
-	if err != nil {
-		return NewDeserializationError(fmt.Sprintf("DeserializeBatchEvents encoding: \"%v\", error: %v", data.Encoding, err.Error()))
-	}
-	return nil
 }
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error
@@ -445,7 +423,7 @@ func NewSerializationError(msg string) *SerializationError {
 }
 
 func (e *SerializationError) Error() string {
-	return fmt.Sprintf("cadence serialization error: %v", e.msg)
+	return fmt.Sprintf("serialization error: %v", e.msg)
 }
 
 // NewDeserializationError returns a DeserializationError
@@ -454,5 +432,5 @@ func NewDeserializationError(msg string) *DeserializationError {
 }
 
 func (e *DeserializationError) Error() string {
-	return fmt.Sprintf("cadence deserialization error: %v", e.msg)
+	return fmt.Sprintf("deserialization error: %v", e.msg)
 }

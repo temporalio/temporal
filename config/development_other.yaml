@@ -111,7 +111,7 @@ kafka:
       cluster: test
     other-dlq:
       cluster: test
-  cadence-cluster-topics:
+  temporal-cluster-topics:
     active:
       topic: active
       dlq-topic: active-dlq

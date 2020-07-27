@@ -25,9 +25,12 @@
 package archiver
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -236,10 +239,19 @@ type (
 		EstimateSize(v interface{}) (int, error)
 	}
 
-	jsonSizeEstimator struct{}
+	jsonSizeEstimator struct {
+		marshaler jsonpb.Marshaler
+	}
 )
 
 func (e *jsonSizeEstimator) EstimateSize(v interface{}) (int, error) {
+	// jsonpb must be used for proto structs.
+	if protoMessage, ok := v.(proto.Message); ok {
+		var buf bytes.Buffer
+		err := e.marshaler.Marshal(&buf, protoMessage)
+		return buf.Len(), err
+	}
+
 	data, err := json.Marshal(v)
 	if err != nil {
 		return 0, err
@@ -247,8 +259,7 @@ func (e *jsonSizeEstimator) EstimateSize(v interface{}) (int, error) {
 	return len(data), nil
 }
 
-// NewJSONSizeEstimator returns a new SizeEstimator which uses json encoding to
-// estimate size
+// NewJSONSizeEstimator returns a new SizeEstimator which uses json encoding to estimate size
 func NewJSONSizeEstimator() SizeEstimator {
 	return &jsonSizeEstimator{}
 }

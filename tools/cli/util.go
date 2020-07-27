@@ -755,7 +755,7 @@ func processJSONInput(c *cli.Context) *commonpb.Payloads {
 	}
 	p, err := payloads.Encode(jsons...)
 	if err != nil {
-		ErrorAndExit("Unable to encode Input.", err)
+		ErrorAndExit("Unable to encode input.", err)
 	}
 
 	return p

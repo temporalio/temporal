@@ -108,8 +108,8 @@ func (c *kafkaClient) NewConsumer(app, consumerName string, concurrency int) (Co
 
 // NewConsumerWithClusterName is used to create a Kafka consumer for consuming replication tasks
 func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, consumerName string, concurrency int) (Consumer, error) {
-	currentTopics := c.config.getTopicsForCadenceCluster(currentCluster)
-	sourceTopics := c.config.getTopicsForCadenceCluster(sourceCluster)
+	currentTopics := c.config.getTopicsForTemporalCluster(currentCluster)
+	sourceTopics := c.config.getTopicsForTemporalCluster(sourceCluster)
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 
@@ -153,7 +153,7 @@ func (c *kafkaClient) NewProducer(app string) (Producer, error) {
 
 // NewProducerWithClusterName is used to create a Kafka producer for shipping replication tasks
 func (c *kafkaClient) NewProducerWithClusterName(sourceCluster string) (Producer, error) {
-	topics := c.config.getTopicsForCadenceCluster(sourceCluster)
+	topics := c.config.getTopicsForTemporalCluster(sourceCluster)
 	return c.newProducerHelper(topics.Topic)
 }
 
