@@ -445,7 +445,7 @@ func NewSerializationError(msg string) *SerializationError {
 }
 
 func (e *SerializationError) Error() string {
-	return fmt.Sprintf("cadence serialization error: %v", e.msg)
+	return fmt.Sprintf("serialization error: %v", e.msg)
 }
 
 // NewDeserializationError returns a DeserializationError
@@ -454,5 +454,5 @@ func NewDeserializationError(msg string) *DeserializationError {
 }
 
 func (e *DeserializationError) Error() string {
-	return fmt.Sprintf("cadence deserialization error: %v", e.msg)
+	return fmt.Sprintf("deserialization error: %v", e.msg)
 }

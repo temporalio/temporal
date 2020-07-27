@@ -99,8 +99,8 @@ func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) {
 	}
 }
 
-func (k *KafkaConfig) getTopicsForCadenceCluster(cadenceCluster string) TopicList {
-	return k.ClusterToTopic[cadenceCluster]
+func (k *KafkaConfig) getTopicsForTemporalCluster(temporalCluster string) TopicList {
+	return k.ClusterToTopic[temporalCluster]
 }
 
 func (k *KafkaConfig) getKafkaClusterForTopic(topic string) string {
