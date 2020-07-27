@@ -36,7 +36,7 @@ type (
 		TLS            auth.TLS                 `yaml:"tls"`
 		Clusters       map[string]ClusterConfig `yaml:"clusters"`
 		Topics         map[string]TopicConfig   `yaml:"topics"`
-		ClusterToTopic map[string]TopicList     `yaml:"cadence-cluster-topics"`
+		ClusterToTopic map[string]TopicList     `yaml:"temporal-cluster-topics"`
 		Applications   map[string]TopicList     `yaml:"applications"`
 	}
 
