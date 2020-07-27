@@ -833,7 +833,7 @@ func (s *resetorSuite) assertTimerIDs(ids []string, timers []*persistenceblobs.T
 	s.Equal(0, len(m))
 }
 
-func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.ActivityInfo) {
+func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistenceblobs.ActivityInfo) {
 	m := map[string]bool{}
 	for _, s := range ids {
 		m[s] = true

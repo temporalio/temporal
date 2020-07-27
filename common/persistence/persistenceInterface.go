@@ -30,8 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -272,7 +270,7 @@ type (
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		VersionHistories *serialization.DataBlob
-		ActivityInfos    map[int64]*InternalActivityInfo
+		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
@@ -282,45 +280,6 @@ type (
 		BufferedEvents      []*serialization.DataBlob
 
 		Checksum checksum.Checksum
-	}
-
-	// InternalActivityInfo details  for Persistence Interface
-	InternalActivityInfo struct {
-		Version                 int64
-		ScheduleID              int64
-		ScheduledEventBatchID   int64
-		ScheduledEvent          *historypb.HistoryEvent
-		ScheduledTime           time.Time
-		StartedID               int64
-		StartedEvent            *historypb.HistoryEvent
-		StartedTime             time.Time
-		ActivityID              string
-		RequestID               string
-		Details                 *commonpb.Payloads
-		ScheduleToStartTimeout  int64
-		ScheduleToCloseTimeout  int64
-		StartToCloseTimeout     int64
-		HeartbeatTimeout        int64
-		CancelRequested         bool
-		CancelRequestID         int64
-		LastHeartbeatUpdateTime time.Time
-		TimerTaskStatus         int32
-		// For retry
-		Attempt                int32
-		NamespaceID            string
-		StartedIdentity        string
-		TaskQueue              string
-		HasRetryPolicy         bool
-		InitialInterval        int64
-		BackoffCoefficient     float64
-		MaximumInterval        int64
-		ExpirationTime         time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		LastFailure            *failurepb.Failure
-		LastWorkerIdentity     string
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
 
 	// InternalChildExecutionInfo has details for pending child executions for Persistence Interface
@@ -397,7 +356,7 @@ type (
 		StartVersion     int64
 		LastWriteVersion int64
 
-		UpsertActivityInfos       []*InternalActivityInfo
+		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
@@ -429,7 +388,7 @@ type (
 		StartVersion     int64
 		LastWriteVersion int64
 
-		ActivityInfos       []*InternalActivityInfo
+		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
 		ChildExecutionInfos []*InternalChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
@@ -909,8 +868,8 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	return executionInfo
 }
 
-func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityInfo) *InternalActivityInfo {
-	info := &InternalActivityInfo{
+func ProtoActivityInfoToActivityInfo(decoded *persistenceblobs.ActivityInfo) *ActivityInfo {
+	info := &ActivityInfo{
 		NamespaceID:             decoded.GetNamespaceId(),
 		ScheduleID:              decoded.GetScheduleId(),
 		Details:                 decoded.LastHeartbeatDetails,
@@ -918,9 +877,9 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		Version:                 decoded.GetVersion(),
 		ScheduledEventBatchID:   decoded.GetScheduledEventBatchId(),
 		ScheduledEvent:          decoded.ScheduledEvent,
-		ScheduledTime:           *timestamp.TimestampFromProto(decoded.GetScheduledTime()).ToTime(),
+		ScheduledTime:           *timestamp.TimestampFromTime(*decoded.GetScheduledTime()).ToTime(),
 		StartedID:               decoded.GetStartedId(),
-		StartedTime:             *timestamp.TimestampFromProto(decoded.GetStartedTime()).ToTime(),
+		StartedTime:             *timestamp.TimestampFromTime(*decoded.GetStartedTime()).ToTime(),
 		ActivityID:              decoded.GetActivityId(),
 		RequestID:               decoded.GetRequestId(),
 		ScheduleToStartTimeout:  truncateDurationToSecondsInt64(decoded.GetScheduleToStartTimeout()),
@@ -951,7 +910,7 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 	return info
 }
 
-func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
+func (v *ActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 
 	info := &persistenceblobs.ActivityInfo{
 		NamespaceId:                 v.NamespaceID,
@@ -961,10 +920,10 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		Version:                     v.Version,
 		ScheduledEventBatchId:       v.ScheduledEventBatchID,
 		ScheduledEvent:              v.ScheduledEvent,
-		ScheduledTime:               timestamp.TimestampFromTimePtr(&v.ScheduledTime).ToProto(),
+		ScheduledTime:               timestamp.TimestampFromTimePtr(&v.ScheduledTime).ToTime(),
 		StartedId:                   v.StartedID,
 		StartedEvent:                v.StartedEvent,
-		StartedTime:                 timestamp.TimestampFromTimePtr(&v.StartedTime).ToProto(),
+		StartedTime:                 timestamp.TimestampFromTimePtr(&v.StartedTime).ToTime(),
 		ActivityId:                  v.ActivityID,
 		RequestId:                   v.RequestID,
 		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(v.ScheduleToStartTimeout),

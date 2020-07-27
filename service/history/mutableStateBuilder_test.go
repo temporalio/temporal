@@ -294,7 +294,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskAttempt:        1,
 	}
 
-	activityInfos := map[int64]*persistence.ActivityInfo{
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
 		5: {
 			Version:                int64(1),
 			ScheduleID:             int64(5),
@@ -753,7 +753,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTaskAttempt:        1,
 	}
 
-	activityInfos := map[int64]*persistence.ActivityInfo{
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
 		5: {
 			Version:                failoverVersion,
 			ScheduleID:             int64(90),

@@ -168,3 +168,7 @@ func (t *Timestamp) UnixNano() int64 {
 
 	return t.protoTime.Seconds*time.Second.Nanoseconds() + int64(t.protoTime.Nanos)
 }
+
+func TimePtr(t time.Time) *time.Time {
+	return &t
+}

@@ -42,8 +42,8 @@ func getBackoffInterval(
 	expirationTime time.Time,
 	currentAttemptCounterValue int32,
 	maxAttempts int32,
-	initInterval int64,
-	maxInterval int64,
+	initInterval time.Duration,
+	maxInterval time.Duration,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
@@ -73,22 +73,22 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
-	if nextInterval <= 0 {
+	nextIntervalSeconds := int64(float64(initInterval.Seconds()) * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
+	if nextIntervalSeconds <= 0 {
 		// math.Pow() could overflow
 		if maxInterval > 0 {
-			nextInterval = int64(maxInterval)
+			nextIntervalSeconds = int64(maxInterval)
 		} else {
 			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 		}
 	}
 
-	if maxInterval > 0 && nextInterval > int64(maxInterval) {
+	if maxInterval > 0 && nextIntervalSeconds > int64(maxInterval) {
 		// cap next interval to MaxInterval
-		nextInterval = int64(maxInterval)
+		nextIntervalSeconds = int64(maxInterval)
 	}
 
-	backoffInterval := time.Duration(nextInterval) * time.Second
+	backoffInterval := time.Duration(nextIntervalSeconds) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT

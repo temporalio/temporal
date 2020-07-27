@@ -12,6 +12,7 @@
     - 'core::0122::name-suffix'
     - 'core::0123::resource-annotation'
     - 'core::0142::time-field-type' # should be gone after time fields conversion
+    - 'core::0140::prepositions' # should be gone after removing last_heartbeat_timeout_visibility_in_seconds
 
 - included_paths:
     - '**/*service/v1/request_response.proto'

@@ -40,7 +40,7 @@ import (
 
 func updateActivityInfos(
 	tx sqlplugin.Tx,
-	activityInfos []*persistence.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	deleteInfos []int64,
 	shardID int,
 	namespaceID primitives.UUID,
@@ -51,7 +51,7 @@ func updateActivityInfos(
 	if len(activityInfos) > 0 {
 		rows := make([]sqlplugin.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
-			blob, err := serialization.ActivityInfoToBlob(v.ToProto())
+			blob, err := serialization.ActivityInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func updateActivityInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				ScheduleID:   v.ScheduleID,
+				ScheduleID:   v.ScheduleId,
 				Data:         blob.Data,
 				DataEncoding: string(blob.Encoding),
 			}
@@ -103,7 +103,7 @@ func getActivityInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.InternalActivityInfo, error) {
+) (map[int64]*persistenceblobs.ActivityInfo, error) {
 
 	rows, err := db.SelectFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     int64(shardID),
@@ -115,14 +115,13 @@ func getActivityInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get activity info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.InternalActivityInfo)
+	ret := make(map[int64]*persistenceblobs.ActivityInfo)
 	for _, v := range rows {
 		decoded, err := serialization.ActivityInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		info := persistence.ProtoActivityInfoToInternalActivityInfo(decoded)
-		ret[v.ScheduleID] = info
+		ret[v.ScheduleID] = decoded
 	}
 
 	return ret, nil

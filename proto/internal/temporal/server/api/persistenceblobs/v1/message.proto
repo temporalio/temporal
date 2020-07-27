@@ -51,10 +51,10 @@ message ActivityInfo {
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     temporal.api.history.v1.HistoryEvent scheduled_event = 3;
-    google.protobuf.Timestamp scheduled_time = 5;
+    google.protobuf.Timestamp scheduled_time = 5 [(gogoproto.stdtime) = true];
     int64 started_id = 6;
     temporal.api.history.v1.HistoryEvent started_event = 7;
-    google.protobuf.Timestamp started_time = 9;
+    google.protobuf.Timestamp started_time = 9 [(gogoproto.stdtime) = true];
     string activity_id = 10;
     string request_id = 11;
     // (-- api-linter: core::0140::prepositions=disabled
@@ -86,6 +86,8 @@ message ActivityInfo {
     int64 schedule_id = 32;
     temporal.api.common.v1.Payloads last_heartbeat_details = 33;
     google.protobuf.Timestamp last_heartbeat_update_time = 34 [(gogoproto.stdtime) = true];
+    // Not persisted... Need to remove.
+    int64 last_heartbeat_timeout_visibility_in_seconds = 35;
 }
 
 message ShardInfo {

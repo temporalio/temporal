@@ -1068,7 +1068,7 @@ func createOrUpdateCurrentExecution(
 
 func updateActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	deleteInfos []int64,
 	shardID int,
 	namespaceID string,
@@ -1077,14 +1077,13 @@ func updateActivityInfos(
 ) error {
 
 	for _, a := range activityInfos {
-		protoActivityInfo := a.ToProto()
-		activityBlob, err := serialization.ActivityInfoToBlob(protoActivityInfo)
+		activityBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
 			return p.NewSerializationError(fmt.Sprintf("activity info serialization error - %v", err))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
-			a.ScheduleID,
+			a.ScheduleId,
 			activityBlob.Data,
 			activityBlob.Encoding,
 			shardID,
@@ -1131,7 +1130,7 @@ func deleteBufferedEvents(
 
 func resetActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	shardID int,
 	namespaceID string,
 	workflowID string,
@@ -1567,18 +1566,18 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 }
 
 func resetActivityInfoMap(
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 ) (map[int64][]byte, common.EncodingType, error) {
 
 	encoding := common.EncodingTypeUnknown
 	aMap := make(map[int64][]byte)
 	for _, a := range activityInfos {
-		aBlob, err := serialization.ActivityInfoToBlob(a.ToProto())
+		aBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityID))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityId))
 		}
 
-		aMap[a.ScheduleID] = aBlob.Data
+		aMap[a.ScheduleId] = aBlob.Data
 		encoding = aBlob.Encoding
 	}
 

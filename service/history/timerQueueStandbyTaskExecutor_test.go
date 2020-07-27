@@ -662,14 +662,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.pendingActivityInfoIDs[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= timerTaskStatusCreatedHeartbeat
-	activityInfo2.LastHeartBeatUpdatedTime = time.Now()
+	activityInfo2.LastHeartbeatUpdateTime = time.Now()
 
 	timerSequence := newTimerSequence(s.timeSource, mutableState)
 	mutableState.insertTimerTasks = nil
 	modified, err := timerSequence.createNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	protoTime, err := types.TimestampProto(activityInfo2.LastHeartBeatUpdatedTime.Add(-5 * time.Second))
+	protoTime, err := types.TimestampProto(activityInfo2.LastHeartbeatUpdateTime.Add(-5 * time.Second))
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
 		ScheduleAttempt: 1,

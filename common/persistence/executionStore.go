@@ -78,6 +78,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	newResponse := &GetWorkflowExecutionResponse{
 		State: &WorkflowMutableState{
+			ActivityInfos: 		response.State.ActivityInfos,
 			TimerInfos:         response.State.TimerInfos,
 			RequestCancelInfos: response.State.RequestCancelInfos,
 			SignalInfos:        response.State.SignalInfos,
@@ -87,10 +88,6 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		},
 	}
 
-	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivityInfos)
-	if err != nil {
-		return nil, err
-	}
 	newResponse.State.ChildExecutionInfos, err = m.DeserializeChildExecutionInfos(response.State.ChildExecutionInfos)
 	if err != nil {
 		return nil, err
@@ -240,7 +237,7 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 }
 
 func (m *executionManagerImpl) DeserializeActivityInfos(
-	infos map[int64]*InternalActivityInfo,
+	infos map[int64]*ActivityInfo,
 ) (map[int64]*ActivityInfo, error) {
 
 	newInfos := make(map[int64]*ActivityInfo, 0)
@@ -253,27 +250,27 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
 			ScheduledTime:                           v.ScheduledTime,
 			StartedID:                               v.StartedID,
-			StartedTime:                             v.StartedTime,
-			ActivityID:                              v.ActivityID,
-			RequestID:                               v.RequestID,
-			Details:                                 v.Details,
-			ScheduleToStartTimeout:                  v.ScheduleToStartTimeout,
-			ScheduleToCloseTimeout:                  v.ScheduleToCloseTimeout,
-			StartToCloseTimeout:                     v.StartToCloseTimeout,
-			HeartbeatTimeout:                        v.HeartbeatTimeout,
-			CancelRequested:                         v.CancelRequested,
-			CancelRequestID:                         v.CancelRequestID,
-			LastHeartBeatUpdatedTime:                v.LastHeartbeatUpdateTime,
-			TimerTaskStatus:                         v.TimerTaskStatus,
-			Attempt:                                 v.Attempt,
-			NamespaceID:                             v.NamespaceID,
-			StartedIdentity:                         v.StartedIdentity,
-			TaskQueue:                               v.TaskQueue,
-			HasRetryPolicy:                          v.HasRetryPolicy,
-			InitialInterval:                         v.InitialInterval,
-			BackoffCoefficient:                      v.BackoffCoefficient,
-			MaximumInterval:                         v.MaximumInterval,
-			ExpirationTime:                          v.ExpirationTime,
+			StartedTime:             v.StartedTime,
+			ActivityID:              v.ActivityID,
+			RequestID:               v.RequestID,
+			Details:                 v.Details,
+			ScheduleToStartTimeout:  v.ScheduleToStartTimeout,
+			ScheduleToCloseTimeout:  v.ScheduleToCloseTimeout,
+			StartToCloseTimeout:     v.StartToCloseTimeout,
+			HeartbeatTimeout:        v.HeartbeatTimeout,
+			CancelRequested:         v.CancelRequested,
+			CancelRequestID:         v.CancelRequestID,
+			LastHeartbeatUpdateTime: v.LastHeartbeatUpdateTime,
+			TimerTaskStatus:         v.TimerTaskStatus,
+			Attempt:                 v.Attempt,
+			NamespaceID:             v.NamespaceID,
+			StartedIdentity:         v.StartedIdentity,
+			TaskQueue:               v.TaskQueue,
+			HasRetryPolicy:          v.HasRetryPolicy,
+			InitialInterval:         v.InitialInterval,
+			BackoffCoefficient:      v.BackoffCoefficient,
+			MaximumInterval:         v.MaximumInterval,
+			ExpirationTime:          v.ExpirationTime,
 			MaximumAttempts:                         v.MaximumAttempts,
 			NonRetryableErrorTypes:                  v.NonRetryableErrorTypes,
 			LastFailure:                             v.LastFailure,
@@ -353,11 +350,11 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(
 func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 	infos []*ActivityInfo,
 	encoding common.EncodingType,
-) ([]*InternalActivityInfo, error) {
+) ([]*ActivityInfo, error) {
 
-	newInfos := make([]*InternalActivityInfo, 0)
+	newInfos := make([]*ActivityInfo, 0)
 	for _, v := range infos {
-		i := &InternalActivityInfo{
+		i := &ActivityInfo{
 			Version:                                 v.Version,
 			ScheduleID:                              v.ScheduleID,
 			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
@@ -375,7 +372,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			HeartbeatTimeout:                        v.HeartbeatTimeout,
 			CancelRequested:                         v.CancelRequested,
 			CancelRequestID:                         v.CancelRequestID,
-			LastHeartbeatUpdateTime:                 v.LastHeartBeatUpdatedTime,
+			LastHeartbeatUpdateTime:                 v.LastHeartbeatUpdateTime,
 			TimerTaskStatus:                         v.TimerTaskStatus,
 			Attempt:                                 v.Attempt,
 			NamespaceID:                             v.NamespaceID,
@@ -595,10 +592,6 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	if err != nil {
 		return nil, err
 	}
-	serializedUpsertActivityInfos, err := m.SerializeUpsertActivityInfos(input.UpsertActivityInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 	serializedUpsertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.UpsertChildExecutionInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -627,7 +620,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
-		UpsertActivityInfos:       serializedUpsertActivityInfos,
+		UpsertActivityInfos:       input.UpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
 		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
@@ -668,10 +661,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	serializedActivityInfos, err := m.SerializeUpsertActivityInfos(input.ActivityInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 	serializedChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.ChildExecutionInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -693,7 +682,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
-		ActivityInfos:       serializedActivityInfos,
+		ActivityInfos:       input.ActivityInfos,
 		TimerInfos:          input.TimerInfos,
 		ChildExecutionInfos: serializedChildExecutionInfos,
 		RequestCancelInfos:  input.RequestCancelInfos,

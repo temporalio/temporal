@@ -231,7 +231,7 @@ Loop:
 			continue Loop
 		}
 
-		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.Details
+		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
 		// If retryState is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
 		if retryState == enumspb.RETRY_STATE_TIMEOUT {
@@ -244,8 +244,8 @@ Loop:
 			timerSequenceID.timerType,
 		)
 		if _, err := mutableState.AddActivityTaskTimedOutEvent(
-			activityInfo.ScheduleID,
-			activityInfo.StartedID,
+			activityInfo.ScheduleId,
+			activityInfo.StartedId,
 			timeoutFailure,
 			retryState,
 		); err != nil {
@@ -391,13 +391,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// generate activity task
 	scheduledID := task.GetEventId()
 	activityInfo, ok := mutableState.GetActivityInfo(scheduledID)
-	if !ok || task.ScheduleAttempt < int64(activityInfo.Attempt) || activityInfo.StartedID != common.EmptyEventID {
+	if !ok || task.ScheduleAttempt < int64(activityInfo.Attempt) || activityInfo.StartedId != common.EmptyEventID {
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowID),
 				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunID),
 				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceID),
-				tag.WorkflowScheduleID(activityInfo.ScheduleID),
+				tag.WorkflowScheduleID(activityInfo.ScheduleId),
 				tag.Attempt(activityInfo.Attempt),
 				tag.FailoverVersion(activityInfo.Version),
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
@@ -412,8 +412,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	namespaceID := task.GetNamespaceId()
 	targetNamespaceID := namespaceID
-	if activityInfo.NamespaceID != "" {
-		targetNamespaceID = activityInfo.NamespaceID
+	if activityInfo.NamespaceId != "" {
+		targetNamespaceID = activityInfo.NamespaceId
 	} else {
 		// TODO remove this block after Mar, 1th, 2020
 		//  previously, NamespaceID in activity info is not used, so need to get
@@ -449,7 +449,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Execution:                     execution,
 		TaskQueue:                     taskQueue,
 		ScheduleId:                    scheduledID,
-		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout),
+		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout.Seconds()),
 	})
 
 	return retError

@@ -271,19 +271,19 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 	mutableState := NewMockmutableState(s.controller)
 
-	activity1 := &persistence.ActivityInfo{
+	activity1 := &persistenceblobs.ActivityInfo{
 		Version:         12,
 		ScheduleID:      123,
 		StartedID:       124,
 		Details:         payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity: "some random activity 1 started identity",
 	}
-	activity2 := &persistence.ActivityInfo{
+	activity2 := &persistenceblobs.ActivityInfo{
 		Version:    12,
 		ScheduleID: 456,
 		StartedID:  common.EmptyEventID,
 	}
-	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistence.ActivityInfo{
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistenceblobs.ActivityInfo{
 		activity1.ScheduleID: activity1,
 		activity2.ScheduleID: activity2,
 	}).AnyTimes()

@@ -844,7 +844,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 			nil,
 		), nil,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
 		Version: lastWriteVersion - 1,
 	}, true).AnyTimes()
 
@@ -909,7 +909,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 			nil,
 		), nil,
 	).AnyTimes()
-	activityInfo := &persistence.ActivityInfo{
+	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version,
 		ScheduleID: scheduleID,
 		Attempt:    attempt,
@@ -981,7 +981,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 			nil,
 		), nil,
 	).AnyTimes()
-	activityInfo := &persistence.ActivityInfo{
+	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version,
 		ScheduleID: scheduleID,
 		Attempt:    attempt - 1,
@@ -1053,7 +1053,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 			nil,
 		), nil,
 	).AnyTimes()
-	activityInfo := &persistence.ActivityInfo{
+	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
 		ScheduleID: scheduleID,
 		Attempt:    attempt + 1,
@@ -1125,13 +1125,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 			nil,
 		), nil,
 	).AnyTimes()
-	activityInfo := &persistence.ActivityInfo{
+	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
 		ScheduleID: scheduleID,
 		Attempt:    attempt + 1,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
-	activityInfos := map[int64]*persistence.ActivityInfo{activityInfo.ScheduleID: activityInfo}
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 
@@ -1209,13 +1209,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 			nil,
 		), nil,
 	).AnyTimes()
-	activityInfo := &persistence.ActivityInfo{
+	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
 		ScheduleID: scheduleID,
 		Attempt:    attempt + 1,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
-	activityInfos := map[int64]*persistence.ActivityInfo{activityInfo.ScheduleID: activityInfo}
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 

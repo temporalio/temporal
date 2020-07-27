@@ -484,7 +484,7 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivityInfos       map[int64]*ActivityInfo
+		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
@@ -508,18 +508,18 @@ type (
 		StartedID                int64
 		StartedEvent             *historypb.HistoryEvent
 		StartedTime              time.Time
-		NamespaceID              string
-		ActivityID               string
-		RequestID                string
-		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int64
-		ScheduleToCloseTimeout   int64
-		StartToCloseTimeout      int64
-		HeartbeatTimeout         int64
-		CancelRequested          bool
-		CancelRequestID          int64
-		LastHeartBeatUpdatedTime time.Time
-		TimerTaskStatus          int32
+		NamespaceID             string
+		ActivityID              string
+		RequestID               string
+		Details                 *commonpb.Payloads
+		ScheduleToStartTimeout  int64
+		ScheduleToCloseTimeout  int64
+		StartToCloseTimeout     int64
+		HeartbeatTimeout        int64
+		CancelRequested         bool
+		CancelRequestID         int64
+		LastHeartbeatUpdateTime time.Time
+		TimerTaskStatus         int32
 		// For retry
 		Attempt                int32
 		StartedIdentity        string
@@ -718,7 +718,7 @@ type (
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
-		UpsertActivityInfos       []*ActivityInfo
+		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
@@ -748,7 +748,7 @@ type (
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
-		ActivityInfos       []*ActivityInfo
+		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
 		ChildExecutionInfos []*ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo

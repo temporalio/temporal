@@ -1026,24 +1026,24 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 
-	ai := &persistence.ActivityInfo{
+	ai := &persistenceblobs.ActivityInfo{
 		Version:                  event.GetVersion(),
 		ScheduleID:               event.GetEventId(),
 		ScheduledEventBatchID:    event.GetEventId(),
 		ScheduledEvent:           event,
-		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
-		StartedID:                common.EmptyEventID,
-		StartedTime:              time.Time{},
-		ActivityID:               activityID,
-		ScheduleToStartTimeout:   timeoutSecond,
-		ScheduleToCloseTimeout:   timeoutSecond,
-		StartToCloseTimeout:      timeoutSecond,
-		HeartbeatTimeout:         timeoutSecond,
-		CancelRequested:          false,
-		CancelRequestID:          common.EmptyEventID,
-		LastHeartBeatUpdatedTime: time.Time{},
-		TimerTaskStatus:          timerTaskStatusNone,
-		TaskQueue:                taskqueue,
+		ScheduledTime:           time.Unix(0, event.GetTimestamp()),
+		StartedID:               common.EmptyEventID,
+		StartedTime:             time.Time{},
+		ActivityID:              activityID,
+		ScheduleToStartTimeout:  timeoutSecond,
+		ScheduleToCloseTimeout:  timeoutSecond,
+		StartToCloseTimeout:     timeoutSecond,
+		HeartbeatTimeout:        timeoutSecond,
+		CancelRequested:         false,
+		CancelRequestID:         common.EmptyEventID,
+		LastHeartbeatUpdateTime: time.Time{},
+		TimerTaskStatus:         timerTaskStatusNone,
+		TaskQueue:               taskqueue,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskQueue: taskqueue,

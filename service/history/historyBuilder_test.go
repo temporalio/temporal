@@ -837,7 +837,7 @@ func (s *historyBuilderSuite) addWorkflowTaskCompletedEvent(scheduleID, startedI
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(workflowTaskCompletedID int64, activityID, activityType,
 	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
-	*persistence.ActivityInfo) {
+	*persistenceblobs.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    activityID,
@@ -1015,7 +1015,7 @@ func (s *historyBuilderSuite) validateTransientActivityTaskStartedEvent(event *h
 	ai, ok := s.msBuilder.GetPendingActivityInfos()[scheduleID]
 	s.True(ok)
 	s.NotNil(ai)
-	s.Equal(scheduleID, ai.ScheduleID)
+	s.Equal(scheduleID, ai.ScheduleId)
 	s.Equal(identity, ai.StartedIdentity)
 }
 
