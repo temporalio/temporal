@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -92,7 +93,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -114,7 +115,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -136,7 +137,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "yet another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 3,
+				Retention: timestamp.DurationFromDays(3),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -208,7 +209,7 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{
 						"abc": {
@@ -254,7 +255,7 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByID() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				},
@@ -293,7 +294,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -317,7 +318,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -380,7 +381,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -404,7 +405,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: uuid.New(), Name: "another random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 2,
+				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -525,7 +526,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{Id: id, Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays: 1,
+				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
 				}},
@@ -598,7 +599,7 @@ func Test_GetRetentionDays(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 		},
 	}
 	d.info.Data[SampleRetentionKey] = "30"
@@ -637,7 +638,7 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
 			},
@@ -656,7 +657,7 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 			Data: make(map[string]string),
 		},
 		config: &persistenceblobs.NamespaceConfig{
-			RetentionDays: 7,
+			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
 			},

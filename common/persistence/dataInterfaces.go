@@ -212,9 +212,9 @@ type (
 		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
-		WorkflowRunTimeout                     int32
-		WorkflowExecutionTimeout               int32
-		DefaultWorkflowTaskTimeout             int32
+		WorkflowRunTimeout                     int64
+		WorkflowExecutionTimeout               int64
+		DefaultWorkflowTaskTimeout             int64
 		State                                  enumsspb.WorkflowExecutionState
 		Status                                 enumspb.WorkflowExecutionStatus
 		LastFirstEventID                       int64
@@ -229,7 +229,7 @@ type (
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
-		WorkflowTaskTimeout                    int32
+		WorkflowTaskTimeout                    int64
 		WorkflowTaskAttempt                    int64
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
@@ -237,7 +237,7 @@ type (
 		CancelRequested                        bool
 		CancelRequestID                        string
 		StickyTaskQueue                        string
-		StickyScheduleToStartTimeout           int32
+		StickyScheduleToStartTimeout           int64
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string
@@ -247,9 +247,9 @@ type (
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string
@@ -512,10 +512,10 @@ type (
 		ActivityID               string
 		RequestID                string
 		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int32
-		ScheduleToCloseTimeout   int32
-		StartToCloseTimeout      int32
-		HeartbeatTimeout         int32
+		ScheduleToStartTimeout   int64
+		ScheduleToCloseTimeout   int64
+		StartToCloseTimeout      int64
+		HeartbeatTimeout         int64
 		CancelRequested          bool
 		CancelRequestID          int64
 		LastHeartBeatUpdatedTime time.Time
@@ -525,9 +525,9 @@ type (
 		StartedIdentity        string
 		TaskQueue              string
 		HasRetryPolicy         bool
-		InitialInterval        int32
+		InitialInterval        int64
 		BackoffCoefficient     float64
-		MaximumInterval        int32
+		MaximumInterval        int64
 		ExpirationTime         time.Time
 		MaximumAttempts        int32
 		NonRetryableErrorTypes []string

@@ -449,7 +449,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Execution:                     execution,
 		TaskQueue:                     taskQueue,
 		ScheduleId:                    scheduledID,
-		ScheduleToStartTimeoutSeconds: scheduleToStartTimeout,
+		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout),
 	})
 
 	return retError

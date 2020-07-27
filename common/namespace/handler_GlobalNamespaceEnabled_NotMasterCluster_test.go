@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -509,7 +510,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Data:        data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           retention,
+				Retention:               timestamp.DurationFromDays(retention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -568,7 +569,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Data:        map[string]string{},
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           0,
+				Retention:               timestamp.DurationFromDays(0),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -645,7 +646,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 				Data:        data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:           retention,
+				Retention:               timestamp.DurationFromDays(retention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				HistoryArchivalUri:      "",
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,

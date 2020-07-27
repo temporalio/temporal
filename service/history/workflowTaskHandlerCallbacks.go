@@ -389,7 +389,7 @@ Update_History_Loop:
 		} else {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeoutSeconds()
+			executionInfo.StickyScheduleToStartTimeout = int64(request.StickyAttributes.GetScheduleToStartTimeoutSeconds())
 		}
 		executionInfo.ClientLibraryVersion = clientLibVersion
 		executionInfo.ClientFeatureVersion = clientFeatureVersion

@@ -26,6 +26,7 @@ package namespace
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
@@ -211,7 +212,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
-	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -294,7 +295,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(namespaceData, resp.Namespace.Info.Data)
-	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -422,7 +423,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updatedData, resp.Namespace.Info.Data)
-	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(updateRetention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(updateHistoryArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(updateVisibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -550,7 +551,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updateData, resp.Namespace.Info.Data)
-	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(updateRetention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(updateHistoryArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(updateVisibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -674,7 +675,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
-	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
@@ -797,7 +798,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
-	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
 	s.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	s.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)

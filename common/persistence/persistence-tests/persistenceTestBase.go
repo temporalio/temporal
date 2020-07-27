@@ -292,7 +292,7 @@ func (s *TestBase) UpdateShard(updatedInfo *persistenceblobs.ShardInfo, previous
 
 // CreateWorkflowExecutionWithBranchToken test util function
 func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue,
-	wType string, wTimeout int32, workflowTaskTimeout int32, nextEventID int64, lastProcessedEventID int64,
+	wType string, wTimeout int64, workflowTaskTimeout int64, nextEventID int64, lastProcessedEventID int64,
 	workflowTaskScheduleID int64, branchToken []byte, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -335,14 +335,14 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 }
 
 // CreateWorkflowExecution is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue, wType string, wTimeout, workflowTaskTimeout int32, nextEventID, lastProcessedEventID, workflowTaskScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
+func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue, wType string, wTimeout, workflowTaskTimeout int64, nextEventID, lastProcessedEventID, workflowTaskScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	return s.CreateWorkflowExecutionWithBranchToken(namespaceID, workflowExecution, taskQueue, wType, wTimeout, workflowTaskTimeout,
 		nextEventID, lastProcessedEventID, workflowTaskScheduleID, nil, timerTasks)
 }
 
 // CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	taskQueue, wType string, wTimeout int32, workflowTaskTimeout int32, nextEventID int64,
+	taskQueue, wType string, wTimeout int64, workflowTaskTimeout int64, nextEventID int64,
 	lastProcessedEventID int64, workflowTaskScheduleID int64, state *p.ReplicationState, txTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
@@ -451,7 +451,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 // CreateChildWorkflowExecution is a utility method to create child workflow executions
 func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExecution commonpb.WorkflowExecution,
 	parentNamespaceID string, parentExecution commonpb.WorkflowExecution, initiatedID int64, taskQueue, wType string,
-	wTimeout int32, workflowTaskTimeout int32, nextEventID int64, lastProcessedEventID int64,
+	wTimeout int64, workflowTaskTimeout int64, nextEventID int64, lastProcessedEventID int64,
 	workflowTaskScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{

@@ -150,7 +150,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEven
 		ScheduleID:                 scheduleID,
 		StartedID:                  common.EmptyEventID,
 		RequestID:                  emptyUUID,
-		WorkflowTaskTimeout:        startToCloseTimeoutSeconds,
+		WorkflowTaskTimeout:        int64(startToCloseTimeoutSeconds),
 		TaskQueue:                  taskQueue,
 		Attempt:                    attempt,
 		ScheduledTimestamp:         scheduleTimestamp,
@@ -315,7 +315,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskScheduledEventAsHea
 		taskQueue.Name = m.msb.executionInfo.TaskQueue
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
-	taskTimeout := m.msb.executionInfo.DefaultWorkflowTaskTimeout
+	taskTimeout := int32(m.msb.executionInfo.DefaultWorkflowTaskTimeout)
 
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
 	// workflow task and will cause in timeout processing to not work for transient workflow tasks
@@ -431,7 +431,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	// First check to see if new events came since transient workflowTask was scheduled
 	if workflowTask.Attempt > 1 && workflowTask.ScheduleID != m.msb.GetNextEventID() {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), workflowTask.WorkflowTaskTimeout, 0)
+		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(request.GetTaskQueue(), int32(workflowTask.WorkflowTaskTimeout), 0)
 		scheduleID = scheduleEvent.GetEventId()
 		workflowTask.Attempt = 1
 	}
@@ -480,7 +480,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskCompletedEvent(
 			Name: m.msb.executionInfo.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, workflowTask.WorkflowTaskTimeout,
+		scheduledEvent := m.msb.hBuilder.AddTransientWorkflowTaskScheduledEvent(taskQueue, int32(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt, workflowTask.ScheduledTimestamp)
 		startedEvent := m.msb.hBuilder.AddTransientWorkflowTaskStartedEvent(scheduledEvent.GetEventId(), workflowTask.RequestID,
 			request.GetIdentity(), workflowTask.StartedTimestamp)
@@ -697,7 +697,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) CreateTransientWorkflowTaskEvents(
 		workflowTask.ScheduleID,
 		workflowTask.ScheduledTimestamp,
 		taskqueue,
-		workflowTask.WorkflowTaskTimeout,
+		int32(workflowTask.WorkflowTaskTimeout),
 		workflowTask.Attempt,
 	)
 
