@@ -1167,7 +1167,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			ReplicationState: currMutableState.GetReplicationState(),
 			VersionHistories: currMutableState.GetVersionHistories(),
 
-			UpsertActivityInfos:       []*persistence.ActivityInfo{},
+			UpsertActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			DeleteActivityInfos:       []int64{},
 			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			DeleteTimerInfos:          []string{},

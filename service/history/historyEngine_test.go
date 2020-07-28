@@ -3841,7 +3841,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-			ScheduledEventId: aInfo.ScheduleID,
+			ScheduledEventId: aInfo.ScheduleId,
 		}},
 	}}
 
@@ -3967,7 +3967,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 		{
 			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-				ScheduledEventId: aInfo.ScheduleID,
+				ScheduledEventId: aInfo.ScheduleId,
 			}},
 		},
 		{
@@ -5011,7 +5011,7 @@ func addActivityTaskScheduledEvent(
 	startToCloseTimeout int32,
 	heartbeatTimeout int32,
 ) (*historypb.HistoryEvent,
-	*persistence.ActivityInfo) {
+	*persistenceblobs.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:                    activityID,
@@ -5038,7 +5038,7 @@ func addActivityTaskScheduledEventWithRetry(
 	startToCloseTimeout int32,
 	heartbeatTimeout int32,
 	retryPolicy *commonpb.RetryPolicy,
-) (*historypb.HistoryEvent, *persistence.ActivityInfo) {
+) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:                    activityID,
@@ -5223,7 +5223,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	stats := &persistence.ExecutionStats{}
-	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
 	}
@@ -5344,42 +5344,40 @@ func copyHistoryEvent(source *historypb.HistoryEvent) *historypb.HistoryEvent {
 	return result
 }
 
-func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.ActivityInfo {
-	return &persistence.ActivityInfo{
-		Version:                  sourceInfo.Version,
-		ScheduleID:               sourceInfo.ScheduleID,
-		ScheduledEventBatchID:    sourceInfo.ScheduledEventBatchID,
-		ScheduledEvent:           copyHistoryEvent(sourceInfo.ScheduledEvent),
-		StartedID:                sourceInfo.StartedID,
-		StartedEvent:             copyHistoryEvent(sourceInfo.StartedEvent),
-		ActivityID:               sourceInfo.ActivityID,
-		RequestID:                sourceInfo.RequestID,
-		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payloads),
-		ScheduledTime:            sourceInfo.ScheduledTime,
-		StartedTime:              sourceInfo.StartedTime,
-		ScheduleToStartTimeout:   sourceInfo.ScheduleToStartTimeout,
-		ScheduleToCloseTimeout:   sourceInfo.ScheduleToCloseTimeout,
-		StartToCloseTimeout:      sourceInfo.StartToCloseTimeout,
-		HeartbeatTimeout:         sourceInfo.HeartbeatTimeout,
-		LastHeartBeatUpdatedTime: sourceInfo.LastHeartBeatUpdatedTime,
-		CancelRequested:          sourceInfo.CancelRequested,
-		CancelRequestID:          sourceInfo.CancelRequestID,
-		TimerTaskStatus:          sourceInfo.TimerTaskStatus,
-		Attempt:                  sourceInfo.Attempt,
-		NamespaceID:              sourceInfo.NamespaceID,
-		StartedIdentity:          sourceInfo.StartedIdentity,
-		TaskQueue:                sourceInfo.TaskQueue,
-		HasRetryPolicy:           sourceInfo.HasRetryPolicy,
-		InitialInterval:          sourceInfo.InitialInterval,
-		BackoffCoefficient:       sourceInfo.BackoffCoefficient,
-		MaximumInterval:          sourceInfo.MaximumInterval,
-		ExpirationTime:           sourceInfo.ExpirationTime,
-		MaximumAttempts:          sourceInfo.MaximumAttempts,
-		NonRetryableErrorTypes:   sourceInfo.NonRetryableErrorTypes,
-		LastFailure:              sourceInfo.LastFailure,
-		LastWorkerIdentity:       sourceInfo.LastWorkerIdentity,
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds: sourceInfo.LastHeartbeatTimeoutVisibilityInSeconds,
+func copyActivityInfo(sourceInfo *persistenceblobs.ActivityInfo) *persistenceblobs.ActivityInfo {
+	return &persistenceblobs.ActivityInfo{
+		Version:                     sourceInfo.Version,
+		ScheduleId:                  sourceInfo.ScheduleId,
+		ScheduledEventBatchId:       sourceInfo.ScheduledEventBatchId,
+		ScheduledEvent:              copyHistoryEvent(sourceInfo.ScheduledEvent),
+		StartedId:                   sourceInfo.StartedId,
+		StartedEvent:                copyHistoryEvent(sourceInfo.StartedEvent),
+		ActivityId:                  sourceInfo.ActivityId,
+		RequestId:                   sourceInfo.RequestId,
+		LastHeartbeatDetails:        sourceInfo.LastHeartbeatDetails,
+		ScheduledTime:               sourceInfo.ScheduledTime,
+		StartedTime:                 sourceInfo.StartedTime,
+		ScheduleToStartTimeout:      sourceInfo.ScheduleToStartTimeout,
+		ScheduleToCloseTimeout:      sourceInfo.ScheduleToCloseTimeout,
+		StartToCloseTimeout:         sourceInfo.StartToCloseTimeout,
+		HeartbeatTimeout:            sourceInfo.HeartbeatTimeout,
+		LastHeartbeatUpdateTime:     sourceInfo.LastHeartbeatUpdateTime,
+		CancelRequested:             sourceInfo.CancelRequested,
+		CancelRequestId:             sourceInfo.CancelRequestId,
+		TimerTaskStatus:             sourceInfo.TimerTaskStatus,
+		Attempt:                     sourceInfo.Attempt,
+		NamespaceId:                 sourceInfo.NamespaceId,
+		StartedIdentity:             sourceInfo.StartedIdentity,
+		TaskQueue:                   sourceInfo.TaskQueue,
+		HasRetryPolicy:              sourceInfo.HasRetryPolicy,
+		RetryInitialInterval:        sourceInfo.RetryInitialInterval,
+		RetryBackoffCoefficient:     sourceInfo.RetryBackoffCoefficient,
+		RetryMaximumInterval:        sourceInfo.RetryMaximumInterval,
+		RetryExpirationTime:         sourceInfo.RetryExpirationTime,
+		RetryMaximumAttempts:        sourceInfo.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes: sourceInfo.RetryNonRetryableErrorTypes,
+		RetryLastFailure:            sourceInfo.RetryLastFailure,
+		RetryLastWorkerIdentity:     sourceInfo.RetryLastWorkerIdentity,
 	}
 }
 

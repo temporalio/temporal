@@ -45,7 +45,7 @@ const (
 		`db_name VARCHAR(255) not null, ` +
 		`creation_time TIMESTAMP, ` +
 		`curr_version VARCHAR(64), ` +
-		`min_compatible_version VARCHAR(64), `+
+		`min_compatible_version VARCHAR(64), ` +
 		`PRIMARY KEY (version_partition, db_name));`
 
 	createSchemaUpdateHistoryTableQuery = `CREATE TABLE schema_update_history(` +

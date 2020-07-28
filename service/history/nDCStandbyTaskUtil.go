@@ -117,7 +117,7 @@ type (
 	}
 
 	pushActivityTaskToMatchingInfo struct {
-		activityTaskScheduleToStartTimeout int64
+		activityTaskScheduleToStartTimeout time.Duration
 	}
 
 	pushWorkflowTaskToMatchingInfo struct {
@@ -148,7 +148,7 @@ func newHistoryResendInfoFor2DC(
 }
 
 func newPushActivityToMatchingInfo(
-	activityScheduleToStartTimeout int64,
+	activityScheduleToStartTimeout time.Duration,
 ) *pushActivityTaskToMatchingInfo {
 
 	return &pushActivityTaskToMatchingInfo{

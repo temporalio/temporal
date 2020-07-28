@@ -154,7 +154,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return err
 	}
 
-	timeout := common.MinInt64(ai.ScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(int64(ai.ScheduleToStartTimeout.Seconds()), common.MaxTaskTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)

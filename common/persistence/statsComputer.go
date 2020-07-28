@@ -190,16 +190,16 @@ func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int 
 	return size
 }
 
-func computeActivityInfoSize(ai *InternalActivityInfo) int {
-	size := len(ai.ActivityID)
+func computeActivityInfoSize(ai *persistenceblobs.ActivityInfo) int {
+	size := len(ai.ActivityId)
 	if ai.ScheduledEvent != nil {
-		size += len(ai.ScheduledEvent.Data)
+		size += ai.ScheduledEvent.Size()
 	}
 	if ai.StartedEvent != nil {
-		size += len(ai.StartedEvent.Data)
+		size += ai.StartedEvent.Size()
 	}
-	if ai.Details != nil {
-		size += ai.Details.Size()
+	if ai.LastHeartbeatDetails != nil {
+		size += ai.LastHeartbeatDetails.Size()
 	}
 
 	return size

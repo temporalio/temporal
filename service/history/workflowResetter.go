@@ -380,7 +380,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 ) error {
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		switch ai.StartedID {
+		switch ai.StartedId {
 		case common.EmptyEventID:
 			// activity not started, noop
 		case common.TransientEventID:
@@ -389,9 +389,9 @@ func (r *workflowResetterImpl) failInflightActivity(
 			return serviceerror.NewInternal("workflowResetter encounter transient activity")
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(
-				ai.ScheduleID,
-				ai.StartedID,
-				failure.NewResetWorkflowFailure(terminateReason, ai.Details),
+				ai.ScheduleId,
+				ai.StartedId,
+				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
 			); err != nil {

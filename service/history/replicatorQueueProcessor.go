@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -648,11 +649,16 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			var startedTime int64
 			var heartbeatTime int64
 			scheduledTime := activityInfo.ScheduledTime.UnixNano()
-			if activityInfo.StartedID != common.EmptyEventID {
+			if activityInfo.StartedId != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime.UnixNano()
 			}
+
 			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
-			heartbeatTime = activityInfo.LastHeartBeatUpdatedTime.UnixNano()
+			if activityInfo.LastHeartbeatUpdateTime != nil {
+				heartbeatTime = activityInfo.LastHeartbeatUpdateTime.UnixNano()
+			} else {
+				return nil, serviceerror.NewInternal(fmt.Sprintf("activityInfo with Id %v has no LastHeartbeatUpdateTime", activityInfo.ActivityId))
+			}
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()
@@ -673,15 +679,15 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						WorkflowId:         taskInfo.GetWorkflowId(),
 						RunId:              runID,
 						Version:            activityInfo.Version,
-						ScheduledId:        activityInfo.ScheduleID,
+						ScheduledId:        activityInfo.ScheduleId,
 						ScheduledTime:      scheduledTime,
-						StartedId:          activityInfo.StartedID,
+						StartedId:          activityInfo.StartedId,
 						StartedTime:        startedTime,
 						LastHeartbeatTime:  heartbeatTime,
-						Details:            activityInfo.Details,
+						Details:            activityInfo.LastHeartbeatDetails,
 						Attempt:            activityInfo.Attempt,
-						LastFailure:        activityInfo.LastFailure,
-						LastWorkerIdentity: activityInfo.LastWorkerIdentity,
+						LastFailure:        activityInfo.RetryLastFailure,
+						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
 						VersionHistory:     versionHistory,
 					},
 				},
