@@ -257,11 +257,6 @@ type (
 		CronSchedule string
 	}
 
-	// ExecutionStats is the statistics about workflow execution
-	ExecutionStats struct {
-		HistorySize int64
-	}
-
 	// ReplicationState represents mutable state information for global namespaces.
 	// This information is used by replication protocol when applying events from remote clusters
 	ReplicationState struct {
@@ -490,7 +485,7 @@ type (
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *ExecutionStats
+		ExecutionStats      *persistenceblobs.ExecutionStats
 		ReplicationState    *ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
@@ -658,7 +653,7 @@ type (
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
+		ExecutionStats   *persistenceblobs.ExecutionStats
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
@@ -688,7 +683,7 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
+		ExecutionStats   *persistenceblobs.ExecutionStats
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 

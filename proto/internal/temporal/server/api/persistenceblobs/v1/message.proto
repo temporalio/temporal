@@ -23,8 +23,8 @@ syntax = "proto3";
 package temporal.server.api.persistenceblobs.v1;
 option go_package = "go.temporal.io/server/api/persistenceblobs/v1;persistenceblobs";
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
 import "temporal/api/common/v1/message.proto";
@@ -40,6 +40,11 @@ import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/replication/v1/message.proto";
+
+// ExecutionStats is not persisted and is used internally and as part of mutableState
+message ExecutionStats {
+    int64 HistorySize = 1;
+}
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster.
 message ImmutableClusterMetadata {

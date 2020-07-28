@@ -229,7 +229,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -254,7 +254,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -914,7 +914,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -938,7 +938,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -1509,7 +1509,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -1535,7 +1535,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2215,7 +2215,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2240,7 +2240,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2815,7 +2815,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2841,7 +2841,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3496,7 +3496,7 @@ func (s *resetorSuite) TestApplyReset() {
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3522,7 +3522,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 

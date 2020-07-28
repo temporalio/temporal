@@ -497,7 +497,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -570,7 +570,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -714,7 +714,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -784,7 +784,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -857,7 +857,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskStartedID:  common.EmptyEventID,
 				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -1931,7 +1931,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2051,7 +2051,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2167,7 +2167,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2303,7 +2303,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2440,7 +2440,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2577,7 +2577,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2715,7 +2715,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2879,7 +2879,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3056,7 +3056,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3230,7 +3230,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3386,7 +3386,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3557,7 +3557,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,

@@ -136,7 +136,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTaskTimeout:        1,
 				BranchToken:                []byte("branchToken1"),
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks: []p.Task{
 				&p.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
@@ -240,7 +240,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowTaskTimeout:    1,
 				BranchToken:            nil,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			VersionHistories: versionHistories,
 			TransferTasks: []p.Task{
 				&p.WorkflowTask{
@@ -363,7 +363,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowTaskTimeout:    1,
 				BranchToken:            []byte("branchToken1"),
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks:  nil,
 			TimerTasks:     nil,
 		},
@@ -657,7 +657,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				WorkflowTaskTimeout:        1,
 				BranchToken:                brToken,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: state,
 			TimerTasks:       timerTasks,
 			TransferTasks:    transferTasks,

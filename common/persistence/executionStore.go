@@ -28,6 +28,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -109,7 +110,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
 	info *InternalWorkflowExecutionInfo,
-) (*WorkflowExecutionInfo, *ExecutionStats, error) {
+) (*WorkflowExecutionInfo, *persistenceblobs.ExecutionStats, error) {
 
 	completionEvent, err := m.serializer.DeserializeEvent(info.CompletionEvent)
 	if err != nil {
@@ -177,7 +178,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		SearchAttributes:                       info.SearchAttributes,
 		Memo:                                   info.Memo,
 	}
-	newStats := &ExecutionStats{
+	newStats := &persistenceblobs.ExecutionStats{
 		HistorySize: info.HistorySize,
 	}
 	return newInfo, newStats, nil
@@ -230,7 +231,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
-	stats *ExecutionStats,
+	stats *persistenceblobs.ExecutionStats,
 	encoding common.EncodingType,
 ) (*InternalWorkflowExecutionInfo, error) {
 
