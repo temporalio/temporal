@@ -272,26 +272,26 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	mutableState := NewMockmutableState(s.controller)
 
 	activity1 := &persistenceblobs.ActivityInfo{
-		Version:         12,
-		ScheduleID:      123,
-		StartedID:       124,
-		Details:         payloads.EncodeString("some random activity 1 details"),
-		StartedIdentity: "some random activity 1 started identity",
+		Version:              12,
+		ScheduleId:           123,
+		StartedId:            124,
+		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
+		StartedIdentity:      "some random activity 1 started identity",
 	}
 	activity2 := &persistenceblobs.ActivityInfo{
 		Version:    12,
-		ScheduleID: 456,
-		StartedID:  common.EmptyEventID,
+		ScheduleId: 456,
+		StartedId:  common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistenceblobs.ActivityInfo{
-		activity1.ScheduleID: activity1,
-		activity2.ScheduleID: activity2,
+		activity1.ScheduleId: activity1,
+		activity2.ScheduleId: activity2,
 	}).AnyTimes()
 
 	mutableState.EXPECT().AddActivityTaskFailedEvent(
-		activity1.ScheduleID,
-		activity1.StartedID,
-		failure.NewResetWorkflowFailure(terminateReason, activity1.Details),
+		activity1.ScheduleId,
+		activity1.StartedId,
+		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)

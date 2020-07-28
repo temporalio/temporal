@@ -840,7 +840,7 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistenceblob
 	}
 
 	for _, t := range timers {
-		delete(m, t.ActivityID)
+		delete(m, t.ActivityId)
 	}
 
 	s.Equal(0, len(m))

@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -662,7 +663,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.pendingActivityInfoIDs[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= timerTaskStatusCreatedHeartbeat
-	activityInfo2.LastHeartbeatUpdateTime = time.Now()
+	activityInfo2.LastHeartbeatUpdateTime = timestamp.TimePtr(time.Now())
 
 	timerSequence := newTimerSequence(s.timeSource, mutableState)
 	mutableState.insertTimerTasks = nil

@@ -2644,10 +2644,10 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(int64(2), ai.StartedId)
 	s.Equal(int64(2), ai.StartedEvent.EventId)
 	s.EqualTimes(currentTime, *ai.StartedTime)
-	s.Equal(int64(1), ai.ScheduleToCloseTimeout)
-	s.Equal(int64(2), ai.ScheduleToStartTimeout)
-	s.Equal(int64(3), ai.StartToCloseTimeout)
-	s.Equal(int64(4), ai.HeartbeatTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(1), *ai.ScheduleToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(2), *ai.ScheduleToStartTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(3), *ai.StartToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(4), *ai.HeartbeatTimeout)
 	s.EqualTimes(currentTime, *ai.LastHeartbeatUpdateTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 	s.Equal(activityInfos[0].CancelRequested, ai.CancelRequested)
@@ -3624,8 +3624,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 		ExecutionStats: updatedStats,
 		ActivityInfos: map[int64]*persistenceblobs.ActivityInfo{
 			4: {
-				Version:                  7789,
-				ScheduleId:               4,
+				Version:                 7789,
+				ScheduleId:              4,
 				ScheduledEventBatchId:   3,
 				ScheduledEvent:          &historypb.HistoryEvent{EventId: 40},
 				ScheduledTime:           &currentTime,
@@ -3637,11 +3637,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				StartToCloseTimeout:     timestamp.DurationFromSeconds(3),
 				HeartbeatTimeout:        timestamp.DurationFromSeconds(4),
 				LastHeartbeatUpdateTime: &currentTime,
-				TimerTaskStatus:        1,
+				TimerTaskStatus:         1,
 			},
 			5: {
-				Version:                  7789,
-				ScheduleId:               5,
+				Version:                 7789,
+				ScheduleId:              5,
 				ScheduledEventBatchId:   3,
 				ScheduledEvent:          &historypb.HistoryEvent{EventId: 50},
 				ScheduledTime:           &currentTime,
@@ -3775,10 +3775,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(6), ai.StartedId)
 	s.Equal(int64(60), ai.StartedEvent.EventId)
 	s.EqualTimes(currentTime, *ai.StartedTime)
-	s.Equal(int64(1), ai.ScheduleToCloseTimeout)
-	s.Equal(int64(2), ai.ScheduleToStartTimeout)
-	s.Equal(int64(3), ai.StartToCloseTimeout)
-	s.Equal(int64(4), ai.HeartbeatTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(1), *ai.ScheduleToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(2), *ai.ScheduleToStartTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(3), *ai.StartToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(4), *ai.HeartbeatTimeout)
 	s.EqualTimes(currentTime, *ai.LastHeartbeatUpdateTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
@@ -3793,10 +3793,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(7), ai.StartedId)
 	s.Equal(int64(70), ai.StartedEvent.EventId)
 	s.EqualTimes(currentTime, *ai.StartedTime)
-	s.Equal(int64(1), ai.ScheduleToCloseTimeout)
-	s.Equal(int64(2), ai.ScheduleToStartTimeout)
-	s.Equal(int64(3), ai.StartToCloseTimeout)
-	s.Equal(int64(4), ai.HeartbeatTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(1), *ai.ScheduleToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(2), *ai.ScheduleToStartTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(3), *ai.StartToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(4), *ai.HeartbeatTimeout)
 	s.EqualTimes(currentTime, *ai.LastHeartbeatUpdateTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
@@ -3861,8 +3861,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	updatedInfo1.NextEventID = int64(3)
 	resetActivityInfos := []*persistenceblobs.ActivityInfo{
 		{
-			Version:                  8789,
-			ScheduleId:               40,
+			Version:                 8789,
+			ScheduleId:              40,
 			ScheduledEventBatchId:   30,
 			ScheduledEvent:          &historypb.HistoryEvent{EventId: 400},
 			ScheduledTime:           &currentTime,
@@ -3962,10 +3962,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(60), ai.StartedId)
 	s.Equal(int64(600), ai.StartedEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
-	s.Equal(int64(10), ai.ScheduleToCloseTimeout)
-	s.Equal(int64(20), ai.ScheduleToStartTimeout)
-	s.Equal(int64(30), ai.StartToCloseTimeout)
-	s.Equal(int64(40), ai.HeartbeatTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(10), *ai.ScheduleToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(20), *ai.ScheduleToStartTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(30), *ai.StartToCloseTimeout)
+	s.EqualValues(*timestamp.DurationFromSeconds(40), *ai.HeartbeatTimeout)
 	s.Equal(currentTime.Unix(), ai.LastHeartbeatUpdateTime.Unix())
 	s.Equal(int32(1), ai.TimerTaskStatus)
 

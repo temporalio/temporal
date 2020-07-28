@@ -93,11 +93,12 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityInfoIDs     map[int64]*persistenceblobs.ActivityInfo    // Schedule Event ID -> Activity Info.
-		pendingActivityIDToEventID map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
-		updateActivityInfos        map[*persistenceblobs.ActivityInfo]struct{} // Modified activities from last update.
-		deleteActivityInfos        map[int64]struct{}                     // Deleted activities from last update.
-		syncActivityTasks          map[int64]struct{}                     // Activity to be sync to remote
+		pendingActivityTimerHeartbeats map[int64]int64                             // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityInfoIDs         map[int64]*persistenceblobs.ActivityInfo    // Schedule Event ID -> Activity Info.
+		pendingActivityIDToEventID     map[string]int64                            // Activity ID -> Schedule Event ID of the activity.
+		updateActivityInfos            map[*persistenceblobs.ActivityInfo]struct{} // Modified activities from last update.
+		deleteActivityInfos            map[int64]struct{}                          // Deleted activities from last update.
+		syncActivityTasks              map[int64]struct{}                          // Activity to be sync to remote
 
 		pendingTimerInfoIDs     map[string]*persistenceblobs.TimerInfo   // User Timer ID -> Timer Info.
 		pendingTimerEventIDToID map[int64]string                         // User Timer Start Event ID -> User Timer ID.
@@ -180,6 +181,7 @@ func newMutableStateBuilder(
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:        make(map[*persistenceblobs.ActivityInfo]struct{}),
+		pendingActivityTimerHeartbeats: make(map[int64]int64),
 		pendingActivityInfoIDs:     make(map[int64]*persistenceblobs.ActivityInfo),
 		pendingActivityIDToEventID: make(map[string]int64),
 		deleteActivityInfos:        make(map[int64]struct{}),
@@ -1035,6 +1037,16 @@ func (e *mutableStateBuilder) GetActivityInfo(
 	return ai, ok
 }
 
+// GetActivityInfo gives details about an activity that is currently in progress.
+func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
+	scheduleEventID int64,
+) (*persistenceblobs.ActivityInfo, int64, bool) {
+	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
+	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
+
+	return ai, timerVis, ok
+}
+
 // GetActivityByActivityID gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityByActivityID(
 	activityID string,
@@ -1351,6 +1363,21 @@ func (e *mutableStateBuilder) UpdateActivity(
 	return nil
 }
 
+// UpdateActivity updates an activity
+func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
+	ai *persistenceblobs.ActivityInfo,
+	timerTimeoutVisiblityInSeconds int64,
+) error {
+
+	err := e.UpdateActivity(ai)
+	if err != nil {
+		return err
+	}
+
+	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisiblityInSeconds
+	return nil
+}
+
 // DeleteActivity deletes details about an activity.
 func (e *mutableStateBuilder) DeleteActivity(
 	scheduleEventID int64,
@@ -1358,6 +1385,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 
 	if activityInfo, ok := e.pendingActivityInfoIDs[scheduleEventID]; ok {
 		delete(e.pendingActivityInfoIDs, scheduleEventID)
+		delete(e.pendingActivityTimerHeartbeats, scheduleEventID)
 
 		if _, ok = e.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(e.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -2184,10 +2212,10 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
 
 	ai := &persistenceblobs.ActivityInfo{
-		Version:                  event.GetVersion(),
-		ScheduleId:               scheduleEventID,
-		ScheduledEventBatchId:    firstEventID,
-		ScheduledTime:            timestamp.TimePtr(time.Unix(0, event.GetTimestamp())),
+		Version:                 event.GetVersion(),
+		ScheduleId:              scheduleEventID,
+		ScheduledEventBatchId:   firstEventID,
+		ScheduledTime:           timestamp.TimePtr(time.Unix(0, event.GetTimestamp())),
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,

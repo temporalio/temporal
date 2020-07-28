@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -158,10 +159,15 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)
+
+	var err error
 	if firstTimerTask.timerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		activityInfo.LastHeartbeatTimeoutVisibilityInSeconds = firstTimerTask.timestamp.Unix()
+		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.timestamp.Unix())
+	} else {
+		err = t.mutableState.UpdateActivity(activityInfo)
 	}
-	if err := t.mutableState.UpdateActivity(activityInfo); err != nil {
+
+	if err != nil {
 		return false, err
 	}
 	t.mutableState.AddTimerTasks(&persistence.ActivityTimeoutTask{
@@ -259,7 +265,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 		return nil
 	}
 
-	startTimeout := activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout)
+	startTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToStartTimeout)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -279,7 +285,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToCloseTimeout)
+	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToCloseTimeout)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -304,7 +310,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := activityInfo.StartedTime.Add(*activityInfo.StartToCloseTimeout)
+	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.StartedTime, activityInfo.StartToCloseTimeout)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -330,17 +336,21 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	}
 
 	// not heartbeat timeout configured
-	if *activityInfo.HeartbeatTimeout <= 0 {
+	if activityInfo.HeartbeatTimeout != nil && *activityInfo.HeartbeatTimeout <= 0 {
 		return nil
 	}
 
 	// use the latest time as last heartbeat time
-	lastHeartbeat := activityInfo.StartedTime
-	if activityInfo.LastHeartbeatUpdateTime.After(*lastHeartbeat) {
-		lastHeartbeat = activityInfo.LastHeartbeatUpdateTime
+	lastHeartbeat := time.Time{}
+	if activityInfo.StartedTime != nil {
+		lastHeartbeat = *activityInfo.StartedTime
 	}
 
-	heartbeatTimeout := lastHeartbeat.Add(*activityInfo.HeartbeatTimeout)
+	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeat) {
+		lastHeartbeat = *activityInfo.LastHeartbeatUpdateTime
+	}
+
+	heartbeatTimeout := timestamp.AddDurationPtrToTime(lastHeartbeat, activityInfo.HeartbeatTimeout)
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,

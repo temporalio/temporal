@@ -190,9 +190,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
+	activityInfo, heartbeatTimeoutVisSeconds, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTime)
-	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
+	if isHeartBeatTask && ok && heartbeatTimeoutVisSeconds <= goVisibilityTS.Unix() {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err

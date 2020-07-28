@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -651,8 +652,13 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			if activityInfo.StartedId != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime.UnixNano()
 			}
+
 			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
-			heartbeatTime = activityInfo.LastHeartbeatUpdateTime.UnixNano()
+			if activityInfo.LastHeartbeatUpdateTime != nil {
+				heartbeatTime = activityInfo.LastHeartbeatUpdateTime.UnixNano()
+			} else {
+				return nil, serviceerror.NewInternal(fmt.Sprintf("activityInfo with Id %v has no LastHeartbeatUpdateTime", activityInfo.ActivityId))
+			}
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()

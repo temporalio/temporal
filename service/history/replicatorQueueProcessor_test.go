@@ -306,15 +306,15 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
 		Version:                 activityVersion,
-		ScheduleID:              activityScheduleID,
-		ScheduledTime:           activityScheduledTime,
-		StartedID:               activityStartedID,
-		StartedTime:             activityStartedTime,
-		LastHeartbeatUpdateTime: activityHeartbeatTime,
-		Details:                 activityDetails,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
 		Attempt:                 activityAttempt,
-		LastFailure:             activityLastFailure,
-		LastWorkerIdentity:      activityLastWorkerIdentity,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -416,15 +416,15 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
 		Version:                 activityVersion,
-		ScheduleID:              activityScheduleID,
-		ScheduledTime:           activityScheduledTime,
-		StartedID:               activityStartedID,
-		StartedTime:             activityStartedTime,
-		LastHeartbeatUpdateTime: activityHeartbeatTime,
-		Details:                 activityDetails,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
 		Attempt:                 activityAttempt,
-		LastFailure:             activityLastFailure,
-		LastWorkerIdentity:      activityLastWorkerIdentity,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},

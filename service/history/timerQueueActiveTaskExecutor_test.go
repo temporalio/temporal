@@ -1140,7 +1140,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			ScheduleId:                    activityInfo.ScheduleId,
-			ScheduleToStartTimeoutSeconds: int32(activityInfo.ScheduleToStartTimeout),
+			ScheduleToStartTimeoutSeconds: int32(activityInfo.ScheduleToStartTimeout.Seconds()),
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 

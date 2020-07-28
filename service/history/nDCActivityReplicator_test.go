@@ -911,7 +911,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	).AnyTimes()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version,
-		ScheduleID: scheduleID,
+		ScheduleId: scheduleID,
 		Attempt:    attempt,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
@@ -983,7 +983,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	).AnyTimes()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version,
-		ScheduleID: scheduleID,
+		ScheduleId: scheduleID,
 		Attempt:    attempt - 1,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
@@ -1055,7 +1055,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	).AnyTimes()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
-		ScheduleID: scheduleID,
+		ScheduleId: scheduleID,
 		Attempt:    attempt + 1,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
@@ -1127,16 +1127,17 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	).AnyTimes()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
-		ScheduleID: scheduleID,
+		ScheduleId: scheduleID,
 		Attempt:    attempt + 1,
 	}
+
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
 	activityInfos := map[int64]*persistenceblobs.ActivityInfo{activityInfo.ScheduleId: activityInfo}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(activityInfo, gomock.Any()).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := time.Unix(0, request.GetLastHeartbeatTime())
@@ -1211,7 +1212,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	).AnyTimes()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:    version - 1,
-		ScheduleID: scheduleID,
+		ScheduleId: scheduleID,
 		Attempt:    attempt + 1,
 	}
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
@@ -1220,7 +1221,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(activityInfo, gomock.Any()).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := time.Unix(0, request.GetLastHeartbeatTime())

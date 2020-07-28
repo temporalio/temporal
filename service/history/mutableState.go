@@ -125,6 +125,7 @@ type (
 		FlushBufferedEvents() error
 		GetActivityByActivityID(string) (*persistenceblobs.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistenceblobs.ActivityInfo, bool)
+		GetActivityInfoWithTimerHeartbeat(int64) (*persistenceblobs.ActivityInfo, int64, bool)
 		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
@@ -218,6 +219,7 @@ type (
 		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
 		UpdateActivity(*persistenceblobs.ActivityInfo) error
+		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, int64) error
 		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateWorkflowTask(*workflowTaskInfo)
 		UpdateReplicationStateVersion(int64, bool)

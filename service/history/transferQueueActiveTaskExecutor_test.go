@@ -1912,7 +1912,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout),
+		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout.Seconds()),
 	}
 }
 

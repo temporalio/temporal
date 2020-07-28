@@ -86,8 +86,6 @@ message ActivityInfo {
     int64 schedule_id = 32;
     temporal.api.common.v1.Payloads last_heartbeat_details = 33;
     google.protobuf.Timestamp last_heartbeat_update_time = 34 [(gogoproto.stdtime) = true];
-    // Not persisted... Need to remove.
-    int64 last_heartbeat_timeout_visibility_in_seconds = 35;
 }
 
 message ShardInfo {

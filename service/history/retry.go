@@ -73,19 +73,20 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	nextIntervalSeconds := int64(float64(initInterval.Seconds()) * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
+	maxIntervalSeconds := int64(maxInterval.Round(time.Second).Seconds())
+	nextIntervalSeconds := int64(initInterval.Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
 	if nextIntervalSeconds <= 0 {
 		// math.Pow() could overflow
 		if maxInterval > 0 {
-			nextIntervalSeconds = int64(maxInterval)
+			nextIntervalSeconds = maxIntervalSeconds
 		} else {
 			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 		}
 	}
 
-	if maxInterval > 0 && nextIntervalSeconds > int64(maxInterval) {
+	if maxInterval > 0 && nextIntervalSeconds > maxIntervalSeconds {
 		// cap next interval to MaxInterval
-		nextIntervalSeconds = int64(maxInterval)
+		nextIntervalSeconds = maxIntervalSeconds
 	}
 
 	backoffInterval := time.Duration(nextIntervalSeconds) * time.Second
