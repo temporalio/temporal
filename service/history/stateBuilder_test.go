@@ -1281,12 +1281,12 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		}},
 	}
 
-	ci := &persistence.ChildExecutionInfo{
+	ci := &persistenceblobs.ChildExecutionInfo{
 		Version:               event.GetVersion(),
-		InitiatedID:           event.GetEventId(),
-		InitiatedEventBatchID: event.GetEventId(),
-		StartedID:             common.EmptyEventID,
-		CreateRequestID:       createRequestID,
+		InitiatedId:           event.GetEventId(),
+		InitiatedEventBatchId: event.GetEventId(),
+		StartedId:             common.EmptyEventID,
+		CreateRequestId:       createRequestID,
 		Namespace:             testTargetNamespace,
 	}
 

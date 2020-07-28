@@ -105,8 +105,8 @@ type (
 		updateTimerInfos        map[*persistenceblobs.TimerInfo]struct{} // Modified timers from last update.
 		deleteTimerInfos        map[string]struct{}                      // Deleted timers from last update.
 
-		pendingChildExecutionInfoIDs map[int64]*persistence.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
-		updateChildExecutionInfos    map[*persistence.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
+		pendingChildExecutionInfoIDs map[int64]*persistenceblobs.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
+		updateChildExecutionInfos    map[*persistenceblobs.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
 		deleteChildExecutionInfo     *int64                                       // Deleted ChildExecution Info since last update
 
 		pendingRequestCancelInfoIDs map[int64]*persistenceblobs.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
@@ -192,8 +192,8 @@ func newMutableStateBuilder(
 		updateTimerInfos:        make(map[*persistenceblobs.TimerInfo]struct{}),
 		deleteTimerInfos:        make(map[string]struct{}),
 
-		updateChildExecutionInfos:    make(map[*persistence.ChildExecutionInfo]struct{}),
-		pendingChildExecutionInfoIDs: make(map[int64]*persistence.ChildExecutionInfo),
+		updateChildExecutionInfos:    make(map[*persistenceblobs.ChildExecutionInfo]struct{}),
+		pendingChildExecutionInfoIDs: make(map[int64]*persistenceblobs.ChildExecutionInfo),
 		deleteChildExecutionInfo:     nil,
 
 		updateRequestCancelInfos:    make(map[*persistenceblobs.RequestCancelInfo]struct{}),
@@ -769,7 +769,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 			initiatedID := attributes.GetInitiatedEventId()
 			scheduledIDToStartedID[initiatedID] = eventID
 			if ci, ok := e.GetChildExecutionInfo(initiatedID); ok {
-				ci.StartedID = eventID
+				ci.StartedId = eventID
 				e.updateChildExecutionInfos[ci] = struct{}{}
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
@@ -1062,7 +1062,7 @@ func (e *mutableStateBuilder) GetActivityByActivityID(
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (e *mutableStateBuilder) GetChildExecutionInfo(
 	initiatedEventID int64,
-) (*persistence.ChildExecutionInfo, bool) {
+) (*persistenceblobs.ChildExecutionInfo, bool) {
 
 	ci, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]
 	return ci, ok
@@ -1087,8 +1087,8 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 		e.executionInfo.NamespaceID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
-		ci.InitiatedEventBatchID,
-		ci.InitiatedID,
+		ci.InitiatedEventBatchId,
+		ci.InitiatedId,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -1530,7 +1530,7 @@ func (e *mutableStateBuilder) GetPendingTimerInfos() map[string]*persistenceblob
 	return e.pendingTimerInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo {
+func (e *mutableStateBuilder) GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo {
 	return e.pendingChildExecutionInfoIDs
 }
 
@@ -3455,7 +3455,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	createRequestID string,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
-) (*historypb.HistoryEvent, *persistence.ChildExecutionInfo, error) {
+) (*historypb.HistoryEvent, *persistenceblobs.ChildExecutionInfo, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -3485,17 +3485,17 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 	createRequestID string,
-) (*persistence.ChildExecutionInfo, error) {
+) (*persistenceblobs.ChildExecutionInfo, error) {
 
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	ci := &persistence.ChildExecutionInfo{
+	ci := &persistenceblobs.ChildExecutionInfo{
 		Version:               event.GetVersion(),
-		InitiatedID:           initiatedEventID,
-		InitiatedEventBatchID: firstEventID,
-		StartedID:             common.EmptyEventID,
-		StartedWorkflowID:     attributes.GetWorkflowId(),
-		CreateRequestID:       createRequestID,
+		InitiatedId:           initiatedEventID,
+		InitiatedEventBatchId: firstEventID,
+		StartedId:             common.EmptyEventID,
+		StartedWorkflowId:     attributes.GetWorkflowId(),
+		CreateRequestId:       createRequestID,
 		Namespace:             attributes.GetNamespace(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
@@ -3521,7 +3521,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID != common.EmptyEventID {
+	if !ok || ci.StartedId != common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3545,8 +3545,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
 	initiatedID := attributes.GetInitiatedEventId()
 
 	ci, _ := e.GetChildExecutionInfo(initiatedID)
-	ci.StartedID = event.GetEventId()
-	ci.StartedRunID = attributes.GetWorkflowExecution().GetRunId()
+	ci.StartedId = event.GetEventId()
+	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	e.updateChildExecutionInfos[ci] = struct{}{}
 
 	return nil
@@ -3564,7 +3564,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID != common.EmptyEventID {
+	if !ok || ci.StartedId != common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3602,7 +3602,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
+	if !ok || ci.StartedId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3615,8 +3615,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 		Name: ci.WorkflowTypeName,
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedID,
-		ci.StartedID, attributes)
+	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedId,
+		ci.StartedId, attributes)
 	if err := e.ReplicateChildWorkflowExecutionCompletedEvent(event); err != nil {
 		return nil, err
 	}
@@ -3645,7 +3645,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
+	if !ok || ci.StartedId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3658,8 +3658,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 		Name: ci.WorkflowTypeName,
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedID,
-		ci.StartedID, attributes)
+	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedId,
+		ci.StartedId, attributes)
 	if err := e.ReplicateChildWorkflowExecutionFailedEvent(event); err != nil {
 		return nil, err
 	}
@@ -3688,7 +3688,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
+	if !ok || ci.StartedId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3701,8 +3701,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 		Name: ci.WorkflowTypeName,
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedID,
-		ci.StartedID, attributes)
+	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedId,
+		ci.StartedId, attributes)
 	if err := e.ReplicateChildWorkflowExecutionCanceledEvent(event); err != nil {
 		return nil, err
 	}
@@ -3731,7 +3731,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
+	if !ok || ci.StartedId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3744,8 +3744,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 		Name: ci.WorkflowTypeName,
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedID,
-		ci.StartedID, attributes)
+	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedId,
+		ci.StartedId, attributes)
 	if err := e.ReplicateChildWorkflowExecutionTerminatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -3774,7 +3774,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
+	if !ok || ci.StartedId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3787,8 +3787,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 		Name: ci.WorkflowTypeName,
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedID,
-		ci.StartedID, attributes)
+	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(ci.Namespace, childExecution, workflowType, ci.InitiatedId,
+		ci.StartedId, attributes)
 	if err := e.ReplicateChildWorkflowExecutionTimedOutEvent(event); err != nil {
 		return nil, err
 	}
@@ -4161,7 +4161,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.updateTimerInfos = make(map[*persistenceblobs.TimerInfo]struct{})
 	e.deleteTimerInfos = make(map[string]struct{})
 
-	e.updateChildExecutionInfos = make(map[*persistence.ChildExecutionInfo]struct{})
+	e.updateChildExecutionInfos = make(map[*persistenceblobs.ChildExecutionInfo]struct{})
 	e.deleteChildExecutionInfo = nil
 
 	e.updateRequestCancelInfos = make(map[*persistenceblobs.RequestCancelInfo]struct{})

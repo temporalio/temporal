@@ -211,13 +211,13 @@ func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
 	return size
 }
 
-func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
+func computeChildInfoSize(ci *persistenceblobs.ChildExecutionInfo) int {
 	size := 0
 	if ci.InitiatedEvent != nil {
-		size += len(ci.InitiatedEvent.Data)
+		size += ci.InitiatedEvent.Size()
 	}
 	if ci.StartedEvent != nil {
-		size += len(ci.StartedEvent.Data)
+		size += ci.StartedEvent.Size()
 	}
 	return size
 }

@@ -31,8 +31,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -251,7 +249,7 @@ func deleteTimerInfoMap(
 
 func updateChildExecutionInfos(
 	tx sqlplugin.Tx,
-	childExecutionInfos []*persistence.InternalChildExecutionInfo,
+	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	deleteInfos *int64,
 	shardID int,
 	namespaceID primitives.UUID,
@@ -262,7 +260,7 @@ func updateChildExecutionInfos(
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqlplugin.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
-			blob, err := serialization.ChildExecutionInfoToBlob(v.ToProto())
+			blob, err := serialization.ChildExecutionInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -271,7 +269,7 @@ func updateChildExecutionInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				InitiatedID:  v.InitiatedID,
+				InitiatedID:  v.InitiatedId,
 				Data:         blob.Data,
 				DataEncoding: string(blob.Encoding),
 			}
@@ -301,7 +299,7 @@ func getChildExecutionInfoMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.InternalChildExecutionInfo, error) {
+) (map[int64]*persistenceblobs.ChildExecutionInfo, error) {
 
 	rows, err := db.SelectFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
 		ShardID:     int64(shardID),
@@ -313,20 +311,13 @@ func getChildExecutionInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.InternalChildExecutionInfo)
+	ret := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.ChildExecutionInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		info := persistence.ProtoChildExecutionInfoToInternal(rowInfo)
-		if rowInfo.InitiatedEvent != nil {
-			info.InitiatedEvent = persistence.NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.GetInitiatedEventEncoding()))
-		}
-		if rowInfo.StartedEvent != nil {
-			info.StartedEvent = persistence.NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.GetStartedEventEncoding()))
-		}
-		ret[v.InitiatedID] = info
+		ret[v.InitiatedID] = rowInfo
 	}
 
 	return ret, nil

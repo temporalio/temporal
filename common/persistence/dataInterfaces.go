@@ -485,7 +485,7 @@ type (
 	WorkflowMutableState struct {
 		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*ChildExecutionInfo
+		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
@@ -504,22 +504,6 @@ type (
 		StartedID  int64
 		ExpiryTime time.Time
 		TaskStatus int64
-	}
-
-	// ChildExecutionInfo has details for pending child executions.
-	ChildExecutionInfo struct {
-		Version               int64
-		InitiatedID           int64
-		InitiatedEventBatchID int64
-		InitiatedEvent        *historypb.HistoryEvent
-		StartedID             int64
-		StartedWorkflowID     string
-		StartedRunID          string
-		StartedEvent          *historypb.HistoryEvent
-		CreateRequestID       string
-		Namespace             string
-		WorkflowTypeName      string
-		ParentClosePolicy     enumspb.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -682,7 +666,7 @@ type (
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
@@ -710,7 +694,7 @@ type (
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*ChildExecutionInfo
+		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string

@@ -569,11 +569,11 @@ func (mr *MockmutableStateMockRecorder) AddStartChildWorkflowExecutionFailedEven
 }
 
 // AddStartChildWorkflowExecutionInitiatedEvent mocks base method.
-func (m *MockmutableState) AddStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *command.StartChildWorkflowExecutionCommandAttributes) (*history.HistoryEvent, *persistence.ChildExecutionInfo, error) {
+func (m *MockmutableState) AddStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *command.StartChildWorkflowExecutionCommandAttributes) (*history.HistoryEvent, *persistenceblobs.ChildExecutionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStartChildWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*history.HistoryEvent)
-	ret1, _ := ret[1].(*persistence.ChildExecutionInfo)
+	ret1, _ := ret[1].(*persistenceblobs.ChildExecutionInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -945,10 +945,10 @@ func (mr *MockmutableStateMockRecorder) GetActivityScheduledEvent(arg0 interface
 }
 
 // GetChildExecutionInfo mocks base method.
-func (m *MockmutableState) GetChildExecutionInfo(arg0 int64) (*persistence.ChildExecutionInfo, bool) {
+func (m *MockmutableState) GetChildExecutionInfo(arg0 int64) (*persistenceblobs.ChildExecutionInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetChildExecutionInfo", arg0)
-	ret0, _ := ret[0].(*persistence.ChildExecutionInfo)
+	ret0, _ := ret[0].(*persistenceblobs.ChildExecutionInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -1220,10 +1220,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingTimerInfos() *gomock.Call {
 }
 
 // GetPendingChildExecutionInfos mocks base method.
-func (m *MockmutableState) GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo {
+func (m *MockmutableState) GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPendingChildExecutionInfos")
-	ret0, _ := ret[0].(map[int64]*persistence.ChildExecutionInfo)
+	ret0, _ := ret[0].(map[int64]*persistenceblobs.ChildExecutionInfo)
 	return ret0
 }
 
@@ -1972,10 +1972,10 @@ func (mr *MockmutableStateMockRecorder) ReplicateStartChildWorkflowExecutionFail
 }
 
 // ReplicateStartChildWorkflowExecutionInitiatedEvent mocks base method.
-func (m *MockmutableState) ReplicateStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *history.HistoryEvent, arg2 string) (*persistence.ChildExecutionInfo, error) {
+func (m *MockmutableState) ReplicateStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *history.HistoryEvent, arg2 string) (*persistenceblobs.ChildExecutionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateStartChildWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*persistence.ChildExecutionInfo)
+	ret0, _ := ret[0].(*persistenceblobs.ChildExecutionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

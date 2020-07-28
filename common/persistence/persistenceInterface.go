@@ -273,29 +273,13 @@ type (
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
+		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		BufferedEvents      []*serialization.DataBlob
 
 		Checksum checksum.Checksum
-	}
-
-	// InternalChildExecutionInfo has details for pending child executions for Persistence Interface
-	InternalChildExecutionInfo struct {
-		Version               int64
-		InitiatedID           int64
-		InitiatedEventBatchID int64
-		InitiatedEvent        *serialization.DataBlob
-		StartedID             int64
-		StartedWorkflowID     string
-		StartedRunID          string
-		StartedEvent          *serialization.DataBlob
-		CreateRequestID       string
-		Namespace             string
-		WorkflowTypeName      string
-		ParentClosePolicy     enumspb.ParentClosePolicy
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -360,7 +344,7 @@ type (
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*InternalChildExecutionInfo
+		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
@@ -390,7 +374,7 @@ type (
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*InternalChildExecutionInfo
+		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string
@@ -866,44 +850,4 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 			common.EncodingType(info.GetAutoResetPointsEncoding()))
 	}
 	return executionInfo
-}
-
-func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionInfo {
-	initiateEvent, initiateEncoding := FromDataBlob(v.InitiatedEvent)
-	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
-
-	info := &persistenceblobs.ChildExecutionInfo{
-		Version:                v.Version,
-		InitiatedId:            v.InitiatedID,
-		InitiatedEventBatchId:  v.InitiatedEventBatchID,
-		InitiatedEvent:         initiateEvent,
-		InitiatedEventEncoding: initiateEncoding,
-		StartedEvent:           startEvent,
-		StartedEventEncoding:   startEncoding,
-		StartedId:              v.StartedID,
-		StartedWorkflowId:      v.StartedWorkflowID,
-		StartedRunId:           v.StartedRunID,
-		CreateRequestId:        v.CreateRequestID,
-		Namespace:              v.Namespace,
-		WorkflowTypeName:       v.WorkflowTypeName,
-		ParentClosePolicy:      v.ParentClosePolicy,
-	}
-	return info
-}
-
-func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionInfo) *InternalChildExecutionInfo {
-	return &InternalChildExecutionInfo{
-		InitiatedID:           rowInfo.GetInitiatedId(),
-		InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchId(),
-		Version:               rowInfo.GetVersion(),
-		StartedID:             rowInfo.GetStartedId(),
-		StartedWorkflowID:     rowInfo.GetStartedWorkflowId(),
-		StartedRunID:          rowInfo.GetStartedRunId(),
-		CreateRequestID:       rowInfo.GetCreateRequestId(),
-		Namespace:             rowInfo.GetNamespace(),
-		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     rowInfo.GetParentClosePolicy(),
-		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
-		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
-	}
 }

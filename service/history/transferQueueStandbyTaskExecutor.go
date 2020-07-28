@@ -355,7 +355,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, err
 		}
 
-		if childWorkflowInfo.StartedID != common.EmptyEventID {
+		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			return nil, nil
 		}
 

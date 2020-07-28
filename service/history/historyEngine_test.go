@@ -2071,14 +2071,14 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
 		childID = c
 		break
 	}
-	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enumspb.PARENT_CLOSE_POLICY_ABANDON, enumspb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowId)
+	s.Equal(enumspb.PARENT_CLOSE_POLICY_ABANDON, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerminatePolicy() {
@@ -2135,14 +2135,14 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
 		childID = c
 		break
 	}
-	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, enumspb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowId)
+	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
 }
 
 // RunID Invalid is no longer possible form this scope.
@@ -4571,7 +4571,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(common.EmptyEventID), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
@@ -5133,7 +5133,7 @@ func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workfl
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, workflowTaskCompletedID int64,
 	createRequestID, namespace, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
 	executionTimeout, runTimeout, taskTimeout int32) (*historypb.HistoryEvent,
-	*persistence.ChildExecutionInfo) {
+	*persistenceblobs.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5239,7 +5239,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	for id, info := range builder.pendingSignalInfoIDs {
 		signalInfos[id] = copySignalInfo(info)
 	}
-	childInfos := make(map[int64]*persistence.ChildExecutionInfo)
+	childInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	for id, info := range builder.pendingChildExecutionInfoIDs {
 		childInfos[id] = copyChildInfo(info)
 	}
@@ -5411,15 +5411,15 @@ func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.S
 	return result
 }
 
-func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.ChildExecutionInfo {
-	return &persistence.ChildExecutionInfo{
+func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistenceblobs.ChildExecutionInfo {
+	return &persistenceblobs.ChildExecutionInfo{
 		Version:               sourceInfo.Version,
-		InitiatedID:           sourceInfo.InitiatedID,
-		InitiatedEventBatchID: sourceInfo.InitiatedEventBatchID,
-		StartedID:             sourceInfo.StartedID,
-		StartedWorkflowID:     sourceInfo.StartedWorkflowID,
-		StartedRunID:          sourceInfo.StartedRunID,
-		CreateRequestID:       sourceInfo.CreateRequestID,
+		InitiatedId:           sourceInfo.InitiatedId,
+		InitiatedEventBatchId: sourceInfo.InitiatedEventBatchId,
+		StartedId:             sourceInfo.StartedId,
+		StartedWorkflowId:     sourceInfo.StartedWorkflowId,
+		StartedRunId:          sourceInfo.StartedRunId,
+		CreateRequestId:       sourceInfo.CreateRequestId,
 		Namespace:             sourceInfo.Namespace,
 		WorkflowTypeName:      sourceInfo.WorkflowTypeName,
 		ParentClosePolicy:     sourceInfo.ParentClosePolicy,

@@ -388,8 +388,8 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		TargetNamespaceID:   targetNamespaceID,
-		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowID,
-		InitiatedID:         childWorkflowInfo.InitiatedID,
+		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
+		InitiatedID:         childWorkflowInfo.InitiatedId,
 		Version:             childWorkflowInfo.Version,
 	})
 

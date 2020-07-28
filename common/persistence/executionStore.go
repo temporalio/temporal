@@ -78,20 +78,17 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	newResponse := &GetWorkflowExecutionResponse{
 		State: &WorkflowMutableState{
-			ActivityInfos:      response.State.ActivityInfos,
-			TimerInfos:         response.State.TimerInfos,
-			RequestCancelInfos: response.State.RequestCancelInfos,
-			SignalInfos:        response.State.SignalInfos,
-			SignalRequestedIDs: response.State.SignalRequestedIDs,
-			ReplicationState:   response.State.ReplicationState,
-			Checksum:           response.State.Checksum,
+			ActivityInfos:       response.State.ActivityInfos,
+			TimerInfos:          response.State.TimerInfos,
+			RequestCancelInfos:  response.State.RequestCancelInfos,
+			SignalInfos:         response.State.SignalInfos,
+			SignalRequestedIDs:  response.State.SignalRequestedIDs,
+			ReplicationState:    response.State.ReplicationState,
+			Checksum:            response.State.Checksum,
+			ChildExecutionInfos: response.State.ChildExecutionInfos,
 		},
 	}
 
-	newResponse.State.ChildExecutionInfos, err = m.DeserializeChildExecutionInfos(response.State.ChildExecutionInfos)
-	if err != nil {
-		return nil, err
-	}
 	newResponse.State.BufferedEvents, err = m.DeserializeBufferedEvents(response.State.BufferedEvents)
 	if err != nil {
 		return nil, err
@@ -201,41 +198,6 @@ func (m *executionManagerImpl) DeserializeBufferedEvents(
 	return events, nil
 }
 
-func (m *executionManagerImpl) DeserializeChildExecutionInfos(
-	infos map[int64]*InternalChildExecutionInfo,
-) (map[int64]*ChildExecutionInfo, error) {
-
-	newInfos := make(map[int64]*ChildExecutionInfo, 0)
-	for k, v := range infos {
-		initiatedEvent, err := m.serializer.DeserializeEvent(v.InitiatedEvent)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.DeserializeEvent(v.StartedEvent)
-		if err != nil {
-			return nil, err
-		}
-		c := &ChildExecutionInfo{
-			InitiatedEvent: initiatedEvent,
-			StartedEvent:   startedEvent,
-
-			Version:               v.Version,
-			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: v.InitiatedEventBatchID,
-			StartedID:             v.StartedID,
-			StartedWorkflowID:     v.StartedWorkflowID,
-			StartedRunID:          v.StartedRunID,
-			CreateRequestID:       v.CreateRequestID,
-			Namespace:             v.Namespace,
-			WorkflowTypeName:      v.WorkflowTypeName,
-			ParentClosePolicy:     v.ParentClosePolicy,
-		}
-
-		newInfos[k] = c
-	}
-	return newInfos, nil
-}
-
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
@@ -264,41 +226,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
-}
-
-func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(
-	infos []*ChildExecutionInfo,
-	encoding common.EncodingType,
-) ([]*InternalChildExecutionInfo, error) {
-
-	newInfos := make([]*InternalChildExecutionInfo, 0)
-	for _, v := range infos {
-		initiatedEvent, err := m.serializer.SerializeEvent(v.InitiatedEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.SerializeEvent(v.StartedEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
-		i := &InternalChildExecutionInfo{
-			InitiatedEvent: initiatedEvent,
-			StartedEvent:   startedEvent,
-
-			Version:               v.Version,
-			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: v.InitiatedEventBatchID,
-			CreateRequestID:       v.CreateRequestID,
-			StartedID:             v.StartedID,
-			StartedWorkflowID:     v.StartedWorkflowID,
-			StartedRunID:          v.StartedRunID,
-			Namespace:             v.Namespace,
-			WorkflowTypeName:      v.WorkflowTypeName,
-			ParentClosePolicy:     v.ParentClosePolicy,
-		}
-		newInfos = append(newInfos, i)
-	}
-	return newInfos, nil
 }
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
@@ -499,10 +426,6 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	if err != nil {
 		return nil, err
 	}
-	serializedUpsertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.UpsertChildExecutionInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 	var serializedNewBufferedEvents *serialization.DataBlob
 	if input.NewBufferedEvents != nil {
 		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
@@ -531,7 +454,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		DeleteActivityInfos:       input.DeleteActivityInfos,
 		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
-		UpsertChildExecutionInfos: serializedUpsertChildExecutionInfos,
+		UpsertChildExecutionInfos: input.UpsertChildExecutionInfos,
 		DeleteChildExecutionInfo:  input.DeleteChildExecutionInfo,
 		UpsertRequestCancelInfos:  input.UpsertRequestCancelInfos,
 		DeleteRequestCancelInfo:   input.DeleteRequestCancelInfo,
@@ -568,10 +491,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	serializedChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.ChildExecutionInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 
 	startVersion, err := getStartVersion(input.VersionHistories, input.ReplicationState)
 	if err != nil {
@@ -591,7 +510,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 		ActivityInfos:       input.ActivityInfos,
 		TimerInfos:          input.TimerInfos,
-		ChildExecutionInfos: serializedChildExecutionInfos,
+		ChildExecutionInfos: input.ChildExecutionInfos,
 		RequestCancelInfos:  input.RequestCancelInfos,
 		SignalInfos:         input.SignalInfos,
 		SignalRequestedIDs:  input.SignalRequestedIDs,
