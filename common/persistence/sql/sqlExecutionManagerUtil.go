@@ -1135,7 +1135,7 @@ func updateCurrentExecution(
 
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1185,7 +1185,7 @@ func buildExecutionRow(
 func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1244,7 +1244,7 @@ func (m *sqlExecutionManager) createExecution(
 func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,

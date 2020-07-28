@@ -252,11 +252,11 @@ func (s *conflictResolverSuite) TestReset() {
 				ExecutionStats: &persistenceblobs.ExecutionStats{
 					HistorySize: historySize,
 				},
-				ReplicationState: &persistence.ReplicationState{
+				ReplicationState: &persistenceblobs.ReplicationState{
 					CurrentVersion:   event1.GetVersion(),
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
-					LastWriteEventID: event1.GetEventId(),
+					LastWriteEventId: event1.GetEventId(),
 					LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),

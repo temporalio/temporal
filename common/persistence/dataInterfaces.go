@@ -257,16 +257,6 @@ type (
 		CronSchedule string
 	}
 
-	// ReplicationState represents mutable state information for global namespaces.
-	// This information is used by replication protocol when applying events from remote clusters
-	ReplicationState struct {
-		CurrentVersion      int64
-		StartVersion        int64
-		LastWriteVersion    int64
-		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
-	}
-
 	// ReplicationTaskInfoWrapper describes a replication task.
 	ReplicationTaskInfoWrapper struct {
 		*persistenceblobs.ReplicationTaskInfo
@@ -486,7 +476,7 @@ type (
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *persistenceblobs.ExecutionStats
-		ReplicationState    *ReplicationState
+		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
@@ -654,7 +644,7 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *ReplicationState
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -684,7 +674,7 @@ type (
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *persistenceblobs.ExecutionStats
-		ReplicationState *ReplicationState
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
@@ -2163,7 +2153,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
-func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
 		StartVersion:     &types.Int64Value{Value: r.StartVersion},
 		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},

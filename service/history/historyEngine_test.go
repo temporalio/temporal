@@ -5252,7 +5252,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
-	var replicationState *persistence.ReplicationState
+	var replicationState *persistenceblobs.ReplicationState
 	if builder.replicationState != nil {
 		replicationState = copyReplicationState(builder.replicationState)
 	}
@@ -5428,7 +5428,7 @@ func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistence
 	}
 }
 
-func copyReplicationState(source *persistence.ReplicationState) *persistence.ReplicationState {
+func copyReplicationState(source *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationState {
 	var lastReplicationInfo map[string]*replicationspb.ReplicationInfo
 	if source.LastReplicationInfo != nil {
 		lastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}
@@ -5440,11 +5440,11 @@ func copyReplicationState(source *persistence.ReplicationState) *persistence.Rep
 		}
 	}
 
-	return &persistence.ReplicationState{
+	return &persistenceblobs.ReplicationState{
 		CurrentVersion:      source.CurrentVersion,
 		StartVersion:        source.StartVersion,
 		LastWriteVersion:    source.LastWriteVersion,
-		LastWriteEventID:    source.LastWriteEventID,
+		LastWriteEventId:    source.LastWriteEventId,
 		LastReplicationInfo: lastReplicationInfo,
 	}
 }

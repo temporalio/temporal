@@ -692,7 +692,7 @@ func (m *executionManagerImpl) Close() {
 
 func getStartVersion(
 	versionHistories *VersionHistories,
-	replicationState *ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 ) (int64, error) {
 
 	if replicationState == nil && versionHistories == nil {
@@ -716,7 +716,7 @@ func getStartVersion(
 
 func getLastWriteVersion(
 	versionHistories *VersionHistories,
-	replicationState *ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 ) (int64, error) {
 
 	if replicationState == nil && versionHistories == nil {

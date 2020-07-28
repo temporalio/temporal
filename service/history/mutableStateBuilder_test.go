@@ -332,11 +332,11 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:        int64(1),
 		CurrentVersion:      int64(1),
 		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 
@@ -820,11 +820,11 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:        failoverVersion,
 		CurrentVersion:      failoverVersion,
 		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 
