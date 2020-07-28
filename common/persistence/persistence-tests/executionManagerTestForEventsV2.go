@@ -900,11 +900,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		StartedId:  103,
 	}}
 
-	insertActivityInfos := []*p.ActivityInfo{{
+	insertActivityInfos := []*persistenceblobs.ActivityInfo{{
 		Version:        110,
-		ScheduleID:     111,
-		StartedID:      112,
-		ActivityID:     uuid.New(),
+		ScheduleId:     111,
+		StartedId:      112,
+		ActivityId:     uuid.New(),
 		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
 	}}
 
@@ -914,11 +914,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		CancelRequestId: uuid.New(),
 	}}
 
-	insertChildExecutionInfos := []*p.ChildExecutionInfo{{
+	insertChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
 		Version:         130,
-		InitiatedID:     131,
-		StartedID:       132,
-		CreateRequestID: uuid.New(),
+		InitiatedId:     131,
+		StartedId:       132,
+		CreateRequestId: uuid.New(),
 		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
 	}}
 
@@ -1315,11 +1315,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		StartedId:  103,
 	}}
 
-	insertActivityInfos := []*p.ActivityInfo{{
+	insertActivityInfos := []*persistenceblobs.ActivityInfo{{
 		Version:        110,
-		ScheduleID:     111,
-		StartedID:      112,
-		ActivityID:     uuid.New(),
+		ScheduleId:     111,
+		StartedId:      112,
+		ActivityId:     uuid.New(),
 		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
 	}}
 
@@ -1329,11 +1329,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		CancelRequestId: uuid.New(),
 	}}
 
-	insertChildExecutionInfos := []*p.ChildExecutionInfo{{
+	insertChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
 		Version:         130,
-		InitiatedID:     131,
-		StartedID:       132,
-		CreateRequestID: uuid.New(),
+		InitiatedId:     131,
+		StartedId:       132,
+		CreateRequestId: uuid.New(),
 		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
 	}}
 
@@ -1599,11 +1599,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		StartedId:  103,
 	}}
 
-	insertActivityInfos := []*p.ActivityInfo{{
+	insertActivityInfos := []*persistenceblobs.ActivityInfo{{
 		Version:        110,
-		ScheduleID:     111,
-		StartedID:      112,
-		ActivityID:     uuid.New(),
+		ScheduleId:     111,
+		StartedId:      112,
+		ActivityId:     uuid.New(),
 		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
 	}}
 

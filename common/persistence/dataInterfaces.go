@@ -34,7 +34,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -484,9 +483,9 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivityInfos       map[int64]*ActivityInfo
+		ActivityInfos       map[int64]*persistenceblobs.ActivityInfo
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
-		ChildExecutionInfos map[int64]*ChildExecutionInfo
+		ChildExecutionInfos map[int64]*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
@@ -498,45 +497,6 @@ type (
 		Checksum            checksum.Checksum
 	}
 
-	// ActivityInfo details.
-	ActivityInfo struct {
-		Version                  int64
-		ScheduleID               int64
-		ScheduledEventBatchID    int64
-		ScheduledEvent           *historypb.HistoryEvent
-		ScheduledTime            time.Time
-		StartedID                int64
-		StartedEvent             *historypb.HistoryEvent
-		StartedTime              time.Time
-		NamespaceID              string
-		ActivityID               string
-		RequestID                string
-		Details                  *commonpb.Payloads
-		ScheduleToStartTimeout   int64
-		ScheduleToCloseTimeout   int64
-		StartToCloseTimeout      int64
-		HeartbeatTimeout         int64
-		CancelRequested          bool
-		CancelRequestID          int64
-		LastHeartBeatUpdatedTime time.Time
-		TimerTaskStatus          int32
-		// For retry
-		Attempt                int32
-		StartedIdentity        string
-		TaskQueue              string
-		HasRetryPolicy         bool
-		InitialInterval        int64
-		BackoffCoefficient     float64
-		MaximumInterval        int64
-		ExpirationTime         time.Time
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-		LastFailure            *failurepb.Failure
-		LastWorkerIdentity     string
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds int64
-	}
-
 	// TimerInfo details - metadata about user timer info.
 	TimerInfo struct {
 		Version    int64
@@ -544,22 +504,6 @@ type (
 		StartedID  int64
 		ExpiryTime time.Time
 		TaskStatus int64
-	}
-
-	// ChildExecutionInfo has details for pending child executions.
-	ChildExecutionInfo struct {
-		Version               int64
-		InitiatedID           int64
-		InitiatedEventBatchID int64
-		InitiatedEvent        *historypb.HistoryEvent
-		StartedID             int64
-		StartedWorkflowID     string
-		StartedRunID          string
-		StartedEvent          *historypb.HistoryEvent
-		CreateRequestID       string
-		Namespace             string
-		WorkflowTypeName      string
-		ParentClosePolicy     enumspb.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -718,11 +662,11 @@ type (
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
-		UpsertActivityInfos       []*ActivityInfo
+		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
 		DeleteActivityInfos       []int64
 		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*ChildExecutionInfo
+		UpsertChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
@@ -748,9 +692,9 @@ type (
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
-		ActivityInfos       []*ActivityInfo
+		ActivityInfos       []*persistenceblobs.ActivityInfo
 		TimerInfos          []*persistenceblobs.TimerInfo
-		ChildExecutionInfos []*ChildExecutionInfo
+		ChildExecutionInfos []*persistenceblobs.ChildExecutionInfo
 		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string

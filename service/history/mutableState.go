@@ -68,12 +68,12 @@ type (
 	}
 
 	mutableState interface {
-		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistence.ActivityInfo, error)
+		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string) (*historypb.HistoryEvent, error)
-		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (*historypb.HistoryEvent, *persistence.ActivityInfo, error)
-		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*historypb.HistoryEvent, error)
+		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo, error)
+		AddActivityTaskStartedEvent(*persistenceblobs.ActivityInfo, int64, string, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
@@ -101,7 +101,7 @@ type (
 		AddSignalExternalWorkflowExecutionInitiatedEvent(int64, string, *commandpb.SignalExternalWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo, error)
 		AddSignalRequested(requestID string)
 		AddStartChildWorkflowExecutionFailedEvent(int64, enumspb.StartChildWorkflowExecutionFailedCause, *historypb.StartChildWorkflowExecutionInitiatedEventAttributes) (*historypb.HistoryEvent, error)
-		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *commandpb.StartChildWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistence.ChildExecutionInfo, error)
+		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *commandpb.StartChildWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, *persistenceblobs.ChildExecutionInfo, error)
 		AddTimeoutWorkflowEvent(int64, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
@@ -115,7 +115,7 @@ type (
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		RetryActivity(ai *persistence.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		RetryActivity(ai *persistenceblobs.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType enumspb.EventType, timestamp int64) *historypb.HistoryEvent
 		CreateTransientWorkflowTaskEvents(di *workflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
@@ -123,10 +123,11 @@ type (
 		DeleteSignalRequested(requestID string)
 		FailWorkflowTask(bool)
 		FlushBufferedEvents() error
-		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
-		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
+		GetActivityByActivityID(string) (*persistenceblobs.ActivityInfo, bool)
+		GetActivityInfo(int64) (*persistenceblobs.ActivityInfo, bool)
+		GetActivityInfoWithTimerHeartbeat(int64) (*persistenceblobs.ActivityInfo, int64, bool)
 		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
-		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
+		GetChildExecutionInfo(int64) (*persistenceblobs.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent() (*historypb.HistoryEvent, error)
 		GetWorkflowTaskInfo(int64) (*workflowTaskInfo, bool)
@@ -143,9 +144,9 @@ type (
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
-		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
+		GetPendingActivityInfos() map[int64]*persistenceblobs.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo
-		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
+		GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
@@ -177,7 +178,7 @@ type (
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskFailedEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskScheduledEvent(int64, *historypb.HistoryEvent) (*persistence.ActivityInfo, error)
+		ReplicateActivityTaskScheduledEvent(int64, *historypb.HistoryEvent) (*persistenceblobs.ActivityInfo, error)
 		ReplicateActivityTaskStartedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskTimedOutEvent(*historypb.HistoryEvent) error
 		ReplicateChildWorkflowExecutionCanceledEvent(*historypb.HistoryEvent) error
@@ -198,7 +199,7 @@ type (
 		ReplicateSignalExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
 		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistenceblobs.SignalInfo, error)
 		ReplicateStartChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistence.ChildExecutionInfo, error)
+		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistenceblobs.ChildExecutionInfo, error)
 		ReplicateTimerCanceledEvent(*historypb.HistoryEvent) error
 		ReplicateTimerFiredEvent(*historypb.HistoryEvent) error
 		ReplicateTimerStartedEvent(*historypb.HistoryEvent) (*persistenceblobs.TimerInfo, error)
@@ -217,8 +218,9 @@ type (
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
-		UpdateActivity(*persistence.ActivityInfo) error
-		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
+		UpdateActivity(*persistenceblobs.ActivityInfo) error
+		UpdateActivityWithTimerHeartbeat(*persistenceblobs.ActivityInfo, int64) error
+		UpdateActivityProgress(ai *persistenceblobs.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateWorkflowTask(*workflowTaskInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)

@@ -321,8 +321,8 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 
 	var targetNamespaceID string
 	var err error
-	if activityInfo.NamespaceID != "" {
-		targetNamespaceID = activityInfo.NamespaceID
+	if activityInfo.NamespaceId != "" {
+		targetNamespaceID = activityInfo.NamespaceId
 	} else {
 		// TODO remove this block after Mar, 1th, 2020
 		//  previously, NamespaceID in activity info is not used, so need to get
@@ -339,7 +339,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 		VisibilityTimestamp: now,
 		NamespaceID:         targetNamespaceID,
 		TaskQueue:           activityInfo.TaskQueue,
-		ScheduleID:          activityInfo.ScheduleID,
+		ScheduleID:          activityInfo.ScheduleId,
 		Version:             activityInfo.Version,
 	})
 
@@ -358,8 +358,8 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 	r.mutableState.AddTimerTasks(&persistence.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		Version:             ai.Version,
-		VisibilityTimestamp: ai.ScheduledTime,
-		EventID:             ai.ScheduleID,
+		VisibilityTimestamp: *ai.ScheduledTime,
+		EventID:             ai.ScheduleId,
 		Attempt:             ai.Attempt,
 	})
 	return nil
@@ -388,8 +388,8 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		TargetNamespaceID:   targetNamespaceID,
-		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowID,
-		InitiatedID:         childWorkflowInfo.InitiatedID,
+		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
+		InitiatedID:         childWorkflowInfo.InitiatedId,
 		Version:             childWorkflowInfo.Version,
 	})
 

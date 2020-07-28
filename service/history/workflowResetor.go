@@ -201,12 +201,12 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 // Fail the started activities
 func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) error {
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
-		if ai.StartedID != common.EmptyEventID {
+		if ai.StartedId != common.EmptyEventID {
 			// this means the activity has started but not completed, we need to fail the activity
 			if _, err := msBuilder.AddActivityTaskFailedEvent(
-				ai.ScheduleID,
-				ai.StartedID,
-				failure.NewResetWorkflowFailure("reset workflow", ai.Details),
+				ai.ScheduleId,
+				ai.StartedId,
+				failure.NewResetWorkflowFailure("reset workflow", ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
 			); err != nil {
@@ -226,13 +226,13 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 	exeInfo := msBuilder.GetExecutionInfo()
 	// activities
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
-		if ai.StartedID != common.EmptyEventID {
+		if ai.StartedId != common.EmptyEventID {
 			return nil, serviceerror.NewInternal("started activities should have been failed.")
 		}
 		t := &persistence.ActivityTask{
 			NamespaceID: exeInfo.NamespaceID,
 			TaskQueue:   exeInfo.TaskQueue,
-			ScheduleID:  ai.ScheduleID,
+			ScheduleID:  ai.ScheduleId,
 		}
 		tasks = append(tasks, t)
 	}

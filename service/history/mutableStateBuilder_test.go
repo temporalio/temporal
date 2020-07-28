@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -294,18 +295,18 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTaskAttempt:        1,
 	}
 
-	activityInfos := map[int64]*persistence.ActivityInfo{
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
 		5: {
 			Version:                int64(1),
-			ScheduleID:             int64(5),
-			ScheduledTime:          time.Now(),
-			StartedID:              common.EmptyEventID,
-			StartedTime:            time.Now(),
-			ActivityID:             activityID,
-			ScheduleToStartTimeout: 100,
-			ScheduleToCloseTimeout: 200,
-			StartToCloseTimeout:    300,
-			HeartbeatTimeout:       50,
+			ScheduleId:             int64(5),
+			ScheduledTime:          timestamp.TimePtr(time.Now()),
+			StartedId:              common.EmptyEventID,
+			StartedTime:            timestamp.TimePtr(time.Now()),
+			ActivityId:             activityID,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
+			StartToCloseTimeout:    timestamp.DurationFromSeconds(300),
+			HeartbeatTimeout:       timestamp.DurationFromSeconds(50),
 		},
 	}
 
@@ -753,18 +754,18 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTaskAttempt:        1,
 	}
 
-	activityInfos := map[int64]*persistence.ActivityInfo{
+	activityInfos := map[int64]*persistenceblobs.ActivityInfo{
 		5: {
 			Version:                failoverVersion,
-			ScheduleID:             int64(90),
-			ScheduledTime:          time.Now(),
-			StartedID:              common.EmptyEventID,
-			StartedTime:            time.Now(),
-			ActivityID:             "activityID_5",
-			ScheduleToStartTimeout: 100,
-			ScheduleToCloseTimeout: 200,
-			StartToCloseTimeout:    300,
-			HeartbeatTimeout:       50,
+			ScheduleId:             int64(90),
+			ScheduledTime:          timestamp.TimePtr(time.Now()),
+			StartedId:              common.EmptyEventID,
+			StartedTime:            timestamp.TimePtr(time.Now()),
+			ActivityId:             "activityID_5",
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
+			StartToCloseTimeout:    timestamp.DurationFromSeconds(300),
+			HeartbeatTimeout:       timestamp.DurationFromSeconds(50),
 		},
 	}
 
@@ -779,14 +780,14 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	childInfos := map[int64]*persistence.ChildExecutionInfo{
+	childInfos := map[int64]*persistenceblobs.ChildExecutionInfo{
 		80: {
 			Version:               failoverVersion,
-			InitiatedID:           80,
-			InitiatedEventBatchID: 20,
+			InitiatedId:           80,
+			InitiatedEventBatchId: 20,
 			InitiatedEvent:        &historypb.HistoryEvent{},
-			StartedID:             common.EmptyEventID,
-			CreateRequestID:       uuid.New(),
+			StartedId:             common.EmptyEventID,
+			CreateRequestId:       uuid.New(),
 			Namespace:             testNamespaceID,
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
 		},

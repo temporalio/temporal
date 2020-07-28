@@ -572,8 +572,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 
 	activityInfo, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetActivityInfo(scheduledEvent.GetEventId())
 	s.True(ok)
-	s.Equal(scheduledEvent.GetEventId(), activityInfo.ScheduleID)
-	s.Equal(common.EmptyEventID, activityInfo.StartedID)
+	s.Equal(scheduledEvent.GetEventId(), activityInfo.ScheduleId)
+	s.Equal(common.EmptyEventID, activityInfo.StartedId)
 	// only a schedule to start timer will be created, apart from the retry timer
 	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), activityInfo.TimerTaskStatus)
 }
@@ -1123,7 +1123,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime:  protoTaskTime,
-		EventId:         activityInfo.ScheduleID,
+		EventId:         activityInfo.ScheduleId,
 		ScheduleAttempt: int64(activityInfo.Attempt),
 	}
 
@@ -1132,15 +1132,15 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
-			NamespaceId:       activityInfo.NamespaceID,
-			SourceNamespaceId: activityInfo.NamespaceID,
+			NamespaceId:       activityInfo.NamespaceId,
+			SourceNamespaceId: activityInfo.NamespaceId,
 			Execution:         &execution,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: activityInfo.TaskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			ScheduleId:                    activityInfo.ScheduleID,
-			ScheduleToStartTimeoutSeconds: int32(activityInfo.ScheduleToStartTimeout),
+			ScheduleId:                    activityInfo.ScheduleId,
+			ScheduleToStartTimeoutSeconds: int32(activityInfo.ScheduleToStartTimeout.Seconds()),
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
@@ -1216,7 +1216,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 		TaskType:        enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
 		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime:  protoTaskTime,
-		EventId:         activityInfo.ScheduleID,
+		EventId:         activityInfo.ScheduleId,
 		ScheduleAttempt: int64(activityInfo.Attempt),
 	}
 

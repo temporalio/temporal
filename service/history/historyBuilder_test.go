@@ -170,7 +170,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(6), s.getNextEventID())
 	ai0, activity1Running0 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running0)
-	s.Equal(common.EmptyEventID, ai0.StartedID)
+	s.Equal(common.EmptyEventID, ai0.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activity2ID := "activity2"
@@ -184,7 +184,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(7), s.getNextEventID())
 	ai2, activity2Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running0)
-	s.Equal(common.EmptyEventID, ai2.StartedID)
+	s.Equal(common.EmptyEventID, ai2.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activity3ID := "activity3"
@@ -204,7 +204,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(8), s.getNextEventID())
 	ai2, activity3Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity3Running0)
-	s.Equal(common.EmptyEventID, ai2.StartedID)
+	s.Equal(common.EmptyEventID, ai2.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskQueue, identity)
@@ -216,7 +216,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(9), s.getNextEventID())
 	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running1)
-	s.Equal(int64(8), ai3.StartedID)
+	s.Equal(int64(8), ai3.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activityCompletedEvent := s.addActivityTaskCompletedEvent(5, 8, activity1Result, identity)
@@ -247,7 +247,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(12), s.getNextEventID())
 	ai4, activity2Running1 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running1)
-	s.Equal(int64(11), ai4.StartedID)
+	s.Equal(int64(11), ai4.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 11, activity2Failure, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, identity)
@@ -264,13 +264,13 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(13), s.getNextEventID())
 	ai5, activity3Running1 := s.msBuilder.GetActivityInfo(7)
 	s.True(activity3Running1)
-	s.Equal(common.TransientEventID, ai5.StartedID)
+	s.Equal(common.TransientEventID, ai5.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activity3Failure := failure.NewServerFailure("dynamic-historybuilder-success-activity3-failed", false)
 	s.msBuilder.RetryActivity(ai5, activity3Failure)
 	ai6, activity3Running2 := s.msBuilder.GetActivityInfo(7)
-	s.Equal(activity3Failure, ai6.LastFailure)
+	s.Equal(activity3Failure, ai6.RetryLastFailure)
 	s.True(activity3Running2)
 
 	activity3StartedEvent2 := s.addActivityTaskStartedEvent(7, activityTaskQueue, identity)
@@ -278,7 +278,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(13), s.getNextEventID())
 	ai7, activity3Running3 := s.msBuilder.GetActivityInfo(7)
 	s.True(activity3Running3)
-	s.Equal(common.TransientEventID, ai7.StartedID)
+	s.Equal(common.TransientEventID, ai7.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activity3Result := payloads.EncodeString("dynamic-historybuilder-success-activity1-result")
@@ -524,7 +524,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(6), s.getNextEventID())
 	ai0, activity1Running0 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running0)
-	s.Equal(common.EmptyEventID, ai0.StartedID)
+	s.Equal(common.EmptyEventID, ai0.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	// 6 activity 2 scheduled
@@ -538,7 +538,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(7), s.getNextEventID())
 	ai2, activity2Running0 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running0)
-	s.Equal(common.EmptyEventID, ai2.StartedID)
+	s.Equal(common.EmptyEventID, ai2.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	// 7 activity1 started
@@ -551,7 +551,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(8), s.getNextEventID())
 	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running1)
-	s.Equal(int64(7), ai3.StartedID)
+	s.Equal(int64(7), ai3.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	// 8 activity1 completed
@@ -591,7 +591,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(11), s.getNextEventID())
 	ai4, activity2Running := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running)
-	s.Equal(common.BufferedEventID, ai4.StartedID)
+	s.Equal(common.BufferedEventID, ai4.StartedId)
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	// 12 (buffered) activity2 failed
@@ -837,7 +837,7 @@ func (s *historyBuilderSuite) addWorkflowTaskCompletedEvent(scheduleID, startedI
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(workflowTaskCompletedID int64, activityID, activityType,
 	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
-	*persistence.ActivityInfo) {
+	*persistenceblobs.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:                    activityID,
@@ -1015,7 +1015,7 @@ func (s *historyBuilderSuite) validateTransientActivityTaskStartedEvent(event *h
 	ai, ok := s.msBuilder.GetPendingActivityInfos()[scheduleID]
 	s.True(ok)
 	s.NotNil(ai)
-	s.Equal(scheduleID, ai.ScheduleID)
+	s.Equal(scheduleID, ai.ScheduleId)
 	s.Equal(identity, ai.StartedIdentity)
 }
 

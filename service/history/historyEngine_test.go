@@ -2071,14 +2071,14 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
 		childID = c
 		break
 	}
-	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enumspb.PARENT_CLOSE_POLICY_ABANDON, enumspb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowId)
+	s.Equal(enumspb.PARENT_CLOSE_POLICY_ABANDON, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerminatePolicy() {
@@ -2135,14 +2135,14 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
 		childID = c
 		break
 	}
-	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, enumspb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowId)
+	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
 }
 
 // RunID Invalid is no longer possible form this scope.
@@ -3841,7 +3841,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-			ScheduledEventId: aInfo.ScheduleID,
+			ScheduledEventId: aInfo.ScheduleId,
 		}},
 	}}
 
@@ -3967,7 +3967,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 		{
 			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-				ScheduledEventId: aInfo.ScheduleID,
+				ScheduledEventId: aInfo.ScheduleId,
 			}},
 		},
 		{
@@ -4571,7 +4571,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(common.EmptyEventID), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
@@ -5011,7 +5011,7 @@ func addActivityTaskScheduledEvent(
 	startToCloseTimeout int32,
 	heartbeatTimeout int32,
 ) (*historypb.HistoryEvent,
-	*persistence.ActivityInfo) {
+	*persistenceblobs.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:                    activityID,
@@ -5038,7 +5038,7 @@ func addActivityTaskScheduledEventWithRetry(
 	startToCloseTimeout int32,
 	heartbeatTimeout int32,
 	retryPolicy *commonpb.RetryPolicy,
-) (*historypb.HistoryEvent, *persistence.ActivityInfo) {
+) (*historypb.HistoryEvent, *persistenceblobs.ActivityInfo) {
 
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:                    activityID,
@@ -5133,7 +5133,7 @@ func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workfl
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, workflowTaskCompletedID int64,
 	createRequestID, namespace, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
 	executionTimeout, runTimeout, taskTimeout int32) (*historypb.HistoryEvent,
-	*persistence.ChildExecutionInfo) {
+	*persistenceblobs.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5223,7 +5223,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder.FlushBufferedEvents() // nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	stats := &persistence.ExecutionStats{}
-	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
 	}
@@ -5239,7 +5239,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	for id, info := range builder.pendingSignalInfoIDs {
 		signalInfos[id] = copySignalInfo(info)
 	}
-	childInfos := make(map[int64]*persistence.ChildExecutionInfo)
+	childInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	for id, info := range builder.pendingChildExecutionInfoIDs {
 		childInfos[id] = copyChildInfo(info)
 	}
@@ -5344,42 +5344,40 @@ func copyHistoryEvent(source *historypb.HistoryEvent) *historypb.HistoryEvent {
 	return result
 }
 
-func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.ActivityInfo {
-	return &persistence.ActivityInfo{
-		Version:                  sourceInfo.Version,
-		ScheduleID:               sourceInfo.ScheduleID,
-		ScheduledEventBatchID:    sourceInfo.ScheduledEventBatchID,
-		ScheduledEvent:           copyHistoryEvent(sourceInfo.ScheduledEvent),
-		StartedID:                sourceInfo.StartedID,
-		StartedEvent:             copyHistoryEvent(sourceInfo.StartedEvent),
-		ActivityID:               sourceInfo.ActivityID,
-		RequestID:                sourceInfo.RequestID,
-		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payloads),
-		ScheduledTime:            sourceInfo.ScheduledTime,
-		StartedTime:              sourceInfo.StartedTime,
-		ScheduleToStartTimeout:   sourceInfo.ScheduleToStartTimeout,
-		ScheduleToCloseTimeout:   sourceInfo.ScheduleToCloseTimeout,
-		StartToCloseTimeout:      sourceInfo.StartToCloseTimeout,
-		HeartbeatTimeout:         sourceInfo.HeartbeatTimeout,
-		LastHeartBeatUpdatedTime: sourceInfo.LastHeartBeatUpdatedTime,
-		CancelRequested:          sourceInfo.CancelRequested,
-		CancelRequestID:          sourceInfo.CancelRequestID,
-		TimerTaskStatus:          sourceInfo.TimerTaskStatus,
-		Attempt:                  sourceInfo.Attempt,
-		NamespaceID:              sourceInfo.NamespaceID,
-		StartedIdentity:          sourceInfo.StartedIdentity,
-		TaskQueue:                sourceInfo.TaskQueue,
-		HasRetryPolicy:           sourceInfo.HasRetryPolicy,
-		InitialInterval:          sourceInfo.InitialInterval,
-		BackoffCoefficient:       sourceInfo.BackoffCoefficient,
-		MaximumInterval:          sourceInfo.MaximumInterval,
-		ExpirationTime:           sourceInfo.ExpirationTime,
-		MaximumAttempts:          sourceInfo.MaximumAttempts,
-		NonRetryableErrorTypes:   sourceInfo.NonRetryableErrorTypes,
-		LastFailure:              sourceInfo.LastFailure,
-		LastWorkerIdentity:       sourceInfo.LastWorkerIdentity,
-		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibilityInSeconds: sourceInfo.LastHeartbeatTimeoutVisibilityInSeconds,
+func copyActivityInfo(sourceInfo *persistenceblobs.ActivityInfo) *persistenceblobs.ActivityInfo {
+	return &persistenceblobs.ActivityInfo{
+		Version:                     sourceInfo.Version,
+		ScheduleId:                  sourceInfo.ScheduleId,
+		ScheduledEventBatchId:       sourceInfo.ScheduledEventBatchId,
+		ScheduledEvent:              copyHistoryEvent(sourceInfo.ScheduledEvent),
+		StartedId:                   sourceInfo.StartedId,
+		StartedEvent:                copyHistoryEvent(sourceInfo.StartedEvent),
+		ActivityId:                  sourceInfo.ActivityId,
+		RequestId:                   sourceInfo.RequestId,
+		LastHeartbeatDetails:        sourceInfo.LastHeartbeatDetails,
+		ScheduledTime:               sourceInfo.ScheduledTime,
+		StartedTime:                 sourceInfo.StartedTime,
+		ScheduleToStartTimeout:      sourceInfo.ScheduleToStartTimeout,
+		ScheduleToCloseTimeout:      sourceInfo.ScheduleToCloseTimeout,
+		StartToCloseTimeout:         sourceInfo.StartToCloseTimeout,
+		HeartbeatTimeout:            sourceInfo.HeartbeatTimeout,
+		LastHeartbeatUpdateTime:     sourceInfo.LastHeartbeatUpdateTime,
+		CancelRequested:             sourceInfo.CancelRequested,
+		CancelRequestId:             sourceInfo.CancelRequestId,
+		TimerTaskStatus:             sourceInfo.TimerTaskStatus,
+		Attempt:                     sourceInfo.Attempt,
+		NamespaceId:                 sourceInfo.NamespaceId,
+		StartedIdentity:             sourceInfo.StartedIdentity,
+		TaskQueue:                   sourceInfo.TaskQueue,
+		HasRetryPolicy:              sourceInfo.HasRetryPolicy,
+		RetryInitialInterval:        sourceInfo.RetryInitialInterval,
+		RetryBackoffCoefficient:     sourceInfo.RetryBackoffCoefficient,
+		RetryMaximumInterval:        sourceInfo.RetryMaximumInterval,
+		RetryExpirationTime:         sourceInfo.RetryExpirationTime,
+		RetryMaximumAttempts:        sourceInfo.RetryMaximumAttempts,
+		RetryNonRetryableErrorTypes: sourceInfo.RetryNonRetryableErrorTypes,
+		RetryLastFailure:            sourceInfo.RetryLastFailure,
+		RetryLastWorkerIdentity:     sourceInfo.RetryLastWorkerIdentity,
 	}
 }
 
@@ -5413,15 +5411,15 @@ func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.S
 	return result
 }
 
-func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.ChildExecutionInfo {
-	return &persistence.ChildExecutionInfo{
+func copyChildInfo(sourceInfo *persistenceblobs.ChildExecutionInfo) *persistenceblobs.ChildExecutionInfo {
+	return &persistenceblobs.ChildExecutionInfo{
 		Version:               sourceInfo.Version,
-		InitiatedID:           sourceInfo.InitiatedID,
-		InitiatedEventBatchID: sourceInfo.InitiatedEventBatchID,
-		StartedID:             sourceInfo.StartedID,
-		StartedWorkflowID:     sourceInfo.StartedWorkflowID,
-		StartedRunID:          sourceInfo.StartedRunID,
-		CreateRequestID:       sourceInfo.CreateRequestID,
+		InitiatedId:           sourceInfo.InitiatedId,
+		InitiatedEventBatchId: sourceInfo.InitiatedEventBatchId,
+		StartedId:             sourceInfo.StartedId,
+		StartedWorkflowId:     sourceInfo.StartedWorkflowId,
+		StartedRunId:          sourceInfo.StartedRunId,
+		CreateRequestId:       sourceInfo.CreateRequestId,
 		Namespace:             sourceInfo.Namespace,
 		WorkflowTypeName:      sourceInfo.WorkflowTypeName,
 		ParentClosePolicy:     sourceInfo.ParentClosePolicy,

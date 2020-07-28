@@ -41,7 +41,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/encoded"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
@@ -207,7 +207,7 @@ func (tdc *testDataConverter) ToString(payload *commonpb.Payload) string {
 	return fmt.Sprintf("%+v", value)
 }
 
-func newTestDataConverter() encoded.DataConverter {
+func newTestDataConverter() converter.DataConverter {
 	return &testDataConverter{}
 }
 
@@ -240,7 +240,7 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	return result + "," + result1, nil
 }
 
-func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) (sdkclient.Client, worker.Worker) {
+func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:      s.hostPort,
 		Namespace:     s.namespace,

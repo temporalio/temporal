@@ -1124,7 +1124,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."))
 	}
 
-	activityInfos := make(map[int64]*p.InternalActivityInfo)
+	activityInfos := make(map[int64]*persistenceblobs.ActivityInfo)
 	aMap := result["activity_map"].(map[int64][]byte)
 	aMapEncoding := result["activity_map_encoding"].(string)
 	for key, value := range aMap {
@@ -1132,8 +1132,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		if err != nil {
 			return nil, err
 		}
-		info := p.ProtoActivityInfoToInternalActivityInfo(aInfo)
-		activityInfos[key] = info
+		activityInfos[key] = aInfo
 	}
 	state.ActivityInfos = activityInfos
 
@@ -1149,7 +1148,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.TimerInfos = timerInfos
 
-	childExecutionInfos := make(map[int64]*p.InternalChildExecutionInfo)
+	childExecutionInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	cMap := result["child_executions_map"].(map[int64][]byte)
 	cMapEncoding := result["child_executions_map_encoding"].(string)
 	for key, value := range cMap {
@@ -1157,7 +1156,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		if err != nil {
 			return nil, err
 		}
-		childExecutionInfos[key] = p.ProtoChildExecutionInfoToInternal(cInfo)
+		childExecutionInfos[key] = cInfo
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 

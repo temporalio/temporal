@@ -1068,7 +1068,7 @@ func createOrUpdateCurrentExecution(
 
 func updateActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	deleteInfos []int64,
 	shardID int,
 	namespaceID string,
@@ -1077,18 +1077,13 @@ func updateActivityInfos(
 ) error {
 
 	for _, a := range activityInfos {
-		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
-		}
-
-		protoActivityInfo := a.ToProto()
-		activityBlob, err := serialization.ActivityInfoToBlob(protoActivityInfo)
+		activityBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
-			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return p.NewSerializationError(fmt.Sprintf("activity info serialization error: %v", err))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
-			a.ScheduleID,
+			a.ScheduleId,
 			activityBlob.Data,
 			activityBlob.Encoding,
 			shardID,
@@ -1135,7 +1130,7 @@ func deleteBufferedEvents(
 
 func resetActivityInfos(
 	batch *gocql.Batch,
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 	shardID int,
 	namespaceID string,
 	workflowID string,
@@ -1233,7 +1228,7 @@ func resetTimerInfos(
 
 func updateChildExecutionInfos(
 	batch *gocql.Batch,
-	childExecutionInfos []*p.InternalChildExecutionInfo,
+	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	deleteInfo *int64,
 	shardID int,
 	namespaceID string,
@@ -1242,17 +1237,13 @@ func updateChildExecutionInfos(
 ) error {
 
 	for _, c := range childExecutionInfos {
-		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
-			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
-		}
-
-		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
+		datablob, err := serialization.ChildExecutionInfoToBlob(c)
 		if err != nil {
 			return nil
 		}
 
 		batch.Query(templateUpdateChildExecutionInfoQuery,
-			c.InitiatedID,
+			c.InitiatedId,
 			datablob.Data,
 			datablob.Encoding,
 			shardID,
@@ -1281,7 +1272,7 @@ func updateChildExecutionInfos(
 
 func resetChildExecutionInfos(
 	batch *gocql.Batch,
-	childExecutionInfos []*p.InternalChildExecutionInfo,
+	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 	shardID int,
 	namespaceID string,
 	workflowID string,
@@ -1571,22 +1562,18 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 }
 
 func resetActivityInfoMap(
-	activityInfos []*p.InternalActivityInfo,
+	activityInfos []*persistenceblobs.ActivityInfo,
 ) (map[int64][]byte, common.EncodingType, error) {
 
 	encoding := common.EncodingTypeUnknown
 	aMap := make(map[int64][]byte)
 	for _, a := range activityInfos {
-		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
-		}
-
-		aBlob, err := serialization.ActivityInfoToBlob(a.ToProto())
+		aBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityID))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityId))
 		}
 
-		aMap[a.ScheduleID] = aBlob.Data
+		aMap[a.ScheduleId] = aBlob.Data
 		encoding = aBlob.Encoding
 	}
 
@@ -1615,21 +1602,17 @@ func resetTimerInfoMap(
 }
 
 func resetChildExecutionInfoMap(
-	childExecutionInfos []*p.InternalChildExecutionInfo,
+	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
 ) (map[int64][]byte, common.EncodingType, error) {
 
 	cMap := make(map[int64][]byte)
 	encoding := common.EncodingTypeUnknown
 	for _, c := range childExecutionInfos {
-		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
-		}
-
-		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
+		datablob, err := serialization.ChildExecutionInfoToBlob(c)
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedID))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedId))
 		}
-		cMap[c.InitiatedID] = datablob.Data
+		cMap[c.InitiatedId] = datablob.Data
 		encoding = datablob.Encoding
 	}
 

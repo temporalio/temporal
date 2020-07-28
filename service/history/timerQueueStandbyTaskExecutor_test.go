@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -662,14 +663,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.pendingActivityInfoIDs[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= timerTaskStatusCreatedHeartbeat
-	activityInfo2.LastHeartBeatUpdatedTime = time.Now()
+	activityInfo2.LastHeartbeatUpdateTime = timestamp.TimePtr(time.Now())
 
 	timerSequence := newTimerSequence(s.timeSource, mutableState)
 	mutableState.insertTimerTasks = nil
 	modified, err := timerSequence.createNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	protoTime, err := types.TimestampProto(activityInfo2.LastHeartBeatUpdatedTime.Add(-5 * time.Second))
+	protoTime, err := types.TimestampProto(activityInfo2.LastHeartbeatUpdateTime.Add(-5 * time.Second))
 	s.NoError(err)
 	timerTask := &persistenceblobs.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -709,7 +710,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				DeleteActivityInfos:       []int64{},
 				UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 				DeleteTimerInfos:          []string{},
-				UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+				UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 				DeleteChildExecutionInfo:  nil,
 				UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 				DeleteRequestCancelInfo:   nil,

@@ -22,9 +22,6 @@ history.historyMgrNumConns:
 system.advancedVisibilityWritingMode:
 - value: "off"
   constraints: {}
-matching.numTaskqueueReadPartitions:
-- value: 1
-  constraints: {}
 history.defaultActivityRetryPolicy:
 - value:
     InitialRetryIntervalInSeconds: 1

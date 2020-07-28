@@ -661,7 +661,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 	partitionKeys = append(partitionKeys, rootPartition)
 
-	nWritePartitions := e.config.GetTasksBatchSize
+	nWritePartitions := e.config.NumTaskqueueWritePartitions
 	n := nWritePartitions(namespace, rootPartition, taskQueueType)
 	if n <= 0 {
 		return partitionKeys, nil

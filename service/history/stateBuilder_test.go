@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -1016,7 +1017,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	now := time.Now()
 	activityID := "activity ID"
 	taskqueue := "some random taskqueue"
-	timeoutSecond := int64(10)
+	timeoutSecond := 10 * time.Second
 	evenType := enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED
 	event := &historypb.HistoryEvent{
 		Version:    version,
@@ -1026,24 +1027,24 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 
-	ai := &persistence.ActivityInfo{
-		Version:                  event.GetVersion(),
-		ScheduleID:               event.GetEventId(),
-		ScheduledEventBatchID:    event.GetEventId(),
-		ScheduledEvent:           event,
-		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
-		StartedID:                common.EmptyEventID,
-		StartedTime:              time.Time{},
-		ActivityID:               activityID,
-		ScheduleToStartTimeout:   timeoutSecond,
-		ScheduleToCloseTimeout:   timeoutSecond,
-		StartToCloseTimeout:      timeoutSecond,
-		HeartbeatTimeout:         timeoutSecond,
-		CancelRequested:          false,
-		CancelRequestID:          common.EmptyEventID,
-		LastHeartBeatUpdatedTime: time.Time{},
-		TimerTaskStatus:          timerTaskStatusNone,
-		TaskQueue:                taskqueue,
+	ai := &persistenceblobs.ActivityInfo{
+		Version:                 event.GetVersion(),
+		ScheduleId:              event.GetEventId(),
+		ScheduledEventBatchId:   event.GetEventId(),
+		ScheduledEvent:          event,
+		ScheduledTime:           timestamp.TimePtr(time.Unix(0, event.GetTimestamp())),
+		StartedId:               common.EmptyEventID,
+		StartedTime:             timestamp.TimePtr(time.Time{}),
+		ActivityId:              activityID,
+		ScheduleToStartTimeout:  &timeoutSecond,
+		ScheduleToCloseTimeout:  &timeoutSecond,
+		StartToCloseTimeout:     &timeoutSecond,
+		HeartbeatTimeout:        &timeoutSecond,
+		CancelRequested:         false,
+		CancelRequestId:         common.EmptyEventID,
+		LastHeartbeatUpdateTime: timestamp.TimePtr(time.Time{}),
+		TimerTaskStatus:         timerTaskStatusNone,
+		TaskQueue:               taskqueue,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskQueue: taskqueue,
@@ -1280,12 +1281,12 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		}},
 	}
 
-	ci := &persistence.ChildExecutionInfo{
+	ci := &persistenceblobs.ChildExecutionInfo{
 		Version:               event.GetVersion(),
-		InitiatedID:           event.GetEventId(),
-		InitiatedEventBatchID: event.GetEventId(),
-		StartedID:             common.EmptyEventID,
-		CreateRequestID:       createRequestID,
+		InitiatedId:           event.GetEventId(),
+		InitiatedEventBatchId: event.GetEventId(),
+		StartedId:             common.EmptyEventID,
+		CreateRequestId:       createRequestID,
 		Namespace:             testTargetNamespace,
 	}
 

@@ -786,7 +786,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
 	s.Equal(_defaultTaskDispatchRPS, descResp.Pollers[0].GetRatePerSecond())
 	s.NotNil(descResp.GetTaskQueueStatus())
-	s.True(descResp.GetTaskQueueStatus().GetRatePerSecond() >= (_defaultTaskDispatchRPS - 1))
+	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
+	s.True(descResp.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (_defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
