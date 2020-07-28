@@ -235,7 +235,7 @@ func (h *Handler) CreateEngine(
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(_ context.Context, request healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
 
 	h.startWG.Wait()
