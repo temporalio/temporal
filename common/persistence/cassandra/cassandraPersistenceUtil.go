@@ -1079,7 +1079,7 @@ func updateActivityInfos(
 	for _, a := range activityInfos {
 		activityBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
-			return p.NewSerializationError(fmt.Sprintf("activity info serialization error - %v", err))
+			return p.NewSerializationError(fmt.Sprintf("activity info serialization error: %v", err))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
