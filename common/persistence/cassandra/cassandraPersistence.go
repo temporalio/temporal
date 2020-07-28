@@ -2815,22 +2815,10 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
 	}
 
-	// var vh *history.VersionHistories
-	// if vhBytes, ok := result["version_histories"].([]byte); ok {
-	// 	vhDatablob := p.NewDataBlob(vhBytes, common.EncodingType(result["version_histories_encoding"].(string)))
-	// 	if vhDatablob != nil {
-	// 		vh, err = serialization.VersionHistoriesFromBlob(vhDatablob.Data, vhDatablob.Encoding.String())
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 	}
-	// }
-
 	mutableState := &p.InternalWorkflowMutableState{
 		ExecutionInfo:    info,
 		ReplicationState: state,
 		VersionHistories: protoInfo.VersionHistories,
-		//VersionHistories: vh,
 	}
 	return mutableState, nil
 }
