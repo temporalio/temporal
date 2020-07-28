@@ -425,7 +425,7 @@ func createExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *serialization.DataBlob,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
@@ -506,7 +506,7 @@ func createExecution(
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
 	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
 		if err != nil {
 			return err
 		}
@@ -537,7 +537,7 @@ func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
+	replicationState *persistenceblobs.ReplicationState,
 	versionHistories *serialization.DataBlob,
 	cqlNowTimestampMillis int64,
 	condition int64,
@@ -620,7 +620,7 @@ func updateExecution(
 			rowTypeExecutionTaskID,
 			condition)
 	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
 		if err != nil {
 			return err
 		}
@@ -1536,12 +1536,12 @@ func updateBufferedEvents(
 	}
 }
 
-func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *p.ReplicationState {
+func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *persistenceblobs.ReplicationState {
 	if rv == nil && wei.ReplicationData == nil {
 		return nil
 	}
 
-	info := &p.ReplicationState{}
+	info := &persistenceblobs.ReplicationState{}
 	info.CurrentVersion = wei.CurrentVersion
 
 	if rv != nil {
@@ -1551,7 +1551,7 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 
 	if wei.ReplicationData != nil {
 		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
-		info.LastWriteEventID = wei.ReplicationData.LastWriteEventId
+		info.LastWriteEventId = wei.ReplicationData.LastWriteEventId
 	}
 
 	if info.LastReplicationInfo == nil {

@@ -2806,7 +2806,7 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *p.ReplicationState, error) {
+func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *persistenceblobs.ReplicationState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
 		return nil, nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
@@ -2834,7 +2834,7 @@ func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflo
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
 
-	var state *p.ReplicationState
+	var state *persistenceblobs.ReplicationState
 	if protoInfo.ReplicationData != nil {
 		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
 		if err != nil {

@@ -268,7 +268,7 @@ type (
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *serialization.DataBlob
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
@@ -335,7 +335,7 @@ type (
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *serialization.DataBlob
 		StartVersion     int64
 		LastWriteVersion int64
@@ -367,7 +367,7 @@ type (
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *serialization.DataBlob
 		StartVersion     int64
 		LastWriteVersion int64
@@ -678,7 +678,7 @@ func truncateDurationToSecondsInt64(d *time.Duration) int64 {
 	return int64(d.Truncate(time.Second).Seconds())
 }
 
-func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
+func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *persistenceblobs.ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           executionInfo.State,
@@ -748,7 +748,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		// both unspecified
 		// this is allowed
 	} else if replicationState != nil && versionHistories == nil {
-		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventID}
+		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventId}
 	} else if versionHistories != nil && replicationState == nil {
 		info.VersionHistories = versionHistories.Data
 		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
