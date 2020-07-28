@@ -34,11 +34,13 @@ import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
 
 import "dependencies/gogoproto/v1/gogo.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
 
 
@@ -263,8 +265,7 @@ message WorkflowExecutionInfo {
     string parent_run_id = 3;
     int64 initiated_id = 4;
     int64 completion_event_batch_id = 5;
-    bytes completion_event = 6;
-    string completion_event_encoding = 7;
+    temporal.api.history.v1.HistoryEvent completion_event = 6;
     string task_queue = 8;
     string workflow_type_name = 9;
     google.protobuf.Duration workflow_execution_timeout = 10 [(gogoproto.stdduration) = true];
@@ -309,12 +310,10 @@ message WorkflowExecutionInfo {
     string client_library_version = 51;
     string client_feature_version = 52;
     string client_impl = 53;
-    bytes auto_reset_points = 54;
-    string auto_reset_points_encoding = 55;
-    map<string, temporal.api.common.v1.Payload> search_attributes = 56;
-    map<string, temporal.api.common.v1.Payload> memo = 57;
-    bytes version_histories = 58;
-    string version_histories_encoding = 59;
+    temporal.api.workflow.v1.ResetPoints auto_reset_points = 54;
+    map<string, temporal.api.common.v1.Payload> search_attributes = 55;
+    map<string, temporal.api.common.v1.Payload> memo = 56;
+    temporal.server.api.history.v1.VersionHistories version_histories = 57;
 }
 
 message Checksum {

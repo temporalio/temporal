@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -426,7 +427,7 @@ func createExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *persistenceblobs.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	versionHistories *history.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
@@ -487,8 +488,7 @@ func createExecution(
 			checksumDatablob.Encoding.String())
 	} else if versionHistories != nil {
 		// TODO also need to set the start / current / last write version
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
-		batch.Query(templateCreateWorkflowExecutionWithVersionHistoriesQuery,
+		batch.Query(templateCreateWorkflowExecutionQuery,
 			shardID,
 			namespaceID,
 			workflowID,
@@ -501,8 +501,6 @@ func createExecution(
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			versionHistoriesData,
-			versionHistoriesEncoding,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
 	} else if replicationState != nil {
@@ -538,7 +536,7 @@ func updateExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *persistenceblobs.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	versionHistories *history.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,
@@ -600,15 +598,12 @@ func updateExecution(
 			condition)
 	} else if versionHistories != nil {
 		// TODO also need to set the start / current / last write version
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
-		batch.Query(templateUpdateWorkflowExecutionWithVersionHistoriesQuery,
+		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
 			executionInfo.NextEventID,
-			versionHistoriesData,
-			versionHistoriesEncoding,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String(),
 			shardID,
