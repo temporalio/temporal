@@ -38,6 +38,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -60,8 +61,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 const (
@@ -69,6 +68,10 @@ const (
 	HealthStatusOK HealthStatus = iota + 1
 	// HealthStatusShuttingDown is used when the rpc handler is shutting down
 	HealthStatusShuttingDown
+)
+
+const (
+	serviceName = "temporal.api.workflowservice.v1.WorkflowService"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -177,8 +180,15 @@ func (wh *WorkflowHandler) GetConfig() *Config {
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (wh *WorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+func (wh *WorkflowHandler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	wh.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
+
+	if request.Service != serviceName {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
+		}, nil
+	}
+
 	status := HealthStatus(atomic.LoadInt32(&wh.healthStatus))
 	if status == HealthStatusOK {
 		return &healthpb.HealthCheckResponse{

@@ -54,6 +54,10 @@ type (
 	}
 )
 
+const (
+	serviceName = "temporal.api.workflowservice.v1.MatchingService"
+)
+
 var (
 	_ matchingservice.MatchingServiceServer = (*Handler)(nil)
 
@@ -101,9 +105,17 @@ func (h *Handler) Stop() {
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.startWG.Wait()
+func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+
+	h.startWG.Wait()
+
+	if request.Service != serviceName {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
+		}, nil
+	}
+
 	hs := &healthpb.HealthCheckResponse{
 		Status: healthpb.HealthCheckResponse_SERVING,
 	}
