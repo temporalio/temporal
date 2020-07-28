@@ -310,17 +310,15 @@ message ChildExecutionInfo {
     int64 version = 1;
     int64 initiated_event_batch_id = 2;
     int64 started_id = 3;
-    bytes initiated_event = 4;
-    string initiated_event_encoding = 5;
-    string started_workflow_id = 6;
-    string started_run_id = 7;
-    bytes started_event = 8;
-    string started_event_encoding = 9;
-    string create_request_id = 10;
-    string namespace = 11;
-    string workflow_type_name = 12;
-    temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 13;
-    int64 initiated_id = 14;
+    temporal.api.history.v1.HistoryEvent initiated_event = 4;
+    string started_workflow_id = 5;
+    string started_run_id = 6;
+    temporal.api.history.v1.HistoryEvent started_event = 7;
+    string create_request_id = 8;
+    string namespace = 9;
+    string workflow_type_name = 10;
+    temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 11;
+    int64 initiated_id = 12;
 }
 
 message NamespaceDetail {

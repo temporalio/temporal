@@ -2760,13 +2760,13 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	createRequestID := uuid.New()
-	childExecutionInfos := []*p.ChildExecutionInfo{{
+	childExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
 		Version:           1234,
-		InitiatedID:       1,
+		InitiatedId:       1,
 		InitiatedEvent:    &historypb.HistoryEvent{EventId: 1},
-		StartedID:         2,
+		StartedId:         2,
 		StartedEvent:      &historypb.HistoryEvent{EventId: 2},
-		CreateRequestID:   createRequestID,
+		CreateRequestId:   createRequestID,
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	}}
 	err2 := s.UpsertChildExecutionsState(updatedInfo, updatedStats, nil, int64(3), childExecutionInfos)
@@ -2780,12 +2780,12 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	s.True(ok)
 	s.NotNil(ci)
 	s.Equal(int64(1234), ci.Version)
-	s.Equal(int64(1), ci.InitiatedID)
+	s.Equal(int64(1), ci.InitiatedId)
 	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, ci.ParentClosePolicy)
 	s.Equal(int64(1), ci.InitiatedEvent.EventId)
-	s.Equal(int64(2), ci.StartedID)
+	s.Equal(int64(2), ci.StartedId)
 	s.Equal(int64(2), ci.StartedEvent.EventId)
-	s.Equal(createRequestID, ci.CreateRequestID)
+	s.Equal(createRequestID, ci.CreateRequestId)
 
 	err2 = s.DeleteChildExecutionsState(updatedInfo, updatedStats, nil, int64(5), int64(1))
 	s.NoError(err2)
@@ -3680,14 +3680,14 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			},
 		},
 
-		ChildExecutionInfos: map[int64]*p.ChildExecutionInfo{
+		ChildExecutionInfos: map[int64]*persistenceblobs.ChildExecutionInfo{
 			9: {
 				Version:         2334,
-				InitiatedID:     9,
+				InitiatedId:     9,
 				InitiatedEvent:  &historypb.HistoryEvent{EventId: 123},
-				StartedID:       11,
+				StartedId:       11,
 				StartedEvent:    nil,
-				CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+				CreateRequestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 			},
 		},
 
@@ -3893,14 +3893,14 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			TaskStatus: 601,
 		}}
 
-	resetChildExecutionInfos := []*p.ChildExecutionInfo{
+	resetChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{
 		{
 			Version:         3334,
-			InitiatedID:     10,
+			InitiatedId:     10,
 			InitiatedEvent:  &historypb.HistoryEvent{EventId: 10},
-			StartedID:       15,
+			StartedId:       15,
 			StartedEvent:    nil,
-			CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+			CreateRequestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 		}}
 
 	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{
@@ -3993,8 +3993,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.True(ok)
 	s.NotNil(ci)
 	s.Equal(int64(3334), ci.Version)
-	s.Equal(int64(10), ci.InitiatedID)
-	s.Equal(int64(15), ci.StartedID)
+	s.Equal(int64(10), ci.InitiatedId)
+	s.Equal(int64(15), ci.StartedId)
 
 	s.Equal(1, len(state4.RequestCancelInfos))
 	rci, ok = state4.RequestCancelInfos[29]
@@ -4107,7 +4107,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*persistenceblobs.ActivityInfo{}
 	resetTimerInfos := []*persistenceblobs.TimerInfo{}
-	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
+	resetChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
 	resetSignalInfos := []*persistenceblobs.SignalInfo{}
 	rState := &p.ReplicationState{
@@ -4239,7 +4239,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*persistenceblobs.ActivityInfo{}
 	resetTimerInfos := []*persistenceblobs.TimerInfo{}
-	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
+	resetChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
 	resetSignalInfos := []*persistenceblobs.SignalInfo{}
 	rState := &p.ReplicationState{
@@ -4363,7 +4363,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4377,7 +4377,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			UpsertActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
-			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
+			UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
 			UpsertSignalRequestedIDs:  []string{},
@@ -4520,7 +4520,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4533,7 +4533,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4546,7 +4546,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			UpsertActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
-			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
+			UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
 			UpsertSignalRequestedIDs:  []string{},
@@ -4666,7 +4666,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4779,7 +4779,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4792,7 +4792,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -4922,7 +4922,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -5048,7 +5048,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
@@ -5061,7 +5061,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 			ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 			TimerInfos:          []*persistenceblobs.TimerInfo{},
-			ChildExecutionInfos: []*p.ChildExecutionInfo{},
+			ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},

@@ -373,7 +373,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForChildWorkflow(
 
 Loop:
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedID != common.EmptyEventID {
+		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -381,8 +381,8 @@ Loop:
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			childWorkflowInfo.InitiatedEventBatchID,
-			childWorkflowInfo.InitiatedID,
+			childWorkflowInfo.InitiatedEventBatchId,
+			childWorkflowInfo.InitiatedId,
 			currentBranchToken,
 		)
 		if err != nil {

@@ -780,14 +780,14 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	childInfos := map[int64]*persistence.ChildExecutionInfo{
+	childInfos := map[int64]*persistenceblobs.ChildExecutionInfo{
 		80: {
 			Version:               failoverVersion,
-			InitiatedID:           80,
-			InitiatedEventBatchID: 20,
+			InitiatedId:           80,
+			InitiatedEventBatchId: 20,
 			InitiatedEvent:        &historypb.HistoryEvent{},
-			StartedID:             common.EmptyEventID,
-			CreateRequestID:       uuid.New(),
+			StartedId:             common.EmptyEventID,
+			CreateRequestId:       uuid.New(),
 			Namespace:             testNamespaceID,
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
 		},

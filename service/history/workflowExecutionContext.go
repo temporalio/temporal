@@ -1171,7 +1171,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteActivityInfos:       []int64{},
 			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			DeleteTimerInfos:          []string{},
-			UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+			UpsertChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 			DeleteChildExecutionInfo:  nil,
 			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 			DeleteRequestCancelInfo:   nil,

@@ -1148,7 +1148,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.TimerInfos = timerInfos
 
-	childExecutionInfos := make(map[int64]*p.InternalChildExecutionInfo)
+	childExecutionInfos := make(map[int64]*persistenceblobs.ChildExecutionInfo)
 	cMap := result["child_executions_map"].(map[int64][]byte)
 	cMapEncoding := result["child_executions_map_encoding"].(string)
 	for key, value := range cMap {
@@ -1156,7 +1156,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		if err != nil {
 			return nil, err
 		}
-		childExecutionInfos[key] = p.ProtoChildExecutionInfoToInternal(cInfo)
+		childExecutionInfos[key] = cInfo
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 

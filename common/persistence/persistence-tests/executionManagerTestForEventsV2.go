@@ -914,11 +914,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		CancelRequestId: uuid.New(),
 	}}
 
-	insertChildExecutionInfos := []*p.ChildExecutionInfo{{
+	insertChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
 		Version:         130,
-		InitiatedID:     131,
-		StartedID:       132,
-		CreateRequestID: uuid.New(),
+		InitiatedId:     131,
+		StartedId:       132,
+		CreateRequestId: uuid.New(),
 		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
 	}}
 
@@ -1329,11 +1329,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		CancelRequestId: uuid.New(),
 	}}
 
-	insertChildExecutionInfos := []*p.ChildExecutionInfo{{
+	insertChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{{
 		Version:         130,
-		InitiatedID:     131,
-		StartedID:       132,
-		CreateRequestID: uuid.New(),
+		InitiatedId:     131,
+		StartedId:       132,
+		CreateRequestId: uuid.New(),
 		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
 	}}
 

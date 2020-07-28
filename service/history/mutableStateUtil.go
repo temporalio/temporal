@@ -128,10 +128,10 @@ func convertDeleteTimerInfos(
 }
 
 func convertPendingChildExecutionInfos(
-	inputs map[int64]*persistence.ChildExecutionInfo,
-) []*persistence.ChildExecutionInfo {
+	inputs map[int64]*persistenceblobs.ChildExecutionInfo,
+) []*persistenceblobs.ChildExecutionInfo {
 
-	outputs := make([]*persistence.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -139,10 +139,10 @@ func convertPendingChildExecutionInfos(
 }
 
 func convertUpdateChildExecutionInfos(
-	inputs map[*persistence.ChildExecutionInfo]struct{},
-) []*persistence.ChildExecutionInfo {
+	inputs map[*persistenceblobs.ChildExecutionInfo]struct{},
+) []*persistenceblobs.ChildExecutionInfo {
 
-	outputs := make([]*persistence.ChildExecutionInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.ChildExecutionInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}

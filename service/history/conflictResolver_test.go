@@ -266,7 +266,7 @@ func (s *conflictResolverSuite) TestReset() {
 				},
 				ActivityInfos:       []*persistenceblobs.ActivityInfo{},
 				TimerInfos:          []*persistenceblobs.TimerInfo{},
-				ChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+				ChildExecutionInfos: []*persistenceblobs.ChildExecutionInfo{},
 				RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 				SignalInfos:         []*persistenceblobs.SignalInfo{},
 				SignalRequestedIDs:  []string{},

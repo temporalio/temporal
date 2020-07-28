@@ -1328,11 +1328,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if len(mutableState.GetPendingChildExecutionInfos()) > 0 {
 		for _, ch := range mutableState.GetPendingChildExecutionInfos() {
 			p := &workflowpb.PendingChildExecutionInfo{
-				WorkflowId:        ch.StartedWorkflowID,
-				RunId:             ch.StartedRunID,
+				WorkflowId:        ch.StartedWorkflowId,
+				RunId:             ch.StartedRunId,
 				WorkflowTypeName:  ch.WorkflowTypeName,
-				InitiatedId:       ch.InitiatedID,
-				ParentClosePolicy: enumspb.ParentClosePolicy(ch.ParentClosePolicy),
+				InitiatedId:       ch.InitiatedId,
+				ParentClosePolicy: ch.ParentClosePolicy,
 			}
 			result.PendingChildren = append(result.PendingChildren, p)
 		}
@@ -2212,7 +2212,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
-			if !isRunning || ci.StartedID == common.EmptyEventID {
+			if !isRunning || ci.StartedId == common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
