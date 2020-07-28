@@ -185,8 +185,8 @@ func AddDurationPtrToTimePtr(t *time.Time, duration *time.Duration) time.Time {
 	if duration != nil && t != nil {
 		return t.Add(*duration)
 	} else if duration != nil && t == nil {
-		return time.Unix(0,0 ).Add(*duration)
-	} else if t != nil{
+		return time.Unix(0, 0).Add(*duration)
+	} else if t != nil {
 		return *t
 	} else {
 		return time.Unix(0, 0)

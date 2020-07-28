@@ -180,12 +180,12 @@ func newMutableStateBuilder(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
-		updateActivityInfos:        make(map[*persistenceblobs.ActivityInfo]struct{}),
+		updateActivityInfos:            make(map[*persistenceblobs.ActivityInfo]struct{}),
 		pendingActivityTimerHeartbeats: make(map[int64]int64),
-		pendingActivityInfoIDs:     make(map[int64]*persistenceblobs.ActivityInfo),
-		pendingActivityIDToEventID: make(map[string]int64),
-		deleteActivityInfos:        make(map[int64]struct{}),
-		syncActivityTasks:          make(map[int64]struct{}),
+		pendingActivityInfoIDs:         make(map[int64]*persistenceblobs.ActivityInfo),
+		pendingActivityIDToEventID:     make(map[string]int64),
+		deleteActivityInfos:            make(map[int64]struct{}),
+		syncActivityTasks:              make(map[int64]struct{}),
 
 		pendingTimerInfoIDs:     make(map[string]*persistenceblobs.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),

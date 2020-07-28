@@ -152,16 +152,16 @@ func Test_NextRetry(t *testing.T) {
 
 	// no retry without retry policy
 	ai := &persistenceblobs.ActivityInfo{
-		ScheduleToStartTimeout: timestamp.DurationFromSeconds(5),
-		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(30),
-		StartToCloseTimeout:    timestamp.DurationFromSeconds(25),
-		HasRetryPolicy:         false,
+		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(5),
+		ScheduleToCloseTimeout:      timestamp.DurationFromSeconds(30),
+		StartToCloseTimeout:         timestamp.DurationFromSeconds(25),
+		HasRetryPolicy:              false,
 		RetryNonRetryableErrorTypes: []string{},
-		StartedIdentity:        identity,
-		Attempt:                1,
-		RetryExpirationTime:	timestamp.TimePtr(time.Time{}),
-		RetryInitialInterval:	timestamp.DurationPtr(time.Duration(0)),
-		RetryMaximumInterval:	timestamp.DurationPtr(time.Duration(0)),
+		StartedIdentity:             identity,
+		Attempt:                     1,
+		RetryExpirationTime:         timestamp.TimePtr(time.Time{}),
+		RetryInitialInterval:        timestamp.DurationPtr(time.Duration(0)),
+		RetryMaximumInterval:        timestamp.DurationPtr(time.Duration(0)),
 	}
 
 	interval, retryState := getBackoffInterval(
