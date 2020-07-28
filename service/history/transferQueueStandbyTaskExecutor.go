@@ -132,10 +132,8 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, err
 		}
 
-		if activityInfo.StartedID == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(
-				activityInfo.ScheduleToStartTimeout,
-			), nil
+		if activityInfo.StartedId == common.EmptyEventID {
+			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
 		}
 
 		return nil, nil
@@ -523,7 +521,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
-	timeout := common.MinInt64(pushActivityInfo.activityTaskScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout.Seconds()), common.MaxTaskTimeout)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
 		timeout,

@@ -304,17 +304,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailure:              activityLastFailure,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -414,17 +414,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
-		Version:                  activityVersion,
-		ScheduleID:               activityScheduleID,
-		ScheduledTime:            activityScheduledTime,
-		StartedID:                activityStartedID,
-		StartedTime:              activityStartedTime,
-		LastHeartBeatUpdatedTime: activityHeartbeatTime,
-		Details:                  activityDetails,
-		Attempt:                  activityAttempt,
-		LastFailure:              activityLastFailure,
-		LastWorkerIdentity:       activityLastWorkerIdentity,
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistenceblobs.ActivityInfo{
+		Version:                 activityVersion,
+		ScheduleId:              activityScheduleID,
+		ScheduledTime:           &activityScheduledTime,
+		StartedId:               activityStartedID,
+		StartedTime:             &activityStartedTime,
+		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		LastHeartbeatDetails:    activityDetails,
+		Attempt:                 activityAttempt,
+		RetryLastFailure:        activityLastFailure,
+		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},

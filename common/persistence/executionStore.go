@@ -78,6 +78,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	newResponse := &GetWorkflowExecutionResponse{
 		State: &WorkflowMutableState{
+			ActivityInfos:      response.State.ActivityInfos,
 			TimerInfos:         response.State.TimerInfos,
 			RequestCancelInfos: response.State.RequestCancelInfos,
 			SignalInfos:        response.State.SignalInfos,
@@ -87,10 +88,6 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		},
 	}
 
-	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivityInfos)
-	if err != nil {
-		return nil, err
-	}
 	newResponse.State.ChildExecutionInfos, err = m.DeserializeChildExecutionInfos(response.State.ChildExecutionInfos)
 	if err != nil {
 		return nil, err
@@ -239,61 +236,6 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 	return newInfos, nil
 }
 
-func (m *executionManagerImpl) DeserializeActivityInfos(
-	infos map[int64]*InternalActivityInfo,
-) (map[int64]*ActivityInfo, error) {
-
-	newInfos := make(map[int64]*ActivityInfo, 0)
-	for k, v := range infos {
-		scheduledEvent, err := m.serializer.DeserializeEvent(v.ScheduledEvent)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.DeserializeEvent(v.StartedEvent)
-		if err != nil {
-			return nil, err
-		}
-		a := &ActivityInfo{
-			ScheduledEvent: scheduledEvent,
-			StartedEvent:   startedEvent,
-
-			Version:                                 v.Version,
-			ScheduleID:                              v.ScheduleID,
-			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
-			ScheduledTime:                           v.ScheduledTime,
-			StartedID:                               v.StartedID,
-			StartedTime:                             v.StartedTime,
-			ActivityID:                              v.ActivityID,
-			RequestID:                               v.RequestID,
-			Details:                                 v.Details,
-			ScheduleToStartTimeout:                  v.ScheduleToStartTimeout,
-			ScheduleToCloseTimeout:                  v.ScheduleToCloseTimeout,
-			StartToCloseTimeout:                     v.StartToCloseTimeout,
-			HeartbeatTimeout:                        v.HeartbeatTimeout,
-			CancelRequested:                         v.CancelRequested,
-			CancelRequestID:                         v.CancelRequestID,
-			LastHeartBeatUpdatedTime:                v.LastHeartbeatUpdateTime,
-			TimerTaskStatus:                         v.TimerTaskStatus,
-			Attempt:                                 v.Attempt,
-			NamespaceID:                             v.NamespaceID,
-			StartedIdentity:                         v.StartedIdentity,
-			TaskQueue:                               v.TaskQueue,
-			HasRetryPolicy:                          v.HasRetryPolicy,
-			InitialInterval:                         v.InitialInterval,
-			BackoffCoefficient:                      v.BackoffCoefficient,
-			MaximumInterval:                         v.MaximumInterval,
-			ExpirationTime:                          v.ExpirationTime,
-			MaximumAttempts:                         v.MaximumAttempts,
-			NonRetryableErrorTypes:                  v.NonRetryableErrorTypes,
-			LastFailure:                             v.LastFailure,
-			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
-		}
-		newInfos[k] = a
-	}
-	return newInfos, nil
-}
-
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
@@ -353,61 +295,6 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(
 			Namespace:             v.Namespace,
 			WorkflowTypeName:      v.WorkflowTypeName,
 			ParentClosePolicy:     v.ParentClosePolicy,
-		}
-		newInfos = append(newInfos, i)
-	}
-	return newInfos, nil
-}
-
-func (m *executionManagerImpl) SerializeUpsertActivityInfos(
-	infos []*ActivityInfo,
-	encoding common.EncodingType,
-) ([]*InternalActivityInfo, error) {
-
-	newInfos := make([]*InternalActivityInfo, 0)
-	for _, v := range infos {
-		scheduledEvent, err := m.serializer.SerializeEvent(v.ScheduledEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
-		startedEvent, err := m.serializer.SerializeEvent(v.StartedEvent, encoding)
-		if err != nil {
-			return nil, err
-		}
-		i := &InternalActivityInfo{
-			Version:                                 v.Version,
-			ScheduleID:                              v.ScheduleID,
-			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
-			ScheduledEvent:                          scheduledEvent,
-			ScheduledTime:                           v.ScheduledTime,
-			StartedID:                               v.StartedID,
-			StartedEvent:                            startedEvent,
-			StartedTime:                             v.StartedTime,
-			ActivityID:                              v.ActivityID,
-			RequestID:                               v.RequestID,
-			Details:                                 v.Details,
-			ScheduleToStartTimeout:                  v.ScheduleToStartTimeout,
-			ScheduleToCloseTimeout:                  v.ScheduleToCloseTimeout,
-			StartToCloseTimeout:                     v.StartToCloseTimeout,
-			HeartbeatTimeout:                        v.HeartbeatTimeout,
-			CancelRequested:                         v.CancelRequested,
-			CancelRequestID:                         v.CancelRequestID,
-			LastHeartbeatUpdateTime:                 v.LastHeartBeatUpdatedTime,
-			TimerTaskStatus:                         v.TimerTaskStatus,
-			Attempt:                                 v.Attempt,
-			NamespaceID:                             v.NamespaceID,
-			StartedIdentity:                         v.StartedIdentity,
-			TaskQueue:                               v.TaskQueue,
-			HasRetryPolicy:                          v.HasRetryPolicy,
-			InitialInterval:                         v.InitialInterval,
-			BackoffCoefficient:                      v.BackoffCoefficient,
-			MaximumInterval:                         v.MaximumInterval,
-			ExpirationTime:                          v.ExpirationTime,
-			MaximumAttempts:                         v.MaximumAttempts,
-			NonRetryableErrorTypes:                  v.NonRetryableErrorTypes,
-			LastFailure:                             v.LastFailure,
-			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos = append(newInfos, i)
 	}
@@ -612,10 +499,6 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	if err != nil {
 		return nil, err
 	}
-	serializedUpsertActivityInfos, err := m.SerializeUpsertActivityInfos(input.UpsertActivityInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 	serializedUpsertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.UpsertChildExecutionInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -644,7 +527,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
-		UpsertActivityInfos:       serializedUpsertActivityInfos,
+		UpsertActivityInfos:       input.UpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
 		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
@@ -685,10 +568,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	serializedActivityInfos, err := m.SerializeUpsertActivityInfos(input.ActivityInfos, encoding)
-	if err != nil {
-		return nil, err
-	}
 	serializedChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.ChildExecutionInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -710,7 +589,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 
-		ActivityInfos:       serializedActivityInfos,
+		ActivityInfos:       input.ActivityInfos,
 		TimerInfos:          input.TimerInfos,
 		ChildExecutionInfos: serializedChildExecutionInfos,
 		RequestCancelInfos:  input.RequestCancelInfos,

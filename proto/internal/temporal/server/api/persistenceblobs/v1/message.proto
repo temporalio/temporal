@@ -33,6 +33,7 @@ import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
 
 import "dependencies/gogoproto/v1/gogo.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -49,13 +50,11 @@ message ImmutableClusterMetadata {
 message ActivityInfo {
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
-    bytes scheduled_event = 3;
-    string scheduled_event_encoding = 4;
-    google.protobuf.Timestamp scheduled_time = 5;
+    temporal.api.history.v1.HistoryEvent scheduled_event = 3;
+    google.protobuf.Timestamp scheduled_time = 5 [(gogoproto.stdtime) = true];
     int64 started_id = 6;
-    bytes started_event = 7;
-    string started_event_encoding = 8;
-    google.protobuf.Timestamp started_time = 9;
+    temporal.api.history.v1.HistoryEvent started_event = 7;
+    google.protobuf.Timestamp started_time = 9 [(gogoproto.stdtime) = true];
     string activity_id = 10;
     string request_id = 11;
     // (-- api-linter: core::0140::prepositions=disabled
@@ -78,7 +77,7 @@ message ActivityInfo {
     google.protobuf.Duration retry_initial_interval = 23 [(gogoproto.stdduration) = true];
     google.protobuf.Duration retry_maximum_interval = 24 [(gogoproto.stdduration) = true];
     int32 retry_maximum_attempts = 25;
-    google.protobuf.Timestamp retry_expiration_time = 26;
+    google.protobuf.Timestamp retry_expiration_time = 26 [(gogoproto.stdtime) = true];
     double retry_backoff_coefficient = 27;
     repeated string retry_non_retryable_error_types = 28;
     temporal.api.failure.v1.Failure retry_last_failure = 29;
@@ -86,7 +85,7 @@ message ActivityInfo {
     string namespace_id = 31;
     int64 schedule_id = 32;
     temporal.api.common.v1.Payloads last_heartbeat_details = 33;
-    google.protobuf.Timestamp last_heartbeat_update_time = 34;
+    google.protobuf.Timestamp last_heartbeat_update_time = 34 [(gogoproto.stdtime) = true];
 }
 
 message ShardInfo {
@@ -260,17 +259,17 @@ message WorkflowExecutionInfo {
     int64 last_event_task_id = 19;
     int64 last_first_event_id = 20;
     int64 last_processed_event = 21;
-    google.protobuf.Timestamp start_time = 22;
-    google.protobuf.Timestamp last_update_time = 23;
+    google.protobuf.Timestamp start_time = 22 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 23 [(gogoproto.stdtime) = true];
     int64 workflow_task_version = 24;
     int64 workflow_task_schedule_id = 25;
     int64 workflow_task_started_id = 26;
     google.protobuf.Duration workflow_task_timeout = 27 [(gogoproto.stdduration) = true];
     int64 workflow_task_attempt = 28;
-    google.protobuf.Timestamp workflow_task_started_time = 29;
-    google.protobuf.Timestamp workflow_task_scheduled_time = 30;
+    google.protobuf.Timestamp workflow_task_started_time = 29 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_task_scheduled_time = 30 [(gogoproto.stdtime) = true];
     bool cancel_requested = 31;
-    google.protobuf.Timestamp workflow_task_original_scheduled_time = 32;
+    google.protobuf.Timestamp workflow_task_original_scheduled_time = 32 [(gogoproto.stdtime) = true];
     string workflow_task_request_id = 34;
     string cancel_request_id = 35;
     string sticky_task_queue = 36;
@@ -282,7 +281,7 @@ message WorkflowExecutionInfo {
     google.protobuf.Duration retry_maximum_interval = 40 [(gogoproto.stdduration) = true];
     int32 retry_maximum_attempts = 41;
     double retry_backoff_coefficient = 42;
-    google.protobuf.Timestamp retry_expiration_time = 43;
+    google.protobuf.Timestamp retry_expiration_time = 43 [(gogoproto.stdtime) = true];
     repeated string retry_non_retryable_error_types = 44;
     bool has_retry_policy = 45;
     string cron_schedule = 46;

@@ -268,12 +268,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	)
 	switch err.(type) {
 	case nil:
-		if ai.StartedID == common.EmptyEventID {
+		if ai.StartedId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
 			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-				ai.ScheduleID,
-				ai.StartedID,
+				ai.ScheduleId,
+				ai.StartedId,
 				actCancelReqEvent.GetEventId(),
 				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,

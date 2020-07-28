@@ -152,7 +152,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		}
 		if ai.Attempt == request.GetAttempt() {
 			lastHeartbeatTime := time.Unix(0, request.GetLastHeartbeatTime())
-			if ai.LastHeartBeatUpdatedTime.After(lastHeartbeatTime) {
+			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
 				// this should not retry, can be caused by out of order delivery
 				return nil
 			}

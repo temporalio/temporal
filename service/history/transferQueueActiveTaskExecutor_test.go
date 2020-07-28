@@ -329,8 +329,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	}
 
 	event = addActivityTaskStartedEvent(mutableState, event.GetEventId(), "")
-	ai.StartedID = event.GetEventId()
-	event = addActivityTaskCompletedEvent(mutableState, ai.ScheduleID, ai.StartedID, nil, "")
+	ai.StartedId = event.GetEventId()
+	event = addActivityTaskCompletedEvent(mutableState, ai.ScheduleId, ai.StartedId, nil, "")
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -1898,7 +1898,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	task *persistenceblobs.TransferTaskInfo,
-	ai *persistence.ActivityInfo,
+	ai *persistenceblobs.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.GetTargetNamespaceId(),
@@ -1912,7 +1912,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout),
+		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout.Seconds()),
 	}
 }
 

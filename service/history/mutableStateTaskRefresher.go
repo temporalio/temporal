@@ -293,7 +293,7 @@ Loop:
 			return err
 		}
 
-		if activityInfo.StartedID != common.EmptyEventID {
+		if activityInfo.StartedId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -301,8 +301,8 @@ Loop:
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			activityInfo.ScheduledEventBatchID,
-			activityInfo.ScheduleID,
+			activityInfo.ScheduledEventBatchId,
+			activityInfo.ScheduleId,
 			currentBranchToken,
 		)
 		if err != nil {
