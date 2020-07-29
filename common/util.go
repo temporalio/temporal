@@ -367,6 +367,38 @@ func SortInt64Slice(slice []int64) {
 	})
 }
 
+// EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultPolicy *commonpb.RetryPolicy) *commonpb.RetryPolicy {
+	if originalPolicy == nil {
+		return defaultPolicy
+	}
+
+	merged := &commonpb.RetryPolicy{
+		BackoffCoefficient:       originalPolicy.GetBackoffCoefficient(),
+		InitialIntervalInSeconds: originalPolicy.GetInitialIntervalInSeconds(),
+		MaximumIntervalInSeconds: originalPolicy.GetMaximumIntervalInSeconds(),
+		MaximumAttempts:          originalPolicy.GetMaximumAttempts(),
+	}
+
+	if merged.GetMaximumAttempts() == 0 {
+		merged.MaximumAttempts = defaultPolicy.GetMaximumAttempts()
+	}
+
+	if merged.GetInitialIntervalInSeconds() == 0 {
+		merged.InitialIntervalInSeconds = defaultPolicy.GetInitialIntervalInSeconds()
+	}
+
+	if merged.GetMaximumIntervalInSeconds() == 0 {
+		merged.MaximumIntervalInSeconds = defaultPolicy.GetMaximumIntervalInSeconds()
+	}
+
+	if merged.GetBackoffCoefficient() == 0 {
+		merged.BackoffCoefficient = defaultPolicy.GetBackoffCoefficient()
+	}
+
+	return merged
+}
+
 // ValidateRetryPolicy validates a retry policy
 func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	if policy == nil {
