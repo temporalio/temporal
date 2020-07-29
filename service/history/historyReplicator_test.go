@@ -497,8 +497,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
-			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
 
@@ -570,8 +570,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
-			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
 
@@ -714,8 +714,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
-			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
 
@@ -784,8 +784,8 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 				WorkflowTaskScheduleID: common.EmptyEventID,
 				WorkflowTaskStartedID:  common.EmptyEventID,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
-			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
 
@@ -857,8 +857,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				WorkflowTaskStartedID:  common.EmptyEventID,
 				State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			},
-			ExecutionStats:   &persistence.ExecutionStats{},
-			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
 
@@ -891,7 +891,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -935,7 +935,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -1003,7 +1003,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -1089,7 +1089,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -1162,7 +1162,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1197,7 +1197,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
@@ -1248,7 +1248,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
@@ -1295,7 +1295,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingEqu
 			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context.Background(), weContext, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderIn, msBuilderOut)
@@ -1316,7 +1316,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 	}).AnyTimes()
 
@@ -1343,7 +1343,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 	}).AnyTimes()
 
@@ -1380,9 +1380,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		}},
 	}
 	startTimeStamp := time.Now()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
@@ -1451,9 +1451,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		}},
 	}
 	startTimeStamp := time.Now()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
@@ -1514,9 +1514,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
 
@@ -1553,9 +1553,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		}},
 	}
 	startTimeStamp := time.Now()
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 	}).AnyTimes()
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(false).Times(1)
 	currentState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
@@ -1611,9 +1611,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
 
@@ -1651,9 +1651,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(false).Times(1)
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 	}).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentLastWriteVersion).Return(prevActiveCluster).AnyTimes()
@@ -1703,9 +1703,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		StartedID:  57,
 	}
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).Times(1)
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
+		LastWriteEventId: currentLastEventID,
 	}).Times(1)
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(true).Times(1)
 	msBuilderIn.EXPECT().GetInFlightWorkflowTask().Return(pendingWorkflowTaskInfo, true).Times(1)
@@ -1742,9 +1742,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	// after the flush, the pending buffered events are gone, however, the last event ID should increase
-	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
+	msBuilderIn.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID + 2,
+		LastWriteEventId: currentLastEventID + 2,
 	}).Times(1)
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(currentState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).Times(1)
@@ -1777,7 +1777,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingLessThanCurrent() 
 		History:      &historypb.History{},
 	}
 	msBuilder.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
-	msBuilder.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes() // logger will use this
+	msBuilder.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{}).AnyTimes() // logger will use this
 
 	err := s.historyReplicator.ApplyOtherEvents(context.Background(), weContext, msBuilder, request, s.logger)
 	s.Nil(err)
@@ -1893,11 +1893,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -1931,7 +1931,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2013,11 +2013,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2051,7 +2051,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2129,11 +2129,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2167,7 +2167,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2258,11 +2258,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2303,7 +2303,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2402,11 +2402,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		},
 	}
 	nextEventID := wti.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2440,7 +2440,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2539,11 +2539,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2577,7 +2577,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2676,11 +2676,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2715,7 +2715,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -2840,11 +2840,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -2879,7 +2879,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3017,11 +3017,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -3056,7 +3056,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3192,11 +3192,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -3230,7 +3230,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3348,11 +3348,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -3386,7 +3386,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -3512,11 +3512,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}
 	nextEventID := di.ScheduleID + 1
-	replicationState := &persistence.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	transferTasks := []persistence.Task{&persistence.CloseExecutionTask{Version: version}}
 	timerTasks := []persistence.Task{&persistence.DeleteHistoryEventTask{Version: version}}
@@ -3557,7 +3557,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
-		ExecutionStats:   &persistence.ExecutionStats{HistorySize: int64(historySize)},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{HistorySize: int64(historySize)},
 		ReplicationState: replicationState,
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,

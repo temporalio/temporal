@@ -107,7 +107,7 @@ type (
 
 		pendingChildExecutionInfoIDs map[int64]*persistenceblobs.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[*persistenceblobs.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
-		deleteChildExecutionInfo     *int64                                       // Deleted ChildExecution Info since last update
+		deleteChildExecutionInfo     *int64                                            // Deleted ChildExecution Info since last update
 
 		pendingRequestCancelInfoIDs map[int64]*persistenceblobs.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
 		updateRequestCancelInfos    map[*persistenceblobs.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
@@ -127,7 +127,7 @@ type (
 
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		versionHistories *persistence.VersionHistories
-		replicationState *persistence.ReplicationState
+		replicationState *persistenceblobs.ReplicationState
 		hBuilder         *historyBuilder
 
 		// in memory only attributes
@@ -252,11 +252,11 @@ func newMutableStateBuilderWithReplicationState(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
 	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	s.replicationState = &persistence.ReplicationState{
+	s.replicationState = &persistenceblobs.ReplicationState{
 		StartVersion:        s.currentVersion,
 		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastReplicationInfo: make(map[string]*replicationspb.ReplicationInfo),
 	}
 	return s
@@ -403,7 +403,7 @@ func (e *mutableStateBuilder) GetExecutionInfo() *persistence.WorkflowExecutionI
 	return e.executionInfo
 }
 
-func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationState {
+func (e *mutableStateBuilder) GetReplicationState() *persistenceblobs.ReplicationState {
 	return e.replicationState
 }
 
@@ -611,7 +611,7 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	lastEventID int64,
 ) {
 	e.replicationState.LastWriteVersion = lastWriteVersion
-	e.replicationState.LastWriteEventID = lastEventID
+	e.replicationState.LastWriteEventId = lastEventID
 
 	lastEventSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()

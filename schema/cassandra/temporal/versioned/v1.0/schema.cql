@@ -43,8 +43,6 @@ CREATE TABLE executions (
   replication_metadata_encoding  text,
   workflow_last_write_version    bigint,
   workflow_state                 int,
-  version_histories              blob, -- the metadata of history branching
-  version_histories_encoding     text,
   checksum                       blob,
   checksum_encoding              text,
   PRIMARY KEY  (shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id)

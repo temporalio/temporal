@@ -149,7 +149,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistenceblobs.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
-		GetReplicationState() *persistence.ReplicationState
+		GetReplicationState() *persistenceblobs.ReplicationState
 		GetRequestCancelInfo(int64) (*persistenceblobs.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() (time.Duration, error)

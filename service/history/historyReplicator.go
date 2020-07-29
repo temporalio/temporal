@@ -454,7 +454,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 	}
 
 	if rState.LastWriteVersion == incomingVersion {
-		// for ri.GetLastEventId() == rState.LastWriteEventID, ideally we should not do anything
+		// for ri.GetLastEventId() == rState.LastWriteEventId, ideally we should not do anything
 		return msBuilder, nil
 	}
 
@@ -516,7 +516,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 
 	// remote replication info last write version is the same as local last write version, check reset
 	// Detect conflict
-	if ri.GetLastEventId() > rState.LastWriteEventID {
+	if ri.GetLastEventId() > rState.LastWriteEventId {
 		// if there is any bug in the replication protocol or implementation, this case can happen
 		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
 		// Returning InvalidArgument to force the message to land into DLQ
@@ -528,7 +528,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		return nil, err
 	}
 
-	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventID {
+	if ri.GetLastEventId() < msBuilder.GetReplicationState().LastWriteEventId {
 		// the reason to reset mutable state if mutable state has buffered events
 		// is: what buffered event actually do is delay generation of event ID,
 		// the actual action of those buffered event are already applied to mutable state.

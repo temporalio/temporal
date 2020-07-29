@@ -249,14 +249,14 @@ func (s *conflictResolverSuite) TestReset() {
 			},
 			ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 				ExecutionInfo: executionInfo,
-				ExecutionStats: &persistence.ExecutionStats{
+				ExecutionStats: &persistenceblobs.ExecutionStats{
 					HistorySize: historySize,
 				},
-				ReplicationState: &persistence.ReplicationState{
+				ReplicationState: &persistenceblobs.ReplicationState{
 					CurrentVersion:   event1.GetVersion(),
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
-					LastWriteEventID: event1.GetEventId(),
+					LastWriteEventId: event1.GetEventId(),
 					LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),
@@ -288,7 +288,7 @@ func (s *conflictResolverSuite) TestReset() {
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			ExecutionStats: &persistence.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
