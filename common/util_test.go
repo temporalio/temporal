@@ -118,7 +118,7 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 			},
 			want: &commonpb.RetryPolicy{
 				InitialIntervalInSeconds: 2,
-				MaximumIntervalInSeconds: 100,
+				MaximumIntervalInSeconds: 200,
 				BackoffCoefficient:       2,
 				MaximumAttempts:          120,
 			},
