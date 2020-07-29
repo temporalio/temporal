@@ -325,8 +325,12 @@ func newAdminHistoryHostCommands() []cli.Command {
 		{
 			Name:    "get_shardid",
 			Aliases: []string{"gsh"},
-			Usage:   "Get shardId for a workflowId",
+			Usage:   "Get shardId for a namespaceId and workflowId combination",
 			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+				},
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
 					Usage: "WorkflowId",

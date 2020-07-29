@@ -184,7 +184,9 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *common
 }
 
 func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
 		ShardID: convert.IntPtr(shardID),

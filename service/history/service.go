@@ -414,9 +414,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 	return cfg
 }
 
-// GetShardID return the corresponding shard ID for a given workflow ID
-func (config *Config) GetShardID(workflowID string) int {
-	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
+// GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
+func (config *Config) GetShardID(namespaceID, workflowID string) int {
+	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
 }
 
 // Service represents the history service

@@ -287,7 +287,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -322,7 +322,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -366,7 +366,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 		return nil, h.error(errTaskQueueNotSet, scope, namespaceID, workflowID)
 	}
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		h.GetLogger().Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err1),
@@ -417,7 +417,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -461,7 +461,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -505,7 +505,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -558,7 +558,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := token.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -622,7 +622,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := token.GetWorkflowId()
 
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -660,7 +660,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 
 	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -754,7 +754,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -787,7 +787,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -820,7 +820,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -853,7 +853,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 	workflowExecution := request.Request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -896,7 +896,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
 
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -935,7 +935,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 	workflowExecution := request.SignalRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -977,7 +977,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1016,7 +1016,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1055,7 +1055,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 
 	workflowExecution := request.TerminateRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1094,7 +1094,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 
 	workflowExecution := request.ResetRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1131,7 +1131,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	}
 
 	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1176,7 +1176,7 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1219,7 +1219,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1263,7 +1263,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	}
 
 	workflowID := request.Execution.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
@@ -1301,7 +1301,7 @@ func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.R
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1339,7 +1339,7 @@ func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservic
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1377,7 +1377,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
+	engine, err1 := h.controller.GetEngine(namespaceID, workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
@@ -1468,7 +1468,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	workflowID := request.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
@@ -1577,6 +1577,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		}
 
 		engine, err := h.controller.GetEngine(
+			taskInfos[0].GetNamespaceId(),
 			taskInfos[0].GetWorkflowId(),
 		)
 		if err != nil {
@@ -1629,7 +1630,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 
 	namespaceID := request.GetNamespaceId()
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
@@ -1758,7 +1759,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	namespaceID := request.GetNamespaceId()
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()
-	engine, err := h.controller.GetEngine(workflowID)
+	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
 		err = h.error(err, scope, namespaceID, workflowID)
 		return nil, err
