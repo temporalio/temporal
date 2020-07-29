@@ -657,6 +657,7 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb
 		return nil
 	}
 
+	attributes.RetryPolicy = common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetryPolicy)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
