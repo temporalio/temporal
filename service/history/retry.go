@@ -35,9 +35,9 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
-const defaultInitialRetryIntervalInSeconds = 1
-const defaultMaximumRetryIntervalCoefficient = 100.0
-const defaultExponentialBackoffCoefficient = 2.0
+const defaultInitialIntervalInSeconds = 1
+const defaultMaximumIntervalCoefficient = 100.0
+const defaultBackoffCoefficient = 2.0
 const defaultMaximumAttempts = 0
 
 func getBackoffInterval(
@@ -136,41 +136,39 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
 	return map[string]interface{}{
-		"InitialRetryIntervalInSeconds": 1,
-		"MaximumRetryIntervalInSeconds": 100,
-		"ExponentialBackoffCoefficient": 2.0,
-		"MaximumAttempts":               0,
+		"InitialIntervalInSeconds": 1,
+		"MaximumIntervalInSeconds": 100,
+		"BackoffCoefficient":       2.0,
+		"MaximumAttempts":          0,
 	}
 }
 
 func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) common.DefaultActivityRetrySettings {
-	defaultSettings := common.DefaultActivityRetrySettings{}
-	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
-	if ok {
-		defaultSettings.InitialRetryIntervalInSeconds = int32(initialRetryInterval.(int))
-	} else {
-		defaultSettings.InitialRetryIntervalInSeconds = defaultInitialRetryIntervalInSeconds
+	defaultSettings := common.DefaultActivityRetrySettings{
+		InitialIntervalInSeconds:   defaultInitialIntervalInSeconds,
+		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
+		BackoffCoefficient:         defaultBackoffCoefficient,
+		MaximumAttempts:            defaultMaximumAttempts,
 	}
 
-	maxRetryIntervalCoefficient, ok := options["MaximumRetryIntervalCoefficient"]
+	initialRetryInterval, ok := options["InitialIntervalInSeconds"]
 	if ok {
-		defaultSettings.MaximumRetryIntervalCoefficient = maxRetryIntervalCoefficient.(float64)
-	} else {
-		defaultSettings.MaximumRetryIntervalCoefficient = defaultMaximumRetryIntervalCoefficient
+		defaultSettings.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
 	}
 
-	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
+	maxRetryIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
 	if ok {
-		defaultSettings.ExponentialBackoffCoefficient = exponentialBackoffCoefficient.(float64)
-	} else {
-		defaultSettings.ExponentialBackoffCoefficient = defaultExponentialBackoffCoefficient
+		defaultSettings.MaximumIntervalCoefficient = maxRetryIntervalCoefficient.(float64)
+	}
+
+	exponentialBackoffCoefficient, ok := options["BackoffCoefficient"]
+	if ok {
+		defaultSettings.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
 	}
 
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
-	} else {
-		defaultSettings.MaximumAttempts = defaultMaximumAttempts
 	}
 
 	return defaultSettings

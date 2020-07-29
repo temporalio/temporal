@@ -385,15 +385,15 @@ func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSett
 	}
 
 	if merged.GetInitialIntervalInSeconds() == 0 {
-		merged.InitialIntervalInSeconds = int32(defaultSettings.InitialRetryIntervalInSeconds)
+		merged.InitialIntervalInSeconds = int32(defaultSettings.InitialIntervalInSeconds)
 	}
 
 	if merged.GetMaximumIntervalInSeconds() == 0 {
-		merged.MaximumIntervalInSeconds = int32(defaultSettings.MaximumRetryIntervalCoefficient * float64(merged.GetInitialIntervalInSeconds()))
+		merged.MaximumIntervalInSeconds = int32(defaultSettings.MaximumIntervalCoefficient * float64(merged.GetInitialIntervalInSeconds()))
 	}
 
 	if merged.GetBackoffCoefficient() == 0 {
-		merged.BackoffCoefficient = defaultSettings.ExponentialBackoffCoefficient
+		merged.BackoffCoefficient = defaultSettings.BackoffCoefficient
 	}
 
 	return &merged

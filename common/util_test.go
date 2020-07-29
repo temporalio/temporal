@@ -90,10 +90,10 @@ func TestValidateRetryPolicy(t *testing.T) {
 
 func TestEnsureRetryPolicyDefaults(t *testing.T) {
 	defaultActivityRetrySettings := DefaultActivityRetrySettings{
-		InitialRetryIntervalInSeconds:   1,
-		MaximumRetryIntervalCoefficient: 100,
-		ExponentialBackoffCoefficient:   2.0,
-		MaximumAttempts:                 120,
+		InitialIntervalInSeconds:   1,
+		MaximumIntervalCoefficient: 100,
+		BackoffCoefficient:         2.0,
+		MaximumAttempts:            120,
 	}
 
 	defaultRetryPolicy := &commonpb.RetryPolicy{

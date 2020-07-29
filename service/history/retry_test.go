@@ -398,15 +398,15 @@ func Test_NextRetry(t *testing.T) {
 
 func Test_FromConfigToActivityRetryPolicy(t *testing.T) {
 	options := map[string]interface{}{
-		"InitialRetryIntervalInSeconds":   2,
-		"MaximumRetryIntervalCoefficient": 100.0,
-		"ExponentialBackoffCoefficient":   4.0,
-		"MaximumAttempts":                 5,
+		"InitialIntervalInSeconds":   2,
+		"MaximumIntervalCoefficient": 100.0,
+		"BackoffCoefficient":         4.0,
+		"MaximumAttempts":            5,
 	}
 
 	defaultSettings := fromConfigToDefaultActivityRetrySettings(options)
-	assert.Equal(t, int32(2), defaultSettings.InitialRetryIntervalInSeconds)
-	assert.Equal(t, 100.0, defaultSettings.MaximumRetryIntervalCoefficient)
-	assert.Equal(t, 4.0, defaultSettings.ExponentialBackoffCoefficient)
+	assert.Equal(t, int32(2), defaultSettings.InitialIntervalInSeconds)
+	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
+	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
 	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
 }
