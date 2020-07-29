@@ -151,19 +151,19 @@ func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) co
 		MaximumAttempts:            defaultMaximumAttempts,
 	}
 
-	initialRetryInterval, ok := options["InitialIntervalInSeconds"]
+	initialIntervalInSeconds, ok := options["InitialIntervalInSeconds"]
 	if ok {
-		defaultSettings.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
+		defaultSettings.InitialIntervalInSeconds = int32(initialIntervalInSeconds.(int))
 	}
 
-	maxRetryIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
+	maximumIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
 	if ok {
-		defaultSettings.MaximumIntervalCoefficient = maxRetryIntervalCoefficient.(float64)
+		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
 	}
 
-	exponentialBackoffCoefficient, ok := options["BackoffCoefficient"]
+	backoffCoefficient, ok := options["BackoffCoefficient"]
 	if ok {
-		defaultSettings.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
+		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
 	}
 
 	maximumAttempts, ok := options["MaximumAttempts"]
