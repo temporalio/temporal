@@ -368,32 +368,32 @@ func SortInt64Slice(slice []int64) {
 }
 
 // EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
-func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultPolicy *commonpb.RetryPolicy) *commonpb.RetryPolicy {
-	if originalPolicy == nil {
-		return defaultPolicy
-	}
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) *commonpb.RetryPolicy {
+	var merged *commonpb.RetryPolicy = &commonpb.RetryPolicy{}
 
-	merged := &commonpb.RetryPolicy{
-		BackoffCoefficient:       originalPolicy.GetBackoffCoefficient(),
-		InitialIntervalInSeconds: originalPolicy.GetInitialIntervalInSeconds(),
-		MaximumIntervalInSeconds: originalPolicy.GetMaximumIntervalInSeconds(),
-		MaximumAttempts:          originalPolicy.GetMaximumAttempts(),
+	if originalPolicy != nil {
+		merged = &commonpb.RetryPolicy{
+			BackoffCoefficient:       originalPolicy.GetBackoffCoefficient(),
+			InitialIntervalInSeconds: originalPolicy.GetInitialIntervalInSeconds(),
+			MaximumIntervalInSeconds: originalPolicy.GetMaximumIntervalInSeconds(),
+			MaximumAttempts:          originalPolicy.GetMaximumAttempts(),
+		}
 	}
 
 	if merged.GetMaximumAttempts() == 0 {
-		merged.MaximumAttempts = defaultPolicy.GetMaximumAttempts()
+		merged.MaximumAttempts = int32(defaultSettings.MaximumAttempts)
 	}
 
 	if merged.GetInitialIntervalInSeconds() == 0 {
-		merged.InitialIntervalInSeconds = defaultPolicy.GetInitialIntervalInSeconds()
+		merged.InitialIntervalInSeconds = int32(defaultSettings.InitialIntervalInSeconds)
 	}
 
 	if merged.GetMaximumIntervalInSeconds() == 0 {
-		merged.MaximumIntervalInSeconds = defaultPolicy.GetMaximumIntervalInSeconds()
+		merged.MaximumIntervalInSeconds = int32(defaultSettings.MaximumIntervalCoefficient * float64(merged.GetInitialIntervalInSeconds()))
 	}
 
 	if merged.GetBackoffCoefficient() == 0 {
-		merged.BackoffCoefficient = defaultPolicy.GetBackoffCoefficient()
+		merged.BackoffCoefficient = defaultSettings.BackoffCoefficient
 	}
 
 	return merged

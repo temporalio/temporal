@@ -29,13 +29,17 @@ import (
 	"math"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 )
+
+const defaultInitialIntervalInSeconds = 1
+const defaultMaximumIntervalCoefficient = 100.0
+const defaultBackoffCoefficient = 2.0
+const defaultMaximumAttempts = 0
 
 func getBackoffInterval(
 	now time.Time,
@@ -133,43 +137,49 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
 	return map[string]interface{}{
-		"InitialRetryIntervalInSeconds": 1,
-		"MaximumRetryIntervalInSeconds": 100,
-		"ExponentialBackoffCoefficient": 2.0,
-		"MaximumAttempts":               0,
+		"InitialIntervalInSeconds": 1,
+		"MaximumIntervalInSeconds": 100,
+		"BackoffCoefficient":       2.0,
+		"MaximumAttempts":          0,
 	}
 }
 
-func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
-	retryPolicy := &commonpb.RetryPolicy{}
-	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
-	if ok {
-		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
+func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) common.DefaultActivityRetrySettings {
+	defaultSettings := common.DefaultActivityRetrySettings{
+		InitialIntervalInSeconds:   defaultInitialIntervalInSeconds,
+		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
+		BackoffCoefficient:         defaultBackoffCoefficient,
+		MaximumAttempts:            defaultMaximumAttempts,
 	}
 
-	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
+	initialIntervalInSeconds, ok := options["InitialIntervalInSeconds"]
 	if ok {
-		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
+		defaultSettings.InitialIntervalInSeconds = int32(initialIntervalInSeconds.(int))
 	}
 
-	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
+	maximumIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
 	if ok {
-		retryPolicy.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
+		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
+	}
+
+	backoffCoefficient, ok := options["BackoffCoefficient"]
+	if ok {
+		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
 	}
 
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
-		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
+		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
 	}
 
-	err := common.ValidateRetryPolicy(retryPolicy)
+	err := common.ValidateRetryPolicy(common.EnsureRetryPolicyDefaults(nil, defaultSettings))
 	if err != nil {
 		panic(
 			fmt.Sprintf(
-				"Bad Default Activity Retry Policy defined: %+v failed validation %v",
-				retryPolicy,
+				"Bad Default Activity Retry Settings defined: %+v failed validation %v",
+				defaultSettings,
 				err))
 	}
 
-	return retryPolicy
+	return defaultSettings
 }
