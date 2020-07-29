@@ -25,11 +25,9 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
@@ -140,36 +138,35 @@ func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
 	}
 }
 
-func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
-	retryPolicy := &commonpb.RetryPolicy{}
+func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) common.DefaultActivityRetrySettings {
+	defaultSettings := common.DefaultActivityRetrySettings{}
 	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
 	if ok {
-		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
+		defaultSettings.InitialRetryIntervalInSeconds = int32(initialRetryInterval.(int))
+	} else {
+		defaultSettings.InitialRetryIntervalInSeconds = 1
 	}
 
-	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
+	maxRetryIntervalCoefficient, ok := options["MaximumRetryIntervalCoefficient"]
 	if ok {
-		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
+		defaultSettings.MaximumRetryIntervalCoefficient = maxRetryIntervalCoefficient.(float64)
+	} else {
+		defaultSettings.MaximumRetryIntervalCoefficient = 100
 	}
 
 	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
 	if ok {
-		retryPolicy.BackoffCoefficient = exponentialBackoffCoefficient.(float64)
+		defaultSettings.ExponentialBackoffCoefficient = exponentialBackoffCoefficient.(float64)
+	} else {
+		defaultSettings.ExponentialBackoffCoefficient = 2.0
 	}
 
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
-		retryPolicy.MaximumAttempts = int32(maximumAttempts.(int))
+		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
+	} else {
+		defaultSettings.MaximumAttempts = 0
 	}
 
-	err := common.ValidateRetryPolicy(retryPolicy)
-	if err != nil {
-		panic(
-			fmt.Sprintf(
-				"Bad Default Activity Retry Policy defined: %+v failed validation %v",
-				retryPolicy,
-				err))
-	}
-
-	return retryPolicy
+	return defaultSettings
 }
