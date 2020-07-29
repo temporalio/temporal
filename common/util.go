@@ -369,10 +369,10 @@ func SortInt64Slice(slice []int64) {
 
 // EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
 func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) *commonpb.RetryPolicy {
-	var merged commonpb.RetryPolicy = commonpb.RetryPolicy{}
+	var merged *commonpb.RetryPolicy = &commonpb.RetryPolicy{}
 
 	if originalPolicy != nil {
-		merged = commonpb.RetryPolicy{
+		merged = &commonpb.RetryPolicy{
 			BackoffCoefficient:       originalPolicy.GetBackoffCoefficient(),
 			InitialIntervalInSeconds: originalPolicy.GetInitialIntervalInSeconds(),
 			MaximumIntervalInSeconds: originalPolicy.GetMaximumIntervalInSeconds(),
@@ -396,7 +396,7 @@ func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSett
 		merged.BackoffCoefficient = defaultSettings.BackoffCoefficient
 	}
 
-	return &merged
+	return merged
 }
 
 // ValidateRetryPolicy validates a retry policy
