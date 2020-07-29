@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -425,8 +426,8 @@ func createExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 	startVersion int64,
@@ -487,8 +488,7 @@ func createExecution(
 			checksumDatablob.Encoding.String())
 	} else if versionHistories != nil {
 		// TODO also need to set the start / current / last write version
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
-		batch.Query(templateCreateWorkflowExecutionWithVersionHistoriesQuery,
+		batch.Query(templateCreateWorkflowExecutionQuery,
 			shardID,
 			namespaceID,
 			workflowID,
@@ -501,12 +501,10 @@ func createExecution(
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			versionHistoriesData,
-			versionHistoriesEncoding,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
 	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
 		if err != nil {
 			return err
 		}
@@ -537,8 +535,8 @@ func updateExecution(
 	batch *gocql.Batch,
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState,
-	versionHistories *serialization.DataBlob,
+	replicationState *persistenceblobs.ReplicationState,
+	versionHistories *history.VersionHistories,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,
@@ -600,15 +598,12 @@ func updateExecution(
 			condition)
 	} else if versionHistories != nil {
 		// TODO also need to set the start / current / last write version
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
-		batch.Query(templateUpdateWorkflowExecutionWithVersionHistoriesQuery,
+		batch.Query(templateUpdateWorkflowExecutionQuery,
 			executionDatablob.Data,
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
 			executionInfo.NextEventID,
-			versionHistoriesData,
-			versionHistoriesEncoding,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String(),
 			shardID,
@@ -620,7 +615,7 @@ func updateExecution(
 			rowTypeExecutionTaskID,
 			condition)
 	} else if replicationState != nil {
-		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(p.GenerateVersionProto(replicationState))
 		if err != nil {
 			return err
 		}
@@ -1536,12 +1531,12 @@ func updateBufferedEvents(
 	}
 }
 
-func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *p.ReplicationState {
+func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *persistenceblobs.ReplicationState {
 	if rv == nil && wei.ReplicationData == nil {
 		return nil
 	}
 
-	info := &p.ReplicationState{}
+	info := &persistenceblobs.ReplicationState{}
 	info.CurrentVersion = wei.CurrentVersion
 
 	if rv != nil {
@@ -1551,7 +1546,7 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 
 	if wei.ReplicationData != nil {
 		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
-		info.LastWriteEventID = wei.ReplicationData.LastWriteEventId
+		info.LastWriteEventId = wei.ReplicationData.LastWriteEventId
 	}
 
 	if info.LastReplicationInfo == nil {

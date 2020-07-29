@@ -150,7 +150,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
 	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
@@ -176,7 +176,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistenceblobs.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
 

@@ -700,7 +700,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{
 				ExecutionInfo:             mutableState.executionInfo,
-				ExecutionStats:            &persistence.ExecutionStats{},
+				ExecutionStats:            &persistenceblobs.ExecutionStats{},
 				ReplicationState:          mutableState.replicationState,
 				TransferTasks:             nil,
 				ReplicationTasks:          nil,

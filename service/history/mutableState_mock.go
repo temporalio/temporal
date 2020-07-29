@@ -1262,10 +1262,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingSignalExternalInfos() *gomock.
 }
 
 // GetReplicationState mocks base method.
-func (m *MockmutableState) GetReplicationState() *persistence.ReplicationState {
+func (m *MockmutableState) GetReplicationState() *persistenceblobs.ReplicationState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationState")
-	ret0, _ := ret[0].(*persistence.ReplicationState)
+	ret0, _ := ret[0].(*persistenceblobs.ReplicationState)
 	return ret0
 }
 

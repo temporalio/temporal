@@ -257,21 +257,6 @@ type (
 		CronSchedule string
 	}
 
-	// ExecutionStats is the statistics about workflow execution
-	ExecutionStats struct {
-		HistorySize int64
-	}
-
-	// ReplicationState represents mutable state information for global namespaces.
-	// This information is used by replication protocol when applying events from remote clusters
-	ReplicationState struct {
-		CurrentVersion      int64
-		StartVersion        int64
-		LastWriteVersion    int64
-		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replicationspb.ReplicationInfo
-	}
-
 	// ReplicationTaskInfoWrapper describes a replication task.
 	ReplicationTaskInfoWrapper struct {
 		*persistenceblobs.ReplicationTaskInfo
@@ -490,8 +475,8 @@ type (
 		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
-		ExecutionStats      *ExecutionStats
-		ReplicationState    *ReplicationState
+		ExecutionStats      *persistenceblobs.ExecutionStats
+		ReplicationState    *persistenceblobs.ReplicationState
 		BufferedEvents      []*historypb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
@@ -658,8 +643,8 @@ type (
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*persistenceblobs.ActivityInfo
@@ -688,8 +673,8 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
-		ExecutionStats   *ExecutionStats
-		ReplicationState *ReplicationState
+		ExecutionStats   *persistenceblobs.ExecutionStats
+		ReplicationState *persistenceblobs.ReplicationState
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*persistenceblobs.ActivityInfo
@@ -2168,7 +2153,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
-func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+func GenerateVersionProto(r *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
 		StartVersion:     &types.Int64Value{Value: r.StartVersion},
 		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},

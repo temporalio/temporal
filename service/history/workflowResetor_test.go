@@ -229,7 +229,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -254,7 +254,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -914,7 +914,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
@@ -938,7 +938,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &persistence.ExecutionStats{},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
 	}}
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
@@ -1500,16 +1500,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -1535,7 +1535,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2107,7 +2107,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
@@ -2206,16 +2206,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2240,7 +2240,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2806,16 +2806,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -2841,7 +2841,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3399,7 +3399,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {
@@ -3487,16 +3487,16 @@ func (s *resetorSuite) TestApplyReset() {
 		State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	}
 
-	forkRepState := &persistence.ReplicationState{
+	forkRepState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
-		LastWriteEventID:    common.EmptyEventID,
+		LastWriteEventId:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
 		LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -3522,7 +3522,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &persistence.ExecutionStats{},
+		ExecutionStats:   &persistenceblobs.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
@@ -4085,7 +4085,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
-	compareRepState.LastWriteEventID = 34
+	compareRepState.LastWriteEventId = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{
 		"standby": {

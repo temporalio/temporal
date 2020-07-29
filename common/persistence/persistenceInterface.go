@@ -30,9 +30,12 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
@@ -214,7 +217,7 @@ type (
 		ParentRunID                            string
 		InitiatedID                            int64
 		CompletionEventBatchID                 int64
-		CompletionEvent                        *serialization.DataBlob
+		CompletionEvent                        *historypb.HistoryEvent
 		TaskQueue                              string
 		WorkflowTypeName                       string
 		WorkflowRunTimeout                     int64
@@ -246,7 +249,7 @@ type (
 		ClientLibraryVersion                   string
 		ClientFeatureVersion                   string
 		ClientImpl                             string
-		AutoResetPoints                        *serialization.DataBlob
+		AutoResetPoints                        *workflow.ResetPoints
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool
@@ -268,8 +271,8 @@ type (
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		VersionHistories *serialization.DataBlob
+		ReplicationState *persistenceblobs.ReplicationState
+		VersionHistories *history.VersionHistories
 		ActivityInfos    map[int64]*persistenceblobs.ActivityInfo
 
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
@@ -335,8 +338,8 @@ type (
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		VersionHistories *serialization.DataBlob
+		ReplicationState *persistenceblobs.ReplicationState
+		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
 
@@ -367,8 +370,8 @@ type (
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		VersionHistories *serialization.DataBlob
+		ReplicationState *persistenceblobs.ReplicationState
+		VersionHistories *history.VersionHistories
 		StartVersion     int64
 		LastWriteVersion int64
 
@@ -678,7 +681,7 @@ func truncateDurationToSecondsInt64(d *time.Duration) int64 {
 	return int64(d.Truncate(time.Second).Seconds())
 }
 
-func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
+func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *persistenceblobs.ReplicationState, versionHistories *history.VersionHistories) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           executionInfo.State,
@@ -726,20 +729,14 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryNonRetryableErrorTypes:       executionInfo.NonRetryableErrorTypes,
 		EventStoreVersion:                 EventStoreVersion,
 		EventBranchToken:                  executionInfo.BranchToken,
-		AutoResetPoints:                   executionInfo.AutoResetPoints.Data,
-		AutoResetPointsEncoding:           executionInfo.AutoResetPoints.GetEncoding().String(),
+		AutoResetPoints:                   executionInfo.AutoResetPoints,
 		SearchAttributes:                  executionInfo.SearchAttributes,
 		Memo:                              executionInfo.Memo,
+		CompletionEvent:                   executionInfo.CompletionEvent,
 	}
 
 	if !executionInfo.ExpirationTime.IsZero() {
 		info.RetryExpirationTime = timestamp.TimestampFromTimePtr(&executionInfo.ExpirationTime).ToTime()
-	}
-
-	completionEvent := executionInfo.CompletionEvent
-	if completionEvent != nil {
-		info.CompletionEvent = completionEvent.Data
-		info.CompletionEventEncoding = string(completionEvent.Encoding)
 	}
 
 	info.StartVersion = startVersion
@@ -748,10 +745,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		// both unspecified
 		// this is allowed
 	} else if replicationState != nil && versionHistories == nil {
-		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventID}
+		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventId}
 	} else if versionHistories != nil && replicationState == nil {
-		info.VersionHistories = versionHistories.Data
-		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
+		info.VersionHistories = versionHistories
 	} else {
 		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("build workflow execution with both version histories and replication state."))
 	}
@@ -817,6 +813,8 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NonRetryableErrorTypes:                 info.GetRetryNonRetryableErrorTypes(),
 		SearchAttributes:                       info.GetSearchAttributes(),
 		Memo:                                   info.GetMemo(),
+		CompletionEvent:                        info.GetCompletionEvent(),
+		AutoResetPoints:					    info.GetAutoResetPoints(),
 	}
 
 	if info.GetRetryExpirationTime() != nil {
@@ -839,15 +837,5 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 
 	executionInfo.CompletionEventBatchID = info.CompletionEventBatchId
-
-	if info.CompletionEvent != nil {
-		executionInfo.CompletionEvent = NewDataBlob(info.CompletionEvent,
-			common.EncodingType(info.GetCompletionEventEncoding()))
-	}
-
-	if info.AutoResetPoints != nil {
-		executionInfo.AutoResetPoints = NewDataBlob(info.AutoResetPoints,
-			common.EncodingType(info.GetAutoResetPointsEncoding()))
-	}
 	return executionInfo
 }

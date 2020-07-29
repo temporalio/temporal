@@ -145,7 +145,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -212,7 +212,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -334,7 +334,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -418,7 +418,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -593,7 +593,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				State:                      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -722,7 +722,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 		Mode:    p.CreateWorkflowModeBrandNew,
@@ -755,11 +755,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	nextEventID := int64(3)
 	workflowTaskScheduleID := int64(2)
 	version := int64(0)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecution, taskqueue,
@@ -791,7 +791,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.GetRangeId(),
@@ -826,11 +826,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	updatedInfo.NextEventID = int64(6)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.AutoResetPoints = &testResetPoints
-	updateReplicationState := &p.ReplicationState{
+	updateReplicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: updatedInfo.NextEventID - 1,
+		LastWriteEventId: updatedInfo.NextEventID - 1,
 	}
 	csum := s.newRandomChecksum()
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
@@ -875,7 +875,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.GetRangeId(),
@@ -904,7 +904,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.GetRangeId(),
@@ -933,7 +933,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.GetRangeId(),
@@ -1000,7 +1000,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				NextEventID:                nextEventID,
 				LastProcessedEvent:         lastProcessedEventID,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 		},
 		RangeID:                  s.ShardInfo.GetRangeId(),
 		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
@@ -1109,7 +1109,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowTaskStartedID:      common.EmptyEventID,
 				WorkflowTaskTimeout:        1,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks: []p.Task{
 				&p.WorkflowTask{
 					TaskID:      s.GetNextSequenceNumber(),
@@ -1138,7 +1138,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflowWithReplicationState
 	}
 	startVersion := int64(144)
 	lastWriteVersion := int64(1444)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     startVersion, // we are only testing this attribute
 		CurrentVersion:   lastWriteVersion,
 		LastWriteVersion: lastWriteVersion,
@@ -1179,7 +1179,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflowWithReplicationState
 				WorkflowTaskStartedID:  common.EmptyEventID,
 				WorkflowTaskTimeout:    1,
 			},
-			ExecutionStats: &p.ExecutionStats{},
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
 			TransferTasks: []p.Task{
 				&p.WorkflowTask{
 					TaskID:      s.GetNextSequenceNumber(),
@@ -1265,14 +1265,14 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				SearchAttributes:           testSearchAttr,
 				Memo:                       testMemo,
 			},
-			ExecutionStats: &p.ExecutionStats{
+			ExecutionStats: &persistenceblobs.ExecutionStats{
 				HistorySize: int64(rand.Int31()),
 			},
-			ReplicationState: &p.ReplicationState{
+			ReplicationState: &persistenceblobs.ReplicationState{
 				CurrentVersion:   int64(rand.Int31()),
 				StartVersion:     int64(rand.Int31()),
 				LastWriteVersion: int64(rand.Int31()),
-				LastWriteEventID: int64(rand.Int31()),
+				LastWriteEventId: int64(rand.Int31()),
 				LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 					"r2": {Version: math.MaxInt32, LastEventId: math.MaxInt32},
 				},
@@ -1334,7 +1334,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.True(ok)
 	s.True(proto.Equal(testMemoVal, memoVal))
 
-	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
+	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventId, state.ReplicationState.LastWriteEventId)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.StartVersion, state.ReplicationState.StartVersion)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.CurrentVersion, state.ReplicationState.CurrentVersion)
@@ -3248,11 +3248,11 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	}}
 
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3,
-		0, 2, &p.ReplicationState{
+		0, 2, &persistenceblobs.ReplicationState{
 			CurrentVersion:   int64(9),
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
-			LastWriteEventID: int64(6),
+			LastWriteEventId: int64(6),
 			LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
@@ -3317,7 +3317,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
-	s.Equal(int64(6), replicationState0.LastWriteEventID)
+	s.Equal(int64(6), replicationState0.LastWriteEventId)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
 		log.Infof("replicationspb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
@@ -3341,7 +3341,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	updatedReplicationState.CurrentVersion = int64(10)
 	updatedReplicationState.StartVersion = int64(11)
 	updatedReplicationState.LastWriteVersion = int64(12)
-	updatedReplicationState.LastWriteEventID = int64(13)
+	updatedReplicationState.LastWriteEventId = int64(13)
 	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(4)
 	updatedReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(2)
 
@@ -3407,7 +3407,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(10), replicationState1.CurrentVersion)
 	s.Equal(int64(11), replicationState1.StartVersion)
 	s.Equal(int64(12), replicationState1.LastWriteVersion)
-	s.Equal(int64(13), replicationState1.LastWriteEventID)
+	s.Equal(int64(13), replicationState1.LastWriteEventId)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
 		log.Infof("replicationspb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
@@ -3552,11 +3552,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3, 0, 2, replicationState, nil)
 	s.NoError(err0)
@@ -3928,7 +3928,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			Control:     "signal_control_c",
 		}}
 
-	rState := &p.ReplicationState{
+	rState := &persistenceblobs.ReplicationState{
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
 	}
@@ -4047,11 +4047,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4104,13 +4104,13 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 		WorkflowTaskRequestID:      uuid.New(),
 		WorkflowTaskTimeout:        0,
 	}
-	resetStats := &p.ExecutionStats{}
+	resetStats := &persistenceblobs.ExecutionStats{}
 	resetActivityInfos := []*persistenceblobs.ActivityInfo{}
 	resetTimerInfos := []*persistenceblobs.TimerInfo{}
 	resetChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
 	resetSignalInfos := []*persistenceblobs.SignalInfo{}
-	rState := &p.ReplicationState{
+	rState := &persistenceblobs.ReplicationState{
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
 	}
@@ -4171,11 +4171,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4236,13 +4236,13 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 		WorkflowTaskRequestID:      uuid.New(),
 		WorkflowTaskTimeout:        0,
 	}
-	resetStats := &p.ExecutionStats{}
+	resetStats := &persistenceblobs.ExecutionStats{}
 	resetActivityInfos := []*persistenceblobs.ActivityInfo{}
 	resetTimerInfos := []*persistenceblobs.TimerInfo{}
 	resetChildExecutionInfos := []*persistenceblobs.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
 	resetSignalInfos := []*persistenceblobs.SignalInfo{}
-	rState := &p.ReplicationState{
+	rState := &persistenceblobs.ReplicationState{
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
 	}
@@ -4285,11 +4285,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4345,7 +4345,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		WorkflowTaskTimeout:        0,
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
-	resetReplicationState := &p.ReplicationState{
+	resetReplicationState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
@@ -4357,7 +4357,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:    resetExecutionInfo,
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: resetReplicationState,
 			Condition:        int64(5),
 
@@ -4371,7 +4371,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		NewWorkflowSnapshot: nil,
 		CurrentWorkflowMutation: &p.WorkflowMutation{
 			ExecutionInfo:    currentInfo,
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: currentState,
 			Condition:        int64(3),
 
@@ -4431,11 +4431,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4493,12 +4493,12 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
-	newWorkflowExecutionStats := &p.ExecutionStats{}
+	newWorkflowExecutionStats := &persistenceblobs.ExecutionStats{}
 	newWorkflowExecutionInfo.CreateRequestID = uuid.New()
 	newWorkflowExecutionInfo.RunID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"
 	newWorkflowExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	newWorkflowExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	newWorkflowExecutionState := &p.ReplicationState{
+	newWorkflowExecutionState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
@@ -4510,8 +4510,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:  resetExecutionInfo,
-			ExecutionStats: &p.ExecutionStats{},
-			ReplicationState: &p.ReplicationState{
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
 				LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
@@ -4611,11 +4611,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4648,7 +4648,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		WorkflowTaskTimeout:        0,
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
-	resetReplicationState := &p.ReplicationState{
+	resetReplicationState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
@@ -4660,7 +4660,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:    resetExecutionInfo,
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: resetReplicationState,
 			Condition:        nextEventID,
 
@@ -4714,11 +4714,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4752,12 +4752,12 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
-	newWorkflowExecutionStats := &p.ExecutionStats{}
+	newWorkflowExecutionStats := &persistenceblobs.ExecutionStats{}
 	newWorkflowExecutionInfo.CreateRequestID = uuid.New()
 	newWorkflowExecutionInfo.RunID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"
 	newWorkflowExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	newWorkflowExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	newWorkflowExecutionState := &p.ReplicationState{
+	newWorkflowExecutionState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
@@ -4769,8 +4769,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:  resetExecutionInfo,
-			ExecutionStats: &p.ExecutionStats{},
-			ReplicationState: &p.ReplicationState{
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
 				LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
@@ -4850,11 +4850,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -4904,7 +4904,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		WorkflowTaskTimeout:        0,
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
-	resetReplicationState := &p.ReplicationState{
+	resetReplicationState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
@@ -4916,7 +4916,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:    resetExecutionInfo,
-			ExecutionStats:   &p.ExecutionStats{},
+			ExecutionStats:   &persistenceblobs.ExecutionStats{},
 			ReplicationState: resetReplicationState,
 			Condition:        int64(5),
 
@@ -4966,11 +4966,11 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	}
 	version := int64(1234)
 	nextEventID := int64(3)
-	replicationState := &p.ReplicationState{
+	replicationState := &persistenceblobs.ReplicationState{
 		StartVersion:     version,
 		CurrentVersion:   version,
 		LastWriteVersion: version,
-		LastWriteEventID: nextEventID - 1,
+		LastWriteEventId: nextEventID - 1,
 	}
 	resp, err := s.CreateWorkflowExecutionWithReplication(namespaceID, workflowExecutionReset, "taskQueue", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
@@ -5021,12 +5021,12 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		AutoResetPoints:            &workflowpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
-	newWorkflowExecutionStats := &p.ExecutionStats{}
+	newWorkflowExecutionStats := &persistenceblobs.ExecutionStats{}
 	newWorkflowExecutionInfo.CreateRequestID = uuid.New()
 	newWorkflowExecutionInfo.RunID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"
 	newWorkflowExecutionInfo.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	newWorkflowExecutionInfo.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	newWorkflowExecutionState := &p.ReplicationState{
+	newWorkflowExecutionState := &persistenceblobs.ReplicationState{
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
@@ -5038,8 +5038,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 		ResetWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:  resetExecutionInfo,
-			ExecutionStats: &p.ExecutionStats{},
-			ReplicationState: &p.ReplicationState{
+			ExecutionStats: &persistenceblobs.ExecutionStats{},
+			ReplicationState: &persistenceblobs.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
 				LastReplicationInfo: map[string]*replicationspb.ReplicationInfo{},
@@ -5325,8 +5325,8 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 	}
 }
 
-func copyExecutionStats(sourceStats *p.ExecutionStats) *p.ExecutionStats {
-	return &p.ExecutionStats{
+func copyExecutionStats(sourceStats *persistenceblobs.ExecutionStats) *persistenceblobs.ExecutionStats {
+	return &persistenceblobs.ExecutionStats{
 		HistorySize: sourceStats.HistorySize,
 	}
 }
@@ -5358,12 +5358,12 @@ func timeComparatorGo(t1, t2 time.Time, timeTolerance time.Duration) bool {
 	return false
 }
 
-func copyReplicationState(sourceState *p.ReplicationState) *p.ReplicationState {
-	state := &p.ReplicationState{
+func copyReplicationState(sourceState *persistenceblobs.ReplicationState) *persistenceblobs.ReplicationState {
+	state := &persistenceblobs.ReplicationState{
 		CurrentVersion:   sourceState.CurrentVersion,
 		StartVersion:     sourceState.StartVersion,
 		LastWriteVersion: sourceState.LastWriteVersion,
-		LastWriteEventID: sourceState.LastWriteEventID,
+		LastWriteEventId: sourceState.LastWriteEventId,
 	}
 	if sourceState.LastReplicationInfo != nil {
 		state.LastReplicationInfo = map[string]*replicationspb.ReplicationInfo{}

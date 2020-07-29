@@ -172,12 +172,6 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
 		`, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
-	templateCreateWorkflowExecutionWithVersionHistoriesQuery = `INSERT INTO executions (` +
-		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, ` +
-		`visibility_ts, task_id, version_histories, version_histories_encoding, checksum, checksum_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
-
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -203,7 +197,7 @@ workflow_state = ? ` +
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_metadata, replication_metadata_encoding, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
-		`version_histories, version_histories_encoding, checksum, checksum_encoding ` +
+		`checksum, checksum_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -264,25 +258,6 @@ workflow_state = ? ` +
 		`, replication_metadata = ? ` +
 		`, replication_metadata_encoding = ? ` +
 		`, next_event_id = ? ` +
-		`, checksum = ? ` +
-		`, checksum_encoding = ? ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ? `
-
-	templateUpdateWorkflowExecutionWithVersionHistoriesQuery = `UPDATE executions ` +
-		`SET execution = ?` +
-		`, execution_encoding = ?` +
-		`, execution_state = ? ` +
-		`, execution_state_encoding = ? ` +
-		`, next_event_id = ? ` +
-		`, version_histories = ? ` +
-		`, version_histories_encoding = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -1109,16 +1084,11 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, convertCommonErrors("GetWorkflowExecution", err)
 	}
 
-	info, replicationState, err := workflowExecutionFromRow(result)
+	state, err := mutableStateFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
-	state := &p.InternalWorkflowMutableState{
-		ExecutionInfo:    info,
-		ReplicationState: replicationState,
-		VersionHistories: p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string))),
-	}
 
 	if state.VersionHistories != nil && state.ReplicationState != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."))
@@ -1929,7 +1899,8 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 			continue
 		}
 		if _, ok := result["execution"]; ok {
-			wfInfo, _, _ := workflowExecutionFromRow(result)
+			state, _ := mutableStateFromRow(result)
+			wfInfo := state.ExecutionInfo
 			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
 		}
 		result = make(map[string]interface{})
@@ -2806,45 +2777,50 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *p.ReplicationState, error) {
+func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMutableState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
+		return nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
 	}
 
 	eiEncoding, ok := result["execution_encoding"].(string)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
+		return nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
 	}
 
 	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	nextEventID, ok := result["next_event_id"].(int64)
 	if !ok {
-		return nil, nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
+		return nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
 	}
 
 	protoState, err := protoExecutionStateFromRow(result)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
 
-	var state *p.ReplicationState
+	var state *persistenceblobs.ReplicationState
 	if protoInfo.ReplicationData != nil {
 		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
 	}
 
-	return info, state, nil
+	mutableState := &p.InternalWorkflowMutableState{
+		ExecutionInfo:    info,
+		ReplicationState: state,
+		VersionHistories: protoInfo.VersionHistories,
+	}
+	return mutableState, nil
 }
 
 func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {

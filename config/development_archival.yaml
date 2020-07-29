@@ -7,15 +7,17 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal"
+        user: "mark"
+        password: "password"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility"
-
 global:
   membership:
     name: temporal
     maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
   pprof:
     port: 7936
 
@@ -26,9 +28,9 @@ services:
       membershipPort: 6933
       bindOnLocalHost: true
     metrics:
-      prometheus:
-        timerType: "histogram"
-        listenAddress: "127.0.0.1:8000"
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "temporal"
 
   matching:
     rpc:
@@ -36,9 +38,9 @@ services:
       membershipPort: 6935
       bindOnLocalHost: true
     metrics:
-      prometheus:
-        timerType: "histogram"
-        listenAddress: "127.0.0.1:8001"
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "temporal"
 
   history:
     rpc:
@@ -46,9 +48,9 @@ services:
       membershipPort: 6934
       bindOnLocalHost: true
     metrics:
-      prometheus:
-        timerType: "histogram"
-        listenAddress: "127.0.0.1:8002"
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "temporal"
 
   worker:
     rpc:
@@ -56,9 +58,9 @@ services:
       membershipPort: 6939
       bindOnLocalHost: true
     metrics:
-      prometheus:
-        timerType: "histogram"
-        listenAddress: "127.0.0.1:8003"
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "temporal"
 
 clusterMetadata:
   enableGlobalNamespace: false
@@ -84,6 +86,8 @@ archival:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
     state: "enabled"
     enableRead: true
@@ -95,13 +99,15 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      state: "disabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      state: "disabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
+  tls:
+    enabled: false
   clusters:
     test:
       brokers:
@@ -113,5 +119,9 @@ kafka:
       cluster: test
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "localhost:7233"
+
+dynamicConfigClient:
+  filepath: "./config/dynamicconfig/development.yaml"
+  pollInterval: "10s"
 

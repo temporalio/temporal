@@ -112,7 +112,7 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistenceblobs.ReplicationState{}).AnyTimes()
 	s.stateBuilder = newStateBuilder(
 		s.mockShard,
 		s.logger,

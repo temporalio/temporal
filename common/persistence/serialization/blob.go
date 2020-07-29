@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common"
 )
@@ -251,6 +252,15 @@ func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (Data
 
 func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationVersions, error) {
 	result := &persistenceblobs.ReplicationVersions{}
+	return result, proto3Decode(b, proto, result)
+}
+
+func VersionHistoriesToBlob(info *historyspb.VersionHistories) (DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func VersionHistoriesFromBlob(b []byte, proto string) (*historyspb.VersionHistories, error) {
+	result := &historyspb.VersionHistories{}
 	return result, proto3Decode(b, proto, result)
 }
 
