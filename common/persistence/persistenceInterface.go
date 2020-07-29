@@ -94,6 +94,7 @@ type (
 
 		// Scan related methods
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
+		ListCurrentExecutions(request *ListCurrentExecutionsRequest) (*ListCurrentExecutionsResponse, error)
 	}
 
 	// HistoryStore is to manager workflow history events

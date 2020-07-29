@@ -125,5 +125,43 @@ func getCurrentExecutionsPersistenceFetchPageFn(
 	pageSize int,
 	shardID int,
 ) pagination.FetchFn {
-	panic("not implemented yet")
+	return func(token pagination.PageToken) (pagination.Page, error) {
+		req := &persistence.ListCurrentExecutionsRequest{
+			PageSize: pageSize,
+		}
+		if token != nil {
+			req.PageToken = token.([]byte)
+		}
+		resp, err := pr.ListCurrentExecutions(req)
+		if err != nil {
+			return pagination.Page{}, err
+		}
+		executions := make([]pagination.Entity, len(resp.Executions), len(resp.Executions))
+		for i, e := range resp.Executions {
+			currentExec := &CurrentExecution{
+				CurrentRunID: e.CurrentRunID,
+				Execution: Execution{
+					ShardID:    shardID,
+					DomainID:   e.DomainID,
+					WorkflowID: e.WorkflowID,
+					RunID:      e.RunID,
+					State:      e.State,
+				},
+			}
+			if err := ValidateCurrentExecution(currentExec); err != nil {
+				return pagination.Page{}, err
+			}
+			executions[i] = currentExec
+		}
+		var nextToken interface{} = resp.PageToken
+		if len(resp.PageToken) == 0 {
+			nextToken = nil
+		}
+		page := pagination.Page{
+			CurrentToken: token,
+			NextToken:    nextToken,
+			Entities:     executions,
+		}
+		return page, nil
+	}
 }

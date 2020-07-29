@@ -778,6 +778,12 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	return m.persistence.GetCurrentExecution(request)
 }
 
+func (m *executionManagerImpl) ListCurrentExecutions(
+	request *ListCurrentExecutionsRequest,
+) (*ListCurrentExecutionsResponse, error) {
+	return m.persistence.ListCurrentExecutions(request)
+}
+
 func (m *executionManagerImpl) IsWorkflowExecutionExists(
 	request *IsWorkflowExecutionExistsRequest,
 ) (*IsWorkflowExecutionExistsResponse, error) {

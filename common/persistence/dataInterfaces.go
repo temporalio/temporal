@@ -353,6 +353,15 @@ type (
 		LastReplicationInfo map[string]*ReplicationInfo
 	}
 
+	// CurrentWorkflowExecution describes a current execution record
+	CurrentWorkflowExecution struct {
+		DomainID     string
+		WorkflowID   string
+		RunID        string
+		State        int
+		CurrentRunID string
+	}
+
 	// TransferTaskInfo describes a transfer task
 	TransferTaskInfo struct {
 		DomainID                string
@@ -793,6 +802,18 @@ type (
 	GetCurrentExecutionRequest struct {
 		DomainID   string
 		WorkflowID string
+	}
+
+	// ListCurrentExecutionsRequest is request to ListCurrentExecutions
+	ListCurrentExecutionsRequest struct {
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListCurrentExecutionsResponse is the response to ListCurrentExecutionsRequest
+	ListCurrentExecutionsResponse struct {
+		Executions []*CurrentWorkflowExecution
+		PageToken  []byte
 	}
 
 	// IsWorkflowExecutionExistsRequest is used to check if the concrete execution exists
@@ -1558,6 +1579,7 @@ type (
 
 		// Scan operations
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+		ListCurrentExecutions(request *ListCurrentExecutionsRequest) (*ListCurrentExecutionsResponse, error)
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

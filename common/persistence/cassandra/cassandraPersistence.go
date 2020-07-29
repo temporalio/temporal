@@ -440,6 +440,11 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateListCurrentExecutionsQuery = `SELECT domain_id, workflow_id, run_id, current_run_id, workflow_state ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ?`
+
 	templateIsWorkflowExecutionExistsQuery = `SELECT shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -2061,6 +2066,50 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		CloseStatus:      executionInfo.CloseStatus,
 		LastWriteVersion: replicationState.LastWriteVersion,
 	}, nil
+}
+
+func (d *cassandraPersistence) ListCurrentExecutions(
+	request *p.ListCurrentExecutionsRequest,
+) (*p.ListCurrentExecutionsResponse, error) {
+	query := d.session.Query(
+		templateListCurrentExecutionsQuery,
+		d.shardID,
+		rowTypeExecution,
+	).PageSize(request.PageSize).PageState(request.PageToken)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: "ListCurrentExecutions operation failed. Not able to create query iterator.",
+		}
+	}
+	response := &p.ListCurrentExecutionsResponse{}
+	result := make(map[string]interface{})
+	for iter.MapScan(result) {
+		runID := result["run_id"].(gocql.UUID).String()
+		if runID != permanentRunID {
+			result = make(map[string]interface{})
+			continue
+		}
+		response.Executions = append(response.Executions, &p.CurrentWorkflowExecution{
+			DomainID:     result["domain_id"].(gocql.UUID).String(),
+			WorkflowID:   result["workflow_id"].(string),
+			RunID:        result["run_id"].(gocql.UUID).String(),
+			State:        result["workflow_state"].(int),
+			CurrentRunID: result["current_run_id"].(gocql.UUID).String(),
+		})
+		result = make(map[string]interface{})
+	}
+	nextPageToken := iter.PageState()
+	response.PageToken = make([]byte, len(nextPageToken))
+	copy(response.PageToken, nextPageToken)
+
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ListCurrentExecutions operation failed. Error: %v", err),
+		}
+	}
+	return response, nil
 }
 
 func (d *cassandraPersistence) IsWorkflowExecutionExists(request *p.IsWorkflowExecutionExistsRequest) (*p.IsWorkflowExecutionExistsResponse,

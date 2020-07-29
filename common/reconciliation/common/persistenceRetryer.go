@@ -102,6 +102,24 @@ func (pr *persistenceRetryer) GetCurrentExecution(
 	return resp, nil
 }
 
+// ListCurrentExecutions retries ListCurrentExecutions
+func (pr *persistenceRetryer) ListCurrentExecutions(
+	req *persistence.ListCurrentExecutionsRequest,
+) (*persistence.ListCurrentExecutionsResponse, error) {
+	var resp *persistence.ListCurrentExecutionsResponse
+	op := func() error {
+		var err error
+		resp, err = pr.execManager.ListCurrentExecutions(req)
+		return err
+	}
+	var err error
+	err = backoff.Retry(op, retryPolicy, common.IsPersistenceTransientError)
+	if err == nil {
+		return resp, nil
+	}
+	return nil, err
+}
+
 // IsWorkflowExecutionExists retries IsWorkflowExecutionExists
 func (pr *persistenceRetryer) IsWorkflowExecutionExists(
 	req *persistence.IsWorkflowExecutionExistsRequest,

@@ -836,6 +836,12 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	}, nil
 }
 
+func (m *sqlExecutionManager) ListCurrentExecutions(
+	_ *p.ListCurrentExecutionsRequest,
+) (*p.ListCurrentExecutionsResponse, error) {
+	return nil, &workflow.InternalServiceError{Message: "Not yet implemented"}
+}
+
 func (m *sqlExecutionManager) IsWorkflowExecutionExists(
 	request *p.IsWorkflowExecutionExistsRequest,
 ) (*p.IsWorkflowExecutionExistsResponse, error) {
