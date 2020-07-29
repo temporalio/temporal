@@ -35,6 +35,11 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
+const defaultInitialRetryIntervalInSeconds = 1
+const defaultMaximumRetryIntervalCoefficient = 100.0
+const defaultExponentialBackoffCoefficient = 2.0
+const defaultMaximumAttempts = 0
+
 func getBackoffInterval(
 	now time.Time,
 	expirationTime time.Time,
@@ -144,28 +149,28 @@ func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) co
 	if ok {
 		defaultSettings.InitialRetryIntervalInSeconds = int32(initialRetryInterval.(int))
 	} else {
-		defaultSettings.InitialRetryIntervalInSeconds = 1
+		defaultSettings.InitialRetryIntervalInSeconds = defaultInitialRetryIntervalInSeconds
 	}
 
 	maxRetryIntervalCoefficient, ok := options["MaximumRetryIntervalCoefficient"]
 	if ok {
 		defaultSettings.MaximumRetryIntervalCoefficient = maxRetryIntervalCoefficient.(float64)
 	} else {
-		defaultSettings.MaximumRetryIntervalCoefficient = 100
+		defaultSettings.MaximumRetryIntervalCoefficient = defaultMaximumRetryIntervalCoefficient
 	}
 
 	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]
 	if ok {
 		defaultSettings.ExponentialBackoffCoefficient = exponentialBackoffCoefficient.(float64)
 	} else {
-		defaultSettings.ExponentialBackoffCoefficient = 2.0
+		defaultSettings.ExponentialBackoffCoefficient = defaultExponentialBackoffCoefficient
 	}
 
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
 	} else {
-		defaultSettings.MaximumAttempts = 0
+		defaultSettings.MaximumAttempts = defaultMaximumAttempts
 	}
 
 	return defaultSettings
