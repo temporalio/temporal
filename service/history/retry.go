@@ -25,6 +25,7 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -169,6 +170,15 @@ func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) co
 	maximumAttempts, ok := options["MaximumAttempts"]
 	if ok {
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
+	}
+
+	err := common.ValidateRetryPolicy(common.EnsureRetryPolicyDefaults(nil, defaultSettings))
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Bad Default Activity Retry Settings defined: %+v failed validation %v",
+				defaultSettings,
+				err))
 	}
 
 	return defaultSettings
