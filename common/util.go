@@ -389,7 +389,7 @@ func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultPoli
 	}
 
 	if merged.GetMaximumIntervalInSeconds() == 0 {
-		merged.MaximumIntervalInSeconds = defaultPolicy.GetMaximumIntervalInSeconds()
+		merged.MaximumIntervalInSeconds = 100 * merged.GetInitialIntervalInSeconds()
 	}
 
 	if merged.GetBackoffCoefficient() == 0 {
