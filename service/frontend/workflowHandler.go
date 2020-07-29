@@ -3181,6 +3181,7 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 	return &workflowservice.ListTaskQueuePartitionsResponse{
 		ActivityTaskQueuePartitions: matchingResponse.ActivityTaskQueuePartitions,
 		WorkflowTaskQueuePartitions: matchingResponse.WorkflowTaskQueuePartitions,
+		Pollers:                     matchingResponse.Pollers,
 	}, err
 }
 

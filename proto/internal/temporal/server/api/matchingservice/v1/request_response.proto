@@ -164,4 +164,5 @@ message ListTaskQueuePartitionsRequest {
 message ListTaskQueuePartitionsResponse {
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata workflow_task_queue_partitions = 2;
+    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 3;
 }

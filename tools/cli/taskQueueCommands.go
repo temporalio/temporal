@@ -89,6 +89,10 @@ func ListTaskQueuePartitions(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Operation ListTaskQueuePartitions failed.", err)
 	}
+
+	if len(response.Pollers) == 0 {
+		ErrorAndExit(colorMagenta("No poller for taskqueue: "+taskQueue), nil)
+	}
 	if len(response.WorkflowTaskQueuePartitions) > 0 {
 		printTaskQueuePartitions("Workflow", response.WorkflowTaskQueuePartitions)
 	}

@@ -592,10 +592,30 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	return tlMgr.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
 }
 
+func (e *matchingEngineImpl) getPollers(request *matchingservice.ListTaskQueuePartitionsRequest) ([]*taskqueuepb.PollerInfo, error) {
+	namespace := request.GetNamespace()
+	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	taskQueueID, err := newTaskQueueID(namespaceID, request.TaskQueue.Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	tqMgr, err := e.getTaskQueueManager(taskQueueID, request.TaskQueue.Kind)
+	if err != nil {
+		return nil, err
+	}
+	return tqMgr.GetAllPollerInfo(), err
+}
+
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	hCtx *handlerContext,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+
 	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return nil, err
@@ -604,9 +624,16 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	if err != nil {
 		return nil, err
 	}
+
+	pollers, err := e.getPollers(request)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := matchingservice.ListTaskQueuePartitionsResponse{
 		ActivityTaskQueuePartitions: activityTaskQueueInfo,
 		WorkflowTaskQueuePartitions: workflowTaskQueueInfo,
+		Pollers:                     pollers,
 	}
 	return &resp, nil
 }
