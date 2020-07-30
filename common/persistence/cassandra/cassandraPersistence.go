@@ -773,7 +773,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId())
 
 	previous := make(map[string]interface{})
@@ -833,7 +833,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 
 	query := d.session.Query(templateUpdateShardQuery,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId(),
 		shardInfo.GetShardId(), // Where
 		rowTypeShard,
@@ -1397,7 +1397,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 		newRunID,
 		stateDatablob.Data,
-		stateDatablob.Encoding,
+		stateDatablob.Encoding.String(),
 		replicationVersions.Data,
 		replicationVersions.Encoding.String(),
 		lastWriteVersion,
@@ -2239,7 +2239,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 				taskQueueTaskID,
 				initialRangeID,
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 			)
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
@@ -2276,7 +2276,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		query = d.session.Query(templateUpdateTaskQueueQuery,
 			rangeID+1,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			request.NamespaceID,
 			&request.TaskQueue,
 			request.TaskType,
@@ -2325,7 +2325,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 			taskQueueTaskID,
 			request.RangeID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			stickyTaskQueueTTL,
 		)
 		err = query.Exec()
@@ -2345,7 +2345,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
@@ -2430,7 +2430,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding)
+				datablob.Encoding.String())
 		} else {
 			if ttl > maxCassandraTTL {
 				ttl = maxCassandraTTL
@@ -2443,7 +2443,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 				ttl)
 		}
 	}
@@ -2460,7 +2460,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	batch.Query(templateUpdateTaskQueueQuery,
 		request.TaskQueueInfo.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
@@ -2697,7 +2697,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		defaultVisibilityTimestamp,
 		task.GetTaskId())
 

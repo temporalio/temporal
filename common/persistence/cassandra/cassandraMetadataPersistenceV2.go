@@ -155,7 +155,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 		request.ID,
 		request.Name,
 		request.Namespace.Data,
-		request.Namespace.Encoding,
+		request.Namespace.Encoding.String(),
 		metadata.NotificationVersion,
 		request.IsGlobal,
 	)

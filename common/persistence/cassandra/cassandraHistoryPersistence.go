@@ -128,13 +128,13 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 		batch := h.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
-			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding.String())
 		batch.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
 		err = h.session.ExecuteBatch(batch)
 	} else {
 		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding.String())
 		err = query.Exec()
 	}
 
@@ -318,7 +318,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
-	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding)
+	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding.String())
 	err = query.Exec()
 	if err != nil {
 		return nil, convertCommonErrors("ForkHistoryBranch", err)

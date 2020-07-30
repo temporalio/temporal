@@ -112,7 +112,7 @@ func (m *cassandraClusterMetadata) Close() {
 func (m *cassandraClusterMetadata) InitializeImmutableClusterMetadata(
 	request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
 	query := m.session.Query(templateInitImmutableClusterMetadata, constMetadataPartition,
-		request.ImmutableClusterMetadata.Data, request.ImmutableClusterMetadata.Encoding)
+		request.ImmutableClusterMetadata.Data, request.ImmutableClusterMetadata.Encoding.String())
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)

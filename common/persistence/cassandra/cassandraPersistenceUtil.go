@@ -783,7 +783,7 @@ func createTransferTasks(
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -863,7 +863,7 @@ func createReplicationTasks(
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -953,7 +953,7 @@ func createTimerTasks(
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			dbTs,
 			task.GetTaskID())
 	}
@@ -1080,7 +1080,7 @@ func updateActivityInfos(
 		batch.Query(templateUpdateActivityInfoQuery,
 			a.ScheduleId,
 			activityBlob.Data,
-			activityBlob.Encoding,
+			activityBlob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1139,7 +1139,7 @@ func resetActivityInfos(
 
 	batch.Query(templateResetActivityInfoQuery,
 		infoMap,
-		encoding,
+		encoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1166,10 +1166,10 @@ func updateTimerInfos(
 		}
 
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.GetTimerId(),    // timermap key
-			datablob.Data,     // timermap data
-			datablob.Encoding, // timermap encoding
-			shardID,           // where ...
+			a.GetTimerId(),             // timermap key
+			datablob.Data,              // timermap data
+			datablob.Encoding.String(), // timermap encoding
+			shardID,                    // where ...
 			rowTypeExecution,
 			namespaceID,
 			workflowID,
@@ -1209,7 +1209,7 @@ func resetTimerInfos(
 
 	batch.Query(templateResetTimerInfoQuery,
 		timerMap,
-		timerMapEncoding,
+		timerMapEncoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1240,7 +1240,7 @@ func updateChildExecutionInfos(
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			c.InitiatedId,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1280,7 +1280,7 @@ func resetChildExecutionInfos(
 	}
 	batch.Query(templateResetChildExecutionInfoQuery,
 		infoMap,
-		encoding,
+		encoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1310,7 +1310,7 @@ func updateRequestCancelInfos(
 		batch.Query(templateUpdateRequestCancelInfoQuery,
 			c.GetInitiatedId(),
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1353,7 +1353,7 @@ func resetRequestCancelInfos(
 
 	batch.Query(templateResetRequestCancelInfoQuery,
 		rciMap,
-		rciMapEncoding,
+		rciMapEncoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1384,7 +1384,7 @@ func updateSignalInfos(
 		batch.Query(templateUpdateSignalInfoQuery,
 			c.GetInitiatedId(),
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1426,7 +1426,7 @@ func resetSignalInfos(
 
 	batch.Query(templateResetSignalInfoQuery,
 		sMap,
-		sMapEncoding,
+		sMapEncoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1515,7 +1515,7 @@ func updateBufferedEvents(
 			rowTypeExecutionTaskID)
 	} else if newBufferedEvents != nil {
 		values := make(map[string]interface{})
-		values["encoding_type"] = newBufferedEvents.Encoding
+		values["encoding_type"] = newBufferedEvents.Encoding.String()
 		values["version"] = int64(0)
 		values["data"] = newBufferedEvents.Data
 		newEventValues := []map[string]interface{}{values}
