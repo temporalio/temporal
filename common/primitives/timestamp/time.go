@@ -173,28 +173,6 @@ func TimePtr(t time.Time) *time.Time {
 	return &t
 }
 
-func AddDurationPtrToTime(t time.Time, duration *time.Duration) time.Time {
-	// TODO: Replace this with TimeValue and DurationValue
-	if duration != nil {
-		return t.Add(*duration)
-	} else {
-		return t
-	}
-}
-
-func AddDurationPtrToTimePtr(t *time.Time, duration *time.Duration) time.Time {
-	// TODO: Replace this with TimeValue and DurationValue
-	if duration != nil && t != nil {
-		return t.Add(*duration)
-	} else if duration != nil && t == nil {
-		return time.Unix(0, 0).Add(*duration)
-	} else if t != nil {
-		return *t
-	} else {
-		return time.Unix(0, 0)
-	}
-}
-
 func TimeValue(t *time.Time) time.Time {
 	if t == nil {
 		return time.Time{}
