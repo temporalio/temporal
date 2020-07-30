@@ -34,7 +34,7 @@ const (
 	// EmptyEventID is the id of the empty event
 	EmptyEventID int64 = -23
 	// EmptyVersion is used as the default value for failover version when no value is provided
-	EmptyVersion int64 = -24
+	EmptyVersion int64 = 0
 	// EndEventID is the id of the end event, here we use the int64 max
 	EndEventID int64 = 1<<63 - 1
 	// BufferedEventID is the id of the buffered event
