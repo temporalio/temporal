@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -194,11 +193,9 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 	}
 
 	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
-	eventBlob := &serialization.DataBlob{}
 
 	for _, row := range rows {
-		eventBlob.Data = row.Data
-		eventBlob.Encoding = common.EncodingType(row.DataEncoding)
+		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
 
 		if *row.TxnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase

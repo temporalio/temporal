@@ -1558,14 +1558,14 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 
 func resetActivityInfoMap(
 	activityInfos []*persistenceblobs.ActivityInfo,
-) (map[int64][]byte, common.EncodingType, error) {
+) (map[int64][]byte, enumspb.EncodingType, error) {
 
-	encoding := common.EncodingTypeUnknown
+	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
 	aMap := make(map[int64][]byte)
 	for _, a := range activityInfos {
 		aBlob, err := serialization.ActivityInfoToBlob(a)
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityId))
+			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityId))
 		}
 
 		aMap[a.ScheduleId] = aBlob.Data
@@ -1577,15 +1577,15 @@ func resetActivityInfoMap(
 
 func resetTimerInfoMap(
 	timerInfos []*persistenceblobs.TimerInfo,
-) (map[string][]byte, common.EncodingType, error) {
+) (map[string][]byte, enumspb.EncodingType, error) {
 
 	tMap := make(map[string][]byte)
-	var encoding common.EncodingType
+	var encoding enumspb.EncodingType
 	for _, t := range timerInfos {
 		datablob, err := serialization.TimerInfoToBlob(t)
 
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, err
+			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
 		encoding = datablob.Encoding
@@ -1598,14 +1598,14 @@ func resetTimerInfoMap(
 
 func resetChildExecutionInfoMap(
 	childExecutionInfos []*persistenceblobs.ChildExecutionInfo,
-) (map[int64][]byte, common.EncodingType, error) {
+) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	cMap := make(map[int64][]byte)
-	encoding := common.EncodingTypeUnknown
+	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
 	for _, c := range childExecutionInfos {
 		datablob, err := serialization.ChildExecutionInfoToBlob(c)
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedId))
+			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedId))
 		}
 		cMap[c.InitiatedId] = datablob.Data
 		encoding = datablob.Encoding
@@ -1616,15 +1616,15 @@ func resetChildExecutionInfoMap(
 
 func resetRequestCancelInfoMap(
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
-) (map[int64][]byte, common.EncodingType, error) {
+) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	rcMap := make(map[int64][]byte)
-	var encoding common.EncodingType
+	var encoding enumspb.EncodingType
 	for _, rc := range requestCancelInfos {
 		datablob, err := serialization.RequestCancelInfoToBlob(rc)
 
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, err
+			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
 		encoding = datablob.Encoding
@@ -1637,15 +1637,15 @@ func resetRequestCancelInfoMap(
 
 func resetSignalInfoMap(
 	signalInfos []*persistenceblobs.SignalInfo,
-) (map[int64][]byte, common.EncodingType, error) {
+) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	sMap := make(map[int64][]byte)
-	var encoding common.EncodingType
+	var encoding enumspb.EncodingType
 	for _, s := range signalInfos {
 		datablob, err := serialization.SignalInfoToBlob(s)
 
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, err
+			return nil, enumspb.ENCODING_TYPE_UNSPECIFIED, err
 		}
 
 		encoding = datablob.Encoding
@@ -1660,7 +1660,7 @@ func createHistoryEventBatchBlob(
 	result map[string]interface{},
 ) *serialization.DataBlob {
 
-	eventBatch := &serialization.DataBlob{Encoding: common.EncodingTypeJSON}
+	eventBatch := &serialization.DataBlob{Encoding: enumspb.ENCODING_TYPE_JSON}
 	for k, v := range result {
 		switch k {
 		case "encoding_type":

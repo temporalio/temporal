@@ -1602,17 +1602,17 @@ func GenerateRandomDBName(n int) string {
 	return prefix.String()
 }
 
-func pickRandomEncoding() common.EncodingType {
+func pickRandomEncoding() enumspb.EncodingType {
 	// randomly pick json/thriftrw/empty as encoding type
-	var encoding common.EncodingType
+	var encoding enumspb.EncodingType
 	i := rand.Intn(3)
 	switch i {
 	case 0:
-		encoding = common.EncodingTypeJSON
+		encoding = enumspb.ENCODING_TYPE_JSON
 	case 1:
-		encoding = common.EncodingTypeProto3
+		encoding = enumspb.ENCODING_TYPE_PROTO3
 	case 2:
-		encoding = common.EncodingType("")
+		encoding = enumspb.ENCODING_TYPE_UNSPECIFIED
 	}
 	return encoding
 }

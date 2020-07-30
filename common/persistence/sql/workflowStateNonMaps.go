@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -167,7 +166,7 @@ func getBufferedEvents(
 	}
 	var result []*serialization.DataBlob
 	for _, row := range rows {
-		result = append(result, p.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)))
+		result = append(result, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 	return result, nil
 }

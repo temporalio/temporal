@@ -32,7 +32,6 @@ import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -158,7 +157,7 @@ func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previo
 	}
 
 	return &p.InternalInitializeImmutableClusterMetadataResponse{
-		PersistedImmutableMetadata: p.NewDataBlob(imData, common.EncodingType(imDataEncoding)),
+		PersistedImmutableMetadata: p.NewDataBlob(imData, imDataEncoding),
 		RequestApplied:             false,
 	}, nil
 }
@@ -173,7 +172,7 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
-		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, common.EncodingType(encoding)),
+		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, encoding),
 	}, nil
 }
 

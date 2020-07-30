@@ -62,20 +62,6 @@ const (
 	WorkerServiceName = "worker"
 )
 
-// Data encoding types
-const (
-	// todo: Deprecate and use protoEncodingEnum.ToString()
-	EncodingTypeJSON    EncodingType = "json"
-	EncodingTypeGob     EncodingType = "gob"
-	EncodingTypeUnknown EncodingType = "unknow"
-	EncodingTypeEmpty   EncodingType = ""
-	EncodingTypeProto3  EncodingType = "proto3"
-)
-
-func (e EncodingType) String() string {
-	return string(e)
-}
-
 type (
 	// EncodingType is an enum that represents various data encoding types
 	EncodingType string

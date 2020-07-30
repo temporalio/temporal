@@ -638,16 +638,19 @@ type (
 )
 
 // NewDataBlob returns a new DataBlob
-func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.DataBlob {
-	if data == nil || len(data) == 0 {
+func NewDataBlob(data []byte, encodingTypeStr string) *serialization.DataBlob {
+	if len(data) == 0 {
 		return nil
 	}
-	if encodingType != common.EncodingTypeProto3 && data[0] == 'Y' {
-		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
+
+	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
+	if !ok || enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 {
+		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingTypeStr))
 	}
+
 	return &serialization.DataBlob{
 		Data:     data,
-		Encoding: encodingType,
+		Encoding: enumspb.EncodingType(encodingType),
 	}
 }
 
@@ -661,19 +664,9 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 
 // NewDataBlobFromProto convert data blob from Proto representation
 func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
-	switch blob.GetEncodingType() {
-	case enumspb.ENCODING_TYPE_JSON:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeJSON,
-			Data:     blob.Data,
-		}
-	case enumspb.ENCODING_TYPE_PROTO3:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeProto3,
-			Data:     blob.Data,
-		}
-	default:
-		panic(fmt.Sprintf("NewDataBlobFromProto seeing unsupported enconding type: %v", blob.GetEncodingType()))
+	return &serialization.DataBlob{
+		Encoding: blob.GetEncodingType(),
+		Data:     blob.Data,
 	}
 }
 
