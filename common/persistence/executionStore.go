@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -200,7 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 	var serializedNewWorkflowSnapshot *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
-		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -223,7 +224,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
 	stats *persistenceblobs.ExecutionStats,
-	encoding common.EncodingType,
 ) (*InternalWorkflowExecutionInfo, error) {
 
 	if info == nil {
@@ -294,7 +294,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	request *ConflictResolveWorkflowExecutionRequest,
 ) error {
 
-	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot, request.Encoding)
+	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot)
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
-		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
 			return err
 		}
@@ -339,7 +339,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(
 	request *ResetWorkflowExecutionRequest,
 ) error {
 
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, request.Encoding)
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
 	if err != nil {
 		return err
 	}
@@ -371,9 +371,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
 
-	encoding := common.EncodingTypeProto3
-
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, encoding)
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -394,13 +392,12 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 
 func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
-	encoding common.EncodingType,
+	encoding enumspb.EncodingType,
 ) (*InternalWorkflowMutation, error) {
 
 	serializedExecutionInfo, err := m.SerializeExecutionInfo(
 		input.ExecutionInfo,
 		input.ExecutionStats,
-		encoding,
 	)
 	if err != nil {
 		return nil, err
@@ -456,13 +453,11 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	input *WorkflowSnapshot,
-	encoding common.EncodingType,
 ) (*InternalWorkflowSnapshot, error) {
 
 	serializedExecutionInfo, err := m.SerializeExecutionInfo(
 		input.ExecutionInfo,
 		input.ExecutionStats,
-		encoding,
 	)
 	if err != nil {
 		return nil, err
@@ -502,7 +497,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 func (m *executionManagerImpl) SerializeVersionHistories(
 	versionHistories *VersionHistories,
-	encoding common.EncodingType,
+	encoding enumspb.EncodingType,
 ) (*serialization.DataBlob, error) {
 
 	if versionHistories == nil {

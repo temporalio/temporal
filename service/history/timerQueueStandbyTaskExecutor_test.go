@@ -722,7 +722,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				ClearBufferedEvents:       false,
 			},
 			NewWorkflowSnapshot: nil,
-			Encoding:            common.EncodingType(s.mockShard.GetConfig().EventEncodingType(s.namespaceID)),
+			Encoding:            enumspb.EncodingType(enumspb.EncodingType_value[s.mockShard.GetConfig().EventEncodingType(s.namespaceID)]),
 		}, input)
 		return true
 	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
