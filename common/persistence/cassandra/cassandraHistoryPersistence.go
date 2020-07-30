@@ -173,11 +173,14 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
 
-	eventBlob := &serialization.DataBlob{}
-	nodeID := int64(0)
-	txnID := int64(0)
-
-	for iter.Scan(&nodeID, &txnID, &eventBlob.Data, &eventBlob.Encoding) {
+	for {
+		var data []byte
+		var encoding string
+		nodeID := int64(0)
+		txnID := int64(0)
+		if !iter.Scan(&nodeID, &txnID, &data, &encoding) {
+			break
+		}
 		if txnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase
 			// thus, valid event batch will come with increasing transaction ID
@@ -201,8 +204,8 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTxnID = txnID
 			lastNodeID = nodeID
+			eventBlob := p.NewDataBlob(data, encoding)
 			history = append(history, eventBlob)
-			eventBlob = &serialization.DataBlob{}
 		}
 	}
 
@@ -239,7 +242,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 //           \
 //            8[8]
 //
-//Now we want to fork a new branch B3 from B2.
+// Now we want to fork a new branch B3 from B2.
 // The only valid forking nodeIDs are 3,6 or 8.
 // 1 is not valid because we can't fork from first node.
 // 2/4/5 is NOT valid either because they are inside a batch.
