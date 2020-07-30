@@ -279,11 +279,11 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 		}).AnyTimes()
 
 	addRequest := matchingservice.AddWorkflowTaskRequest{
-		NamespaceId:                   namespaceID,
-		Execution:                     execution,
-		ScheduleId:                    scheduleID,
-		TaskQueue:                     stickyTaskQueue,
-		ScheduleToStartTimeoutSeconds: 1,
+		NamespaceId:            namespaceID,
+		Execution:              execution,
+		ScheduleId:             scheduleID,
+		TaskQueue:              stickyTaskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 	}
 
 	_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
@@ -312,11 +312,11 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		EventStoreVersion:  0,
-		BranchToken:        nil,
-		ScheduledTimestamp: 0,
-		StartedTimestamp:   0,
-		Queries:            nil,
+		EventStoreVersion: 0,
+		BranchToken:       nil,
+		ScheduledTime:     &time.Time{},
+		StartedTime:       &time.Time{},
+		Queries:           nil,
 	}
 
 	s.Nil(err)
@@ -419,12 +419,12 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 		var err error
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceId:             namespaceID,
-				NamespaceId:                   namespaceID,
-				Execution:                     execution,
-				ScheduleId:                    scheduleID,
-				TaskQueue:                     taskQueue,
-				ScheduleToStartTimeoutSeconds: 1,
+				SourceNamespaceId:      namespaceID,
+				NamespaceId:            namespaceID,
+				Execution:              execution,
+				ScheduleId:             scheduleID,
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
 			if isForwarded {
 				addRequest.ForwardedFrom = forwardedFrom
@@ -432,11 +432,11 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		} else {
 			addRequest := matchingservice.AddWorkflowTaskRequest{
-				NamespaceId:                   namespaceID,
-				Execution:                     execution,
-				ScheduleId:                    scheduleID,
-				TaskQueue:                     taskQueue,
-				ScheduleToStartTimeoutSeconds: 1,
+				NamespaceId:            namespaceID,
+				Execution:              execution,
+				ScheduleId:             scheduleID,
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
 			if isForwarded {
 				addRequest.ForwardedFrom = forwardedFrom
@@ -478,11 +478,11 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceId:             namespaceID,
-		NamespaceId:                   namespaceID,
-		Execution:                     execution,
-		TaskQueue:                     taskQueue,
-		ScheduleToStartTimeoutSeconds: 1,
+		SourceNamespaceId:      namespaceID,
+		NamespaceId:            namespaceID,
+		Execution:              execution,
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 	}
 
 	// stop the task writer explicitly
@@ -525,12 +525,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:             namespaceID,
-			NamespaceId:                   namespaceID,
-			Execution:                     workflowExecution,
-			ScheduleId:                    scheduleID,
-			TaskQueue:                     taskQueue,
-			ScheduleToStartTimeoutSeconds: 1,
+			SourceNamespaceId:      namespaceID,
+			NamespaceId:            namespaceID,
+			Execution:              workflowExecution,
+			ScheduleId:             scheduleID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
 
 		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
@@ -587,11 +587,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		s.Equal(true, validateTimeRange(time.Unix(0, result.ScheduledTimestamp), time.Minute))
-		s.Equal(int32(100), result.ScheduleToCloseTimeoutSeconds)
-		s.Equal(true, validateTimeRange(time.Unix(0, result.StartedTimestamp), time.Minute))
-		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
-		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
+		s.Equal(true, validateTimeRange(*result.ScheduledTime, time.Minute))
+		s.EqualValues(time.Second*100, *result.ScheduleToCloseTimeout)
+		s.Equal(true, validateTimeRange(*result.StartedTime, time.Minute))
+		s.EqualValues(time.Second*50, *result.StartToCloseTimeout)
+		s.EqualValues(time.Second*10, *result.HeartbeatTimeout)
 		taskToken := &tokenspb.Task{
 			ScheduleAttempt: 1,
 			NamespaceId:     namespaceID,
@@ -708,12 +708,12 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:             namespaceID,
-			NamespaceId:                   namespaceID,
-			Execution:                     workflowExecution,
-			ScheduleId:                    scheduleID,
-			TaskQueue:                     taskQueue,
-			ScheduleToStartTimeoutSeconds: 1,
+			SourceNamespaceId:      namespaceID,
+			NamespaceId:            namespaceID,
+			Execution:              workflowExecution,
+			ScheduleId:             scheduleID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
 		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		wg.Wait()
@@ -857,12 +857,12 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceId:             namespaceID,
-					NamespaceId:                   namespaceID,
-					Execution:                     workflowExecution,
-					ScheduleId:                    scheduleID,
-					TaskQueue:                     taskQueue,
-					ScheduleToStartTimeoutSeconds: 1,
+					SourceNamespaceId:      namespaceID,
+					NamespaceId:            namespaceID,
+					Execution:              workflowExecution,
+					ScheduleId:             scheduleID,
+					TaskQueue:              taskQueue,
+					ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 				}
 
 				_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
@@ -999,11 +999,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
-					NamespaceId:                   namespaceID,
-					Execution:                     workflowExecution,
-					ScheduleId:                    scheduleID,
-					TaskQueue:                     taskQueue,
-					ScheduleToStartTimeoutSeconds: 1,
+					NamespaceId:            namespaceID,
+					Execution:              workflowExecution,
+					ScheduleId:             scheduleID,
+					TaskQueue:              taskQueue,
+					ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 				}
 
 				_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
@@ -1153,12 +1153,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceId:             namespaceID,
-					NamespaceId:                   namespaceID,
-					Execution:                     workflowExecution,
-					ScheduleId:                    scheduleID,
-					TaskQueue:                     taskQueue,
-					ScheduleToStartTimeoutSeconds: 600,
+					SourceNamespaceId:      namespaceID,
+					NamespaceId:            namespaceID,
+					Execution:              workflowExecution,
+					ScheduleId:             scheduleID,
+					TaskQueue:              taskQueue,
+					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
 
 				_, err := engine.AddActivityTask(s.handlerContext, &addRequest)
@@ -1304,11 +1304,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
-					NamespaceId:                   namespaceID,
-					Execution:                     workflowExecution,
-					ScheduleId:                    scheduleID,
-					TaskQueue:                     taskQueue,
-					ScheduleToStartTimeoutSeconds: 600,
+					NamespaceId:            namespaceID,
+					Execution:              workflowExecution,
+					ScheduleId:             scheduleID,
+					TaskQueue:              taskQueue,
+					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
 
 				_, err := engine.AddWorkflowTask(s.handlerContext, &addRequest)
@@ -1422,12 +1422,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	scheduleID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceId:             namespaceID,
-		NamespaceId:                   namespaceID,
-		Execution:                     workflowExecution,
-		ScheduleId:                    scheduleID,
-		TaskQueue:                     taskQueue,
-		ScheduleToStartTimeoutSeconds: 1,
+		SourceNamespaceId:      namespaceID,
+		NamespaceId:            namespaceID,
+		Execution:              workflowExecution,
+		ScheduleId:             scheduleID,
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 	}
 
 	_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
@@ -1470,12 +1470,12 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:             namespaceID,
-			NamespaceId:                   namespaceID,
-			Execution:                     workflowExecution,
-			ScheduleId:                    scheduleID,
-			TaskQueue:                     taskQueue,
-			ScheduleToStartTimeoutSeconds: 1,
+			SourceNamespaceId:      namespaceID,
+			NamespaceId:            namespaceID,
+			Execution:              workflowExecution,
+			ScheduleId:             scheduleID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
 
 		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
@@ -1611,16 +1611,16 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		for i := int64(0); i < taskCount; i++ {
 			scheduleID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceId:             namespaceID,
-				NamespaceId:                   namespaceID,
-				Execution:                     workflowExecution,
-				ScheduleId:                    scheduleID,
-				TaskQueue:                     taskQueue,
-				ScheduleToStartTimeoutSeconds: 5,
+				SourceNamespaceId:      namespaceID,
+				NamespaceId:            namespaceID,
+				Execution:              workflowExecution,
+				ScheduleId:             scheduleID,
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(5),
 			}
 			if i%2 == 0 {
 				// simulates creating a task whose scheduledToStartTimeout is already expired
-				addRequest.ScheduleToStartTimeoutSeconds = -5
+				addRequest.ScheduleToStartTimeout = timestamp.DurationFromSeconds(-5)
 			}
 			_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 			s.NoError(err)

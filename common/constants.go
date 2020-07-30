@@ -63,7 +63,8 @@ const (
 )
 
 // MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
-const MaxTaskTimeout = 31622400
+const MaxTaskTimeout = MaxTaskTimeoutSeconds * time.Second
+const MaxTaskTimeoutSeconds = 31622400
 
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
