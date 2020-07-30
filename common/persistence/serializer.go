@@ -30,16 +30,15 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
-	"go.temporal.io/server/common/persistence/serialization"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -47,31 +46,31 @@ type (
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	PayloadSerializer interface {
 		// serialize/deserialize history events
-		SerializeBatchEvents(batch []*historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeBatchEvents(batch []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeBatchEvents(data *serialization.DataBlob) ([]*historypb.HistoryEvent, error)
 
 		// serialize/deserialize a single history event
-		SerializeEvent(event *historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeEvent(data *serialization.DataBlob) (*historypb.HistoryEvent, error)
 
 		// serialize/deserialize visibility memo fields
-		SerializeVisibilityMemo(memo *commonpb.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeVisibilityMemo(memo *commonpb.Memo, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonpb.Memo, error)
 
 		// serialize/deserialize reset points
-		SerializeResetPoints(event *workflowpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeResetPoints(event *workflowpb.ResetPoints, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeResetPoints(data *serialization.DataBlob) (*workflowpb.ResetPoints, error)
 
 		// serialize/deserialize bad binaries
-		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeVersionHistories(data *serialization.DataBlob) (*historyspb.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
-		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error)
 		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
 	}
 
@@ -87,7 +86,7 @@ type (
 
 	// UnknownEncodingTypeError is an error type for unknown or unsupported encoding type
 	UnknownEncodingTypeError struct {
-		encodingType common.EncodingType
+		encodingType enumspb.EncodingType
 	}
 
 	serializerImpl struct{}
@@ -98,7 +97,7 @@ func NewPayloadSerializer() PayloadSerializer {
 	return &serializerImpl{}
 }
 
-func (t *serializerImpl) SerializeBatchEvents(events []*historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeBatchEvents(events []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	return t.serialize(&historypb.History{Events: events}, encodingType)
 }
 
@@ -113,10 +112,9 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	events := &historypb.History{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, events)
-	case common.EncodingTypeProto3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, events)
 	default:
@@ -128,7 +126,7 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	return events.Events, nil
 }
 
-func (t *serializerImpl) SerializeEvent(event *historypb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if event == nil {
 		return nil, nil
 	}
@@ -146,10 +144,9 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*histor
 	event := &historypb.HistoryEvent{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
 	default:
@@ -163,7 +160,7 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*histor
 	return event, err
 }
 
-func (t *serializerImpl) SerializeResetPoints(rp *workflowpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeResetPoints(rp *workflowpb.ResetPoints, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if rp == nil {
 		rp = &workflowpb.ResetPoints{}
 	}
@@ -181,9 +178,9 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	memo := &workflowpb.ResetPoints{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -198,7 +195,7 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeBadBinaries(bb *namespacepb.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeBadBinaries(bb *namespacepb.BadBinaries, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if bb == nil {
 		bb = &namespacepb.BadBinaries{}
 	}
@@ -216,9 +213,9 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	memo := &namespacepb.BadBinaries{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -233,7 +230,7 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVisibilityMemo(memo *commonpb.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVisibilityMemo(memo *commonpb.Memo, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if memo == nil {
 		// Return nil here to be consistent with Event
 		// This check is not duplicate as check in following serialize
@@ -253,9 +250,9 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	memo := &commonpb.Memo{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -270,7 +267,7 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *historyspb.VersionHistories, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
@@ -288,9 +285,9 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	memo := &historyspb.VersionHistories{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -305,7 +302,7 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if icm == nil {
 		icm = &persistenceblobs.ImmutableClusterMetadata{}
 	}
@@ -323,9 +320,9 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	event := &persistenceblobs.ImmutableClusterMetadata{}
 	var err error
 	switch data.Encoding {
-	case common.EncodingTypeJSON:
+	case enumspb.ENCODING_TYPE_JSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3:
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
@@ -340,7 +337,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	return event, err
 }
 
-func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -349,15 +346,13 @@ func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType common.E
 	var err error
 
 	switch encodingType {
-	case common.EncodingTypeProto3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		data, err = p.Marshal()
-	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
-		encodingType = common.EncodingTypeJSON
+	case enumspb.ENCODING_TYPE_JSON:
 		pb, ok := p.(proto.Message)
 		if !ok {
-			return nil, NewSerializationError("could not cast protomarshal interface to proto.message")
+			return nil, NewSerializationError("could not cast proto.Marshal interface to proto.Message")
 		}
 		data, err = codec.NewJSONPBEncoder().Encode(pb)
 	default:
@@ -379,7 +374,7 @@ func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType common.E
 	}, nil
 }
 
-func (t *serializerImpl) serialize(input interface{}, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) serialize(input interface{}, encodingType enumspb.EncodingType) (*serialization.DataBlob, error) {
 	if input == nil {
 		return nil, nil
 	}
@@ -393,8 +388,7 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	var err error
 
 	switch encodingType {
-	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
-		encodingType = common.EncodingTypeJSON
+	case enumspb.ENCODING_TYPE_JSON:
 		// input should never be a proto struct.
 		data, err = json.Marshal(input)
 	default:
@@ -405,11 +399,14 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 		return nil, NewSerializationError(err.Error())
 	}
 
-	return NewDataBlob(data, encodingType), nil
+	return &serialization.DataBlob{
+		Data:     data,
+		Encoding: encodingType,
+	}, nil
 }
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error
-func NewUnknownEncodingTypeError(encodingType common.EncodingType) error {
+func NewUnknownEncodingTypeError(encodingType enumspb.EncodingType) error {
 	return &UnknownEncodingTypeError{encodingType: encodingType}
 }
 

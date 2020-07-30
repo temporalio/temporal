@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -59,15 +60,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 workflowID,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -90,14 +91,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     taskQueue,
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 25,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       25,
+					ActivityId:             strconv.Itoa(int(1)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
 				}},
 			}}, nil
 		}
@@ -225,15 +226,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 workflowID,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -256,14 +257,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     taskQueue,
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 25,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       25,
+					ActivityId:             strconv.Itoa(int(1)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
 				}},
 			}}, nil
 		}
@@ -384,15 +385,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.testRawHistoryNamespaceName,
-		WorkflowId:                 workflowID,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.testRawHistoryNamespaceName,
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -416,14 +417,14 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
 					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    "1",
-						ActivityType:                  &commonpb.ActivityType{Name: activityName},
-						TaskQueue:                     taskQueue,
-						Input:                         payloads.EncodeBytes(buf.Bytes()),
-						ScheduleToCloseTimeoutSeconds: 100,
-						ScheduleToStartTimeoutSeconds: 25,
-						StartToCloseTimeoutSeconds:    50,
-						HeartbeatTimeoutSeconds:       25,
+						ActivityId:             "1",
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              taskQueue,
+						Input:                  payloads.EncodeBytes(buf.Bytes()),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
 					},
 				},
 			}}, nil
@@ -492,7 +493,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -586,15 +587,15 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 workflowID,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -621,14 +622,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     taskQueue,
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 25,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       25,
+					ActivityId:             strconv.Itoa(int(1)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
 				}},
 			}}, nil
 		}
@@ -680,7 +681,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -801,15 +802,15 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 workflowID,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -836,14 +837,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     taskQueue,
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 25,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       25,
+					ActivityId:             strconv.Itoa(int(1)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
 				}},
 			}}, nil
 		}
@@ -910,7 +911,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)

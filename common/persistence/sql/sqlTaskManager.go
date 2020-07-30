@@ -142,7 +142,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			TaskQueueID:  tqId,
 			RangeID:      row.RangeID + 1,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -189,7 +189,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		}); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Failed to make sticky task queue. Error: %v", err))
 		}
@@ -209,7 +209,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -408,7 +408,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			TaskQueueID:  tqId,
 			TaskID:       v.GetTaskId(),
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		}
 	}
 	var resp *persistence.CreateTasksResponse

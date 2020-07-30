@@ -444,12 +444,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		NamespaceId:                   targetNamespaceID,
-		SourceNamespaceId:             namespaceID,
-		Execution:                     execution,
-		TaskQueue:                     taskQueue,
-		ScheduleId:                    scheduledID,
-		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout.Seconds()),
+		NamespaceId:            targetNamespaceID,
+		SourceNamespaceId:      namespaceID,
+		Execution:              execution,
+		TaskQueue:              taskQueue,
+		ScheduleId:             scheduledID,
+		ScheduleToStartTimeout: scheduleToStartTimeout,
 	})
 
 	return retError
@@ -524,19 +524,19 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		WorkflowType:                  startAttributes.WorkflowType,
-		TaskQueue:                     startAttributes.TaskQueue,
-		Input:                         startAttributes.Input,
-		WorkflowRunTimeoutSeconds:     startAttributes.WorkflowRunTimeoutSeconds,
-		WorkflowTaskTimeoutSeconds:    startAttributes.WorkflowTaskTimeoutSeconds,
-		BackoffStartIntervalInSeconds: int32(backoffInterval.Seconds()),
-		RetryPolicy:                   startAttributes.RetryPolicy,
-		Initiator:                     continueAsNewInitiator,
-		Failure:                       timeoutFailure,
-		CronSchedule:                  mutableState.GetExecutionInfo().CronSchedule,
-		Header:                        startAttributes.Header,
-		Memo:                          startAttributes.Memo,
-		SearchAttributes:              startAttributes.SearchAttributes,
+		WorkflowType:         startAttributes.WorkflowType,
+		TaskQueue:            startAttributes.TaskQueue,
+		Input:                startAttributes.Input,
+		WorkflowRunTimeout:   startAttributes.WorkflowRunTimeout,
+		WorkflowTaskTimeout:  startAttributes.WorkflowTaskTimeout,
+		BackoffStartInterval: &backoffInterval,
+		RetryPolicy:          startAttributes.RetryPolicy,
+		Initiator:            continueAsNewInitiator,
+		Failure:              timeoutFailure,
+		CronSchedule:         mutableState.GetExecutionInfo().CronSchedule,
+		Header:               startAttributes.Header,
+		Memo:                 startAttributes.Memo,
+		SearchAttributes:     startAttributes.SearchAttributes,
 	}
 	newMutableState, err := retryWorkflow(
 		mutableState,

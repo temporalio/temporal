@@ -82,6 +82,9 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			DisableHealthCheck: true,
+		},
 	})
 	if err != nil {
 		b.logger.Fatal("Failed to create SDK client", zap.Error(err))

@@ -173,22 +173,56 @@ func TimePtr(t time.Time) *time.Time {
 	return &t
 }
 
-func AddDurationPtrToTime(t time.Time, duration *time.Duration) time.Time {
-	if duration != nil {
-		return t.Add(*duration)
-	} else {
-		return t
+func TimeValue(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
 	}
+	return *t
 }
 
-func AddDurationPtrToTimePtr(t *time.Time, duration *time.Duration) time.Time {
-	if duration != nil && t != nil {
-		return t.Add(*duration)
-	} else if duration != nil && t == nil {
-		return time.Unix(0, 0).Add(*duration)
-	} else if t != nil {
-		return *t
-	} else {
-		return time.Unix(0, 0)
+func DurationValue(d *time.Duration) time.Duration {
+	if d == nil {
+		return 0
 	}
+	return *d
+}
+
+func MinDurationPtr(d1 *time.Duration, d2 *time.Duration) *time.Duration {
+	res := MinDuration(DurationValue(d1), DurationValue(d2))
+	return &res
+}
+
+func MinDuration(d1 time.Duration, d2 time.Duration) time.Duration {
+	if d1 > d2 {
+		return d2
+	}
+	return d1
+}
+
+func RoundUp(d time.Duration) time.Duration {
+	res := d.Truncate(time.Second)
+	if res == d {
+		return d
+	}
+	return res + time.Second
+}
+
+func UnixOrZeroTime(nanos int64) time.Time {
+	if nanos <= 0 {
+		return time.Time{}
+	}
+
+	return time.Unix(0, nanos)
+}
+
+func UnixOrZeroTimePtr(nano int64) *time.Time {
+	return TimePtr(UnixOrZeroTime(nano))
+}
+
+func TimeNowPtrUtcAddSeconds(seconds int) *time.Time {
+	return TimePtr(time.Now().UTC().Add(time.Second * time.Duration(seconds)))
+}
+
+func TimeNowPtrUtc() *time.Time {
+	return TimePtr(time.Now().UTC())
 }

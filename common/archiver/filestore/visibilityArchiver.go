@@ -33,7 +33,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -41,6 +40,7 @@ import (
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -336,11 +336,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime: &types.Int64Value{
-			Value: record.CloseTimestamp},
+		StartTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.StartTimestamp)),
+		ExecutionTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(record.ExecutionTimestamp)),
+		CloseTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.CloseTimestamp)),
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

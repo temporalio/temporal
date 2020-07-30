@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -128,19 +129,19 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 	}
 
 	request := &workflowservice.RegisterNamespaceRequest{
-		Name:                                 namespace,
-		Description:                          description,
-		OwnerEmail:                           ownerEmail,
-		Data:                                 namespaceData,
-		WorkflowExecutionRetentionPeriodDays: int32(retentionDays),
-		Clusters:                             clusters,
-		ActiveClusterName:                    activeClusterName,
-		SecurityToken:                        securityToken,
-		HistoryArchivalState:                 archivalState(c, FlagHistoryArchivalState),
-		HistoryArchivalUri:                   c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalState:              archivalState(c, FlagVisibilityArchivalState),
-		VisibilityArchivalUri:                c.String(FlagVisibilityArchivalURI),
-		IsGlobalNamespace:                    isGlobalNamespace,
+		Name:                             namespace,
+		Description:                      description,
+		OwnerEmail:                       ownerEmail,
+		Data:                             namespaceData,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
+		Clusters:                         clusters,
+		ActiveClusterName:                activeClusterName,
+		SecurityToken:                    securityToken,
+		HistoryArchivalState:             archivalState(c, FlagHistoryArchivalState),
+		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalState:          archivalState(c, FlagVisibilityArchivalState),
+		VisibilityArchivalUri:            c.String(FlagVisibilityArchivalURI),
+		IsGlobalNamespace:                isGlobalNamespace,
 	}
 
 	ctx, cancel := newContext(c)
@@ -190,7 +191,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 
 		description := resp.NamespaceInfo.GetDescription()
 		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
-		retentionDays := resp.Config.GetWorkflowExecutionRetentionPeriodInDays()
+		retention := resp.Config.GetWorkflowExecutionRetentionTtl()
 		var clusters []*replicationpb.ClusterReplicationConfig
 
 		if c.IsSet(FlagDescription) {
@@ -208,7 +209,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			}
 		}
 		if c.IsSet(FlagRetentionDays) {
-			retentionDays = int32(c.Int(FlagRetentionDays))
+			retention = timestamp.DurationPtr(time.Duration(c.Int(FlagRetentionDays)) * time.Hour * 24)
 		}
 		if c.IsSet(FlagClusters) {
 			clusterStr := c.String(FlagClusters)
@@ -251,12 +252,12 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			Data:        namespaceData,
 		}
 		updateConfig := &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionPeriodInDays: retentionDays,
-			HistoryArchivalState:                   archivalState(c, FlagHistoryArchivalState),
-			HistoryArchivalUri:                     c.String(FlagHistoryArchivalURI),
-			VisibilityArchivalState:                archivalState(c, FlagVisibilityArchivalState),
-			VisibilityArchivalUri:                  c.String(FlagVisibilityArchivalURI),
-			BadBinaries:                            binBinaries,
+			WorkflowExecutionRetentionTtl: retention,
+			HistoryArchivalState:          archivalState(c, FlagHistoryArchivalState),
+			HistoryArchivalUri:            c.String(FlagHistoryArchivalURI),
+			VisibilityArchivalState:       archivalState(c, FlagVisibilityArchivalState),
+			VisibilityArchivalUri:         c.String(FlagVisibilityArchivalURI),
+			BadBinaries:                   binBinaries,
 		}
 		replicationConfig := &replicationpb.NamespaceReplicationConfig{
 			Clusters: clusters,
@@ -318,7 +319,7 @@ func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 		resp.NamespaceInfo.GetOwnerEmail(),
 		resp.NamespaceInfo.Data,
 		resp.NamespaceInfo.GetState(),
-		resp.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+		timestamp.DurationValue(resp.Config.GetWorkflowExecutionRetentionTtl()),
 		resp.ReplicationConfig.GetActiveClusterName(),
 		clustersToString(resp.ReplicationConfig.Clusters),
 		resp.Config.GetHistoryArchivalState().String(),
@@ -346,7 +347,7 @@ func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 		for cs, bin := range resp.Config.BadBinaries.Binaries {
 			row := []string{cs}
 			row = append(row, bin.GetOperator())
-			row = append(row, time.Unix(0, bin.GetCreateTimeNano()).String())
+			row = append(row, timestamp.TimeValue(bin.GetCreateTime()).String())
 			row = append(row, bin.GetReason())
 			table.Append(row)
 		}

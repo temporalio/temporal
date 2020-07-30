@@ -34,7 +34,9 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -47,6 +49,7 @@ import (
 	cassp "go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/cassandra"
 )
@@ -151,8 +154,8 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if ms.ExecutionInfo.AutoResetPoints != nil {
 			fmt.Println("auto-reset-points:")
 			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-				createT := time.Unix(0, p.GetCreateTimeNano())
-				expireT := time.Unix(0, p.GetExpireTimeNano())
+				createT := timestamp.TimeValue(p.GetCreateTime())
+				expireT := timestamp.TimeValue(p.GetExpireTime())
 				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstWorkflowTaskCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}
@@ -239,7 +242,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	for _, branchToken := range branchTokens {
-		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			ErrorAndExit("HistoryBranchFromBlob decoder err", err)
 		}
@@ -477,10 +480,8 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_TIMER {
-		minVisFlag := parseTime(c.String(FlagMinVisibilityTimestamp), 0, time.Now())
-		minVis := time.Unix(0, minVisFlag)
-		maxVisFlag := parseTime(c.String(FlagMaxVisibilityTimestamp), 0, time.Now())
-		maxVis := time.Unix(0, maxVisFlag)
+		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now())
+		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now())
 
 		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -621,7 +622,8 @@ func AdminListClusterMembership(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to map membership role", err)
 	}
-	heartbeatFlag := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	// TODO: refactor this: parseTime shouldn't be used for duration.
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
 	pFactory := CreatePersistenceFactory(c)

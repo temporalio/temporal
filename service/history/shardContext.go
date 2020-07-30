@@ -33,6 +33,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -542,8 +543,13 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) getDefaultEncoding(namespaceEntry *cache.NamespaceCacheEntry) common.EncodingType {
-	return common.EncodingType(s.config.EventEncodingType(namespaceEntry.GetInfo().Name))
+func (s *shardContextImpl) getDefaultEncoding(namespaceEntry *cache.NamespaceCacheEntry) enumspb.EncodingType {
+	encodingStr := s.config.EventEncodingType(namespaceEntry.GetInfo().Name)
+	encoding, ok := enumspb.EncodingType_value[encodingStr]
+	if !ok {
+		encoding = int32(enumspb.ENCODING_TYPE_UNSPECIFIED)
+	}
+	return enumspb.EncodingType(encoding)
 }
 
 func (s *shardContextImpl) UpdateWorkflowExecution(
