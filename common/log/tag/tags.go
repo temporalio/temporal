@@ -548,8 +548,8 @@ func TimerTaskStatus(timerTaskStatus int32) Tag {
 // retry
 
 // Attempt returns tag for Attempt
-func Attempt(attempt int32) Tag {
-	return newInt32("attempt", attempt)
+func Attempt(attempt int64) Tag {
+	return newInt64("attempt", attempt)
 }
 
 // AttemptCount returns tag for AttemptCount

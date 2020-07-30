@@ -639,7 +639,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) UpdateWorkflowTask(
 		tag.WorkflowStartedID(workflowTask.StartedID),
 		tag.WorkflowTaskRequestId(workflowTask.RequestID),
 		tag.WorkflowTaskTimeoutSeconds(workflowTask.WorkflowTaskTimeout),
-		tag.Attempt(int32(workflowTask.Attempt)),
+		tag.Attempt(workflowTask.Attempt),
 		tag.TimestampInt(workflowTask.StartedTimestamp))
 }
 

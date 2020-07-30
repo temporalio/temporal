@@ -1305,7 +1305,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.LastStartedTime = ai.StartedTime
 			}
 			if ai.HasRetryPolicy {
-				p.Attempt = ai.Attempt
+				p.Attempt = int32(ai.Attempt)
 				p.ExpirationTime = ai.RetryExpirationTime
 				if ai.RetryMaximumAttempts != 0 {
 					p.MaximumAttempts = ai.RetryMaximumAttempts
@@ -2266,7 +2266,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 ) error {
 
 	clusterName := request.GetSourceCluster()
-	now := time.Unix(0, request.GetTimestamp())
+	now := timestamp.TimeValue(request.GetStatusTime())
 
 	// here there are 3 main things
 	// 1. update the view of remote cluster's shard time
@@ -2884,7 +2884,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 
 	// Set cluster status for sync shard info
 	replicationMessages.SyncShardStatus = &replicationspb.SyncShardStatus{
-		Timestamp: e.timeSource.Now().UnixNano(),
+		StatusTime: timestamp.TimePtr(e.timeSource.Now()),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil

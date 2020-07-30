@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
@@ -204,7 +205,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 	replicationAttr := &replicationspb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
-		Timestamp:     time.Now().UnixNano(),
+		StatusTime:    timestamp.TimeNowPtrUtc(),
 	}
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
@@ -218,7 +219,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
-			Timestamp:     replicationAttr.Timestamp,
+			StatusTime:    replicationAttr.StatusTime,
 		},
 	).Return(nil, nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil, nil).Once()
@@ -230,7 +231,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 	replicationAttr := &replicationspb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
-		Timestamp:     time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano(),
+		StatusTime:    timestamp.TimeNowPtrUtcAddDuration(-2 * dropSyncShardTaskTimeThreshold),
 	}
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
@@ -248,7 +249,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 	replicationAttr := &replicationspb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
-		Timestamp:     time.Now().UnixNano(),
+		StatusTime:    timestamp.TimeNowPtrUtc(),
 	}
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
@@ -263,7 +264,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
-			Timestamp:     replicationAttr.Timestamp,
+			StatusTime:    replicationAttr.StatusTime,
 		},
 	).Return(nil, nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
@@ -278,10 +279,10 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 		RunId:             "some random run ID",
 		Version:           1234,
 		ScheduledId:       1235,
-		ScheduledTime:     time.Now().UnixNano(),
+		ScheduledTime:     timestamp.TimeNowPtrUtc(),
 		StartedId:         1236,
-		StartedTime:       time.Now().UnixNano(),
-		LastHeartbeatTime: time.Now().UnixNano(),
+		StartedTime:       timestamp.TimeNowPtrUtc(),
+		LastHeartbeatTime: timestamp.TimeNowPtrUtc(),
 		Details:           payloads.EncodeString("some random details"),
 		Attempt:           1048576,
 	}
@@ -304,10 +305,10 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 		RunId:             "some random run ID",
 		Version:           1234,
 		ScheduledId:       1235,
-		ScheduledTime:     time.Now().UnixNano(),
+		ScheduledTime:     timestamp.TimeNowPtrUtc(),
 		StartedId:         1236,
-		StartedTime:       time.Now().UnixNano(),
-		LastHeartbeatTime: time.Now().UnixNano(),
+		StartedTime:       timestamp.TimeNowPtrUtc(),
+		LastHeartbeatTime: timestamp.TimeNowPtrUtc(),
 		Details:           payloads.EncodeString("some random details"),
 		Attempt:           1048576,
 	}
