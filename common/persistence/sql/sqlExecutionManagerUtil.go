@@ -763,7 +763,7 @@ func createTransferTasks(
 			return err
 		}
 		transferTasksRows[i].Data = blob.Data
-		transferTasksRows[i].DataEncoding = string(blob.Encoding)
+		transferTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoTransferTasks(transferTasksRows)
@@ -857,7 +857,7 @@ func createReplicationTasks(
 		replicationTasksRows[i].ShardID = shardID
 		replicationTasksRows[i].TaskID = task.GetTaskID()
 		replicationTasksRows[i].Data = blob.Data
-		replicationTasksRows[i].DataEncoding = string(blob.Encoding)
+		replicationTasksRows[i].DataEncoding = blob.Encoding.String()
 	}
 
 	result, err := tx.InsertIntoReplicationTasks(replicationTasksRows)
@@ -946,7 +946,7 @@ func createTimerTasks(
 			timerTasksRows[i].VisibilityTimestamp = goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
-			timerTasksRows[i].DataEncoding = string(blob.Encoding)
+			timerTasksRows[i].DataEncoding = blob.Encoding.String()
 		}
 
 		result, err := tx.InsertIntoTimerTasks(timerTasksRows)

@@ -32,7 +32,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	p "go.temporal.io/server/common/persistence"
 )
@@ -68,7 +67,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			TypeName:      source.WorkflowType,
 			StartTime:     time.Unix(0, source.StartTime),
 			ExecutionTime: time.Unix(0, source.ExecutionTime),
-			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
+			Memo:          p.NewDataBlob(source.Memo, source.Encoding),
 			TaskQueue:     source.TaskQueue,
 			CloseTime:     time.Unix(0, source.CloseTime),
 			Status:        source.ExecutionStatus,
@@ -98,7 +97,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			StartTime:     time.Unix(0, startTime),
 			ExecutionTime: time.Unix(0, executionTime),
 			TaskQueue:     source[definition.TaskQueue].(string),
-			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
+			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), source[definition.Encoding].(string)),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
 		statusEnum := enumspb.WorkflowExecutionStatus(status)
