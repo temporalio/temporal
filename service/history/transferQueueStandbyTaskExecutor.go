@@ -169,7 +169,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowRunTimeout
-		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeout)
+		wtTimeout := common.MinInt64(workflowTimeout, common.MaxTaskTimeoutSeconds)
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
@@ -522,10 +522,10 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
-	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout.Seconds()), common.MaxTaskTimeout)
+	timeout := common.MinInt64(int64(pushActivityInfo.activityTaskScheduleToStartTimeout), common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		task.(*persistenceblobs.TransferTaskInfo),
-		timeout,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 
@@ -540,11 +540,11 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	}
 
 	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
-	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeout)
+	timeout := common.MinInt64(pushwtInfo.workflowTaskScheduleToStartTimeout, common.MaxTaskTimeoutSeconds)
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		task.(*persistenceblobs.TransferTaskInfo),
 		&pushwtInfo.taskqueue,
-		timeout,
+		timestamp.DurationFromSeconds(timeout),
 	)
 }
 

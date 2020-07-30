@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -155,11 +156,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return err
 	}
 
-	timeout := common.MinInt64(int64(ai.ScheduleToStartTimeout.Seconds()), common.MaxTaskTimeout)
+	timeout := timestamp.MinDuration(timestamp.DurationValue(ai.ScheduleToStartTimeout), common.MaxTaskTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(task, timeout)
+	return t.pushActivity(task, &timeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -194,7 +195,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	runTimeout := executionInfo.WorkflowRunTimeout
-	taskTimeout := common.MinInt64(runTimeout, common.MaxTaskTimeout)
+	taskTimeout := common.MinInt64(runTimeout, int64(common.MaxTaskTimeout.Seconds()))
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
@@ -215,7 +216,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(task, taskQueue, taskTimeout)
+	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationPtr(time.Second*time.Duration(taskTimeout)))
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(

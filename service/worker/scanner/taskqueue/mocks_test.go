@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -117,19 +118,19 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 
 func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
-		exp, _ := types.TimestampProto(time.Now().Add(time.Hour))
+		exp := time.Now().Add(time.Hour)
 		ti := &persistenceblobs.AllocatedTaskInfo{
 			Data: &persistenceblobs.TaskInfo{
 				NamespaceId: tbl.namespaceID,
 				WorkflowId:  tbl.workflowID,
 				RunId:       tbl.runID,
 				ScheduleId:  3,
-				ExpiryTime:  exp,
+				ExpiryTime:  &exp,
 			},
 			TaskId: tbl.nextTaskID,
 		}
 		if expired {
-			ti.Data.ExpiryTime, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
+			ti.Data.ExpiryTime = timestamp.TimePtr(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++

@@ -719,7 +719,7 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   1,
-		EventTime: timestamp.TimePtr(time.Now()),
+		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
 		TaskId:    1,
 		Version:   1,
 	}

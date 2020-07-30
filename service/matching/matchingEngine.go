@@ -33,7 +33,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -235,7 +234,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 			addRequest.TaskQueue.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
-			addRequest.GetScheduleToStartTimeoutSeconds()))
+			timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())))
 
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -248,15 +247,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
+	now := timestamp.TimePtr(time.Now())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
-		ExpiryTime:  expiry,
+		ExpiryTime:  &expiry,
 		CreateTime:  now,
 	}
 
@@ -295,16 +293,15 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	now := types.TimestampNow()
-	expiry := types.TimestampNow()
-	expiry.Seconds += int64(addRequest.GetScheduleToStartTimeoutSeconds())
+	now := timestamp.TimePtr(time.Now())
+	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: sourceNamespaceID,
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
 		CreateTime:  now,
-		ExpiryTime:  expiry,
+		ExpiryTime:  &expiry,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
@@ -725,7 +722,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
-			ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
+			ct := timestamp.TimeValue(task.event.Data.CreateTime)
 			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 		}
 	}
@@ -757,7 +754,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
-		ct, _ := types.TimestampFromProto(task.event.Data.CreateTime)
+		ct := timestamp.TimeValue(task.event.Data.CreateTime)
 		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
 	}
 
@@ -774,22 +771,22 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
 	return &matchingservice.PollActivityTaskQueueResponse{
-		ActivityId:                      attributes.ActivityId,
-		ActivityType:                    attributes.ActivityType,
-		Header:                          attributes.Header,
-		Input:                           attributes.Input,
-		WorkflowExecution:               task.workflowExecution(),
-		ScheduledTimestampOfThisAttempt: historyResponse.ScheduledTimestampOfThisAttempt,
-		ScheduledTimestamp:              timestamp.TimeValue(scheduledEvent.EventTime).UnixNano(),
-		ScheduleToCloseTimeoutSeconds:   int32(timestamp.DurationValue(attributes.ScheduleToCloseTimeout).Seconds()),
-		StartedTimestamp:                historyResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      int32(timestamp.DurationValue(attributes.StartToCloseTimeout).Seconds()),
-		HeartbeatTimeoutSeconds:         int32(timestamp.DurationValue(attributes.HeartbeatTimeout).Seconds()),
-		TaskToken:                       serializedToken,
-		Attempt:                         int32(taskToken.ScheduleAttempt),
-		HeartbeatDetails:                historyResponse.HeartbeatDetails,
-		WorkflowType:                    historyResponse.WorkflowType,
-		WorkflowNamespace:               historyResponse.WorkflowNamespace,
+		ActivityId:                  attributes.ActivityId,
+		ActivityType:                attributes.ActivityType,
+		Header:                      attributes.Header,
+		Input:                       attributes.Input,
+		WorkflowExecution:           task.workflowExecution(),
+		CurrentAttemptScheduledTime: timestamp.UnixOrZeroTimePtr(historyResponse.ScheduledTimestampOfThisAttempt),
+		ScheduledTime:               scheduledEvent.EventTime,
+		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		StartedTime:                 timestamp.UnixOrZeroTimePtr(historyResponse.StartedTimestamp),
+		StartToCloseTimeout:         attributes.StartToCloseTimeout,
+		HeartbeatTimeout:            attributes.HeartbeatTimeout,
+		TaskToken:                   serializedToken,
+		Attempt:                     int32(taskToken.ScheduleAttempt),
+		HeartbeatDetails:            historyResponse.HeartbeatDetails,
+		WorkflowType:                historyResponse.WorkflowType,
+		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 	}
 }
 
