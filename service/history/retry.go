@@ -29,6 +29,7 @@ import (
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 
@@ -172,7 +173,9 @@ func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) co
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
 	}
 
-	err := common.ValidateRetryPolicy(common.EnsureRetryPolicyDefaults(nil, defaultSettings))
+	var empty commonpb.RetryPolicy
+	common.EnsureRetryPolicyDefaults(&empty, defaultSettings)
+	err := common.ValidateRetryPolicy(&empty)
 	if err != nil {
 		panic(
 			fmt.Sprintf(

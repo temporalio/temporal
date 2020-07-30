@@ -1,7 +1,7 @@
 package common
 
 // DefaultActivityRetrySettings indicates what the "default" activity retry settings
-// are of it is not specified on an Activity
+// are if it is not specified on an Activity
 type DefaultActivityRetrySettings struct {
 	InitialIntervalInSeconds   int32
 	MaximumIntervalCoefficient float64

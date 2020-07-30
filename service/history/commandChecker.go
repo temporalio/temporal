@@ -652,7 +652,11 @@ func (v *commandAttrValidator) validateTaskQueue(
 }
 
 func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb.ScheduleActivityTaskCommandAttributes) error {
-	attributes.RetryPolicy = common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
+	if attributes.RetryPolicy == nil {
+		attributes.RetryPolicy = &commonpb.RetryPolicy{}
+	}
+
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
