@@ -278,7 +278,7 @@ func (s *conflictResolverSuite) TestReset() {
 				TimerTasks:          nil,
 				Condition:           s.mockContext.updateCondition,
 			},
-			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(namespaceID)),
+			Encoding: enumspb.EncodingType(enumspb.EncodingType_value[s.mockShard.GetConfig().EventEncodingType(namespaceID)]),
 		}, input)
 		return true
 	})).Return(nil).Once()

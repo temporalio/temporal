@@ -29,7 +29,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
@@ -45,7 +44,7 @@ type (
 )
 
 // VisibilityEncoding is default encoding for visibility data
-const VisibilityEncoding = common.EncodingTypeProto3
+const VisibilityEncoding = enumspb.ENCODING_TYPE_PROTO3
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
