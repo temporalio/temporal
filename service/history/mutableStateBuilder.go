@@ -1120,7 +1120,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	return getBackoffInterval(
 		e.timeSource.Now(),
 		info.WorkflowExpirationTime,
-		info.Attempt,
+		int64(info.Attempt),
 		info.MaximumAttempts,
 		*timestamp.DurationFromSeconds(info.InitialInterval),
 		*timestamp.DurationFromSeconds(info.MaximumInterval),
@@ -3825,7 +3825,7 @@ func (e *mutableStateBuilder) RetryActivity(
 	backoffInterval, retryState := getBackoffInterval(
 		now,
 		timestamp.TimeValue(ai.RetryExpirationTime),
-		int32(ai.Attempt),
+		ai.Attempt,
 		ai.RetryMaximumAttempts,
 		timestamp.DurationValue(ai.RetryInitialInterval),
 		timestamp.DurationValue(ai.RetryMaximumInterval),
