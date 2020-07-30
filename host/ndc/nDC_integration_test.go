@@ -1680,7 +1680,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents([]*historypb.HistoryEvent{newRunFirstEvent}, common.EncodingTypeProto3)
+	eventBlob, err := s.serializer.SerializeBatchEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 
 	return eventBlob
@@ -1694,21 +1694,8 @@ func (s *nDCIntegrationTestSuite) toProtoDataBlob(
 		return nil
 	}
 
-	var encodingType enumspb.EncodingType
-	switch blob.GetEncoding() {
-	case common.EncodingTypeProto3:
-		encodingType = enumspb.ENCODING_TYPE_PROTO3
-	case common.EncodingTypeJSON,
-		common.EncodingTypeGob,
-		common.EncodingTypeUnknown,
-		common.EncodingTypeEmpty:
-		panic(fmt.Sprintf("unsupported encoding type: %v", blob.GetEncoding()))
-	default:
-		panic(fmt.Sprintf("unknown encoding type: %v", blob.GetEncoding()))
-	}
-
 	return &commonpb.DataBlob{
-		EncodingType: encodingType,
+		EncodingType: blob.Encoding,
 		Data:         blob.Data,
 	}
 }
@@ -1728,7 +1715,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeProto3)
+	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob
 }

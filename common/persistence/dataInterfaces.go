@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -577,7 +576,7 @@ type (
 
 		NewWorkflowSnapshot *WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -599,7 +598,7 @@ type (
 		//  basically should use CurrentWorkflowMutation instead
 		CurrentWorkflowCAS *CurrentWorkflowCAS
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// CurrentWorkflowCAS represent a compare and swap on current record
@@ -628,7 +627,7 @@ type (
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -1055,7 +1054,7 @@ type (
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
-		Encoding common.EncodingType
+		Encoding enumspb.EncodingType
 		// The shard to get history node data
 		ShardID *int
 	}

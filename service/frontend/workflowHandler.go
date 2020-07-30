@@ -3211,18 +3211,9 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	var encoding enumspb.EncodingType
 	for _, data := range resp.HistoryEventBlobs {
-		switch data.Encoding {
-		case common.EncodingTypeJSON:
-			encoding = enumspb.ENCODING_TYPE_JSON
-		case common.EncodingTypeProto3:
-			encoding = enumspb.ENCODING_TYPE_PROTO3
-		default:
-			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
-		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: encoding,
+			EncodingType: data.Encoding,
 			Data:         data.Data,
 		})
 	}
@@ -3237,7 +3228,7 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.Error(err))
 		}
 
-		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, common.EncodingTypeProto3)
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3246,7 +3237,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			Data:         blob.Data,
 		})
 
-		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, common.EncodingTypeProto3)
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}

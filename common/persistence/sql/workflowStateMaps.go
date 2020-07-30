@@ -61,7 +61,7 @@ func updateActivityInfos(
 				RunID:        runID,
 				ScheduleID:   v.ScheduleId,
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 
@@ -168,7 +168,7 @@ func updateTimerInfos(
 				RunID:        runID,
 				TimerID:      v.GetTimerId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 		if _, err := tx.ReplaceIntoTimerInfoMaps(rows); err != nil {
@@ -271,7 +271,7 @@ func updateChildExecutionInfos(
 				RunID:        runID,
 				InitiatedID:  v.InitiatedId,
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 		if _, err := tx.ReplaceIntoChildExecutionInfoMaps(rows); err != nil {
@@ -366,7 +366,7 @@ func updateRequestCancelInfos(
 				RunID:        runID,
 				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 
@@ -475,7 +475,7 @@ func updateSignalInfos(
 				RunID:        runID,
 				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
-				DataEncoding: string(blob.Encoding),
+				DataEncoding: blob.Encoding.String(),
 			}
 		}
 

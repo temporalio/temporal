@@ -493,7 +493,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -681,7 +681,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -911,7 +911,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeProto3,
+				Encoding: enumspb.ENCODING_TYPE_PROTO3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
