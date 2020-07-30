@@ -51,11 +51,11 @@ import (
 
 type (
 	commandAttrValidator struct {
-		namespaceCache             cache.NamespaceCache
-		config                     *Config
-		maxIDLengthLimit           int
-		searchAttributesValidator  *validator.SearchAttributesValidator
-		defaultActivityRetryPolicy *commonpb.RetryPolicy
+		namespaceCache               cache.NamespaceCache
+		config                       *Config
+		maxIDLengthLimit             int
+		searchAttributesValidator    *validator.SearchAttributesValidator
+		defaultActivityRetrySettings common.DefaultActivityRetrySettings
 	}
 
 	workflowSizeChecker struct {
@@ -96,7 +96,7 @@ func newCommandAttrValidator(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		defaultActivityRetryPolicy: fromConfigToActivityRetryPolicy(config.DefaultActivityRetryPolicy()),
+		defaultActivityRetrySettings: fromConfigToDefaultActivityRetrySettings(config.DefaultActivityRetryPolicy()),
 	}
 }
 
@@ -653,11 +653,10 @@ func (v *commandAttrValidator) validateTaskQueue(
 
 func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb.ScheduleActivityTaskCommandAttributes) error {
 	if attributes.RetryPolicy == nil {
-		attributes.RetryPolicy = v.defaultActivityRetryPolicy
-		return nil
+		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	attributes.RetryPolicy = common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetryPolicy)
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 

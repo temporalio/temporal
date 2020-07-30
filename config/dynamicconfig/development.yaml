@@ -24,7 +24,7 @@ system.advancedVisibilityWritingMode:
   constraints: {}
 history.defaultActivityRetryPolicy:
 - value:
-    InitialRetryIntervalInSeconds: 1
-    MaximumRetryIntervalInSeconds: 120
-    ExponentialBackoffCoefficient: 2.0
+    InitialIntervalInSeconds: 1
+    MaximumIntervalCoefficient: 100.0
+    BackoffCoefficient: 2.0
     MaximumAttempts: 0

@@ -587,7 +587,7 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			},
 		},
 		{
-			name: "partial override set policy",
+			name: "partial override of fields",
 			input: &commonpb.RetryPolicy{
 				InitialIntervalInSeconds: 0,
 				BackoffCoefficient:       1.2,
@@ -599,6 +599,19 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 				BackoffCoefficient:       1.2,
 				MaximumIntervalInSeconds: 100,
 				MaximumAttempts:          7,
+			},
+		},
+		{
+			name: "set expected max interval if only init interval set",
+			input: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 3,
+				MaximumIntervalInSeconds: 0,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 3,
+				BackoffCoefficient:       2,
+				MaximumIntervalInSeconds: 300,
+				MaximumAttempts:          0,
 			},
 		},
 		{
