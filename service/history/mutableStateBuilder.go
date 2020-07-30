@@ -1120,7 +1120,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	return getBackoffInterval(
 		e.timeSource.Now(),
 		info.WorkflowExpirationTime,
-		info.Attempt,
+		int64(info.Attempt),
 		info.MaximumAttempts,
 		*timestamp.DurationFromSeconds(info.InitialInterval),
 		*timestamp.DurationFromSeconds(info.MaximumInterval),
@@ -1322,13 +1322,13 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	}
 
 	ai.Version = request.GetVersion()
-	ai.ScheduledTime = timestamp.TimePtr(time.Unix(0, request.GetScheduledTime()))
+	ai.ScheduledTime = request.GetScheduledTime()
 	ai.StartedId = request.GetStartedId()
-	ai.LastHeartbeatUpdateTime = timestamp.TimePtr(time.Unix(0, request.GetLastHeartbeatTime()))
+	ai.LastHeartbeatUpdateTime = request.GetLastHeartbeatTime()
 	if ai.StartedId == common.EmptyEventID {
 		ai.StartedTime = timestamp.TimePtr(time.Time{})
 	} else {
-		ai.StartedTime = timestamp.TimePtr(time.Unix(0, request.GetStartedTime()))
+		ai.StartedTime = request.GetStartedTime()
 	}
 	ai.LastHeartbeatDetails = request.GetDetails()
 	ai.Attempt = request.GetAttempt()
@@ -2257,7 +2257,7 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 	}
 
 	// activity task was started (as transient event), we need to add it now.
-	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestId, ai.StartedIdentity,
+	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, int32(ai.Attempt), ai.RequestId, ai.StartedIdentity,
 		ai.RetryLastFailure)
 	if !ai.StartedTime.IsZero() {
 		// overwrite started event time to the one recorded in ActivityInfo
@@ -2279,7 +2279,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	}
 
 	if !ai.HasRetryPolicy {
-		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity, ai.RetryLastFailure)
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, int32(ai.Attempt), requestID, identity, ai.RetryLastFailure)
 		if err := e.ReplicateActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
