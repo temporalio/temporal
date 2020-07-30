@@ -412,7 +412,7 @@ type (
 		TaskID              int64
 		EventID             int64
 		Version             int64
-		Attempt             int32
+		Attempt             int64
 	}
 
 	// WorkflowBackoffTimerTask to schedule first workflow task for retried workflow

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/common/xdc"
@@ -321,14 +322,15 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicationspb.Repl
 	}()
 
 	attr := task.GetSyncShardStatusTaskAttributes()
-	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+	st := timestamp.TimeValue(attr.GetStatusTime())
+	if timestamp.TimeNowPtrUtc().Sub(st) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 
 	req := &historyservice.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
 		ShardId:       attr.ShardId,
-		Timestamp:     attr.Timestamp,
+		StatusTime:    &st,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()

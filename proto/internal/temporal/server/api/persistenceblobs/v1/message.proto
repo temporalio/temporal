@@ -90,7 +90,7 @@ message ActivityInfo {
     bool cancel_requested = 16;
     int64 cancel_request_id = 17;
     int32 timer_task_status = 18;
-    int32 attempt = 19;
+    int64 attempt = 19;
     string task_queue = 20;
     string started_identity = 21;
     bool has_retry_policy = 22;
