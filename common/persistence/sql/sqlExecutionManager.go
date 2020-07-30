@@ -1120,7 +1120,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
-		DataEncoding:      string(blob.Encoding),
+		DataEncoding:      blob.Encoding.String(),
 	}
 
 	_, err = m.db.InsertIntoReplicationTasksDLQ(row)

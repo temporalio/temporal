@@ -4045,7 +4045,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(33), appendReq.Events[3].GetEventId())
 	s.Equal(int64(34), appendReq.Events[4].GetEventId())
 
-	s.Equal(common.EncodingType(s.config.EventEncodingType(namespaceID)), appendReq.Encoding)
+	s.Equal(enumspb.EncodingType(enumspb.EncodingType_value[s.config.EventEncodingType(namespaceID)]), appendReq.Encoding)
 
 	// verify executionManager request
 	calls = s.mockExecutionMgr.Calls

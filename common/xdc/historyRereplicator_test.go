@@ -1122,7 +1122,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			},
 		}
-		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeProto3)
+		blob, err := s.serializer.SerializeBatchEvents(eventBatch, enumspb.ENCODING_TYPE_PROTO3)
 		s.Nil(err)
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
@@ -1199,7 +1199,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 			}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
@@ -1226,7 +1226,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonpb.DataBlob{
@@ -1255,7 +1255,7 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 		},
 	}
 
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 
 	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonpb.DataBlob{
@@ -1267,7 +1267,7 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 }
 
 func (s *historyRereplicatorSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
+	blob, err := s.serializer.SerializeBatchEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	s.Nil(err)
 	return &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,

@@ -429,7 +429,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	var blobs []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
-		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeProto3)
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
 		}

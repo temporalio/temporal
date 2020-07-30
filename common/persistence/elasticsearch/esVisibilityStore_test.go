@@ -45,7 +45,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	esMocks "go.temporal.io/server/common/elasticsearch/mocks"
@@ -134,7 +133,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	request.ExecutionTimestamp = int64(321)
 	request.TaskID = int64(111)
 	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
+	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexerspb.Message) bool {
 		fields := input.Fields
 		s.Equal(request.NamespaceID, input.GetNamespaceId())
@@ -145,7 +144,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
 		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
-		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
+		s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), fields[es.Encoding].GetStringData())
 		return true
 	})).Return(nil).Once()
 	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
@@ -180,7 +179,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	request.ExecutionTimestamp = int64(321)
 	request.TaskID = int64(111)
 	memoBytes := []byte(`test bytes`)
-	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
+	request.Memo = p.NewDataBlob(memoBytes, enumspb.ENCODING_TYPE_PROTO3.String())
 	request.CloseTimestamp = int64(999)
 	request.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	request.HistoryLength = int64(20)
@@ -194,7 +193,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
 		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
-		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
+		s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
 		s.EqualValues(request.Status, fields[es.ExecutionStatus].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())

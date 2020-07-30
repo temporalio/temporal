@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cassandra"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -181,7 +180,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
+			request.Memo.Encoding.String(),
 			request.TaskQueue,
 		)
 	} else {
@@ -194,7 +193,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
+			request.Memo.Encoding.String(),
 			request.TaskQueue,
 			ttl,
 		)
@@ -244,7 +243,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
+			request.Memo.Encoding.String(),
 			request.TaskQueue,
 		)
 	} else {
@@ -260,7 +259,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			request.Status,
 			request.HistoryLength,
 			request.Memo.Data,
-			string(request.Memo.GetEncoding()),
+			request.Memo.Encoding.String(),
 			request.TaskQueue,
 			retention,
 		)
@@ -603,7 +602,7 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 			TypeName:      typeName,
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
-			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
+			Memo:          p.NewDataBlob(memo, encoding),
 			TaskQueue:     taskQueue,
 			Status:        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		}
@@ -634,7 +633,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 			CloseTime:     closeTime,
 			Status:        status,
 			HistoryLength: historyLength,
-			Memo:          p.NewDataBlob(memo, common.EncodingType(encoding)),
+			Memo:          p.NewDataBlob(memo, encoding),
 			TaskQueue:     taskQueue,
 		}
 		return record, true
