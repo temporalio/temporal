@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 )
@@ -227,7 +228,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowExecutionRetentionPeriodDays() > common.MaxWorkflowRetentionPeriodInDays {
+	if timestamp.DurationValue(request.GetWorkflowExecutionRetentionPeriod()) > common.MaxWorkflowRetentionPeriod {
 		return nil, errInvalidRetention
 	}
 
@@ -443,15 +444,15 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
@@ -1118,22 +1119,22 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                     matchingResponse.TaskToken,
-		WorkflowExecution:             matchingResponse.WorkflowExecution,
-		ActivityId:                    matchingResponse.ActivityId,
-		ActivityType:                  matchingResponse.ActivityType,
-		Input:                         matchingResponse.Input,
-		ScheduledTimestamp:            matchingResponse.ScheduledTimestamp,
-		ScheduleToCloseTimeoutSeconds: matchingResponse.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:              matchingResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:    matchingResponse.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:       matchingResponse.HeartbeatTimeoutSeconds,
-		Attempt:                       matchingResponse.Attempt,
-		ScheduledTimestampThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
-		HeartbeatDetails:              matchingResponse.HeartbeatDetails,
-		WorkflowType:                  matchingResponse.WorkflowType,
-		WorkflowNamespace:             matchingResponse.WorkflowNamespace,
-		Header:                        matchingResponse.Header,
+		TaskToken:                   matchingResponse.TaskToken,
+		WorkflowExecution:           matchingResponse.WorkflowExecution,
+		ActivityId:                  matchingResponse.ActivityId,
+		ActivityType:                matchingResponse.ActivityType,
+		Input:                       matchingResponse.Input,
+		ScheduledTime:               timestamp.TimePtr(timestamp.UnixOrZeroTime(matchingResponse.ScheduledTimestamp)),
+		ScheduleToCloseTimeout:      timestamp.DurationPtr(time.Duration(matchingResponse.ScheduleToCloseTimeoutSeconds) * time.Second),
+		StartedTime:                 timestamp.TimePtr(timestamp.UnixOrZeroTime(matchingResponse.StartedTimestamp)),
+		StartToCloseTimeout:         timestamp.DurationPtr(time.Duration(matchingResponse.StartToCloseTimeoutSeconds) * time.Second),
+		HeartbeatTimeout:            timestamp.DurationPtr(time.Duration(matchingResponse.HeartbeatTimeoutSeconds) * time.Second),
+		Attempt:                     matchingResponse.Attempt,
+		CurrentAttemptScheduledTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(matchingResponse.ScheduledTimestampOfThisAttempt)),
+		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
+		WorkflowType:                matchingResponse.WorkflowType,
+		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
+		Header:                      matchingResponse.Header,
 	}, nil
 }
 
@@ -2135,15 +2136,15 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
@@ -2342,7 +2343,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, wh.error(errStartTimeFilterNotSet, scope)
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2365,8 +2366,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2438,7 +2439,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, wh.error(errStartTimeFilterNotSet, scope)
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2461,8 +2462,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2658,8 +2659,8 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if execution.GetExecutionTime() == 0 {
-			execution.ExecutionTime = execution.GetStartTime().GetValue()
+		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
 
@@ -3517,8 +3518,8 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		History:                    history,
 		NextPageToken:              continuation,
 		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
-		ScheduledTimestamp:         matchingResp.ScheduledTimestamp,
-		StartedTimestamp:           matchingResp.StartedTimestamp,
+		ScheduledTime:              timestamp.TimePtr(timestamp.UnixOrZeroTime(matchingResp.ScheduledTimestamp)),
+		StartedTime:                timestamp.TimePtr(timestamp.UnixOrZeroTime(matchingResp.StartedTimestamp)),
 		Queries:                    matchingResp.Queries,
 	}
 

@@ -25,7 +25,6 @@
 package persistence
 
 import (
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -282,10 +281,8 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		Type: &commonpb.WorkflowType{
 			Name: execution.TypeName,
 		},
-		StartTime: &types.Int64Value{
-			Value: execution.StartTime.UnixNano(),
-		},
-		ExecutionTime:    execution.ExecutionTime.UnixNano(),
+		StartTime:        &execution.StartTime,
+		ExecutionTime:    &execution.ExecutionTime,
 		Memo:             memo,
 		SearchAttributes: searchAttributes,
 		TaskQueue:        execution.TaskQueue,
@@ -294,9 +291,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 
 	// for close records
 	if execution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		convertedExecution.CloseTime = &types.Int64Value{
-			Value: execution.CloseTime.UnixNano(),
-		}
+		convertedExecution.CloseTime = &execution.CloseTime
 		convertedExecution.HistoryLength = execution.HistoryLength
 	}
 

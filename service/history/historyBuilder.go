@@ -25,6 +25,8 @@
 package history
 
 import (
+	"time"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,6 +39,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -95,8 +98,8 @@ func (b *historyBuilder) AddWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.Ta
 }
 
 func (b *historyBuilder) AddTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32, attempt int64, timestamp int64) *historypb.HistoryEvent {
-	event := b.newTransientWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt, timestamp)
+	startToCloseTimeoutSeconds int32, attempt int64, time time.Time) *historypb.HistoryEvent {
+	event := b.newTransientWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt, time)
 
 	return b.addTransientEvent(event)
 }
@@ -109,8 +112,8 @@ func (b *historyBuilder) AddWorkflowTaskStartedEvent(scheduleEventID int64, requ
 }
 
 func (b *historyBuilder) AddTransientWorkflowTaskStartedEvent(scheduleEventID int64, requestID string,
-	identity string, timestamp int64) *historypb.HistoryEvent {
-	event := b.newTransientWorkflowTaskStartedEvent(scheduleEventID, requestID, identity, timestamp)
+	identity string, time time.Time) *historypb.HistoryEvent {
+	event := b.newTransientWorkflowTaskStartedEvent(scheduleEventID, requestID, identity, time)
 
 	return b.addTransientEvent(event)
 }
@@ -219,7 +222,7 @@ func (b *historyBuilder) AddTimerStartedEvent(workflowTaskCompletedEventID int64
 
 	attributes := &historypb.TimerStartedEventAttributes{}
 	attributes.TimerId = request.TimerId
-	attributes.StartToFireTimeoutSeconds = request.StartToFireTimeoutSeconds
+	attributes.StartToFireTimeout = request.StartToFireTimeout
 	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
 
 	event := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_TIMER_STARTED)
@@ -466,20 +469,20 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.TaskQueue = request.TaskQueue
 	attributes.Header = request.Header
 	attributes.Input = request.Input
-	attributes.WorkflowRunTimeoutSeconds = request.WorkflowRunTimeoutSeconds
-	attributes.WorkflowExecutionTimeoutSeconds = request.WorkflowExecutionTimeoutSeconds
-	attributes.WorkflowTaskTimeoutSeconds = request.WorkflowTaskTimeoutSeconds
+	attributes.WorkflowRunTimeout = request.WorkflowRunTimeout
+	attributes.WorkflowExecutionTimeout = request.WorkflowExecutionTimeout
+	attributes.WorkflowTaskTimeout = request.WorkflowTaskTimeout
 	attributes.ContinuedExecutionRunId = prevRunID
 	attributes.PrevAutoResetPoints = resetPoints
 	attributes.Identity = request.Identity
 	attributes.RetryPolicy = request.RetryPolicy
 	attributes.Attempt = startRequest.GetAttempt()
-	attributes.WorkflowExecutionExpirationTimestamp = startRequest.WorkflowExecutionExpirationTimestamp
+	attributes.WorkflowExecutionExpirationTime = timestamp.TimePtr(timestamp.UnixOrZeroTime(startRequest.WorkflowExecutionExpirationTimestamp))
 	attributes.CronSchedule = request.CronSchedule
 	attributes.LastCompletionResult = startRequest.LastCompletionResult
 	attributes.ContinuedFailure = startRequest.GetContinuedFailure()
 	attributes.Initiator = startRequest.ContinueAsNewInitiator
-	attributes.FirstWorkflowTaskBackoffSeconds = startRequest.FirstWorkflowTaskBackoffSeconds
+	attributes.FirstWorkflowTaskBackoff = timestamp.DurationPtr(time.Duration(startRequest.FirstWorkflowTaskBackoffSeconds) * time.Second)
 	attributes.FirstExecutionRunId = firstRunID
 	attributes.OriginalExecutionRunId = originalRunID
 	attributes.Memo = request.Memo
@@ -504,8 +507,8 @@ func (b *historyBuilder) newWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.Ta
 }
 
 func (b *historyBuilder) newTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
-	attempt int64, timestamp int64) *historypb.HistoryEvent {
-	historyEvent := b.msBuilder.CreateNewHistoryEventWithTimestamp(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, timestamp)
+	attempt int64, time time.Time) *historypb.HistoryEvent {
+	historyEvent := b.msBuilder.CreateNewHistoryEventWithTime(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, time)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
@@ -518,8 +521,8 @@ func (b *historyBuilder) newWorkflowTaskStartedEvent(scheduledEventID int64, req
 }
 
 func (b *historyBuilder) newTransientWorkflowTaskStartedEvent(scheduledEventID int64, requestID string,
-	identity string, timestamp int64) *historypb.HistoryEvent {
-	historyEvent := b.msBuilder.CreateNewHistoryEventWithTimestamp(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, timestamp)
+	identity string, time time.Time) *historypb.HistoryEvent {
+	historyEvent := b.msBuilder.CreateNewHistoryEventWithTime(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, time)
 
 	return setWorkflowTaskStartedEventInfo(historyEvent, scheduledEventID, requestID, identity)
 }
@@ -563,10 +566,10 @@ func (b *historyBuilder) newActivityTaskScheduledEvent(workflowTaskCompletedEven
 	attributes.TaskQueue = scheduleAttributes.TaskQueue
 	attributes.Header = scheduleAttributes.Header
 	attributes.Input = scheduleAttributes.Input
-	attributes.ScheduleToCloseTimeoutSeconds = scheduleAttributes.ScheduleToCloseTimeoutSeconds
-	attributes.ScheduleToStartTimeoutSeconds = scheduleAttributes.ScheduleToStartTimeoutSeconds
-	attributes.StartToCloseTimeoutSeconds = scheduleAttributes.StartToCloseTimeoutSeconds
-	attributes.HeartbeatTimeoutSeconds = scheduleAttributes.HeartbeatTimeoutSeconds
+	attributes.ScheduleToCloseTimeout = scheduleAttributes.ScheduleToCloseTimeout
+	attributes.ScheduleToStartTimeout = scheduleAttributes.ScheduleToStartTimeout
+	attributes.StartToCloseTimeout = scheduleAttributes.StartToCloseTimeout
+	attributes.HeartbeatTimeout = scheduleAttributes.HeartbeatTimeout
 	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
 	attributes.RetryPolicy = scheduleAttributes.RetryPolicy
 	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: attributes}
@@ -852,10 +855,10 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(workflowTaskCom
 	attributes.TaskQueue = request.TaskQueue
 	attributes.Header = request.Header
 	attributes.Input = request.Input
-	attributes.WorkflowRunTimeoutSeconds = request.WorkflowRunTimeoutSeconds
-	attributes.WorkflowTaskTimeoutSeconds = request.WorkflowTaskTimeoutSeconds
+	attributes.WorkflowRunTimeout = request.WorkflowRunTimeout
+	attributes.WorkflowTaskTimeout = request.WorkflowTaskTimeout
 	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
-	attributes.BackoffStartIntervalInSeconds = request.GetBackoffStartIntervalInSeconds()
+	attributes.BackoffStartInterval = request.GetBackoffStartInterval()
 	attributes.Initiator = request.Initiator
 	attributes.Failure = request.GetFailure()
 	attributes.LastCompletionResult = request.LastCompletionResult
@@ -876,9 +879,9 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(workflowTa
 	attributes.TaskQueue = startAttributes.TaskQueue
 	attributes.Header = startAttributes.Header
 	attributes.Input = startAttributes.Input
-	attributes.WorkflowExecutionTimeoutSeconds = startAttributes.WorkflowExecutionTimeoutSeconds
-	attributes.WorkflowRunTimeoutSeconds = startAttributes.WorkflowRunTimeoutSeconds
-	attributes.WorkflowTaskTimeoutSeconds = startAttributes.WorkflowTaskTimeoutSeconds
+	attributes.WorkflowExecutionTimeout = startAttributes.WorkflowExecutionTimeout
+	attributes.WorkflowRunTimeout = startAttributes.WorkflowRunTimeout
+	attributes.WorkflowTaskTimeout = startAttributes.WorkflowTaskTimeout
 	attributes.Control = startAttributes.Control
 	attributes.WorkflowTaskCompletedEventId = workflowTaskCompletedEventID
 	attributes.WorkflowIdReusePolicy = startAttributes.WorkflowIdReusePolicy
@@ -1022,10 +1025,10 @@ func newWorkflowTaskStartedEventWithInfo(eventID, timestamp int64, scheduledEven
 	return setWorkflowTaskStartedEventInfo(historyEvent, scheduledEventID, requestID, identity)
 }
 
-func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, timestamp int64) *historypb.HistoryEvent {
+func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, eventTime int64) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{}
 	historyEvent.EventId = eventID
-	historyEvent.Timestamp = timestamp
+	historyEvent.EventTime = timestamp.TimePtr(timestamp.UnixOrZeroTime(eventTime))
 	historyEvent.EventType = eventType
 
 	return historyEvent
@@ -1035,7 +1038,7 @@ func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, tas
 	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
 	attributes := &historypb.WorkflowTaskScheduledEventAttributes{}
 	attributes.TaskQueue = taskQueue
-	attributes.StartToCloseTimeoutSeconds = startToCloseTimeoutSeconds
+	attributes.StartToCloseTimeout = timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second)
 	attributes.Attempt = attempt
 	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: attributes}
 

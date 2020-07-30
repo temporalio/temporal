@@ -85,7 +85,7 @@ func (pollers *pollerHistory) getAllPollerInfo() []*taskqueuepb.PollerInfo {
 		lastAccessTime := entry.CreateTime()
 		result = append(result, &taskqueuepb.PollerInfo{
 			Identity:       string(key),
-			LastAccessTime: lastAccessTime.UnixNano(),
+			LastAccessTime: &lastAccessTime,
 			RatePerSecond:  value.ratePerSecond,
 		})
 	}

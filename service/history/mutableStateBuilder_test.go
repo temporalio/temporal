@@ -131,7 +131,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   newWorkflowTaskStartedEvent.GetEventId() + 1,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Now()),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
 			ScheduledEventId: newWorkflowTaskScheduleEvent.GetEventId(),
@@ -566,24 +566,24 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	now := time.Now()
 	workflowType := "some random workflow type"
 	taskqueue := "some random taskqueue"
-	workflowTimeoutSecond := int32(222)
-	runTimeoutSecond := int32(111)
-	workflowTaskTimeoutSecond := int32(11)
+	workflowTimeout := 222 * time.Second
+	runTimeout := 111 * time.Second
+	workflowTaskTimeout := 11 * time.Second
 	workflowTaskAttempt := int64(1)
 
 	eventID := int64(1)
 	workflowStartEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
-			Input:                           nil,
-			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
-			WorkflowRunTimeoutSeconds:       runTimeoutSecond,
-			WorkflowTaskTimeoutSeconds:      workflowTaskTimeoutSecond,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
+			Input:                    nil,
+			WorkflowExecutionTimeout: &workflowTimeout,
+			WorkflowRunTimeout:       &runTimeout,
+			WorkflowTaskTimeout:      &workflowTaskTimeout,
 		}},
 	}
 	eventID++
@@ -591,12 +591,12 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTaskScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
-			StartToCloseTimeoutSeconds: workflowTaskTimeoutSecond,
-			Attempt:                    workflowTaskAttempt,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+			StartToCloseTimeout: &workflowTaskTimeout,
+			Attempt:             workflowTaskAttempt,
 		}},
 	}
 	eventID++
@@ -604,7 +604,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTaskStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -616,7 +616,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	_ = &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -642,7 +642,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
-		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
+		int32(timestamp.DurationValue(workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeout()).Seconds()),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
 		0,
@@ -655,7 +655,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
 		workflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		workflowTaskStartedEvent.GetTimestamp(),
+		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()).UnixNano(),
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -667,12 +667,12 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	newWorkflowTaskScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-			TaskQueue:                  &taskqueuepb.TaskQueue{Name: taskqueue},
-			StartToCloseTimeoutSeconds: workflowTaskTimeoutSecond,
-			Attempt:                    workflowTaskAttempt,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+			StartToCloseTimeout: &workflowTaskTimeout,
+			Attempt:             workflowTaskAttempt,
 		}},
 	}
 	eventID++
@@ -680,7 +680,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	newWorkflowTaskStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		Timestamp: now.UnixNano(),
+		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -693,7 +693,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
-		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
+		int32(timestamp.DurationValue(newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetStartToCloseTimeout()).Seconds()),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		0,
 		0,
@@ -706,7 +706,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
-		newWorkflowTaskStartedEvent.GetTimestamp(),
+		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()).UnixNano(),
 	)
 	s.Nil(err)
 	s.NotNil(di)
