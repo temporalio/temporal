@@ -2343,6 +2343,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, wh.error(errStartTimeFilterNotSet, scope)
 	}
 
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = timestamp.TimeNowPtrUtc()
+	}
+
 	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
@@ -2437,6 +2441,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	if request.StartTimeFilter == nil {
 		return nil, wh.error(errStartTimeFilterNotSet, scope)
+	}
+
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = timestamp.TimeNowPtrUtc()
 	}
 
 	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
