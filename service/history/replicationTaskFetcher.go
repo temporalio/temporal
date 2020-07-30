@@ -253,7 +253,12 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 	f.logger.Debug("Successfully fetched replication tasks.", tag.Counter(len(messagesByShard)))
 
 	for shardID, tasks := range messagesByShard {
-		request := requestByShard[shardID]
+		request, ok := requestByShard[shardID]
+
+		if !ok {
+			f.logger.Error("No outstanding request found for shardId.  Skipping Messages.", tag.ShardID(int(shardID)))
+			continue
+		}
 		request.respChan <- tasks
 		close(request.respChan)
 		delete(requestByShard, shardID)
