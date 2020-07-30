@@ -90,3 +90,99 @@ func TestValidateRetryPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureRetryPolicyDefaults(t *testing.T) {
+	defaultActivityRetrySettings := DefaultActivityRetrySettings{
+		InitialIntervalInSeconds:   1,
+		MaximumIntervalCoefficient: 100,
+		BackoffCoefficient:         2.0,
+		MaximumAttempts:            120,
+	}
+
+	defaultRetryPolicy := &commonpb.RetryPolicy{
+		InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+		BackoffCoefficient: 2.0,
+		MaximumAttempts:    120,
+	}
+
+	testCases := []struct {
+		name  string
+		input *commonpb.RetryPolicy
+		want  *commonpb.RetryPolicy
+	}{
+		{
+			name:  "default fields are set ",
+			input: &commonpb.RetryPolicy{},
+			want:  defaultRetryPolicy,
+		},
+		{
+			name: "non-default InitialIntervalInSeconds is not set",
+			input: &commonpb.RetryPolicy{
+				InitialInterval: timestamp.DurationPtr(2 * time.Second),
+			},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:    timestamp.DurationPtr(2 * time.Second),
+				MaximumInterval:    timestamp.DurationPtr(200 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumAttempts:    120,
+			},
+		},
+		{
+			name: "non-default MaximumIntervalInSeconds is not set",
+			input: &commonpb.RetryPolicy{
+				MaximumInterval: timestamp.DurationPtr(1000 * time.Second),
+			},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumAttempts:    120,
+			},
+		},
+		{
+			name: "non-default BackoffCoefficient is not set",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: 1.5,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				BackoffCoefficient: 1.5,
+				MaximumAttempts:    120,
+			},
+		},
+		{
+			name: "non-default Maximum attempts is not set",
+			input: &commonpb.RetryPolicy{
+				MaximumAttempts: 49,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumAttempts:    49,
+			},
+		},
+		{
+			name: "non-retryable errors are set",
+			input: &commonpb.RetryPolicy{
+				NonRetryableErrorTypes: []string{"testFailureType"},
+			},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+				MaximumInterval:        timestamp.DurationPtr(100 * time.Second),
+				BackoffCoefficient:     2.0,
+				MaximumAttempts:        120,
+				NonRetryableErrorTypes: []string{"testFailureType"},
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			EnsureRetryPolicyDefaults(tt.input, defaultActivityRetrySettings)
+			assert.Equal(t, tt.want, tt.input)
+		})
+	}
+}

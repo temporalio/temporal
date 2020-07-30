@@ -109,10 +109,10 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      state: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      state: "enabled"
+      state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:

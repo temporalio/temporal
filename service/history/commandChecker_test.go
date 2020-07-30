@@ -574,7 +574,7 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			},
 		},
 		{
-			name: "do not override set policy",
+			name: "do not override fully set policy",
 			input: &commonpb.RetryPolicy{
 				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
 				BackoffCoefficient: 10,
@@ -586,6 +586,49 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 				BackoffCoefficient: 10,
 				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
 				MaximumAttempts:    8,
+			},
+		},
+		{
+			name: "partial override of fields",
+			input: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 0,
+				BackoffCoefficient:       1.2,
+				MaximumIntervalInSeconds: 0,
+				MaximumAttempts:          7,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 1,
+				BackoffCoefficient:       1.2,
+				MaximumIntervalInSeconds: 100,
+				MaximumAttempts:          7,
+			},
+		},
+		{
+			name: "set expected max interval if only init interval set",
+			input: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 3,
+				MaximumIntervalInSeconds: 0,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 3,
+				BackoffCoefficient:       2,
+				MaximumIntervalInSeconds: 300,
+				MaximumAttempts:          0,
+			},
+		},
+		{
+			name: "override all defaults",
+			input: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 0,
+				BackoffCoefficient:       0,
+				MaximumIntervalInSeconds: 0,
+				MaximumAttempts:          0,
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 1,
+				BackoffCoefficient:       2,
+				MaximumIntervalInSeconds: 100,
+				MaximumAttempts:          0,
 			},
 		},
 	}
