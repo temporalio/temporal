@@ -223,6 +223,7 @@ func (s *engineSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -248,8 +249,9 @@ func (s *engineSuite) SetupTest() {
 	historyEventNotifier := newHistoryEventNotifier(
 		clock.NewRealTimeSource(),
 		s.mockShard.resource.MetricsClient,
-		func(workflowID string) int {
-			return len(workflowID)
+		func(namespaceID, workflowID string) int {
+			key := namespaceID + "_" + workflowID
+			return len(key)
 		},
 	)
 
