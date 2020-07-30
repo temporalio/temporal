@@ -40,13 +40,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/elasticsearch/validator"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -202,7 +202,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
-	runTimeout int32,
+	runTimeout time.Duration,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -246,33 +246,33 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if attributes.GetScheduleToCloseTimeoutSeconds() < 0 || attributes.GetScheduleToStartTimeoutSeconds() < 0 ||
-		attributes.GetStartToCloseTimeoutSeconds() < 0 || attributes.GetHeartbeatTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) < 0 ||
+		timestamp.DurationValue(attributes.GetStartToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetHeartbeatTimeout()) < 0 {
 		return serviceerror.NewInvalidArgument("A valid timeout may not be negative.")
 	}
 
-	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
-	validScheduleToStart := attributes.GetScheduleToStartTimeoutSeconds() > 0
-	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
+	validScheduleToClose := timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > 0
+	validScheduleToStart := timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > 0
+	validStartToClose := timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > 0
 
 	if validScheduleToClose {
 		if validScheduleToStart {
-			attributes.ScheduleToStartTimeoutSeconds = common.MinInt32(attributes.GetScheduleToStartTimeoutSeconds(),
-				attributes.GetScheduleToCloseTimeoutSeconds())
+			attributes.ScheduleToStartTimeout = timestamp.MinDurationPtr(attributes.GetScheduleToStartTimeout(),
+				attributes.GetScheduleToCloseTimeout())
 		} else {
-			attributes.ScheduleToStartTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
+			attributes.ScheduleToStartTimeout = attributes.GetScheduleToCloseTimeout()
 		}
 		if validStartToClose {
-			attributes.StartToCloseTimeoutSeconds = common.MinInt32(attributes.GetStartToCloseTimeoutSeconds(),
-				attributes.GetScheduleToCloseTimeoutSeconds())
+			attributes.StartToCloseTimeout = timestamp.MinDurationPtr(attributes.GetStartToCloseTimeout(),
+				attributes.GetScheduleToCloseTimeout())
 		} else {
-			attributes.StartToCloseTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
+			attributes.StartToCloseTimeout = attributes.GetScheduleToCloseTimeout()
 		}
 	} else if validStartToClose {
 		// We are in !validScheduleToClose due to the first if above
-		attributes.ScheduleToCloseTimeoutSeconds = runTimeout
+		attributes.ScheduleToCloseTimeout = &runTimeout
 		if !validScheduleToStart {
-			attributes.ScheduleToStartTimeoutSeconds = runTimeout
+			attributes.ScheduleToStartTimeout = &runTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
@@ -280,22 +280,21 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	}
 	// ensure activity timeout never larger than workflow timeout
 	if runTimeout > 0 {
-		if attributes.GetScheduleToCloseTimeoutSeconds() > runTimeout {
-			attributes.ScheduleToCloseTimeoutSeconds = runTimeout
+		if timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > runTimeout {
+			attributes.ScheduleToCloseTimeout = &runTimeout
 		}
-		if attributes.GetScheduleToStartTimeoutSeconds() > runTimeout {
-			attributes.ScheduleToStartTimeoutSeconds = runTimeout
+		if timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > runTimeout {
+			attributes.ScheduleToStartTimeout = &runTimeout
 		}
-		if attributes.GetStartToCloseTimeoutSeconds() > runTimeout {
-			attributes.StartToCloseTimeoutSeconds = runTimeout
+		if timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > runTimeout {
+			attributes.StartToCloseTimeout = &runTimeout
 		}
-		if attributes.GetHeartbeatTimeoutSeconds() > runTimeout {
-			attributes.HeartbeatTimeoutSeconds = runTimeout
+		if timestamp.DurationValue(attributes.GetHeartbeatTimeout()) > runTimeout {
+			attributes.HeartbeatTimeout = &runTimeout
 		}
 	}
-	if attributes.GetHeartbeatTimeoutSeconds() > attributes.GetScheduleToCloseTimeoutSeconds() {
-		attributes.HeartbeatTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
-	}
+	attributes.HeartbeatTimeout = timestamp.MinDurationPtr(attributes.GetHeartbeatTimeout(), attributes.GetScheduleToCloseTimeout())
+
 	return nil
 }
 
@@ -312,8 +311,8 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
 	}
-	if attributes.GetStartToFireTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("A valid StartToFireTimeoutSeconds is not set on command.")
+	if timestamp.DurationValue(attributes.GetStartToFireTimeout()) <= 0 {
+		return serviceerror.NewInvalidArgument("A valid StartToFireTimeout is not set on command.")
 	}
 	return nil
 }
@@ -524,24 +523,24 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
 	timeoutTime := executionInfo.WorkflowExpirationTime
 	if !timeoutTime.IsZero() {
-		runTimeout := convert.Int32Ceil(timeoutTime.Sub(time.Now()).Seconds())
-		if attributes.GetWorkflowRunTimeoutSeconds() > 0 {
-			runTimeout = common.MinInt32(runTimeout, attributes.GetWorkflowRunTimeoutSeconds())
+		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now()))
+		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
+			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
 		} else {
-			runTimeout = common.MinInt32(runTimeout, int32(executionInfo.WorkflowRunTimeout))
+			runTimeout = timestamp.MinDuration(runTimeout, time.Duration(executionInfo.WorkflowRunTimeout)*time.Second)
 		}
-		attributes.WorkflowRunTimeoutSeconds = runTimeout
-	} else if attributes.GetWorkflowRunTimeoutSeconds() == 0 {
-		attributes.WorkflowRunTimeoutSeconds = int32(executionInfo.WorkflowRunTimeout)
+		attributes.WorkflowRunTimeout = &runTimeout
+	} else if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
+		attributes.WorkflowRunTimeout = timestamp.DurationPtr(time.Duration(executionInfo.WorkflowRunTimeout) * time.Second)
 	}
 
 	// Inherit workflow task timeout from previous execution if not provided on command
-	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
-		attributes.WorkflowTaskTimeoutSeconds = int32(executionInfo.DefaultWorkflowTaskTimeout)
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
+		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(executionInfo.DefaultWorkflowTaskTimeout) * time.Second)
 	}
 
 	// Check next run workflow task delay
-	if attributes.GetBackoffStartIntervalInSeconds() < 0 {
+	if timestamp.DurationValue(attributes.GetBackoffStartInterval()) < 0 {
 		return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
 	}
 
@@ -606,15 +605,15 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	attributes.WorkflowExecutionTimeoutSeconds = getWorkflowExecutionTimeout(targetNamespace,
-		attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
+	attributes.WorkflowExecutionTimeout = timestamp.DurationPtr(getWorkflowExecutionTimeout(targetNamespace,
+		timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()), v.config))
 
-	attributes.WorkflowRunTimeoutSeconds = getWorkflowRunTimeout(targetNamespace,
-		attributes.GetWorkflowRunTimeoutSeconds(), attributes.GetWorkflowExecutionTimeoutSeconds(), v.config)
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(getWorkflowRunTimeout(targetNamespace,
+		timestamp.DurationValue(attributes.GetWorkflowRunTimeout()), timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()), v.config))
 
 	// Inherit workflow task timeout from parent workflow execution if not provided on command
-	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
-		attributes.WorkflowTaskTimeoutSeconds = int32(parentInfo.DefaultWorkflowTaskTimeout)
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) <= 0 {
+		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(time.Duration(parentInfo.DefaultWorkflowTaskTimeout) * time.Second)
 	}
 
 	return nil

@@ -405,8 +405,8 @@ func Test_FromConfigToActivityRetryPolicy(t *testing.T) {
 	}
 
 	policy := fromConfigToActivityRetryPolicy(options)
-	assert.Equal(t, int32(2), policy.GetInitialIntervalInSeconds())
-	assert.Equal(t, int32(200), policy.GetMaximumIntervalInSeconds())
+	assert.Equal(t, 2*time.Second, timestamp.DurationValue(policy.GetInitialInterval()))
+	assert.Equal(t, 200*time.Second, timestamp.DurationValue(policy.GetMaximumInterval()))
 	assert.Equal(t, 4.0, policy.GetBackoffCoefficient())
 	assert.Equal(t, int32(5), policy.GetMaximumAttempts())
 }

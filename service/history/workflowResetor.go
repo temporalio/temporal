@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -561,15 +562,14 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 
 func (w *workflowResetorImpl) generateTimerTasksForReset(
 	msBuilder mutableState,
-	runTimeoutSecs int64,
+	runTimeout time.Duration,
 	needActivityTimer bool,
 ) ([]persistence.Task, error) {
 	timerTasks := []persistence.Task{}
 
 	// WF timeout task
-	duration := time.Duration(runTimeoutSecs) * time.Second
 	runTimeoutTask := &persistence.WorkflowTimeoutTask{
-		VisibilityTimestamp: w.eng.shard.GetTimeSource().Now().Add(duration),
+		VisibilityTimestamp: w.eng.shard.GetTimeSource().Now().Add(runTimeout),
 	}
 	timerTasks = append(timerTasks, runTimeoutTask)
 
@@ -618,7 +618,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState mutableState,
 	newRunID string,
-) (forkEventVersion, runTimeoutSecs int64, receivedSignalsAfterReset []*historypb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
+) (forkEventVersion int64, runTimeout time.Duration, receivedSignalsAfterReset []*historypb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
 	prevExecution := commonpb.WorkflowExecution{
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
@@ -675,7 +675,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not WorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
-				runTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
+				runTimeout = timestamp.DurationValue(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout())
 				if prevMutableState.GetReplicationState() != nil {
 					resetMutableState = newMutableStateBuilderWithReplicationState(
 						w.eng.shard,
@@ -872,7 +872,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	if retError != nil {
 		return retError
 	}
-	now := time.Unix(0, lastEvent.GetTimestamp())
+	now := timestamp.TimeValue(lastEvent.GetEventTime())
 	notify(w.eng.shard, request.GetSourceCluster(), now)
 	return nil
 }
@@ -893,7 +893,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	requestID := uuid.New()
 	var sBuilder stateBuilder
-	var runTimeoutSecs int64
+	var runTimeout time.Duration
 
 	namespaceEntry, retError := w.eng.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if retError != nil {
@@ -927,7 +927,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 			firstEvent := events[0]
 			lastEvent = events[len(events)-1]
 			if firstEvent.GetEventId() == common.FirstEventID {
-				runTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
+				runTimeout = timestamp.DurationValue(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout())
 				newMsBuilder = newMutableStateBuilderWithReplicationState(
 					w.eng.shard,
 					w.eng.shard.GetEventsCache(),
@@ -967,7 +967,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		retError = serviceerrors.NewRetryTask(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 		return
 	}
-	startTime := time.Unix(0, firstEvent.GetTimestamp())
+	startTime := timestamp.TimeValue(firstEvent.GetEventTime())
 	newMsBuilder.GetExecutionInfo().RunID = resetAttr.GetNewRunId()
 	newMsBuilder.GetExecutionInfo().StartTimestamp = startTime
 	newMsBuilder.GetExecutionInfo().LastUpdatedTimestamp = startTime
@@ -976,7 +976,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
 	_, _, retError = newMsBuilder.CloseTransactionAsSnapshot(
-		time.Unix(0, lastEvent.GetTimestamp()),
+		timestamp.TimeValue(lastEvent.GetEventTime()),
 		transactionPolicyPassive,
 	)
 	if retError != nil {
@@ -991,7 +991,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
 	_, _, retError = newMsBuilder.CloseTransactionAsSnapshot(
-		time.Unix(0, lastEvent.GetTimestamp()),
+		timestamp.TimeValue(lastEvent.GetEventTime()),
 		transactionPolicyPassive,
 	)
 	if retError != nil {
@@ -1011,7 +1011,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 	transferTasks = append(transferTasks, actTasks...)
-	timerTasks, retError = w.generateTimerTasksForReset(newMsBuilder, runTimeoutSecs, len(actTasks) > 0)
+	timerTasks, retError = w.generateTimerTasksForReset(newMsBuilder, runTimeout, len(actTasks) > 0)
 	if retError != nil {
 		return
 	}
@@ -1040,11 +1040,12 @@ func FindAutoResetPoint(
 	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
 		return "", nil
 	}
-	nowNano := timeSource.Now().UnixNano()
+	now := timeSource.Now()
 	for _, p := range autoResetPoints.Points {
 		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
 		if ok && p.GetResettable() {
-			if p.GetExpireTimeNano() > 0 && nowNano > p.GetExpireTimeNano() {
+			expireTime := timestamp.TimeValue(p.GetExpireTime())
+			if !expireTime.IsZero() && now.After(expireTime) {
 				// reset point has expired and we may already deleted the history
 				continue
 			}

@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func encode(message proto.Message) ([]byte, error) {
@@ -165,9 +165,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:     &types.Int64Value{Value: record.StartTimestamp},
-		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime:     &types.Int64Value{Value: record.CloseTimestamp},
+		StartTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.StartTimestamp)),
+		ExecutionTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(record.ExecutionTimestamp)),
+		CloseTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.CloseTimestamp)),
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

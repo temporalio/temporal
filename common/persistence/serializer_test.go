@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -83,7 +84,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
 		EventId:   999,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
@@ -108,9 +109,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 				BinaryChecksum:               "bad-binary-cs",
 				RunId:                        "test-run-id",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
-				ExpireTimeNano:               789,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -118,9 +119,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	badBinaries0 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"bad-binary-cs": {
-				CreateTimeNano: 456,
-				Operator:       "test-operattor",
-				Reason:         "test-reason",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				Operator:   "test-operattor",
+				Reason:     "test-reason",
 			},
 		},
 	}

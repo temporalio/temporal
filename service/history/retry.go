@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func getBackoffInterval(
@@ -142,14 +143,14 @@ func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
 
 func fromConfigToActivityRetryPolicy(options map[string]interface{}) *commonpb.RetryPolicy {
 	retryPolicy := &commonpb.RetryPolicy{}
-	initialRetryInterval, ok := options["InitialRetryIntervalInSeconds"]
+	initialRetryIntervalSeconds, ok := options["InitialRetryIntervalInSeconds"]
 	if ok {
-		retryPolicy.InitialIntervalInSeconds = int32(initialRetryInterval.(int))
+		retryPolicy.InitialInterval = timestamp.DurationPtr(time.Duration(initialRetryIntervalSeconds.(int)) * time.Second)
 	}
 
-	maxRetryInterval, ok := options["MaximumRetryIntervalInSeconds"]
+	maxRetryIntervalSeconds, ok := options["MaximumRetryIntervalInSeconds"]
 	if ok {
-		retryPolicy.MaximumIntervalInSeconds = int32(maxRetryInterval.(int))
+		retryPolicy.MaximumInterval = timestamp.DurationPtr(time.Duration(maxRetryIntervalSeconds.(int)) * time.Second)
 	}
 
 	exponentialBackoffCoefficient, ok := options["ExponentialBackoffCoefficient"]

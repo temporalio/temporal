@@ -26,6 +26,7 @@ package history
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -565,25 +567,25 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			name:  "override non-set policy",
 			input: nil,
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 1,
-				BackoffCoefficient:       2,
-				MaximumIntervalInSeconds: 100,
-				MaximumAttempts:          0,
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumAttempts:    0,
 			},
 		},
 		{
 			name: "do not override set policy",
 			input: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 5,
-				BackoffCoefficient:       10,
-				MaximumIntervalInSeconds: 20,
-				MaximumAttempts:          8,
+				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				BackoffCoefficient: 10,
+				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumAttempts:    8,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 5,
-				BackoffCoefficient:       10,
-				MaximumIntervalInSeconds: 20,
-				MaximumAttempts:          8,
+				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				BackoffCoefficient: 10,
+				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumAttempts:    8,
 			},
 		},
 	}

@@ -37,6 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/client/matching"
@@ -351,9 +352,9 @@ func getWorkflowExecutionTimestamp(
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoffSeconds(); backoffSeconds != 0 {
-		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
-		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
+	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
+		startTime := timestamp.TimeValue(startEvent.GetEventTime())
+		executionTimestamp = startTime.Add(backoffDuration)
 	}
 	return executionTimestamp
 }

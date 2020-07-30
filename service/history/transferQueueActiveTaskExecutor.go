@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -252,7 +253,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	wfCloseTime := completionEvent.GetTimestamp()
+	wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
 
 	parentNamespaceID := executionInfo.ParentNamespaceID
 	parentWorkflowID := executionInfo.ParentWorkflowID
@@ -268,7 +269,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	workflowStartTimestamp := startEvent.GetTimestamp()
+	workflowStartTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
@@ -283,9 +284,9 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		workflowTypeName,
-		workflowStartTimestamp,
+		workflowStartTimestamp.UnixNano(),
 		workflowExecutionTimestamp.UnixNano(),
-		workflowCloseTimestamp,
+		workflowCloseTimestamp.UnixNano(),
 		workflowStatus,
 		workflowHistoryLength,
 		task.GetTaskId(),
@@ -680,7 +681,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	if err != nil {
 		return err
 	}
-	startTimestamp := startEvent.GetTimestamp()
+	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
@@ -695,7 +696,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			task.GetWorkflowId(),
 			task.GetRunId(),
 			wfTypeName,
-			startTimestamp,
+			startTimestamp.UnixNano(),
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
@@ -709,7 +710,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		wfTypeName,
-		startTimestamp,
+		startTimestamp.UnixNano(),
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
@@ -1197,15 +1198,15 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: task.GetTargetNamespaceId(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                       targetNamespace,
-			WorkflowId:                      attributes.WorkflowId,
-			WorkflowType:                    attributes.WorkflowType,
-			TaskQueue:                       attributes.TaskQueue,
-			Input:                           attributes.Input,
-			Header:                          attributes.Header,
-			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
-			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
-			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,
+			Namespace:                targetNamespace,
+			WorkflowId:               attributes.WorkflowId,
+			WorkflowType:             attributes.WorkflowType,
+			TaskQueue:                attributes.TaskQueue,
+			Input:                    attributes.Input,
+			Header:                   attributes.Header,
+			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
+			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
+			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             childInfo.CreateRequestId,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
