@@ -11,10 +11,14 @@ import (
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
+	time "time"
 
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	v11 "go.temporal.io/api/common/v1"
+	_ "go.temporal.io/api/dependencies/gogoproto"
 	v16 "go.temporal.io/api/enums/v1"
 	v12 "go.temporal.io/api/query/v1"
 	v14 "go.temporal.io/api/taskqueue/v1"
@@ -27,6 +31,7 @@ import (
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -116,8 +121,8 @@ type PollWorkflowTaskQueueResponse struct {
 	WorkflowExecutionTaskQueue *v14.TaskQueue                 `protobuf:"bytes,12,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
 	EventStoreVersion          int32                          `protobuf:"varint,13,opt,name=event_store_version,json=eventStoreVersion,proto3" json:"event_store_version,omitempty"`
 	BranchToken                []byte                         `protobuf:"bytes,14,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	ScheduledTimestamp         int64                          `protobuf:"varint,15,opt,name=scheduled_timestamp,json=scheduledTimestamp,proto3" json:"scheduled_timestamp,omitempty"`
-	StartedTimestamp           int64                          `protobuf:"varint,16,opt,name=started_timestamp,json=startedTimestamp,proto3" json:"started_timestamp,omitempty"`
+	ScheduledTime              *time.Time                     `protobuf:"bytes,15,opt,name=scheduled_time,json=scheduledTime,proto3,stdtime" json:"scheduled_time,omitempty"`
+	StartedTime                *time.Time                     `protobuf:"bytes,16,opt,name=started_time,json=startedTime,proto3,stdtime" json:"started_time,omitempty"`
 	Queries                    map[string]*v12.WorkflowQuery  `protobuf:"bytes,17,rep,name=queries,proto3" json:"queries,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
@@ -251,18 +256,18 @@ func (m *PollWorkflowTaskQueueResponse) GetBranchToken() []byte {
 	return nil
 }
 
-func (m *PollWorkflowTaskQueueResponse) GetScheduledTimestamp() int64 {
+func (m *PollWorkflowTaskQueueResponse) GetScheduledTime() *time.Time {
 	if m != nil {
-		return m.ScheduledTimestamp
+		return m.ScheduledTime
 	}
-	return 0
+	return nil
 }
 
-func (m *PollWorkflowTaskQueueResponse) GetStartedTimestamp() int64 {
+func (m *PollWorkflowTaskQueueResponse) GetStartedTime() *time.Time {
 	if m != nil {
-		return m.StartedTimestamp
+		return m.StartedTime
 	}
-	return 0
+	return nil
 }
 
 func (m *PollWorkflowTaskQueueResponse) GetQueries() map[string]*v12.WorkflowQuery {
@@ -340,22 +345,22 @@ func (m *PollActivityTaskQueueRequest) GetForwardedFrom() string {
 }
 
 type PollActivityTaskQueueResponse struct {
-	TaskToken                       []byte                 `protobuf:"bytes,1,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
-	WorkflowExecution               *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	ActivityId                      string                 `protobuf:"bytes,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	ActivityType                    *v11.ActivityType      `protobuf:"bytes,4,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	Input                           *v11.Payloads          `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
-	ScheduledTimestamp              int64                  `protobuf:"varint,6,opt,name=scheduled_timestamp,json=scheduledTimestamp,proto3" json:"scheduled_timestamp,omitempty"`
-	ScheduleToCloseTimeoutSeconds   int32                  `protobuf:"varint,7,opt,name=schedule_to_close_timeout_seconds,json=scheduleToCloseTimeoutSeconds,proto3" json:"schedule_to_close_timeout_seconds,omitempty"`
-	StartedTimestamp                int64                  `protobuf:"varint,8,opt,name=started_timestamp,json=startedTimestamp,proto3" json:"started_timestamp,omitempty"`
-	StartToCloseTimeoutSeconds      int32                  `protobuf:"varint,9,opt,name=start_to_close_timeout_seconds,json=startToCloseTimeoutSeconds,proto3" json:"start_to_close_timeout_seconds,omitempty"`
-	HeartbeatTimeoutSeconds         int32                  `protobuf:"varint,10,opt,name=heartbeat_timeout_seconds,json=heartbeatTimeoutSeconds,proto3" json:"heartbeat_timeout_seconds,omitempty"`
-	Attempt                         int32                  `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	ScheduledTimestampOfThisAttempt int64                  `protobuf:"varint,12,opt,name=scheduled_timestamp_of_this_attempt,json=scheduledTimestampOfThisAttempt,proto3" json:"scheduled_timestamp_of_this_attempt,omitempty"`
-	HeartbeatDetails                *v11.Payloads          `protobuf:"bytes,13,opt,name=heartbeat_details,json=heartbeatDetails,proto3" json:"heartbeat_details,omitempty"`
-	WorkflowType                    *v11.WorkflowType      `protobuf:"bytes,14,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	WorkflowNamespace               string                 `protobuf:"bytes,15,opt,name=workflow_namespace,json=workflowNamespace,proto3" json:"workflow_namespace,omitempty"`
-	Header                          *v11.Header            `protobuf:"bytes,16,opt,name=header,proto3" json:"header,omitempty"`
+	TaskToken                   []byte                 `protobuf:"bytes,1,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
+	WorkflowExecution           *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	ActivityId                  string                 `protobuf:"bytes,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	ActivityType                *v11.ActivityType      `protobuf:"bytes,4,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
+	Input                       *v11.Payloads          `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	ScheduledTime               *time.Time             `protobuf:"bytes,6,opt,name=scheduled_time,json=scheduledTime,proto3,stdtime" json:"scheduled_time,omitempty"`
+	ScheduleToCloseTimeout      *time.Duration         `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3,stdduration" json:"schedule_to_close_timeout,omitempty"`
+	StartedTime                 *time.Time             `protobuf:"bytes,8,opt,name=started_time,json=startedTime,proto3,stdtime" json:"started_time,omitempty"`
+	StartToCloseTimeout         *time.Duration         `protobuf:"bytes,9,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3,stdduration" json:"start_to_close_timeout,omitempty"`
+	HeartbeatTimeout            *time.Duration         `protobuf:"bytes,10,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3,stdduration" json:"heartbeat_timeout,omitempty"`
+	Attempt                     int32                  `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	CurrentAttemptScheduledTime *time.Time             `protobuf:"bytes,12,opt,name=current_attempt_scheduled_time,json=currentAttemptScheduledTime,proto3,stdtime" json:"current_attempt_scheduled_time,omitempty"`
+	HeartbeatDetails            *v11.Payloads          `protobuf:"bytes,13,opt,name=heartbeat_details,json=heartbeatDetails,proto3" json:"heartbeat_details,omitempty"`
+	WorkflowType                *v11.WorkflowType      `protobuf:"bytes,14,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	WorkflowNamespace           string                 `protobuf:"bytes,15,opt,name=workflow_namespace,json=workflowNamespace,proto3" json:"workflow_namespace,omitempty"`
+	Header                      *v11.Header            `protobuf:"bytes,16,opt,name=header,proto3" json:"header,omitempty"`
 }
 
 func (m *PollActivityTaskQueueResponse) Reset()      { *m = PollActivityTaskQueueResponse{} }
@@ -425,39 +430,39 @@ func (m *PollActivityTaskQueueResponse) GetInput() *v11.Payloads {
 	return nil
 }
 
-func (m *PollActivityTaskQueueResponse) GetScheduledTimestamp() int64 {
+func (m *PollActivityTaskQueueResponse) GetScheduledTime() *time.Time {
 	if m != nil {
-		return m.ScheduledTimestamp
+		return m.ScheduledTime
 	}
-	return 0
+	return nil
 }
 
-func (m *PollActivityTaskQueueResponse) GetScheduleToCloseTimeoutSeconds() int32 {
+func (m *PollActivityTaskQueueResponse) GetScheduleToCloseTimeout() *time.Duration {
 	if m != nil {
-		return m.ScheduleToCloseTimeoutSeconds
+		return m.ScheduleToCloseTimeout
 	}
-	return 0
+	return nil
 }
 
-func (m *PollActivityTaskQueueResponse) GetStartedTimestamp() int64 {
+func (m *PollActivityTaskQueueResponse) GetStartedTime() *time.Time {
 	if m != nil {
-		return m.StartedTimestamp
+		return m.StartedTime
 	}
-	return 0
+	return nil
 }
 
-func (m *PollActivityTaskQueueResponse) GetStartToCloseTimeoutSeconds() int32 {
+func (m *PollActivityTaskQueueResponse) GetStartToCloseTimeout() *time.Duration {
 	if m != nil {
-		return m.StartToCloseTimeoutSeconds
+		return m.StartToCloseTimeout
 	}
-	return 0
+	return nil
 }
 
-func (m *PollActivityTaskQueueResponse) GetHeartbeatTimeoutSeconds() int32 {
+func (m *PollActivityTaskQueueResponse) GetHeartbeatTimeout() *time.Duration {
 	if m != nil {
-		return m.HeartbeatTimeoutSeconds
+		return m.HeartbeatTimeout
 	}
-	return 0
+	return nil
 }
 
 func (m *PollActivityTaskQueueResponse) GetAttempt() int32 {
@@ -467,11 +472,11 @@ func (m *PollActivityTaskQueueResponse) GetAttempt() int32 {
 	return 0
 }
 
-func (m *PollActivityTaskQueueResponse) GetScheduledTimestampOfThisAttempt() int64 {
+func (m *PollActivityTaskQueueResponse) GetCurrentAttemptScheduledTime() *time.Time {
 	if m != nil {
-		return m.ScheduledTimestampOfThisAttempt
+		return m.CurrentAttemptScheduledTime
 	}
-	return 0
+	return nil
 }
 
 func (m *PollActivityTaskQueueResponse) GetHeartbeatDetails() *v11.Payloads {
@@ -503,13 +508,13 @@ func (m *PollActivityTaskQueueResponse) GetHeader() *v11.Header {
 }
 
 type AddWorkflowTaskRequest struct {
-	NamespaceId                   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution                     *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	TaskQueue                     *v14.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	ScheduleId                    int64                  `protobuf:"varint,4,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	ScheduleToStartTimeoutSeconds int32                  `protobuf:"varint,5,opt,name=schedule_to_start_timeout_seconds,json=scheduleToStartTimeoutSeconds,proto3" json:"schedule_to_start_timeout_seconds,omitempty"`
-	ForwardedFrom                 string                 `protobuf:"bytes,6,opt,name=forwarded_from,json=forwardedFrom,proto3" json:"forwarded_from,omitempty"`
-	Source                        v15.TaskSource         `protobuf:"varint,7,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
+	NamespaceId            string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution              *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	TaskQueue              *v14.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	ScheduleId             int64                  `protobuf:"varint,4,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	ScheduleToStartTimeout *time.Duration         `protobuf:"bytes,5,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3,stdduration" json:"schedule_to_start_timeout,omitempty"`
+	ForwardedFrom          string                 `protobuf:"bytes,6,opt,name=forwarded_from,json=forwardedFrom,proto3" json:"forwarded_from,omitempty"`
+	Source                 v15.TaskSource         `protobuf:"varint,7,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 }
 
 func (m *AddWorkflowTaskRequest) Reset()      { *m = AddWorkflowTaskRequest{} }
@@ -572,11 +577,11 @@ func (m *AddWorkflowTaskRequest) GetScheduleId() int64 {
 	return 0
 }
 
-func (m *AddWorkflowTaskRequest) GetScheduleToStartTimeoutSeconds() int32 {
+func (m *AddWorkflowTaskRequest) GetScheduleToStartTimeout() *time.Duration {
 	if m != nil {
-		return m.ScheduleToStartTimeoutSeconds
+		return m.ScheduleToStartTimeout
 	}
-	return 0
+	return nil
 }
 
 func (m *AddWorkflowTaskRequest) GetForwardedFrom() string {
@@ -629,14 +634,14 @@ func (m *AddWorkflowTaskResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_AddWorkflowTaskResponse proto.InternalMessageInfo
 
 type AddActivityTaskRequest struct {
-	NamespaceId                   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution                     *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	SourceNamespaceId             string                 `protobuf:"bytes,3,opt,name=source_namespace_id,json=sourceNamespaceId,proto3" json:"source_namespace_id,omitempty"`
-	TaskQueue                     *v14.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	ScheduleId                    int64                  `protobuf:"varint,5,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	ScheduleToStartTimeoutSeconds int32                  `protobuf:"varint,6,opt,name=schedule_to_start_timeout_seconds,json=scheduleToStartTimeoutSeconds,proto3" json:"schedule_to_start_timeout_seconds,omitempty"`
-	ForwardedFrom                 string                 `protobuf:"bytes,7,opt,name=forwarded_from,json=forwardedFrom,proto3" json:"forwarded_from,omitempty"`
-	Source                        v15.TaskSource         `protobuf:"varint,8,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
+	NamespaceId            string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution              *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	SourceNamespaceId      string                 `protobuf:"bytes,3,opt,name=source_namespace_id,json=sourceNamespaceId,proto3" json:"source_namespace_id,omitempty"`
+	TaskQueue              *v14.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	ScheduleId             int64                  `protobuf:"varint,5,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	ScheduleToStartTimeout *time.Duration         `protobuf:"bytes,6,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3,stdduration" json:"schedule_to_start_timeout,omitempty"`
+	ForwardedFrom          string                 `protobuf:"bytes,7,opt,name=forwarded_from,json=forwardedFrom,proto3" json:"forwarded_from,omitempty"`
+	Source                 v15.TaskSource         `protobuf:"varint,8,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 }
 
 func (m *AddActivityTaskRequest) Reset()      { *m = AddActivityTaskRequest{} }
@@ -706,11 +711,11 @@ func (m *AddActivityTaskRequest) GetScheduleId() int64 {
 	return 0
 }
 
-func (m *AddActivityTaskRequest) GetScheduleToStartTimeoutSeconds() int32 {
+func (m *AddActivityTaskRequest) GetScheduleToStartTimeout() *time.Duration {
 	if m != nil {
-		return m.ScheduleToStartTimeoutSeconds
+		return m.ScheduleToStartTimeout
 	}
-	return 0
+	return nil
 }
 
 func (m *AddActivityTaskRequest) GetForwardedFrom() string {
@@ -1315,112 +1320,116 @@ func init() {
 }
 
 var fileDescriptor_a429a3813476c583 = []byte{
-	// 1670 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x58, 0x5b, 0x6f, 0x1b, 0xc5,
-	0x17, 0xcf, 0x3a, 0x89, 0x13, 0x1f, 0x3b, 0x69, 0xbc, 0xfd, 0xff, 0x5b, 0x27, 0x6d, 0x36, 0xa9,
-	0x7b, 0x0b, 0x50, 0x1c, 0x35, 0xa8, 0x55, 0x5b, 0xa8, 0x20, 0x4d, 0x03, 0xb5, 0xe8, 0x25, 0xdd,
-	0x58, 0x05, 0x55, 0x48, 0xdb, 0xc9, 0xee, 0x24, 0x5e, 0xb2, 0xde, 0x71, 0x76, 0x66, 0x9d, 0x9a,
-	0x27, 0x10, 0x5f, 0x00, 0x89, 0x27, 0x84, 0x78, 0x87, 0x77, 0x3e, 0x04, 0x2f, 0x95, 0xfa, 0xd8,
-	0x47, 0x9a, 0x3e, 0xc0, 0x63, 0xf9, 0x00, 0x48, 0x68, 0x66, 0xf6, 0xe2, 0x5d, 0xdb, 0xb9, 0xb5,
-	0xa2, 0xbc, 0x79, 0xcf, 0xf9, 0x9d, 0xcb, 0x9c, 0xdf, 0x9c, 0x33, 0x33, 0x86, 0xeb, 0x0c, 0x37,
-	0x9a, 0xc4, 0x43, 0xce, 0x3c, 0xc5, 0x5e, 0x0b, 0x7b, 0xf3, 0xa8, 0x69, 0xcf, 0x37, 0x10, 0x33,
-	0xeb, 0xb6, 0xbb, 0xc1, 0x45, 0xb6, 0x89, 0xe7, 0x5b, 0x17, 0xe7, 0x3d, 0xbc, 0xe5, 0x63, 0xca,
-	0x0c, 0x0f, 0xd3, 0x26, 0x71, 0x29, 0xae, 0x34, 0x3d, 0xc2, 0x88, 0x7a, 0x2e, 0x34, 0xaf, 0x48,
-	0xf3, 0x0a, 0x6a, 0xda, 0x95, 0x94, 0x79, 0xa5, 0x75, 0x71, 0xea, 0x4c, 0x14, 0x86, 0xfb, 0x37,
-	0x49, 0xa3, 0x41, 0x5c, 0xee, 0xb6, 0x81, 0x29, 0x45, 0x1b, 0x81, 0xb7, 0xa9, 0x73, 0x09, 0x14,
-	0x76, 0xfd, 0x06, 0xe5, 0x20, 0x86, 0xe8, 0xa6, 0xb1, 0xe5, 0x63, 0x3f, 0xc4, 0x9d, 0x4f, 0xe0,
-	0xb8, 0x5a, 0x68, 0xbb, 0x1d, 0x9e, 0x4e, 0x00, 0xb7, 0x7c, 0xec, 0xb5, 0xbb, 0x41, 0xe7, 0x7b,
-	0x95, 0x20, 0x11, 0x3c, 0x00, 0x5e, 0xe8, 0x05, 0xac, 0xdb, 0x94, 0x91, 0x5e, 0x6e, 0x2f, 0x27,
-	0x62, 0x6f, 0x13, 0x6f, 0x73, 0xdd, 0x21, 0xdb, 0x7b, 0x96, 0xb4, 0xfc, 0x87, 0x02, 0x27, 0x57,
-	0x88, 0xe3, 0x7c, 0x16, 0x58, 0xd4, 0x10, 0xdd, 0xbc, 0xcf, 0x97, 0xa7, 0x4b, 0xbc, 0x7a, 0x0a,
-	0x0a, 0x2e, 0x6a, 0x60, 0xda, 0x44, 0x26, 0x36, 0x6c, 0xab, 0xa4, 0xcc, 0x2a, 0x73, 0x39, 0x3d,
-	0x1f, 0xc9, 0xaa, 0x96, 0x7a, 0x02, 0x72, 0x4d, 0xe2, 0x38, 0xd8, 0xe3, 0xfa, 0x8c, 0xd0, 0x8f,
-	0x4a, 0x41, 0xd5, 0x52, 0x1f, 0x41, 0x81, 0xff, 0x36, 0x82, 0xf8, 0xa5, 0xc1, 0x59, 0x65, 0x2e,
-	0xbf, 0x70, 0xbd, 0x12, 0x51, 0xc9, 0x39, 0x4c, 0xe5, 0x5b, 0x69, 0x5d, 0xac, 0xec, 0x96, 0x94,
-	0x9e, 0xe7, 0x2e, 0xc3, 0x0c, 0xcf, 0xc2, 0xf8, 0x3a, 0xf1, 0xb6, 0x91, 0x67, 0x61, 0xcb, 0x58,
-	0xf7, 0x48, 0xa3, 0x34, 0x24, 0x72, 0x18, 0x8b, 0xa4, 0x1f, 0x7b, 0xa4, 0x51, 0xfe, 0x7b, 0x14,
-	0xa6, 0xfb, 0x38, 0x95, 0x15, 0x51, 0xa7, 0x01, 0x04, 0xf9, 0x8c, 0x6c, 0x62, 0x57, 0x2c, 0xb4,
-	0xa0, 0xe7, 0xb8, 0xa4, 0xc6, 0x05, 0xea, 0xe7, 0xa0, 0x86, 0x79, 0x1a, 0xf8, 0x31, 0x36, 0x7d,
-	0x66, 0x13, 0x57, 0xac, 0x37, 0xbf, 0xf0, 0x56, 0x72, 0x3d, 0x72, 0xcb, 0xf1, 0x65, 0x84, 0xd1,
-	0x96, 0x43, 0x03, 0xbd, 0xb8, 0x9d, 0x16, 0xa9, 0x55, 0x18, 0x8b, 0x3c, 0xb3, 0x76, 0x13, 0x07,
-	0x45, 0x3a, 0xb3, 0x97, 0xd3, 0x5a, 0xbb, 0x89, 0xf5, 0xc2, 0x76, 0xc7, 0x97, 0x7a, 0x15, 0x26,
-	0x9b, 0x1e, 0x6e, 0xd9, 0xc4, 0xa7, 0x06, 0x65, 0xc8, 0x63, 0xd8, 0x32, 0x70, 0x0b, 0xbb, 0x8c,
-	0x73, 0xc3, 0xeb, 0x32, 0xa8, 0x1f, 0x0b, 0x01, 0xab, 0x52, 0xbf, 0xcc, 0xd5, 0x55, 0x4b, 0x9d,
-	0x83, 0x89, 0x2e, 0x8b, 0x61, 0x61, 0x31, 0x4e, 0x93, 0xc8, 0x12, 0x8c, 0x20, 0xc6, 0x73, 0x63,
-	0xa5, 0xac, 0x00, 0x84, 0x9f, 0x6a, 0x19, 0xc6, 0x5c, 0xfc, 0x98, 0xc5, 0x0e, 0x46, 0x84, 0x3e,
-	0xcf, 0x85, 0xa1, 0xf5, 0x05, 0x50, 0xd7, 0x90, 0xb9, 0xe9, 0x90, 0x0d, 0xc3, 0x24, 0xbe, 0xcb,
-	0x8c, 0xba, 0xed, 0xb2, 0xd2, 0xa8, 0x00, 0x4e, 0x04, 0x9a, 0x25, 0xae, 0xb8, 0x65, 0xbb, 0x4c,
-	0xbd, 0x02, 0x25, 0xca, 0x6c, 0x73, 0xb3, 0x1d, 0xd7, 0xdc, 0xc0, 0x2e, 0x5a, 0x73, 0xb0, 0x55,
-	0xca, 0xcd, 0x2a, 0x73, 0xa3, 0xfa, 0x31, 0xa9, 0x8f, 0xca, 0xb9, 0x2c, 0xb5, 0xea, 0x35, 0x18,
-	0x16, 0x3d, 0x58, 0x82, 0x5e, 0xd5, 0x14, 0xaa, 0xce, 0x62, 0xde, 0xe7, 0x02, 0x5d, 0x9a, 0xa8,
-	0x1b, 0x1d, 0x5c, 0x8b, 0x3d, 0x61, 0xbb, 0xeb, 0xa4, 0x94, 0x17, 0x8e, 0xae, 0x56, 0x7a, 0x8d,
-	0xa1, 0xa0, 0x33, 0xb9, 0xc7, 0x9a, 0x87, 0x5c, 0x6a, 0x63, 0x97, 0x75, 0x6e, 0xb5, 0xaa, 0xbb,
-	0x4e, 0xf4, 0x89, 0xed, 0x94, 0x44, 0xdd, 0x80, 0xe9, 0xee, 0x4d, 0x65, 0xc4, 0x33, 0xa8, 0x54,
-	0xe8, 0x95, 0x7c, 0x34, 0x84, 0x44, 0xb8, 0x68, 0x23, 0x4f, 0x75, 0x6d, 0xad, 0x48, 0xa7, 0x56,
-	0xe0, 0xa8, 0x24, 0x85, 0xa7, 0x89, 0x8d, 0x16, 0xf6, 0x28, 0xdf, 0xbe, 0x63, 0xb3, 0xca, 0xdc,
-	0xb0, 0x5e, 0x14, 0xaa, 0x55, 0xae, 0x79, 0x20, 0x15, 0xbc, 0xef, 0xd7, 0x3c, 0xe4, 0x9a, 0xf5,
-	0xa0, 0x1d, 0xc6, 0x45, 0x3b, 0xe4, 0xa5, 0x4c, 0x36, 0xc4, 0x3c, 0x1c, 0xa5, 0x66, 0x1d, 0x5b,
-	0xbe, 0x83, 0x2d, 0x83, 0xd9, 0x0d, 0x4c, 0x19, 0x6a, 0x34, 0x4b, 0x47, 0x04, 0x93, 0x6a, 0xa4,
-	0xaa, 0x85, 0x1a, 0xf5, 0x1d, 0x28, 0x86, 0x3b, 0x2c, 0x86, 0x4f, 0x48, 0xe2, 0x03, 0x45, 0x0c,
-	0x76, 0x60, 0x84, 0x73, 0x61, 0x63, 0x5a, 0x2a, 0xce, 0x0e, 0xce, 0xe5, 0x17, 0xf4, 0xca, 0xfe,
-	0xc6, 0x7f, 0x65, 0xd7, 0x2e, 0xaf, 0xdc, 0x97, 0x4e, 0x97, 0x5d, 0xe6, 0xb5, 0xf5, 0x30, 0xc4,
-	0xd4, 0x23, 0x28, 0x74, 0x2a, 0xd4, 0x09, 0x18, 0xdc, 0xc4, 0xed, 0x60, 0xda, 0xf1, 0x9f, 0x7c,
-	0x3b, 0xb5, 0x90, 0xe3, 0xe3, 0xa0, 0xe3, 0xf7, 0xb9, 0x9d, 0x84, 0xc9, 0xb5, 0xcc, 0x15, 0x25,
-	0x9a, 0xb4, 0x8b, 0x26, 0xb3, 0x5b, 0x36, 0x6b, 0xff, 0xa7, 0x26, 0x6d, 0xbf, 0xa4, 0x0e, 0x35,
-	0x69, 0x9f, 0x8c, 0xc8, 0x49, 0xdb, 0xc3, 0xe9, 0x9b, 0x9e, 0xb4, 0x33, 0x90, 0x47, 0x41, 0x56,
-	0xbc, 0x84, 0x83, 0x22, 0x7d, 0x08, 0x45, 0x55, 0x8b, 0x8f, 0xe2, 0x08, 0x20, 0x46, 0xf1, 0xd0,
-	0xee, 0xa3, 0x38, 0x5a, 0xa3, 0x18, 0xc5, 0xa8, 0xe3, 0x4b, 0xbd, 0x0c, 0xc3, 0xb6, 0xdb, 0xf4,
-	0x99, 0x18, 0xa2, 0xf9, 0x85, 0xd9, 0x7e, 0x2e, 0x56, 0x50, 0xdb, 0x21, 0xc8, 0xa2, 0xba, 0x84,
-	0xf7, 0x6b, 0xab, 0x6c, 0xdf, 0xb6, 0xba, 0x05, 0xa7, 0x42, 0xa9, 0xc1, 0x88, 0x61, 0x3a, 0x84,
-	0x62, 0x61, 0x48, 0x7c, 0x66, 0x50, 0x6c, 0x12, 0xd7, 0xa2, 0x62, 0x10, 0x0f, 0xeb, 0xd3, 0x21,
-	0xb0, 0x46, 0x96, 0x38, 0xac, 0x26, 0x51, 0xab, 0x12, 0xd4, 0xbb, 0x41, 0x47, 0xfb, 0x34, 0xe8,
-	0x0d, 0xd0, 0x84, 0xac, 0x7f, 0xcc, 0x9c, 0x88, 0x39, 0x25, 0x50, 0xbd, 0x03, 0x5e, 0x83, 0xc9,
-	0x3a, 0x46, 0x1e, 0x5b, 0xc3, 0x88, 0x75, 0x99, 0x83, 0x30, 0x3f, 0x1e, 0x01, 0x52, 0xb6, 0x1d,
-	0xa7, 0x50, 0x5e, 0x20, 0xa3, 0x53, 0xe8, 0x36, 0x9c, 0xee, 0x51, 0x41, 0x83, 0xac, 0x1b, 0xac,
-	0x6e, 0x53, 0x23, 0xb4, 0x2a, 0x88, 0x85, 0xcd, 0x74, 0x57, 0xf4, 0xde, 0x7a, 0xad, 0x6e, 0xd3,
-	0xc5, 0xc0, 0xdb, 0x1d, 0x28, 0xc6, 0x39, 0x5a, 0x98, 0x21, 0xdb, 0xa1, 0x62, 0x6e, 0xee, 0x87,
-	0xd3, 0x89, 0xc8, 0xf4, 0xa6, 0xb4, 0xec, 0x3e, 0xec, 0xc7, 0x0f, 0x7d, 0xd8, 0xbf, 0xdb, 0xd1,
-	0x27, 0xd1, 0x98, 0x10, 0xf3, 0x37, 0x17, 0x6f, 0xfe, 0xbb, 0xa1, 0x42, 0xbd, 0x0c, 0xd9, 0x3a,
-	0x46, 0x16, 0xf6, 0xc4, 0xcc, 0xcd, 0x2f, 0x68, 0xfd, 0x42, 0xde, 0x12, 0x28, 0x3d, 0x40, 0x97,
-	0x7f, 0x1a, 0x84, 0x63, 0x8b, 0x96, 0xd5, 0x39, 0x52, 0x0f, 0x30, 0xb3, 0x3e, 0x81, 0xdc, 0x2b,
-	0xf4, 0x70, 0x6c, 0xab, 0x2e, 0x05, 0x43, 0x43, 0x9e, 0x8b, 0x83, 0x07, 0x38, 0x17, 0xc5, 0x68,
-	0x91, 0xc7, 0xe0, 0x0c, 0xe4, 0xa3, 0x5e, 0x89, 0x6e, 0x44, 0x10, 0x8a, 0xaa, 0x56, 0xba, 0x99,
-	0x82, 0x1d, 0x9e, 0xda, 0x99, 0xc3, 0xe9, 0x66, 0x12, 0x57, 0xa9, 0xd4, 0xfe, 0xec, 0x9e, 0x96,
-	0xd9, 0x1e, 0xd3, 0x52, 0xfd, 0x08, 0xb2, 0x94, 0xf8, 0x9e, 0x89, 0x45, 0x8b, 0x8e, 0x2f, 0xcc,
-	0xf5, 0x3c, 0xe6, 0xc4, 0x0b, 0x21, 0x5c, 0xd5, 0xaa, 0xc0, 0xeb, 0x81, 0x5d, 0x79, 0x12, 0x8e,
-	0x77, 0xd1, 0x23, 0x07, 0x6d, 0xf9, 0x89, 0xa4, 0xae, 0x73, 0x12, 0xbf, 0x09, 0xea, 0x2a, 0x70,
-	0x54, 0xe6, 0x6a, 0x24, 0x42, 0xca, 0xf1, 0x5b, 0x94, 0xaa, 0xbb, 0x1d, 0x81, 0x93, 0x54, 0x0f,
-	0xbd, 0x16, 0xaa, 0x87, 0x0f, 0x47, 0x75, 0xf6, 0x70, 0x54, 0x8f, 0xec, 0x4e, 0xf5, 0xe8, 0x2b,
-	0x51, 0x9d, 0xa4, 0x33, 0xa0, 0xfa, 0x9b, 0x0c, 0xfc, 0x4f, 0x5c, 0x3a, 0x42, 0x26, 0x0e, 0x40,
-	0x74, 0xb2, 0xde, 0x99, 0xc3, 0xd5, 0xfb, 0x21, 0x8c, 0x89, 0x5b, 0x50, 0xea, 0x02, 0x72, 0x69,
-	0xcf, 0x0b, 0x48, 0xaf, 0xac, 0xf5, 0x82, 0xf0, 0x75, 0xc0, 0x9b, 0xc7, 0x2f, 0x0a, 0xfc, 0x3f,
-	0xe5, 0x2d, 0xb8, 0x71, 0x2c, 0x41, 0x21, 0x4c, 0x8e, 0xfa, 0x0e, 0x13, 0x45, 0xd8, 0xcf, 0xfc,
-	0xce, 0x07, 0x69, 0x70, 0x23, 0xf5, 0x53, 0x18, 0x0f, 0x9d, 0x7c, 0x89, 0x4d, 0x86, 0xad, 0x3d,
-	0xee, 0x82, 0xf2, 0x0e, 0x18, 0x60, 0xf5, 0xb1, 0xad, 0xce, 0xcf, 0xf2, 0xf7, 0x19, 0x98, 0x95,
-	0xe9, 0x59, 0x02, 0xc7, 0x6b, 0xba, 0x44, 0x1a, 0x4d, 0x07, 0x73, 0xf0, 0xbf, 0xcc, 0xdd, 0x71,
-	0x18, 0x91, 0xcf, 0x9c, 0xb0, 0x29, 0xb3, 0xfc, 0xb3, 0x6a, 0xa9, 0x2e, 0x14, 0xcd, 0x30, 0xa9,
-	0x88, 0x58, 0xd9, 0x90, 0x8b, 0x7b, 0x12, 0xbb, 0xd7, 0xf2, 0xf4, 0x09, 0x33, 0x25, 0x29, 0x9f,
-	0x86, 0x53, 0xbb, 0x58, 0x05, 0x5b, 0xfd, 0x2f, 0x05, 0x4e, 0x2e, 0x21, 0xd7, 0xc4, 0xce, 0x3d,
-	0x9f, 0x51, 0x86, 0x5c, 0xcb, 0x76, 0x37, 0x56, 0x3a, 0x2e, 0xaa, 0xfb, 0x28, 0xdb, 0x6d, 0x38,
-	0x12, 0x97, 0x4d, 0x1e, 0xc4, 0x19, 0xd1, 0x94, 0xa9, 0xda, 0x25, 0xba, 0x51, 0x14, 0x4b, 0x1c,
-	0xc4, 0x63, 0xac, 0xf3, 0xf3, 0xf5, 0x9c, 0x4d, 0x89, 0xdb, 0xfd, 0x50, 0xf2, 0x76, 0x5f, 0x9e,
-	0x81, 0xe9, 0x3e, 0x4b, 0x0e, 0x8a, 0xf2, 0xa3, 0x02, 0xa5, 0x9b, 0x98, 0x9a, 0x9e, 0xbd, 0x86,
-	0x0f, 0xf3, 0xb6, 0xf8, 0x02, 0x0a, 0x16, 0xa6, 0x66, 0x44, 0x72, 0x26, 0xfd, 0xd8, 0xed, 0x43,
-	0x72, 0xbf, 0x98, 0x7a, 0x9e, 0xbb, 0x0b, 0x79, 0xfd, 0x55, 0x81, 0xc9, 0x1e, 0xc8, 0xa0, 0x3b,
-	0x3f, 0x84, 0x11, 0xb9, 0x50, 0x5a, 0x52, 0xc4, 0x5b, 0xef, 0xec, 0x2e, 0xb5, 0x5b, 0x91, 0x25,
-	0xe1, 0xef, 0xe9, 0xd0, 0x4a, 0x7d, 0x00, 0xc5, 0x0e, 0x36, 0x29, 0x43, 0xcc, 0xa7, 0xc1, 0x0a,
-	0xde, 0xde, 0x0f, 0x0d, 0xab, 0xc2, 0x42, 0x3f, 0xc2, 0x92, 0x82, 0xf2, 0xb7, 0x0a, 0x68, 0xb7,
-	0x6d, 0xca, 0x22, 0xe0, 0x0a, 0xf2, 0x98, 0xcd, 0xcf, 0x34, 0x1a, 0x96, 0xf6, 0x24, 0xe4, 0xe2,
-	0xbb, 0x97, 0xac, 0x6b, 0x2c, 0x78, 0x2d, 0xdd, 0x59, 0xfe, 0x21, 0x03, 0x33, 0x7d, 0xb3, 0x08,
-	0x4a, 0xf8, 0x15, 0x68, 0xf1, 0xc3, 0x25, 0x2e, 0x45, 0x33, 0x42, 0x06, 0x95, 0xbd, 0xb4, 0x9f,
-	0xe0, 0x91, 0xff, 0x3b, 0x98, 0x21, 0x0b, 0x31, 0xa4, 0x9f, 0x40, 0xe9, 0xc7, 0x5c, 0x9c, 0x03,
-	0x8f, 0x9d, 0xfc, 0xb7, 0xa4, 0x2b, 0x76, 0xe6, 0x95, 0x62, 0x6f, 0xa7, 0x1f, 0xf3, 0x71, 0xec,
-	0x1b, 0xde, 0xd3, 0xe7, 0xda, 0xc0, 0xb3, 0xe7, 0xda, 0xc0, 0xcb, 0xe7, 0x9a, 0xf2, 0xf5, 0x8e,
-	0xa6, 0xfc, 0xbc, 0xa3, 0x29, 0xbf, 0xed, 0x68, 0xca, 0xd3, 0x1d, 0x4d, 0xf9, 0x7d, 0x47, 0x53,
-	0xfe, 0xdc, 0xd1, 0x06, 0x5e, 0xee, 0x68, 0xca, 0x77, 0x2f, 0xb4, 0x81, 0xa7, 0x2f, 0xb4, 0x81,
-	0x67, 0x2f, 0xb4, 0x81, 0x87, 0x1f, 0x6c, 0x90, 0x38, 0x17, 0x9b, 0xec, 0xfe, 0x77, 0xf4, 0xfb,
-	0x29, 0xd1, 0x5a, 0x56, 0xfc, 0x77, 0xfa, 0xde, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xb5, 0x1d,
-	0x9a, 0xf8, 0xcf, 0x16, 0x00, 0x00,
+	// 1739 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x58, 0x4f, 0x6f, 0xdb, 0xc8,
+	0x15, 0x37, 0x65, 0x5b, 0xb6, 0x86, 0x92, 0x63, 0x33, 0xad, 0x23, 0x3b, 0x31, 0xed, 0x28, 0xff,
+	0xdc, 0x22, 0xa5, 0x10, 0x17, 0x09, 0x92, 0xb4, 0x41, 0xeb, 0x38, 0x6e, 0x22, 0x34, 0x49, 0x1d,
+	0x5a, 0x48, 0x8b, 0xa0, 0x00, 0x33, 0x26, 0xc7, 0x32, 0x6b, 0x8a, 0x23, 0x73, 0x86, 0x72, 0xd4,
+	0x53, 0x8b, 0x7e, 0x81, 0x00, 0xbd, 0xb4, 0xe8, 0x17, 0x68, 0x0f, 0x45, 0x2f, 0xfd, 0x10, 0x7b,
+	0xd8, 0x43, 0x8e, 0xb9, 0x65, 0xe3, 0x1c, 0x76, 0x8f, 0xd9, 0x6f, 0xb0, 0x98, 0x3f, 0xa4, 0x48,
+	0x4a, 0xb2, 0x65, 0xc7, 0xd8, 0xec, 0x4d, 0x7c, 0xff, 0xe6, 0xcd, 0xfb, 0xbd, 0xf7, 0x9b, 0x19,
+	0x81, 0x7b, 0x14, 0x35, 0x5b, 0x38, 0x80, 0x5e, 0x95, 0xa0, 0xa0, 0x8d, 0x82, 0x2a, 0x6c, 0xb9,
+	0xd5, 0x26, 0xa4, 0xf6, 0x8e, 0xeb, 0x37, 0x98, 0xc8, 0xb5, 0x51, 0xb5, 0x7d, 0xa3, 0x1a, 0xa0,
+	0xbd, 0x10, 0x11, 0x6a, 0x05, 0x88, 0xb4, 0xb0, 0x4f, 0x90, 0xd1, 0x0a, 0x30, 0xc5, 0xda, 0xd5,
+	0xc8, 0xdd, 0x10, 0xee, 0x06, 0x6c, 0xb9, 0x46, 0xc6, 0xdd, 0x68, 0xdf, 0x98, 0xd7, 0x1b, 0x18,
+	0x37, 0x3c, 0x54, 0xe5, 0x5e, 0x5b, 0xe1, 0x76, 0xd5, 0x09, 0x03, 0x48, 0x5d, 0xec, 0x8b, 0x38,
+	0xf3, 0x8b, 0x59, 0x3d, 0x75, 0x9b, 0x88, 0x50, 0xd8, 0x6c, 0x49, 0x83, 0x8b, 0x0e, 0x6a, 0x21,
+	0xdf, 0x41, 0xbe, 0xed, 0x22, 0x52, 0x6d, 0xe0, 0x06, 0xe6, 0x72, 0xfe, 0x4b, 0x9a, 0x5c, 0x8e,
+	0xb7, 0xc2, 0xf6, 0x60, 0xe3, 0x66, 0x13, 0xfb, 0x2c, 0xf5, 0x26, 0x22, 0x04, 0x36, 0x64, 0xc6,
+	0xf3, 0x57, 0x53, 0x56, 0xc8, 0x0f, 0x9b, 0x84, 0x19, 0x51, 0x48, 0x76, 0xad, 0xbd, 0x10, 0x85,
+	0x91, 0xdd, 0xb5, 0x94, 0x1d, 0x53, 0x73, 0x6d, 0x6f, 0xc0, 0x4b, 0x29, 0xc3, 0xbd, 0x10, 0x05,
+	0x9d, 0x5e, 0xa3, 0x6b, 0xfd, 0xca, 0x9c, 0x5a, 0x5c, 0x1a, 0x5e, 0xef, 0x67, 0xb8, 0xe3, 0x12,
+	0x8a, 0xfb, 0x85, 0xbd, 0x95, 0x5a, 0x7b, 0x1f, 0x07, 0xbb, 0xdb, 0x1e, 0xde, 0x3f, 0x12, 0xb6,
+	0xca, 0xd7, 0x0a, 0xb8, 0xb0, 0x81, 0x3d, 0xef, 0xf7, 0xd2, 0xa3, 0x0e, 0xc9, 0xee, 0x33, 0xb6,
+	0x3d, 0x53, 0xd8, 0x6b, 0x17, 0x41, 0xd1, 0x87, 0x4d, 0x44, 0x5a, 0xd0, 0x46, 0x96, 0xeb, 0x94,
+	0x95, 0x25, 0x65, 0xb9, 0x60, 0xaa, 0xb1, 0xac, 0xe6, 0x68, 0xe7, 0x41, 0xa1, 0x85, 0x3d, 0x0f,
+	0x05, 0x4c, 0x9f, 0xe3, 0xfa, 0x49, 0x21, 0xa8, 0x39, 0xda, 0x4b, 0x50, 0x64, 0xbf, 0x2d, 0xb9,
+	0x7e, 0x79, 0x74, 0x49, 0x59, 0x56, 0x57, 0xee, 0x19, 0x71, 0xbb, 0xb0, 0x3e, 0xc9, 0xe4, 0x6b,
+	0xb4, 0x6f, 0x18, 0x87, 0x25, 0x65, 0xaa, 0x2c, 0x64, 0x94, 0xe1, 0x15, 0x30, 0xb5, 0x8d, 0x83,
+	0x7d, 0x18, 0x38, 0xc8, 0xb1, 0xb6, 0x03, 0xdc, 0x2c, 0x8f, 0xf1, 0x1c, 0x4a, 0xb1, 0xf4, 0x37,
+	0x01, 0x6e, 0x56, 0xfe, 0x5b, 0x00, 0x0b, 0x03, 0x82, 0x8a, 0x8a, 0x68, 0x0b, 0x00, 0x70, 0xf0,
+	0x29, 0xde, 0x45, 0x3e, 0xdf, 0x68, 0xd1, 0x2c, 0x30, 0x49, 0x9d, 0x09, 0xb4, 0x3f, 0x00, 0x2d,
+	0xca, 0xd3, 0x42, 0xaf, 0x90, 0x1d, 0xb2, 0xae, 0xe5, 0xfb, 0x55, 0x57, 0x7e, 0x92, 0xde, 0x8f,
+	0x68, 0x39, 0xb6, 0x8d, 0x68, 0xb5, 0xf5, 0xc8, 0xc1, 0x9c, 0xd9, 0xcf, 0x8a, 0xb4, 0x1a, 0x28,
+	0xc5, 0x91, 0x69, 0xa7, 0x85, 0x64, 0x91, 0x2e, 0x1f, 0x15, 0xb4, 0xde, 0x69, 0x21, 0xb3, 0xb8,
+	0x9f, 0xf8, 0xd2, 0xee, 0x80, 0xb9, 0x56, 0x80, 0xda, 0x2e, 0x0e, 0x89, 0x45, 0x28, 0x0c, 0x28,
+	0x72, 0x2c, 0xd4, 0x46, 0x3e, 0x65, 0xd8, 0xb0, 0xba, 0x8c, 0x9a, 0xb3, 0x91, 0xc1, 0xa6, 0xd0,
+	0xaf, 0x33, 0x75, 0xcd, 0xd1, 0x96, 0xc1, 0x74, 0x8f, 0xc7, 0x38, 0xf7, 0x98, 0x22, 0x69, 0xcb,
+	0x32, 0x98, 0x80, 0x94, 0xe5, 0x46, 0xcb, 0x79, 0x6e, 0x10, 0x7d, 0x6a, 0x15, 0x50, 0xf2, 0xd1,
+	0x2b, 0xda, 0x0d, 0x30, 0xc1, 0xf5, 0x2a, 0x13, 0x46, 0xde, 0xd7, 0x81, 0xb6, 0x05, 0xed, 0x5d,
+	0x0f, 0x37, 0x2c, 0x1b, 0x87, 0x3e, 0xb5, 0x76, 0x5c, 0x9f, 0x96, 0x27, 0xb9, 0xe1, 0xb4, 0xd4,
+	0xac, 0x31, 0xc5, 0x23, 0xd7, 0xa7, 0xda, 0x6d, 0x50, 0x26, 0xd4, 0xb5, 0x77, 0x3b, 0xdd, 0x9a,
+	0x5b, 0xc8, 0x87, 0x5b, 0x1e, 0x72, 0xca, 0x85, 0x25, 0x65, 0x79, 0xd2, 0x9c, 0x15, 0xfa, 0xb8,
+	0x9c, 0xeb, 0x42, 0xab, 0xdd, 0x05, 0xe3, 0x7c, 0x06, 0xcb, 0xa0, 0x5f, 0x35, 0xb9, 0x2a, 0x59,
+	0xcc, 0x67, 0x4c, 0x60, 0x0a, 0x17, 0xad, 0x91, 0xc0, 0x9a, 0xf7, 0x84, 0xeb, 0x6f, 0xe3, 0xb2,
+	0xca, 0x03, 0xdd, 0x31, 0xfa, 0x51, 0x9d, 0x9c, 0x4c, 0x16, 0xb1, 0x1e, 0x40, 0x9f, 0xb8, 0xc8,
+	0xa7, 0xc9, 0x56, 0xab, 0xf9, 0xdb, 0xd8, 0x9c, 0xde, 0xcf, 0x48, 0xb4, 0x06, 0x58, 0xe8, 0x6d,
+	0x2a, 0xab, 0xcb, 0x41, 0xe5, 0x62, 0xbf, 0xe4, 0x63, 0x12, 0xe2, 0xcb, 0xc5, 0x8d, 0x3c, 0xdf,
+	0xd3, 0x5a, 0xb1, 0x4e, 0x33, 0xc0, 0x59, 0x01, 0x0a, 0x4b, 0x13, 0x59, 0x6d, 0x14, 0x10, 0xd6,
+	0xbe, 0xa5, 0x25, 0x65, 0x79, 0xdc, 0x9c, 0xe1, 0xaa, 0x4d, 0xa6, 0x79, 0x2e, 0x14, 0x6c, 0xee,
+	0xb7, 0x02, 0xe8, 0xdb, 0x3b, 0x72, 0x1c, 0xa6, 0xf8, 0x38, 0xa8, 0x42, 0x26, 0x06, 0xe2, 0x21,
+	0x98, 0x22, 0xf6, 0x0e, 0x72, 0x42, 0x0f, 0x39, 0x16, 0xa3, 0xe9, 0xf2, 0x19, 0x9e, 0xec, 0xbc,
+	0x21, 0x38, 0xdc, 0x88, 0x38, 0xdc, 0xa8, 0x47, 0x1c, 0x7e, 0x7f, 0xec, 0xf5, 0xbb, 0x45, 0xc5,
+	0x2c, 0xc5, 0x7e, 0x4c, 0xa3, 0xad, 0x81, 0x62, 0xd4, 0x79, 0x3c, 0xcc, 0xf4, 0x90, 0x61, 0x54,
+	0xe9, 0xc5, 0x83, 0x78, 0x60, 0x82, 0x61, 0xe7, 0x22, 0x52, 0x9e, 0x59, 0x1a, 0x5d, 0x56, 0x57,
+	0x4c, 0x63, 0xb8, 0x23, 0xc9, 0x38, 0x94, 0x15, 0x8c, 0x67, 0x22, 0xe8, 0xba, 0x4f, 0x83, 0x8e,
+	0x19, 0x2d, 0x31, 0xff, 0x12, 0x14, 0x93, 0x0a, 0x6d, 0x1a, 0x8c, 0xee, 0xa2, 0x8e, 0x64, 0x47,
+	0xf6, 0x93, 0xb5, 0x5f, 0x1b, 0x7a, 0x21, 0x92, 0x0c, 0x31, 0x64, 0xfb, 0x71, 0x97, 0xbb, 0xb9,
+	0xdb, 0x4a, 0xcc, 0xcc, 0xab, 0x36, 0x75, 0xdb, 0x2e, 0xed, 0xfc, 0xa0, 0x98, 0x79, 0x50, 0x52,
+	0x27, 0x62, 0xe6, 0x2f, 0x27, 0x05, 0x33, 0xf7, 0x09, 0xfa, 0xb9, 0x99, 0x79, 0x11, 0xa8, 0x50,
+	0x66, 0xc5, 0x4a, 0x38, 0xca, 0xd3, 0x07, 0x91, 0xa8, 0xe6, 0x30, 0xea, 0x8e, 0x0d, 0x38, 0x75,
+	0x8f, 0x1d, 0x4e, 0xdd, 0xf1, 0x1e, 0x39, 0x75, 0xc3, 0xc4, 0x97, 0x76, 0x0b, 0x8c, 0xbb, 0x7e,
+	0x2b, 0xa4, 0x9c, 0x74, 0xd5, 0x95, 0xa5, 0x41, 0x21, 0x36, 0x60, 0xc7, 0xc3, 0xd0, 0x21, 0xa6,
+	0x30, 0xef, 0x33, 0x86, 0xf9, 0x93, 0x8d, 0xe1, 0x0b, 0x30, 0x17, 0x09, 0x2c, 0x8a, 0x2d, 0xdb,
+	0xc3, 0x04, 0xf1, 0x80, 0x38, 0xa4, 0x9c, 0xc8, 0xd5, 0x95, 0xb9, 0x9e, 0x98, 0x0f, 0xe4, 0xf5,
+	0xed, 0xfe, 0xd8, 0x3f, 0x58, 0xc8, 0xd9, 0x28, 0x42, 0x1d, 0xaf, 0x31, 0xff, 0xba, 0x70, 0xef,
+	0x19, 0xf1, 0xc9, 0x93, 0x8c, 0x78, 0x1d, 0xcc, 0xf2, 0xcf, 0xde, 0xec, 0x0a, 0xc3, 0x65, 0x77,
+	0x96, 0xbb, 0x67, 0x52, 0x7b, 0x0c, 0x66, 0x76, 0x10, 0x0c, 0xe8, 0x16, 0x82, 0x34, 0x0e, 0x08,
+	0x86, 0x0b, 0x38, 0x1d, 0x7b, 0x46, 0xd1, 0x12, 0x67, 0xa3, 0xca, 0xb9, 0x35, 0x3e, 0x1b, 0x11,
+	0xd0, 0xed, 0x30, 0x08, 0x18, 0x07, 0x4b, 0x91, 0x95, 0xc1, 0xad, 0x38, 0x64, 0x51, 0xce, 0xcb,
+	0x38, 0xab, 0x22, 0xcc, 0x66, 0x0a, 0xc5, 0x27, 0xc9, 0xed, 0x38, 0x88, 0x42, 0xd7, 0x23, 0x9c,
+	0xe6, 0x87, 0x69, 0xa9, 0xee, 0x7e, 0x1e, 0x08, 0xcf, 0xde, 0xbb, 0xc9, 0xd4, 0x89, 0xef, 0x26,
+	0x3f, 0x4b, 0x8c, 0x69, 0xcc, 0x52, 0xfc, 0xcc, 0x28, 0x74, 0x67, 0xef, 0x69, 0xa4, 0xd0, 0x6e,
+	0x81, 0xfc, 0x0e, 0x82, 0x0e, 0x0a, 0xe4, 0x79, 0xa0, 0x0f, 0x5a, 0xf2, 0x11, 0xb7, 0x32, 0xa5,
+	0x75, 0xe5, 0x7f, 0xa3, 0x60, 0x76, 0xd5, 0x71, 0x92, 0x8c, 0x7e, 0x0c, 0xca, 0x7c, 0x08, 0x0a,
+	0x9f, 0x40, 0x21, 0x5d, 0x5f, 0x6d, 0x4d, 0x72, 0x96, 0x38, 0xc6, 0x47, 0x8f, 0x71, 0x8c, 0x73,
+	0x66, 0x13, 0xa7, 0xf6, 0x22, 0x50, 0xe3, 0x91, 0x8c, 0x2f, 0x70, 0x20, 0x12, 0xd5, 0x9c, 0xec,
+	0xcc, 0xca, 0xf1, 0x90, 0x4d, 0x3c, 0x7e, 0xec, 0x99, 0xe5, 0x57, 0xc2, 0xa8, 0x95, 0x7b, 0xe9,
+	0x3b, 0xdf, 0x87, 0xbe, 0xb5, 0x5f, 0x83, 0x3c, 0xc1, 0x61, 0x60, 0x23, 0xce, 0x11, 0x53, 0x2b,
+	0xcb, 0x7d, 0xcf, 0x5d, 0xfe, 0xc4, 0x89, 0xf6, 0xb9, 0xc9, 0xed, 0x4d, 0xe9, 0x57, 0x99, 0x03,
+	0xe7, 0x7a, 0x00, 0x13, 0xcc, 0x5f, 0x79, 0x27, 0xc0, 0x4c, 0x1e, 0x0d, 0x9f, 0x03, 0x4c, 0x03,
+	0x9c, 0x15, 0xb9, 0x5a, 0xa9, 0x25, 0xc5, 0x79, 0x30, 0x23, 0x54, 0x4f, 0x13, 0x0b, 0xa7, 0xc1,
+	0x1f, 0x3b, 0x15, 0xf0, 0xc7, 0x8f, 0x07, 0x7e, 0xfe, 0xb4, 0xc1, 0x9f, 0x38, 0x1c, 0xfc, 0xc9,
+	0x4f, 0x02, 0x3f, 0x0d, 0xb0, 0x04, 0xff, 0xaf, 0x39, 0xf0, 0x23, 0x7e, 0x2f, 0x8a, 0xb0, 0x39,
+	0x06, 0xf4, 0x69, 0x04, 0x72, 0x27, 0x43, 0xe0, 0x05, 0x28, 0xf1, 0x8b, 0x5a, 0xe6, 0x8e, 0x74,
+	0xf3, 0xc8, 0x3b, 0x52, 0xbf, 0xac, 0xcd, 0x22, 0x8f, 0x75, 0xcc, 0xcb, 0xd1, 0x7f, 0x14, 0xf0,
+	0xe3, 0x4c, 0x34, 0x79, 0x29, 0x5a, 0x03, 0xc5, 0x28, 0x39, 0x12, 0x7a, 0x94, 0x17, 0x61, 0x18,
+	0x8e, 0x57, 0x65, 0x1a, 0xcc, 0x49, 0xfb, 0x2d, 0x98, 0x8a, 0x82, 0xfc, 0x09, 0xd9, 0x14, 0x39,
+	0x47, 0x5c, 0x57, 0xc5, 0x35, 0x55, 0xda, 0x9a, 0xa5, 0xbd, 0xe4, 0x67, 0xe5, 0xef, 0x39, 0xb0,
+	0x24, 0xd2, 0x73, 0xb8, 0x1d, 0xab, 0xe9, 0x1a, 0x6e, 0xb6, 0x3c, 0xc4, 0x8c, 0xbf, 0x67, 0xec,
+	0xce, 0x81, 0x09, 0xf1, 0x72, 0x8b, 0xc6, 0x34, 0xcf, 0x3e, 0x6b, 0x8e, 0xe6, 0x83, 0x19, 0x3b,
+	0x4a, 0x2a, 0x06, 0x56, 0x8c, 0xe8, 0xea, 0x91, 0xc0, 0x1e, 0xb5, 0x3d, 0x73, 0xda, 0xce, 0x48,
+	0x2a, 0x97, 0xc0, 0xc5, 0x43, 0xbc, 0x64, 0xab, 0x7f, 0xab, 0x80, 0x0b, 0x6b, 0xd0, 0xb7, 0x91,
+	0xf7, 0xbb, 0x90, 0x12, 0x0a, 0x7d, 0xc7, 0xf5, 0x1b, 0x1b, 0x89, 0xbb, 0xf4, 0x10, 0x65, 0x7b,
+	0x0c, 0xce, 0x74, 0xcb, 0x26, 0x0e, 0xeb, 0x1c, 0x1f, 0xca, 0x4c, 0xed, 0x52, 0xd3, 0xc8, 0x8b,
+	0xc5, 0x0f, 0xeb, 0x12, 0x4d, 0x7e, 0x9e, 0xce, 0xf9, 0x95, 0x7a, 0x80, 0x8c, 0xa5, 0x1f, 0x20,
+	0x95, 0x45, 0xb0, 0x30, 0x60, 0xcb, 0xb2, 0x28, 0xff, 0x52, 0x40, 0xf9, 0x01, 0x22, 0x76, 0xe0,
+	0x6e, 0xa1, 0x93, 0x3c, 0x7f, 0xfe, 0x08, 0x8a, 0x0e, 0x22, 0x76, 0x0c, 0x72, 0x2e, 0xfb, 0x7e,
+	0x1f, 0x00, 0xf2, 0xa0, 0x35, 0x4d, 0x95, 0x85, 0x8b, 0x70, 0xfd, 0xbf, 0x02, 0xe6, 0xfa, 0x58,
+	0xca, 0xe9, 0xfc, 0x15, 0x98, 0x10, 0x1b, 0x25, 0x65, 0x85, 0x3f, 0x47, 0xaf, 0x1c, 0x52, 0xbb,
+	0x0d, 0x51, 0x12, 0x7f, 0x1b, 0x9b, 0x91, 0x97, 0xf6, 0x1c, 0xcc, 0x24, 0xd0, 0x24, 0x14, 0xd2,
+	0x90, 0xc8, 0x1d, 0xfc, 0x74, 0x18, 0x18, 0x36, 0xb9, 0x87, 0x79, 0x86, 0xa6, 0x05, 0x95, 0xbf,
+	0x29, 0x40, 0x7f, 0xec, 0x12, 0x1a, 0x1b, 0x6e, 0xc0, 0x80, 0xba, 0xec, 0x44, 0x20, 0x51, 0x69,
+	0x2f, 0x80, 0x42, 0xf7, 0x7e, 0x26, 0xea, 0xda, 0x15, 0x9c, 0xca, 0x74, 0x56, 0xfe, 0x99, 0x03,
+	0x8b, 0x03, 0xb3, 0x90, 0x25, 0xfc, 0x33, 0xd0, 0xbb, 0x6f, 0xab, 0x6e, 0x29, 0x5a, 0xb1, 0xa5,
+	0xac, 0xec, 0xcd, 0x61, 0x16, 0x8f, 0xe3, 0x3f, 0x41, 0x14, 0x3a, 0x90, 0x42, 0xf3, 0x3c, 0xcc,
+	0xbe, 0x37, 0xbb, 0x39, 0xb0, 0xb5, 0xd3, 0x7f, 0x00, 0xf5, 0xac, 0x9d, 0xfb, 0xa4, 0xb5, 0xf7,
+	0xb3, 0xff, 0x37, 0x74, 0xd7, 0xbe, 0x1f, 0xbc, 0x79, 0xaf, 0x8f, 0xbc, 0x7d, 0xaf, 0x8f, 0x7c,
+	0x7c, 0xaf, 0x2b, 0x7f, 0x39, 0xd0, 0x95, 0x7f, 0x1f, 0xe8, 0xca, 0x17, 0x07, 0xba, 0xf2, 0xe6,
+	0x40, 0x57, 0xbe, 0x3a, 0xd0, 0x95, 0x6f, 0x0e, 0xf4, 0x91, 0x8f, 0x07, 0xba, 0xf2, 0xfa, 0x83,
+	0x3e, 0xf2, 0xe6, 0x83, 0x3e, 0xf2, 0xf6, 0x83, 0x3e, 0xf2, 0xe2, 0x97, 0x0d, 0xdc, 0xcd, 0xc5,
+	0xc5, 0x87, 0xff, 0x8b, 0xff, 0x8b, 0x8c, 0x68, 0x2b, 0xcf, 0xef, 0x07, 0x3f, 0xff, 0x2e, 0x00,
+	0x00, 0xff, 0xff, 0x2b, 0x92, 0xd0, 0xe2, 0x06, 0x18, 0x00, 0x00,
 }
 
 func (this *PollWorkflowTaskQueueRequest) Equal(that interface{}) bool {
@@ -1517,10 +1526,18 @@ func (this *PollWorkflowTaskQueueResponse) Equal(that interface{}) bool {
 	if !bytes.Equal(this.BranchToken, that1.BranchToken) {
 		return false
 	}
-	if this.ScheduledTimestamp != that1.ScheduledTimestamp {
+	if that1.ScheduledTime == nil {
+		if this.ScheduledTime != nil {
+			return false
+		}
+	} else if !this.ScheduledTime.Equal(*that1.ScheduledTime) {
 		return false
 	}
-	if this.StartedTimestamp != that1.StartedTimestamp {
+	if that1.StartedTime == nil {
+		if this.StartedTime != nil {
+			return false
+		}
+	} else if !this.StartedTime.Equal(*that1.StartedTime) {
 		return false
 	}
 	if len(this.Queries) != len(that1.Queries) {
@@ -1600,25 +1617,55 @@ func (this *PollActivityTaskQueueResponse) Equal(that interface{}) bool {
 	if !this.Input.Equal(that1.Input) {
 		return false
 	}
-	if this.ScheduledTimestamp != that1.ScheduledTimestamp {
+	if that1.ScheduledTime == nil {
+		if this.ScheduledTime != nil {
+			return false
+		}
+	} else if !this.ScheduledTime.Equal(*that1.ScheduledTime) {
 		return false
 	}
-	if this.ScheduleToCloseTimeoutSeconds != that1.ScheduleToCloseTimeoutSeconds {
+	if this.ScheduleToCloseTimeout != nil && that1.ScheduleToCloseTimeout != nil {
+		if *this.ScheduleToCloseTimeout != *that1.ScheduleToCloseTimeout {
+			return false
+		}
+	} else if this.ScheduleToCloseTimeout != nil {
+		return false
+	} else if that1.ScheduleToCloseTimeout != nil {
 		return false
 	}
-	if this.StartedTimestamp != that1.StartedTimestamp {
+	if that1.StartedTime == nil {
+		if this.StartedTime != nil {
+			return false
+		}
+	} else if !this.StartedTime.Equal(*that1.StartedTime) {
 		return false
 	}
-	if this.StartToCloseTimeoutSeconds != that1.StartToCloseTimeoutSeconds {
+	if this.StartToCloseTimeout != nil && that1.StartToCloseTimeout != nil {
+		if *this.StartToCloseTimeout != *that1.StartToCloseTimeout {
+			return false
+		}
+	} else if this.StartToCloseTimeout != nil {
+		return false
+	} else if that1.StartToCloseTimeout != nil {
 		return false
 	}
-	if this.HeartbeatTimeoutSeconds != that1.HeartbeatTimeoutSeconds {
+	if this.HeartbeatTimeout != nil && that1.HeartbeatTimeout != nil {
+		if *this.HeartbeatTimeout != *that1.HeartbeatTimeout {
+			return false
+		}
+	} else if this.HeartbeatTimeout != nil {
+		return false
+	} else if that1.HeartbeatTimeout != nil {
 		return false
 	}
 	if this.Attempt != that1.Attempt {
 		return false
 	}
-	if this.ScheduledTimestampOfThisAttempt != that1.ScheduledTimestampOfThisAttempt {
+	if that1.CurrentAttemptScheduledTime == nil {
+		if this.CurrentAttemptScheduledTime != nil {
+			return false
+		}
+	} else if !this.CurrentAttemptScheduledTime.Equal(*that1.CurrentAttemptScheduledTime) {
 		return false
 	}
 	if !this.HeartbeatDetails.Equal(that1.HeartbeatDetails) {
@@ -1666,7 +1713,13 @@ func (this *AddWorkflowTaskRequest) Equal(that interface{}) bool {
 	if this.ScheduleId != that1.ScheduleId {
 		return false
 	}
-	if this.ScheduleToStartTimeoutSeconds != that1.ScheduleToStartTimeoutSeconds {
+	if this.ScheduleToStartTimeout != nil && that1.ScheduleToStartTimeout != nil {
+		if *this.ScheduleToStartTimeout != *that1.ScheduleToStartTimeout {
+			return false
+		}
+	} else if this.ScheduleToStartTimeout != nil {
+		return false
+	} else if that1.ScheduleToStartTimeout != nil {
 		return false
 	}
 	if this.ForwardedFrom != that1.ForwardedFrom {
@@ -1732,7 +1785,13 @@ func (this *AddActivityTaskRequest) Equal(that interface{}) bool {
 	if this.ScheduleId != that1.ScheduleId {
 		return false
 	}
-	if this.ScheduleToStartTimeoutSeconds != that1.ScheduleToStartTimeoutSeconds {
+	if this.ScheduleToStartTimeout != nil && that1.ScheduleToStartTimeout != nil {
+		if *this.ScheduleToStartTimeout != *that1.ScheduleToStartTimeout {
+			return false
+		}
+	} else if this.ScheduleToStartTimeout != nil {
+		return false
+	} else if that1.ScheduleToStartTimeout != nil {
 		return false
 	}
 	if this.ForwardedFrom != that1.ForwardedFrom {
@@ -2100,8 +2159,8 @@ func (this *PollWorkflowTaskQueueResponse) GoString() string {
 	}
 	s = append(s, "EventStoreVersion: "+fmt.Sprintf("%#v", this.EventStoreVersion)+",\n")
 	s = append(s, "BranchToken: "+fmt.Sprintf("%#v", this.BranchToken)+",\n")
-	s = append(s, "ScheduledTimestamp: "+fmt.Sprintf("%#v", this.ScheduledTimestamp)+",\n")
-	s = append(s, "StartedTimestamp: "+fmt.Sprintf("%#v", this.StartedTimestamp)+",\n")
+	s = append(s, "ScheduledTime: "+fmt.Sprintf("%#v", this.ScheduledTime)+",\n")
+	s = append(s, "StartedTime: "+fmt.Sprintf("%#v", this.StartedTime)+",\n")
 	keysForQueries := make([]string, 0, len(this.Queries))
 	for k, _ := range this.Queries {
 		keysForQueries = append(keysForQueries, k)
@@ -2150,13 +2209,13 @@ func (this *PollActivityTaskQueueResponse) GoString() string {
 	if this.Input != nil {
 		s = append(s, "Input: "+fmt.Sprintf("%#v", this.Input)+",\n")
 	}
-	s = append(s, "ScheduledTimestamp: "+fmt.Sprintf("%#v", this.ScheduledTimestamp)+",\n")
-	s = append(s, "ScheduleToCloseTimeoutSeconds: "+fmt.Sprintf("%#v", this.ScheduleToCloseTimeoutSeconds)+",\n")
-	s = append(s, "StartedTimestamp: "+fmt.Sprintf("%#v", this.StartedTimestamp)+",\n")
-	s = append(s, "StartToCloseTimeoutSeconds: "+fmt.Sprintf("%#v", this.StartToCloseTimeoutSeconds)+",\n")
-	s = append(s, "HeartbeatTimeoutSeconds: "+fmt.Sprintf("%#v", this.HeartbeatTimeoutSeconds)+",\n")
+	s = append(s, "ScheduledTime: "+fmt.Sprintf("%#v", this.ScheduledTime)+",\n")
+	s = append(s, "ScheduleToCloseTimeout: "+fmt.Sprintf("%#v", this.ScheduleToCloseTimeout)+",\n")
+	s = append(s, "StartedTime: "+fmt.Sprintf("%#v", this.StartedTime)+",\n")
+	s = append(s, "StartToCloseTimeout: "+fmt.Sprintf("%#v", this.StartToCloseTimeout)+",\n")
+	s = append(s, "HeartbeatTimeout: "+fmt.Sprintf("%#v", this.HeartbeatTimeout)+",\n")
 	s = append(s, "Attempt: "+fmt.Sprintf("%#v", this.Attempt)+",\n")
-	s = append(s, "ScheduledTimestampOfThisAttempt: "+fmt.Sprintf("%#v", this.ScheduledTimestampOfThisAttempt)+",\n")
+	s = append(s, "CurrentAttemptScheduledTime: "+fmt.Sprintf("%#v", this.CurrentAttemptScheduledTime)+",\n")
 	if this.HeartbeatDetails != nil {
 		s = append(s, "HeartbeatDetails: "+fmt.Sprintf("%#v", this.HeartbeatDetails)+",\n")
 	}
@@ -2184,7 +2243,7 @@ func (this *AddWorkflowTaskRequest) GoString() string {
 		s = append(s, "TaskQueue: "+fmt.Sprintf("%#v", this.TaskQueue)+",\n")
 	}
 	s = append(s, "ScheduleId: "+fmt.Sprintf("%#v", this.ScheduleId)+",\n")
-	s = append(s, "ScheduleToStartTimeoutSeconds: "+fmt.Sprintf("%#v", this.ScheduleToStartTimeoutSeconds)+",\n")
+	s = append(s, "ScheduleToStartTimeout: "+fmt.Sprintf("%#v", this.ScheduleToStartTimeout)+",\n")
 	s = append(s, "ForwardedFrom: "+fmt.Sprintf("%#v", this.ForwardedFrom)+",\n")
 	s = append(s, "Source: "+fmt.Sprintf("%#v", this.Source)+",\n")
 	s = append(s, "}")
@@ -2214,7 +2273,7 @@ func (this *AddActivityTaskRequest) GoString() string {
 		s = append(s, "TaskQueue: "+fmt.Sprintf("%#v", this.TaskQueue)+",\n")
 	}
 	s = append(s, "ScheduleId: "+fmt.Sprintf("%#v", this.ScheduleId)+",\n")
-	s = append(s, "ScheduleToStartTimeoutSeconds: "+fmt.Sprintf("%#v", this.ScheduleToStartTimeoutSeconds)+",\n")
+	s = append(s, "ScheduleToStartTimeout: "+fmt.Sprintf("%#v", this.ScheduleToStartTimeout)+",\n")
 	s = append(s, "ForwardedFrom: "+fmt.Sprintf("%#v", this.ForwardedFrom)+",\n")
 	s = append(s, "Source: "+fmt.Sprintf("%#v", this.Source)+",\n")
 	s = append(s, "}")
@@ -2479,17 +2538,27 @@ func (m *PollWorkflowTaskQueueResponse) MarshalToSizedBuffer(dAtA []byte) (int, 
 			dAtA[i] = 0x8a
 		}
 	}
-	if m.StartedTimestamp != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.StartedTimestamp))
+	if m.StartedTime != nil {
+		n3, err3 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StartedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime):])
+		if err3 != nil {
+			return 0, err3
+		}
+		i -= n3
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n3))
 		i--
 		dAtA[i] = 0x1
 		i--
-		dAtA[i] = 0x80
+		dAtA[i] = 0x82
 	}
-	if m.ScheduledTimestamp != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduledTimestamp))
+	if m.ScheduledTime != nil {
+		n4, err4 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ScheduledTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime):])
+		if err4 != nil {
+			return 0, err4
+		}
+		i -= n4
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n4))
 		i--
-		dAtA[i] = 0x78
+		dAtA[i] = 0x7a
 	}
 	if len(m.BranchToken) > 0 {
 		i -= len(m.BranchToken)
@@ -2729,40 +2798,70 @@ func (m *PollActivityTaskQueueResponse) MarshalToSizedBuffer(dAtA []byte) (int, 
 		i--
 		dAtA[i] = 0x6a
 	}
-	if m.ScheduledTimestampOfThisAttempt != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduledTimestampOfThisAttempt))
+	if m.CurrentAttemptScheduledTime != nil {
+		n14, err14 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.CurrentAttemptScheduledTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.CurrentAttemptScheduledTime):])
+		if err14 != nil {
+			return 0, err14
+		}
+		i -= n14
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n14))
 		i--
-		dAtA[i] = 0x60
+		dAtA[i] = 0x62
 	}
 	if m.Attempt != 0 {
 		i = encodeVarintRequestResponse(dAtA, i, uint64(m.Attempt))
 		i--
 		dAtA[i] = 0x58
 	}
-	if m.HeartbeatTimeoutSeconds != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.HeartbeatTimeoutSeconds))
+	if m.HeartbeatTimeout != nil {
+		n15, err15 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.HeartbeatTimeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.HeartbeatTimeout):])
+		if err15 != nil {
+			return 0, err15
+		}
+		i -= n15
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n15))
 		i--
-		dAtA[i] = 0x50
+		dAtA[i] = 0x52
 	}
-	if m.StartToCloseTimeoutSeconds != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.StartToCloseTimeoutSeconds))
+	if m.StartToCloseTimeout != nil {
+		n16, err16 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.StartToCloseTimeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.StartToCloseTimeout):])
+		if err16 != nil {
+			return 0, err16
+		}
+		i -= n16
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n16))
 		i--
-		dAtA[i] = 0x48
+		dAtA[i] = 0x4a
 	}
-	if m.StartedTimestamp != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.StartedTimestamp))
+	if m.StartedTime != nil {
+		n17, err17 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StartedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime):])
+		if err17 != nil {
+			return 0, err17
+		}
+		i -= n17
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n17))
 		i--
-		dAtA[i] = 0x40
+		dAtA[i] = 0x42
 	}
-	if m.ScheduleToCloseTimeoutSeconds != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduleToCloseTimeoutSeconds))
+	if m.ScheduleToCloseTimeout != nil {
+		n18, err18 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.ScheduleToCloseTimeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToCloseTimeout):])
+		if err18 != nil {
+			return 0, err18
+		}
+		i -= n18
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n18))
 		i--
-		dAtA[i] = 0x38
+		dAtA[i] = 0x3a
 	}
-	if m.ScheduledTimestamp != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduledTimestamp))
+	if m.ScheduledTime != nil {
+		n19, err19 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ScheduledTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime):])
+		if err19 != nil {
+			return 0, err19
+		}
+		i -= n19
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n19))
 		i--
-		dAtA[i] = 0x30
+		dAtA[i] = 0x32
 	}
 	if m.Input != nil {
 		{
@@ -2849,10 +2948,15 @@ func (m *AddWorkflowTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		i--
 		dAtA[i] = 0x32
 	}
-	if m.ScheduleToStartTimeoutSeconds != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduleToStartTimeoutSeconds))
+	if m.ScheduleToStartTimeout != nil {
+		n23, err23 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.ScheduleToStartTimeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToStartTimeout):])
+		if err23 != nil {
+			return 0, err23
+		}
+		i -= n23
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n23))
 		i--
-		dAtA[i] = 0x28
+		dAtA[i] = 0x2a
 	}
 	if m.ScheduleId != 0 {
 		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduleId))
@@ -2948,10 +3052,15 @@ func (m *AddActivityTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		i--
 		dAtA[i] = 0x3a
 	}
-	if m.ScheduleToStartTimeoutSeconds != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduleToStartTimeoutSeconds))
+	if m.ScheduleToStartTimeout != nil {
+		n26, err26 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.ScheduleToStartTimeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToStartTimeout):])
+		if err26 != nil {
+			return 0, err26
+		}
+		i -= n26
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n26))
 		i--
-		dAtA[i] = 0x30
+		dAtA[i] = 0x32
 	}
 	if m.ScheduleId != 0 {
 		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ScheduleId))
@@ -3566,11 +3675,13 @@ func (m *PollWorkflowTaskQueueResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.ScheduledTimestamp != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduledTimestamp))
+	if m.ScheduledTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.StartedTimestamp != 0 {
-		n += 2 + sovRequestResponse(uint64(m.StartedTimestamp))
+	if m.StartedTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime)
+		n += 2 + l + sovRequestResponse(uint64(l))
 	}
 	if len(m.Queries) > 0 {
 		for k, v := range m.Queries {
@@ -3639,26 +3750,32 @@ func (m *PollActivityTaskQueueResponse) Size() (n int) {
 		l = m.Input.Size()
 		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.ScheduledTimestamp != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduledTimestamp))
+	if m.ScheduledTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.ScheduleToCloseTimeoutSeconds != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduleToCloseTimeoutSeconds))
+	if m.ScheduleToCloseTimeout != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToCloseTimeout)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.StartedTimestamp != 0 {
-		n += 1 + sovRequestResponse(uint64(m.StartedTimestamp))
+	if m.StartedTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.StartToCloseTimeoutSeconds != 0 {
-		n += 1 + sovRequestResponse(uint64(m.StartToCloseTimeoutSeconds))
+	if m.StartToCloseTimeout != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.StartToCloseTimeout)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	if m.HeartbeatTimeoutSeconds != 0 {
-		n += 1 + sovRequestResponse(uint64(m.HeartbeatTimeoutSeconds))
+	if m.HeartbeatTimeout != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.HeartbeatTimeout)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	if m.Attempt != 0 {
 		n += 1 + sovRequestResponse(uint64(m.Attempt))
 	}
-	if m.ScheduledTimestampOfThisAttempt != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduledTimestampOfThisAttempt))
+	if m.CurrentAttemptScheduledTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.CurrentAttemptScheduledTime)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	if m.HeartbeatDetails != nil {
 		l = m.HeartbeatDetails.Size()
@@ -3700,8 +3817,9 @@ func (m *AddWorkflowTaskRequest) Size() (n int) {
 	if m.ScheduleId != 0 {
 		n += 1 + sovRequestResponse(uint64(m.ScheduleId))
 	}
-	if m.ScheduleToStartTimeoutSeconds != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduleToStartTimeoutSeconds))
+	if m.ScheduleToStartTimeout != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToStartTimeout)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	l = len(m.ForwardedFrom)
 	if l > 0 {
@@ -3747,8 +3865,9 @@ func (m *AddActivityTaskRequest) Size() (n int) {
 	if m.ScheduleId != 0 {
 		n += 1 + sovRequestResponse(uint64(m.ScheduleId))
 	}
-	if m.ScheduleToStartTimeoutSeconds != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ScheduleToStartTimeoutSeconds))
+	if m.ScheduleToStartTimeout != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ScheduleToStartTimeout)
+		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	l = len(m.ForwardedFrom)
 	if l > 0 {
@@ -4000,8 +4119,8 @@ func (this *PollWorkflowTaskQueueResponse) String() string {
 		`WorkflowExecutionTaskQueue:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowExecutionTaskQueue), "TaskQueue", "v14.TaskQueue", 1) + `,`,
 		`EventStoreVersion:` + fmt.Sprintf("%v", this.EventStoreVersion) + `,`,
 		`BranchToken:` + fmt.Sprintf("%v", this.BranchToken) + `,`,
-		`ScheduledTimestamp:` + fmt.Sprintf("%v", this.ScheduledTimestamp) + `,`,
-		`StartedTimestamp:` + fmt.Sprintf("%v", this.StartedTimestamp) + `,`,
+		`ScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.ScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
+		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`Queries:` + mapStringForQueries + `,`,
 		`}`,
 	}, "")
@@ -4030,13 +4149,13 @@ func (this *PollActivityTaskQueueResponse) String() string {
 		`ActivityId:` + fmt.Sprintf("%v", this.ActivityId) + `,`,
 		`ActivityType:` + strings.Replace(fmt.Sprintf("%v", this.ActivityType), "ActivityType", "v11.ActivityType", 1) + `,`,
 		`Input:` + strings.Replace(fmt.Sprintf("%v", this.Input), "Payloads", "v11.Payloads", 1) + `,`,
-		`ScheduledTimestamp:` + fmt.Sprintf("%v", this.ScheduledTimestamp) + `,`,
-		`ScheduleToCloseTimeoutSeconds:` + fmt.Sprintf("%v", this.ScheduleToCloseTimeoutSeconds) + `,`,
-		`StartedTimestamp:` + fmt.Sprintf("%v", this.StartedTimestamp) + `,`,
-		`StartToCloseTimeoutSeconds:` + fmt.Sprintf("%v", this.StartToCloseTimeoutSeconds) + `,`,
-		`HeartbeatTimeoutSeconds:` + fmt.Sprintf("%v", this.HeartbeatTimeoutSeconds) + `,`,
+		`ScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.ScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
+		`ScheduleToCloseTimeout:` + strings.Replace(fmt.Sprintf("%v", this.ScheduleToCloseTimeout), "Duration", "types.Duration", 1) + `,`,
+		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
+		`StartToCloseTimeout:` + strings.Replace(fmt.Sprintf("%v", this.StartToCloseTimeout), "Duration", "types.Duration", 1) + `,`,
+		`HeartbeatTimeout:` + strings.Replace(fmt.Sprintf("%v", this.HeartbeatTimeout), "Duration", "types.Duration", 1) + `,`,
 		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
-		`ScheduledTimestampOfThisAttempt:` + fmt.Sprintf("%v", this.ScheduledTimestampOfThisAttempt) + `,`,
+		`CurrentAttemptScheduledTime:` + strings.Replace(fmt.Sprintf("%v", this.CurrentAttemptScheduledTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`HeartbeatDetails:` + strings.Replace(fmt.Sprintf("%v", this.HeartbeatDetails), "Payloads", "v11.Payloads", 1) + `,`,
 		`WorkflowType:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowType), "WorkflowType", "v11.WorkflowType", 1) + `,`,
 		`WorkflowNamespace:` + fmt.Sprintf("%v", this.WorkflowNamespace) + `,`,
@@ -4054,7 +4173,7 @@ func (this *AddWorkflowTaskRequest) String() string {
 		`Execution:` + strings.Replace(fmt.Sprintf("%v", this.Execution), "WorkflowExecution", "v11.WorkflowExecution", 1) + `,`,
 		`TaskQueue:` + strings.Replace(fmt.Sprintf("%v", this.TaskQueue), "TaskQueue", "v14.TaskQueue", 1) + `,`,
 		`ScheduleId:` + fmt.Sprintf("%v", this.ScheduleId) + `,`,
-		`ScheduleToStartTimeoutSeconds:` + fmt.Sprintf("%v", this.ScheduleToStartTimeoutSeconds) + `,`,
+		`ScheduleToStartTimeout:` + strings.Replace(fmt.Sprintf("%v", this.ScheduleToStartTimeout), "Duration", "types.Duration", 1) + `,`,
 		`ForwardedFrom:` + fmt.Sprintf("%v", this.ForwardedFrom) + `,`,
 		`Source:` + fmt.Sprintf("%v", this.Source) + `,`,
 		`}`,
@@ -4080,7 +4199,7 @@ func (this *AddActivityTaskRequest) String() string {
 		`SourceNamespaceId:` + fmt.Sprintf("%v", this.SourceNamespaceId) + `,`,
 		`TaskQueue:` + strings.Replace(fmt.Sprintf("%v", this.TaskQueue), "TaskQueue", "v14.TaskQueue", 1) + `,`,
 		`ScheduleId:` + fmt.Sprintf("%v", this.ScheduleId) + `,`,
-		`ScheduleToStartTimeoutSeconds:` + fmt.Sprintf("%v", this.ScheduleToStartTimeoutSeconds) + `,`,
+		`ScheduleToStartTimeout:` + strings.Replace(fmt.Sprintf("%v", this.ScheduleToStartTimeout), "Duration", "types.Duration", 1) + `,`,
 		`ForwardedFrom:` + fmt.Sprintf("%v", this.ForwardedFrom) + `,`,
 		`Source:` + fmt.Sprintf("%v", this.Source) + `,`,
 		`}`,
@@ -4828,10 +4947,10 @@ func (m *PollWorkflowTaskQueueResponse) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 15:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduledTimestamp", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScheduledTime", wireType)
 			}
-			m.ScheduledTimestamp = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -4841,16 +4960,33 @@ func (m *PollWorkflowTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduledTimestamp |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScheduledTime == nil {
+				m.ScheduledTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.ScheduledTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 16:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StartedTimestamp", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartedTime", wireType)
 			}
-			m.StartedTimestamp = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -4860,11 +4996,28 @@ func (m *PollWorkflowTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartedTimestamp |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.StartedTime == nil {
+				m.StartedTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.StartedTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 17:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Queries", wireType)
@@ -5407,10 +5560,10 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduledTimestamp", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScheduledTime", wireType)
 			}
-			m.ScheduledTimestamp = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5420,16 +5573,33 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduledTimestamp |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScheduledTime == nil {
+				m.ScheduledTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.ScheduledTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToCloseTimeoutSeconds", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToCloseTimeout", wireType)
 			}
-			m.ScheduleToCloseTimeoutSeconds = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5439,16 +5609,33 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduleToCloseTimeoutSeconds |= int32(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScheduleToCloseTimeout == nil {
+				m.ScheduleToCloseTimeout = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.ScheduleToCloseTimeout, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StartedTimestamp", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartedTime", wireType)
 			}
-			m.StartedTimestamp = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5458,16 +5645,33 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartedTimestamp |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.StartedTime == nil {
+				m.StartedTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.StartedTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 9:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StartToCloseTimeoutSeconds", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartToCloseTimeout", wireType)
 			}
-			m.StartToCloseTimeoutSeconds = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5477,16 +5681,33 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartToCloseTimeoutSeconds |= int32(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.StartToCloseTimeout == nil {
+				m.StartToCloseTimeout = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.StartToCloseTimeout, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 10:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatTimeoutSeconds", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatTimeout", wireType)
 			}
-			m.HeartbeatTimeoutSeconds = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5496,11 +5717,28 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.HeartbeatTimeoutSeconds |= int32(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.HeartbeatTimeout == nil {
+				m.HeartbeatTimeout = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.HeartbeatTimeout, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 11:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Attempt", wireType)
@@ -5521,10 +5759,10 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 			}
 		case 12:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduledTimestampOfThisAttempt", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CurrentAttemptScheduledTime", wireType)
 			}
-			m.ScheduledTimestampOfThisAttempt = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5534,11 +5772,28 @@ func (m *PollActivityTaskQueueResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduledTimestampOfThisAttempt |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CurrentAttemptScheduledTime == nil {
+				m.CurrentAttemptScheduledTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.CurrentAttemptScheduledTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 13:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatDetails", wireType)
@@ -5856,10 +6111,10 @@ func (m *AddWorkflowTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToStartTimeoutSeconds", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToStartTimeout", wireType)
 			}
-			m.ScheduleToStartTimeoutSeconds = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -5869,11 +6124,28 @@ func (m *AddWorkflowTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduleToStartTimeoutSeconds |= int32(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScheduleToStartTimeout == nil {
+				m.ScheduleToStartTimeout = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.ScheduleToStartTimeout, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ForwardedFrom", wireType)
@@ -6187,10 +6459,10 @@ func (m *AddActivityTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToStartTimeoutSeconds", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScheduleToStartTimeout", wireType)
 			}
-			m.ScheduleToStartTimeoutSeconds = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -6200,11 +6472,28 @@ func (m *AddActivityTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ScheduleToStartTimeoutSeconds |= int32(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScheduleToStartTimeout == nil {
+				m.ScheduleToStartTimeout = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.ScheduleToStartTimeout, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ForwardedFrom", wireType)

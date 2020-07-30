@@ -214,3 +214,15 @@ func UnixOrZeroTime(nanos int64) time.Time {
 
 	return time.Unix(0, nanos)
 }
+
+func UnixOrZeroTimePtr(nano int64) *time.Time {
+	return TimePtr(UnixOrZeroTime(nano))
+}
+
+func TimeNowPtrUtcAddSeconds(seconds int) *time.Time {
+	return TimePtr(time.Now().UTC().Add(time.Second * time.Duration(seconds)))
+}
+
+func TimeNowPtrUtc() *time.Time {
+	return TimePtr(time.Now().UTC())
+}
