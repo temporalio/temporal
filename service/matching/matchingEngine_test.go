@@ -588,10 +588,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		s.Equal(true, validateTimeRange(*result.ScheduledTime, time.Minute))
-		s.Equal(time.Second*100, result.ScheduleToCloseTimeout)
+		s.EqualValues(time.Second*100, *result.ScheduleToCloseTimeout)
 		s.Equal(true, validateTimeRange(*result.StartedTime, time.Minute))
-		s.Equal(time.Second*50, result.StartToCloseTimeout)
-		s.Equal(time.Second*10, result.HeartbeatTimeout)
+		s.EqualValues(time.Second*50, *result.StartToCloseTimeout)
+		s.EqualValues(time.Second*10, *result.HeartbeatTimeout)
 		taskToken := &tokenspb.Task{
 			ScheduleAttempt: 1,
 			NamespaceId:     namespaceID,
