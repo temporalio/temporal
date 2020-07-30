@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -1416,7 +1417,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 		return nil, h.error(errShardIDNotSet, scope, "", "")
 	}
 
-	if request.GetTimestamp() == 0 {
+	if timestamp.TimeValue(request.GetStatusTime()).IsZero() {
 		return nil, h.error(errTimestampNotSet, scope, "", "")
 	}
 
