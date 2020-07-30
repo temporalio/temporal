@@ -456,6 +456,9 @@ func (c *temporalImpl) startHistory(
 			HostPort:     c.FrontendGRPCAddress(),
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				DisableHealthCheck: true,
+			},
 		})
 		if err != nil {
 			c.logger.Fatal("Failed to create client for history", tag.Error(err))
@@ -582,6 +585,9 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		HostPort:     c.FrontendGRPCAddress(),
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: params.MetricScope,
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			DisableHealthCheck: true,
+		},
 	})
 	if err != nil {
 		c.logger.Fatal("Failed to create client for worker", tag.Error(err))

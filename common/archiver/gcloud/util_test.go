@@ -49,6 +49,7 @@ type utilSuite struct {
 }
 
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
+	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 	historyBatches := []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
@@ -62,7 +63,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					Timestamp: time.Now().UnixNano(),
+					EventTime: &now,
 					Version:   1,
 				},
 				{

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,17 +59,17 @@ type (
 
 	// TaskPoller is used in integration tests to poll workflow or activity task queues.
 	TaskPoller struct {
-		Engine                              FrontendClient
-		Namespace                           string
-		TaskQueue                           *taskqueuepb.TaskQueue
-		StickyTaskQueue                     *taskqueuepb.TaskQueue
-		StickyScheduleToStartTimeoutSeconds int32
-		Identity                            string
-		WorkflowTaskHandler                 workflowTaskHandler
-		ActivityTaskHandler                 activityTaskHandler
-		QueryHandler                        queryHandler
-		Logger                              log.Logger
-		T                                   *testing.T
+		Engine                       FrontendClient
+		Namespace                    string
+		TaskQueue                    *taskqueuepb.TaskQueue
+		StickyTaskQueue              *taskqueuepb.TaskQueue
+		StickyScheduleToStartTimeout time.Duration
+		Identity                     string
+		WorkflowTaskHandler          workflowTaskHandler
+		ActivityTaskHandler          activityTaskHandler
+		QueryHandler                 queryHandler
+		Logger                       log.Logger
+		T                            *testing.T
 	}
 )
 
@@ -277,8 +278,8 @@ Loop:
 				Identity:  p.Identity,
 				Commands:  commands,
 				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-					WorkerTaskQueue:               p.StickyTaskQueue,
-					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
+					WorkerTaskQueue:        p.StickyTaskQueue,
+					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 				},
 				ReturnNewWorkflowTask:      forceCreateNewWorkflowTask,
 				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
@@ -334,8 +335,8 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			Identity:  p.Identity,
 			Commands:  commands,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-				WorkerTaskQueue:               p.StickyTaskQueue,
-				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
+				WorkerTaskQueue:        p.StickyTaskQueue,
+				ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,

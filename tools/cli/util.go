@@ -84,6 +84,13 @@ func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLe
 
 func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 	v := reflect.ValueOf(d)
+	// Time is handled separetely because we don't want to go through it fields.
+	if t, isTime := d.(time.Time); isTime {
+		if t.IsZero() {
+			return "<zero>"
+		}
+		return t.String()
+	}
 	switch v.Kind() {
 	case reflect.Ptr:
 		return anyToString(v.Elem().Interface(), printFully, maxFieldLength)
@@ -97,6 +104,12 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 				continue
 			}
 			fieldName := t.Field(i).Name
+
+			// Filter out private fields.
+			if !f.CanInterface() {
+				continue
+			}
+
 			fieldValue := valueToString(f, printFully, maxFieldLength)
 			if fieldValue == "" {
 				continue
@@ -571,8 +584,7 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 	return value
 }
 
-func convertTime(unixNano int64, onlyTime bool) string {
-	t := time.Unix(0, unixNano)
+func formatTime(t time.Time, onlyTime bool) string {
 	var result string
 	if onlyTime {
 		result = t.Format(defaultTimeFormat)
@@ -582,7 +594,7 @@ func convertTime(unixNano int64, onlyTime bool) string {
 	return result
 }
 
-func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
+func parseTime(timeStr string, defaultValue time.Time, now time.Time) time.Time {
 	if len(timeStr) == 0 {
 		return defaultValue
 	}
@@ -590,22 +602,22 @@ func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 	// try to parse
 	parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
 	if err == nil {
-		return parsedTime.UnixNano()
+		return parsedTime
 	}
 
-	// treat as raw time
+	// treat as raw unix time
 	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return resultValue
+		return time.Unix(0, resultValue)
 	}
 
 	// treat as time range format
 	parsedTime, err = parseTimeRange(timeStr, now)
 	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z', "+
+		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05', "+
 			"time range or raw UnixNano directly. See help for more details.", timeStr), err)
 	}
-	return parsedTime.UnixNano()
+	return parsedTime
 }
 
 // parseTimeRange parses a given time duration string (in format X<time-duration>) and

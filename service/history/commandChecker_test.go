@@ -26,6 +26,7 @@ package history
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -565,68 +567,68 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			name:  "override non-set policy",
 			input: nil,
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 1,
-				BackoffCoefficient:       2,
-				MaximumIntervalInSeconds: 100,
-				MaximumAttempts:          0,
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumAttempts:    0,
 			},
 		},
 		{
 			name: "do not override fully set policy",
 			input: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 5,
-				BackoffCoefficient:       10,
-				MaximumIntervalInSeconds: 20,
-				MaximumAttempts:          8,
+				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				BackoffCoefficient: 10,
+				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumAttempts:    8,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 5,
-				BackoffCoefficient:       10,
-				MaximumIntervalInSeconds: 20,
-				MaximumAttempts:          8,
+				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				BackoffCoefficient: 10,
+				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumAttempts:    8,
 			},
 		},
 		{
 			name: "partial override of fields",
 			input: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 0,
-				BackoffCoefficient:       1.2,
-				MaximumIntervalInSeconds: 0,
-				MaximumAttempts:          7,
+				InitialInterval:    timestamp.DurationPtr(0 * time.Second),
+				BackoffCoefficient: 1.2,
+				MaximumInterval:    timestamp.DurationPtr(0 * time.Second),
+				MaximumAttempts:    7,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 1,
-				BackoffCoefficient:       1.2,
-				MaximumIntervalInSeconds: 100,
-				MaximumAttempts:          7,
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				BackoffCoefficient: 1.2,
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumAttempts:    7,
 			},
 		},
 		{
 			name: "set expected max interval if only init interval set",
 			input: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 3,
-				MaximumIntervalInSeconds: 0,
+				InitialInterval: timestamp.DurationPtr(3 * time.Second),
+				MaximumInterval: timestamp.DurationPtr(0 * time.Second),
 			},
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 3,
-				BackoffCoefficient:       2,
-				MaximumIntervalInSeconds: 300,
-				MaximumAttempts:          0,
+				InitialInterval:    timestamp.DurationPtr(3 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumInterval:    timestamp.DurationPtr(300 * time.Second),
+				MaximumAttempts:    0,
 			},
 		},
 		{
 			name: "override all defaults",
 			input: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 0,
-				BackoffCoefficient:       0,
-				MaximumIntervalInSeconds: 0,
-				MaximumAttempts:          0,
+				InitialInterval:    timestamp.DurationPtr(0 * time.Second),
+				BackoffCoefficient: 0,
+				MaximumInterval:    timestamp.DurationPtr(0 * time.Second),
+				MaximumAttempts:    0,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialIntervalInSeconds: 1,
-				BackoffCoefficient:       2,
-				MaximumIntervalInSeconds: 100,
-				MaximumAttempts:          0,
+				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumAttempts:    0,
 			},
 		},
 	}

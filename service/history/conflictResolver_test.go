@@ -41,6 +41,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -166,13 +167,13 @@ func (s *conflictResolverSuite) TestReset() {
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random workflow type"},
-			Input:                           payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeoutSeconds: 123,
-			WorkflowRunTimeoutSeconds:       231,
-			WorkflowTaskTimeoutSeconds:      233,
-			Identity:                        "some random identity",
+			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+			Input:                    payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(231 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(233 * time.Second),
+			Identity:                 "some random identity",
 		}},
 	}
 	event2 := &historypb.HistoryEvent{
@@ -209,9 +210,9 @@ func (s *conflictResolverSuite) TestReset() {
 		InitiatedID:                  common.EmptyEventID,
 		TaskQueue:                    event1.GetWorkflowExecutionStartedEventAttributes().TaskQueue.GetName(),
 		WorkflowTypeName:             event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
-		WorkflowExecutionTimeout:     int64(event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds),
-		WorkflowRunTimeout:           int64(event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds),
-		DefaultWorkflowTaskTimeout:   int64(event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds),
+		WorkflowExecutionTimeout:     int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()).Seconds()),
+		WorkflowRunTimeout:           int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()).Seconds()),
+		DefaultWorkflowTaskTimeout:   int64(timestamp.DurationValue(event1.GetWorkflowExecutionStartedEventAttributes().GetWorkflowTaskTimeout()).Seconds()),
 		State:                        enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:                       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastFirstEventID:             event1.GetEventId(),
@@ -239,6 +240,8 @@ func (s *conflictResolverSuite) TestReset() {
 		}
 		s.IsType(&persistence.UpsertWorkflowSearchAttributesTask{}, transferTasks[0])
 		input.ResetWorkflowSnapshot.TransferTasks = nil
+
+		s.Equal(executionInfo, input.ResetWorkflowSnapshot.ExecutionInfo)
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
 			RangeID: s.mockShard.shardInfo.GetRangeId(),

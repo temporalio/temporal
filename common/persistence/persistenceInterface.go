@@ -814,7 +814,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		SearchAttributes:                       info.GetSearchAttributes(),
 		Memo:                                   info.GetMemo(),
 		CompletionEvent:                        info.GetCompletionEvent(),
-		AutoResetPoints:					    info.GetAutoResetPoints(),
+		AutoResetPoints:                        info.GetAutoResetPoints(),
 	}
 
 	if info.GetRetryExpirationTime() != nil {
