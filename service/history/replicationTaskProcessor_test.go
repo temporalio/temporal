@@ -160,7 +160,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 	}).Return(nil).Times(1)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
-		Timestamp: now.UnixNano(),
+		StatusTime: &now,
 	})
 	s.NoError(err)
 }

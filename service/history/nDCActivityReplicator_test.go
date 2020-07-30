@@ -863,7 +863,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(1)
+	attempt := int64(1)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -882,11 +882,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     scheduledTime.UnixNano(),
+		ScheduledTime:     &scheduledTime,
 		StartedId:         startedID,
-		StartedTime:       startedTime.UnixNano(),
+		StartedTime:       &startedTime,
 		Attempt:           attempt,
-		LastHeartbeatTime: heartBeatUpdatedTime.UnixNano(),
+		LastHeartbeatTime: &heartBeatUpdatedTime,
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -935,7 +935,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(100)
+	attempt := int64(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -954,11 +954,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     scheduledTime.UnixNano(),
+		ScheduledTime:     &scheduledTime,
 		StartedId:         startedID,
-		StartedTime:       startedTime.UnixNano(),
+		StartedTime:       &startedTime,
 		Attempt:           attempt,
-		LastHeartbeatTime: heartBeatUpdatedTime.UnixNano(),
+		LastHeartbeatTime: &heartBeatUpdatedTime,
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1003,11 +1003,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := time.Now()
+	scheduledTime := timestamp.TimeNowPtrUtc()
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(100)
+	attempt := int64(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1026,11 +1026,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     scheduledTime.UnixNano(),
+		ScheduledTime:     scheduledTime,
 		StartedId:         startedID,
-		StartedTime:       startedTime.UnixNano(),
+		StartedTime:       &startedTime,
 		Attempt:           attempt,
-		LastHeartbeatTime: heartBeatUpdatedTime.UnixNano(),
+		LastHeartbeatTime: &heartBeatUpdatedTime,
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1079,7 +1079,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(100)
+	attempt := int64(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1097,11 +1097,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     scheduledTime.UnixNano(),
+		ScheduledTime:     &scheduledTime,
 		StartedId:         startedID,
-		StartedTime:       startedTime.UnixNano(),
+		StartedTime:       &startedTime,
 		Attempt:           attempt,
-		LastHeartbeatTime: heartBeatUpdatedTime.UnixNano(),
+		LastHeartbeatTime: &heartBeatUpdatedTime,
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1140,7 +1140,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
-	now := time.Unix(0, request.GetLastHeartbeatTime())
+	now := request.GetLastHeartbeatTime()
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
@@ -1160,11 +1160,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := time.Now()
+	scheduledTime := timestamp.TimeNowPtrUtc()
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int32(100)
+	attempt := int64(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1182,11 +1182,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     scheduledTime.UnixNano(),
+		ScheduledTime:     scheduledTime,
 		StartedId:         startedID,
-		StartedTime:       startedTime.UnixNano(),
+		StartedTime:       &startedTime,
 		Attempt:           attempt,
-		LastHeartbeatTime: heartBeatUpdatedTime.UnixNano(),
+		LastHeartbeatTime: &heartBeatUpdatedTime,
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1224,7 +1224,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
-	now := time.Unix(0, request.GetLastHeartbeatTime())
+	now := request.GetLastHeartbeatTime()
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeBypassCurrent,

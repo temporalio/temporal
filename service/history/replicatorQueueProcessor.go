@@ -363,7 +363,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 				SyncShardStatusTaskAttributes: &replicationspb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
 					ShardId:       int64(p.shard.GetShardID()),
-					Timestamp:     now.UnixNano(),
+					StatusTime:    &now,
 				},
 			},
 		}
@@ -646,16 +646,16 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 				return nil, nil
 			}
 
-			var startedTime int64
-			var heartbeatTime int64
-			scheduledTime := activityInfo.ScheduledTime.UnixNano()
+			var startedTime *time.Time
+			var heartbeatTime *time.Time
+			scheduledTime := activityInfo.ScheduledTime
 			if activityInfo.StartedId != common.EmptyEventID {
-				startedTime = activityInfo.StartedTime.UnixNano()
+				startedTime = activityInfo.StartedTime
 			}
 
 			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
 			if activityInfo.LastHeartbeatUpdateTime != nil {
-				heartbeatTime = activityInfo.LastHeartbeatUpdateTime.UnixNano()
+				heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 			} else {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("activityInfo with Id %v has no LastHeartbeatUpdateTime", activityInfo.ActivityId))
 			}
@@ -685,7 +685,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						StartedTime:        startedTime,
 						LastHeartbeatTime:  heartbeatTime,
 						Details:            activityInfo.LastHeartbeatDetails,
-						Attempt:            activityInfo.Attempt,
+						Attempt:            int64(activityInfo.Attempt),
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
 						VersionHistory:     versionHistory,

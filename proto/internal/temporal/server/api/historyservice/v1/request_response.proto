@@ -23,6 +23,10 @@ syntax = "proto3";
 package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -362,7 +366,7 @@ message ReplicateEventsV2Response {
 message SyncShardStatusRequest {
     string source_cluster = 1;
     int64 shard_id = 2;
-    int64 timestamp = 3;
+    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
 }
 
 message SyncShardStatusResponse {
@@ -374,12 +378,12 @@ message SyncActivityRequest {
     string run_id = 3;
     int64 version = 4;
     int64 scheduled_id = 5;
-    int64 scheduled_time = 6;
+    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
     int64 started_id = 7;
-    int64 started_time = 8;
-    int64 last_heartbeat_time = 9;
+    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads details = 10;
-    int32 attempt = 11;
+    int64 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;

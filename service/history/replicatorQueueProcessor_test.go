@@ -298,7 +298,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityStartedID := common.EmptyEventID
 	activityStartedTime := time.Time{}
 	activityHeartbeatTime := time.Time{}
-	activityAttempt := int32(16384)
+	activityAttempt := int64(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
@@ -355,10 +355,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      &activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        0,
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        timestamp.UnixOrZeroTimePtr(0),
+				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
@@ -408,7 +408,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityStartedID := activityScheduleID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
-	activityAttempt := int32(16384)
+	activityAttempt := int64(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
@@ -464,10 +464,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				RunId:              runID,
 				Version:            activityVersion,
 				ScheduledId:        activityScheduleID,
-				ScheduledTime:      activityScheduledTime.UnixNano(),
+				ScheduledTime:      &activityScheduledTime,
 				StartedId:          activityStartedID,
-				StartedTime:        activityStartedTime.UnixNano(),
-				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				StartedTime:        &activityStartedTime,
+				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,

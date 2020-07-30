@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -339,7 +340,7 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 
 	if status == nil ||
 		p.shard.GetTimeSource().Now().Sub(
-			time.Unix(0, status.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+			timestamp.TimeValue(status.GetStatusTime())) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
@@ -348,7 +349,7 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,
 		ShardId:       int64(p.shard.GetShardID()),
-		Timestamp:     status.Timestamp,
+		StatusTime:    status.StatusTime,
 	})
 }
 

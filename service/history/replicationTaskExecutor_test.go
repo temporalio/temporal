@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 )
@@ -200,10 +201,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		RunId:              runID,
 		Version:            0,
 		ScheduledId:        0,
-		ScheduledTime:      0,
+		ScheduledTime:      timestamp.UnixOrZeroTimePtr( 0),
 		StartedId:          0,
-		StartedTime:        0,
-		LastHeartbeatTime:  0,
+		StartedTime:        timestamp.UnixOrZeroTimePtr(0),
+		LastHeartbeatTime:  timestamp.UnixOrZeroTimePtr(0),
 		Attempt:            1,
 		LastFailure:        nil,
 		LastWorkerIdentity: "",
