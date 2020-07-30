@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -2491,10 +2492,14 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 	var ttl int64 = 0
 	if task.ExpiryTime != nil {
-		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
-		// and we'd have checked this upstream
-		expiryGo, _ := types.TimestampFromProto(task.ExpiryTime)
-		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
+		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(task.ExpiryTime)).Seconds())
+
+		// 0 means no ttl, we dont want that.
+		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
+		if expiryTtl < 1 {
+			expiryTtl = 1
+		}
+
 		ttl = expiryTtl
 	}
 	return ttl

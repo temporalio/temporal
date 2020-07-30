@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -112,10 +113,8 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.GetWorkflowId())
 		s.EqualValues(workflowExecution.RunId, resp.Tasks[0].Data.GetRunId())
 		s.Equal(sid, resp.Tasks[0].Data.GetScheduleId())
-		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreateTime)
-		s.NoError(err)
-		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.ExpiryTime)
-		s.NoError(err)
+		cTime := timestamp.TimeValue(resp.Tasks[0].Data.CreateTime)
+		eTime := timestamp.TimeValue(resp.Tasks[0].Data.ExpiryTime)
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
 			// cassandra uses TTL and expiry isn't stored as part of task state
