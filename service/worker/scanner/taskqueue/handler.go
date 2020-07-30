@@ -146,8 +146,8 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 }
 
 func IsTaskExpired(t *persistenceblobs.AllocatedTaskInfo) bool {
-	tExpiry := timestamp.TimestampFromProto(t.Data.ExpiryTime)
-	tEpoch := timestamp.TimestampEpoch()
-	tNow := timestamp.TimestampNow()
+	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
+	tEpoch := time.Unix(0, 0)
+	tNow := time.Now()
 	return tExpiry.After(tEpoch) && tNow.After(tExpiry)
 }

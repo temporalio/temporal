@@ -27,6 +27,8 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/enums/v1/namespace.proto";
@@ -36,7 +38,6 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 
-import "dependencies/gogoproto/gogo.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -214,8 +215,8 @@ message TaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     int64 schedule_id = 4;
-    google.protobuf.Timestamp create_time = 5;
-    google.protobuf.Timestamp expiry_time = 6;
+    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
 }
 
 message AllocatedTaskInfo {

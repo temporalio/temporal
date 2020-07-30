@@ -444,12 +444,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		NamespaceId:                   targetNamespaceID,
-		SourceNamespaceId:             namespaceID,
-		Execution:                     execution,
-		TaskQueue:                     taskQueue,
-		ScheduleId:                    scheduledID,
-		ScheduleToStartTimeoutSeconds: int32(scheduleToStartTimeout.Seconds()),
+		NamespaceId:            targetNamespaceID,
+		SourceNamespaceId:      namespaceID,
+		Execution:              execution,
+		TaskQueue:              taskQueue,
+		ScheduleId:             scheduledID,
+		ScheduleToStartTimeout: scheduleToStartTimeout,
 	})
 
 	return retError

@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -2493,7 +2494,7 @@ func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 	if task.ExpiryTime != nil {
 		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
 		// and we'd have checked this upstream
-		expiryGo, _ := types.TimestampFromProto(task.ExpiryTime)
+		expiryGo := timestamp.TimeValue(task.ExpiryTime)
 		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
 		ttl = expiryTtl
 	}
