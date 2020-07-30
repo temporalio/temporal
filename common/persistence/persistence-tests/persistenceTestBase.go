@@ -1603,16 +1603,5 @@ func GenerateRandomDBName(n int) string {
 }
 
 func pickRandomEncoding() enumspb.EncodingType {
-	// randomly pick json/thriftrw/empty as encoding type
-	var encoding enumspb.EncodingType
-	i := rand.Intn(3)
-	switch i {
-	case 0:
-		encoding = enumspb.ENCODING_TYPE_JSON
-	case 1:
-		encoding = enumspb.ENCODING_TYPE_PROTO3
-	case 2:
-		encoding = enumspb.ENCODING_TYPE_UNSPECIFIED
-	}
-	return encoding
+	return enumspb.ENCODING_TYPE_PROTO3
 }

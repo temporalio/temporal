@@ -1659,12 +1659,14 @@ func resetSignalInfoMap(
 func createHistoryEventBatchBlob(
 	result map[string]interface{},
 ) *serialization.DataBlob {
-
-	eventBatch := &serialization.DataBlob{Encoding: enumspb.ENCODING_TYPE_JSON}
+	eventBatch := &serialization.DataBlob{Encoding: enumspb.ENCODING_TYPE_UNSPECIFIED}
 	for k, v := range result {
 		switch k {
 		case "encoding_type":
-			eventBatch.Encoding = common.EncodingType(v.(string))
+			encodingStr := v.(string)
+			if encoding, ok := enumspb.EncodingType_value[encodingStr]; ok {
+				eventBatch.Encoding = enumspb.EncodingType(encoding)
+			}
 		case "data":
 			eventBatch.Data = v.([]byte)
 		}

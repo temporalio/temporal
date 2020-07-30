@@ -87,7 +87,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		NodeID:       request.NodeID,
 		TxnID:        &request.TransactionID,
 		Data:         request.Events.Data,
-		DataEncoding: string(request.Events.Encoding),
+		DataEncoding: request.Events.Encoding.String(),
 		ShardID:      request.ShardID,
 	}
 
@@ -353,7 +353,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
 		Data:         blob.Data,
-		DataEncoding: string(blob.Encoding),
+		DataEncoding: blob.Encoding.String(),
 	}
 	result, err := m.db.InsertIntoHistoryTree(row)
 	if err != nil {

@@ -659,7 +659,7 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 	if blob == nil || len(blob.Data) == 0 {
 		return nil, ""
 	}
-	return blob.Data, string(blob.Encoding)
+	return blob.Data, blob.Encoding.String()
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation

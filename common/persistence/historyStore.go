@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -88,7 +89,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	forkBranch, err := serialization.HistoryBranchFromBlob(request.ForkBranchToken, common.EncodingTypeProto3.String())
+	forkBranch, err := serialization.HistoryBranchFromBlob(request.ForkBranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +126,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 	request *DeleteHistoryBranchRequest,
 ) error {
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
 		return err
 	}
@@ -149,7 +150,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 ) (*GetHistoryTreeResponse, error) {
 
 	if len(request.TreeID) == 0 {
-		branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
+		branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +164,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +295,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) ([]*serialization.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
 		return nil, nil, 0, nil, err
 	}

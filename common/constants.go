@@ -62,11 +62,6 @@ const (
 	WorkerServiceName = "worker"
 )
 
-type (
-	// EncodingType is an enum that represents various data encoding types
-	EncodingType string
-)
-
 // MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
 const MaxTaskTimeout = 31622400
 
