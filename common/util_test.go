@@ -109,11 +109,6 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 		want  *commonpb.RetryPolicy
 	}{
 		{
-			name:  "nil policy is okay",
-			input: nil,
-			want:  defaultRetryPolicy,
-		},
-		{
 			name:  "default fields are set ",
 			input: &commonpb.RetryPolicy{},
 			want:  defaultRetryPolicy,
@@ -166,12 +161,25 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 				MaximumAttempts:          49,
 			},
 		},
+		{
+			name: "non-retryable errors are set",
+			input: &commonpb.RetryPolicy{
+				NonRetryableErrorTypes: []string{"testFailureType"},
+			},
+			want: &commonpb.RetryPolicy{
+				InitialIntervalInSeconds: 1,
+				MaximumIntervalInSeconds: 100,
+				BackoffCoefficient:       2.0,
+				MaximumAttempts:          120,
+				NonRetryableErrorTypes:   []string{"testFailureType"},
+			},
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EnsureRetryPolicyDefaults(tt.input, defaultActivityRetrySettings)
-			assert.Equal(t, tt.want, got)
+			EnsureRetryPolicyDefaults(tt.input, defaultActivityRetrySettings)
+			assert.Equal(t, tt.want, tt.input)
 		})
 	}
 }

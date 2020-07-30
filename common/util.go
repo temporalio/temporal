@@ -368,35 +368,22 @@ func SortInt64Slice(slice []int64) {
 }
 
 // EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
-func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) *commonpb.RetryPolicy {
-	var merged *commonpb.RetryPolicy = &commonpb.RetryPolicy{}
-
-	if originalPolicy != nil {
-		merged = &commonpb.RetryPolicy{
-			BackoffCoefficient:       originalPolicy.GetBackoffCoefficient(),
-			InitialIntervalInSeconds: originalPolicy.GetInitialIntervalInSeconds(),
-			MaximumIntervalInSeconds: originalPolicy.GetMaximumIntervalInSeconds(),
-			MaximumAttempts:          originalPolicy.GetMaximumAttempts(),
-		}
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) {
+	if originalPolicy.GetMaximumAttempts() == 0 {
+		originalPolicy.MaximumAttempts = int32(defaultSettings.MaximumAttempts)
 	}
 
-	if merged.GetMaximumAttempts() == 0 {
-		merged.MaximumAttempts = int32(defaultSettings.MaximumAttempts)
+	if originalPolicy.GetInitialIntervalInSeconds() == 0 {
+		originalPolicy.InitialIntervalInSeconds = int32(defaultSettings.InitialIntervalInSeconds)
 	}
 
-	if merged.GetInitialIntervalInSeconds() == 0 {
-		merged.InitialIntervalInSeconds = int32(defaultSettings.InitialIntervalInSeconds)
+	if originalPolicy.GetMaximumIntervalInSeconds() == 0 {
+		originalPolicy.MaximumIntervalInSeconds = int32(defaultSettings.MaximumIntervalCoefficient * float64(originalPolicy.GetInitialIntervalInSeconds()))
 	}
 
-	if merged.GetMaximumIntervalInSeconds() == 0 {
-		merged.MaximumIntervalInSeconds = int32(defaultSettings.MaximumIntervalCoefficient * float64(merged.GetInitialIntervalInSeconds()))
+	if originalPolicy.GetBackoffCoefficient() == 0 {
+		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
 	}
-
-	if merged.GetBackoffCoefficient() == 0 {
-		merged.BackoffCoefficient = defaultSettings.BackoffCoefficient
-	}
-
-	return merged
 }
 
 // ValidateRetryPolicy validates a retry policy
