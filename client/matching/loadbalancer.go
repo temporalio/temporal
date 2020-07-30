@@ -83,8 +83,8 @@ func NewLoadBalancer(
 ) LoadBalancer {
 	return &defaultLoadBalancer{
 		namespaceIDToName: namespaceIDToName,
-		nReadPartitions:   dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
-		nWritePartitions:  dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+		nReadPartitions:   dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
+		nWritePartitions:  dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
 	}
 }
 
