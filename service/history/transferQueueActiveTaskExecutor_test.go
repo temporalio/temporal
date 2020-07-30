@@ -1807,7 +1807,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 				CronSchedule:             cronSchedule,
 			},
-			FirstWorkflowTaskBackoffSeconds: int32(backoff.Seconds()),
+			FirstWorkflowTaskBackoff: &backoff,
 		},
 	)
 	s.Nil(err)
@@ -2072,7 +2072,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			Execution:   &execution,
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now),
+		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
 		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 	}
 }

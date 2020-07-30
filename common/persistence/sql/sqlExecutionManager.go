@@ -32,8 +32,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1057,14 +1055,14 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	}
 
 	if len(resp.Timers) > request.BatchSize {
-		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTime)
+		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
 		}
 
 		pageToken = &timerTaskPageToken{
 			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
-			Timestamp: goVisibilityTimestamp,
+			Timestamp: *goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()

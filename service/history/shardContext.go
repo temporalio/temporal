@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -47,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -321,20 +321,14 @@ func (s *shardContextImpl) GetTimerAckLevel() time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
-	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
-	return goTime
+	return timestamp.TimeValue(s.shardInfo.TimerAckLevelTime)
 }
 
 func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	pTime, err := types.TimestampProto(ackLevel)
-	if err != nil {
-		return err
-	}
-
-	s.shardInfo.TimerAckLevelTime = pTime
+	s.shardInfo.TimerAckLevelTime = &ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -346,26 +340,18 @@ func (s *shardContextImpl) GetTimerClusterAckLevel(cluster string) time.Time {
 	// if we can find corresponding ack level
 	if ackLevel, ok := s.shardInfo.ClusterTimerAckLevel[cluster]; ok {
 
-		goTime, _ := types.TimestampFromProto(ackLevel)
-
-		return goTime
+		return timestamp.TimeValue(ackLevel)
 	}
 	// otherwise, default to existing ack level, which belongs to local cluster
 	// this can happen if you add more cluster
-	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
-	return goTime
+	return timestamp.TimeValue(s.shardInfo.TimerAckLevelTime)
 }
 
 func (s *shardContextImpl) UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	pTime, err := types.TimestampProto(ackLevel)
-	if err != nil {
-		return err
-	}
-
-	s.shardInfo.ClusterTimerAckLevel[cluster] = pTime
+	s.shardInfo.ClusterTimerAckLevel[cluster] = &ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -1026,10 +1012,10 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTransferLevel := maxTransferLevel - minTransferLevel
 
-	minTimerLevel, _ := types.TimestampFromProto(s.shardInfo.ClusterTimerAckLevel[currentCluster])
-	maxTimerLevel, _ := types.TimestampFromProto(s.shardInfo.ClusterTimerAckLevel[currentCluster])
+	minTimerLevel := timestamp.TimeValue(s.shardInfo.ClusterTimerAckLevel[currentCluster])
+	maxTimerLevel := timestamp.TimeValue(s.shardInfo.ClusterTimerAckLevel[currentCluster])
 	for _, v := range s.shardInfo.ClusterTimerAckLevel {
-		t, _ := types.TimestampFromProto(v)
+		t := timestamp.TimeValue(v)
 		if t.Before(minTimerLevel) {
 			minTimerLevel = t
 		}
@@ -1041,8 +1027,7 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 
 	replicationLag := s.transferMaxReadLevel - s.shardInfo.ReplicationAckLevel
 	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
-	timerAckLevel, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevelTime)
-	timerLag := time.Since(timerAckLevel)
+	timerLag := time.Since(timestamp.TimeValue(s.shardInfo.TimerAckLevelTime))
 
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
 	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
@@ -1248,10 +1233,10 @@ func acquireShard(
 			continue
 		}
 
-		currentReadTime, _ := types.TimestampFromProto(shardInfo.TimerAckLevelTime)
+		currentReadTime := timestamp.TimeValue(shardInfo.TimerAckLevelTime)
 		if clusterName != shardItem.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
-				currentReadTime, _ = types.TimestampFromProto(currentTime)
+				currentReadTime = timestamp.TimeValue(currentTime)
 			}
 
 			remoteClusterCurrentTime[clusterName] = currentReadTime
@@ -1305,7 +1290,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	for k, v := range shardInfo.ClusterTransferAckLevel {
 		clusterTransferAckLevel[k] = v
 	}
-	clusterTimerAckLevel := make(map[string]*types.Timestamp)
+	clusterTimerAckLevel := make(map[string]*time.Time)
 	for k, v := range shardInfo.ClusterTimerAckLevel {
 		clusterTimerAckLevel[k] = v
 	}

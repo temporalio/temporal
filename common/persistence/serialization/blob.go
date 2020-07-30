@@ -26,9 +26,9 @@ package serialization
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -93,7 +93,7 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	}
 
 	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
-		shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
+		shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
 			clusterName: shardInfo.GetTimerAckLevelTime(),
 		}
 	}
