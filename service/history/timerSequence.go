@@ -265,7 +265,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 		return nil
 	}
 
-	startTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToStartTimeout)
+	startTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToStartTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -285,7 +285,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.ScheduledTime, activityInfo.ScheduleToCloseTimeout)
+	closeTimeout := timestamp.TimeValue(activityInfo.ScheduledTime).Add(timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -310,7 +310,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 		return nil
 	}
 
-	closeTimeout := timestamp.AddDurationPtrToTimePtr(activityInfo.StartedTime, activityInfo.StartToCloseTimeout)
+	closeTimeout := timestamp.TimeValue(activityInfo.StartedTime).Add(timestamp.DurationValue(activityInfo.StartToCloseTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,
@@ -341,16 +341,16 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	}
 
 	// use the latest time as last heartbeat time
-	lastHeartbeat := time.Time{}
+	var lastHeartbeat time.Time
 	if activityInfo.StartedTime != nil {
-		lastHeartbeat = *activityInfo.StartedTime
+		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
 	}
 
 	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeat) {
-		lastHeartbeat = *activityInfo.LastHeartbeatUpdateTime
+		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
-	heartbeatTimeout := timestamp.AddDurationPtrToTime(lastHeartbeat, activityInfo.HeartbeatTimeout)
+	heartbeatTimeout := lastHeartbeat.Add(timestamp.DurationValue(activityInfo.HeartbeatTimeout))
 
 	return &timerSequenceID{
 		eventID:      activityInfo.ScheduleId,

@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -779,11 +780,11 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		Input:                           attributes.Input,
 		WorkflowExecution:               task.workflowExecution(),
 		ScheduledTimestampOfThisAttempt: historyResponse.ScheduledTimestampOfThisAttempt,
-		ScheduledTimestamp:              scheduledEvent.Timestamp,
-		ScheduleToCloseTimeoutSeconds:   attributes.ScheduleToCloseTimeoutSeconds,
+		ScheduledTimestamp:              timestamp.TimeValue(scheduledEvent.EventTime).UnixNano(),
+		ScheduleToCloseTimeoutSeconds:   int32(timestamp.DurationValue(attributes.ScheduleToCloseTimeout).Seconds()),
 		StartedTimestamp:                historyResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      attributes.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         attributes.HeartbeatTimeoutSeconds,
+		StartToCloseTimeoutSeconds:      int32(timestamp.DurationValue(attributes.StartToCloseTimeout).Seconds()),
+		HeartbeatTimeoutSeconds:         int32(timestamp.DurationValue(attributes.HeartbeatTimeout).Seconds()),
 		TaskToken:                       serializedToken,
 		Attempt:                         int32(taskToken.ScheduleAttempt),
 		HeartbeatDetails:                historyResponse.HeartbeatDetails,

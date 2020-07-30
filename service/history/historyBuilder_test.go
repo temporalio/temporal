@@ -26,6 +26,7 @@ package history
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -117,9 +119,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	tl := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "dynamic-historybuilder-success-taskqueue"}
 	identity := "dynamic-historybuilder-success-worker"
 	input := payloads.EncodeString("dynamic-historybuilder-success-input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
@@ -155,9 +157,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activityTaskQueue := "dynamic-historybuilder-success-activity-taskqueue"
-	activityTimeout := int32(60)
-	queueTimeout := int32(20)
-	hearbeatTimeout := int32(10)
+	activityTimeout := time.Duration(60) * time.Second
+	queueTimeout := time.Duration(20) * time.Second
+	hearbeatTimeout := time.Duration(10) * time.Second
 
 	activity1ID := "activity1"
 	activity1Type := "dynamic-historybuilder-success-activity1-type"
@@ -191,11 +193,11 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	activity3Type := "dynamic-historybuilder-success-activity3-type"
 	activity3Input := payloads.EncodeString("dynamic-historybuilder-success-activity3-input")
 	activity3RetryPolicy := &commonpb.RetryPolicy{
-		InitialIntervalInSeconds: 1,
-		MaximumAttempts:          3,
-		MaximumIntervalInSeconds: 1,
-		NonRetryableErrorTypes:   []string{"bad-bug"},
-		BackoffCoefficient:       1,
+		InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+		MaximumAttempts:        3,
+		MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+		NonRetryableErrorTypes: []string{"bad-bug"},
+		BackoffCoefficient:     1,
 	}
 	activity3ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity3ID, activity3Type,
 		activityTaskQueue, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout, activity3RetryPolicy)
@@ -321,9 +323,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	tl := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "historybuilder-workflowstart-failures-taskqueue"}
 	identity := "historybuilder-workflowstart-failures-worker"
 	input := payloads.EncodeString("historybuilder-workflowstart-failures-input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
@@ -347,14 +349,14 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 			Attempt:     1,
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowId:                      we.WorkflowId,
-				WorkflowType:                    &commonpb.WorkflowType{Name: wt},
-				TaskQueue:                       tl,
-				Input:                           input,
-				WorkflowExecutionTimeoutSeconds: execTimeout,
-				WorkflowRunTimeoutSeconds:       runTimeout,
-				WorkflowTaskTimeoutSeconds:      taskTimeout,
-				Identity:                        identity,
+				WorkflowId:               we.WorkflowId,
+				WorkflowType:             &commonpb.WorkflowType{Name: wt},
+				TaskQueue:                tl,
+				Input:                    input,
+				WorkflowExecutionTimeout: &execTimeout,
+				WorkflowRunTimeout:       &runTimeout,
+				WorkflowTaskTimeout:      &taskTimeout,
+				Identity:                 identity,
 			},
 		})
 	s.NotNil(err)
@@ -373,9 +375,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowTaskScheduledFailures() 
 	tl := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "historybuilder-workflow-task-scheduled-failures-taskqueue"}
 	identity := "historybuilder-workflow-task-scheduled-failures-worker"
 	input := payloads.EncodeString("historybuilder-workflow-task-scheduled-failures-input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
@@ -409,9 +411,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowTaskStartedFailures() {
 	tl := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "historybuilder-workflow-task-started-failures-taskqueue"}
 	identity := "historybuilder-workflow-task-started-failures-worker"
 	input := payloads.EncodeString("historybuilder-workflow-task-started-failures-input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
@@ -466,9 +468,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	tl := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "flush-buffered-events-taskqueue"}
 	identity := "flush-buffered-events-worker"
 	input := payloads.EncodeString("flush-buffered-events-input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
@@ -508,9 +510,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(3), s.getPreviousWorkflowTaskStartedEventID())
 
 	activityTaskQueue := "flush-buffered-events-activity-taskqueue"
-	activityTimeout := int32(60)
-	queueTimeout := int32(20)
-	hearbeatTimeout := int32(10)
+	activityTimeout := time.Duration(60) * time.Second
+	queueTimeout := time.Duration(20) * time.Second
+	hearbeatTimeout := time.Duration(10) * time.Second
 
 	// 5 activity1 scheduled
 	activity1ID := "activity1"
@@ -630,9 +632,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	identity := "some random identity"
 	input := payloads.EncodeString("some random workflow input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -702,9 +704,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	identity := "some random identity"
 	input := payloads.EncodeString("some random workflow input")
-	execTimeout := int32(70)
-	runTimeout := int32(60)
-	taskTimeout := int32(10)
+	execTimeout := time.Duration(70) * time.Second
+	runTimeout := time.Duration(60) * time.Second
+	taskTimeout := time.Duration(10) * time.Second
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -783,17 +785,17 @@ func (s *historyBuilderSuite) getPreviousWorkflowTaskStartedEventID() int64 {
 }
 
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we commonpb.WorkflowExecution, workflowType string,
-	taskQueue *taskqueuepb.TaskQueue, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) *historypb.HistoryEvent {
+	taskQueue *taskqueuepb.TaskQueue, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration, identity string) *historypb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                      we.WorkflowId,
-		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                       taskQueue,
-		Input:                           input,
-		WorkflowExecutionTimeoutSeconds: executionTimeout,
-		WorkflowRunTimeoutSeconds:       runTimeout,
-		WorkflowTaskTimeoutSeconds:      taskTimeout,
-		Identity:                        identity,
+		WorkflowId:               we.WorkflowId,
+		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:                taskQueue,
+		Input:                    input,
+		WorkflowExecutionTimeout: &executionTimeout,
+		WorkflowRunTimeout:       &runTimeout,
+		WorkflowTaskTimeout:      &taskTimeout,
+		Identity:                 identity,
 	}
 
 	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
@@ -836,19 +838,19 @@ func (s *historyBuilderSuite) addWorkflowTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(workflowTaskCompletedID int64, activityID, activityType,
-	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
+	taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout time.Duration, retryPolicy *commonpb.RetryPolicy) (*historypb.HistoryEvent,
 	*persistenceblobs.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
-			ActivityId:                    activityID,
-			ActivityType:                  &commonpb.ActivityType{Name: activityType},
-			TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue},
-			Input:                         input,
-			ScheduleToCloseTimeoutSeconds: timeout,
-			ScheduleToStartTimeoutSeconds: queueTimeout,
-			HeartbeatTimeoutSeconds:       hearbeatTimeout,
-			StartToCloseTimeoutSeconds:    1,
-			RetryPolicy:                   retryPolicy,
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: activityType},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                  input,
+			ScheduleToCloseTimeout: &timeout,
+			ScheduleToStartTimeout: &queueTimeout,
+			HeartbeatTimeout:       &hearbeatTimeout,
+			StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
+			RetryPolicy:            retryPolicy,
 		})
 	s.Nil(err)
 	return event, ai
@@ -935,7 +937,7 @@ func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEve
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *historypb.HistoryEvent, workflowType string,
-	taskQueue *taskqueuepb.TaskQueue, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) {
+	taskQueue *taskqueuepb.TaskQueue, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration, identity string) {
 	s.NotNil(event)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, event.EventType)
 	s.Equal(common.FirstEventID, event.EventId)
@@ -944,14 +946,14 @@ func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *histo
 	s.Equal(workflowType, attributes.WorkflowType.Name)
 	s.Equal(taskQueue, attributes.TaskQueue)
 	s.Equal(input, attributes.Input)
-	s.Equal(executionTimeout, attributes.WorkflowExecutionTimeoutSeconds)
-	s.Equal(runTimeout, attributes.WorkflowRunTimeoutSeconds)
-	s.Equal(taskTimeout, attributes.WorkflowTaskTimeoutSeconds)
+	s.Equal(executionTimeout, timestamp.DurationValue(attributes.WorkflowExecutionTimeout))
+	s.Equal(runTimeout, timestamp.DurationValue(attributes.WorkflowRunTimeout))
+	s.Equal(taskTimeout, timestamp.DurationValue(attributes.WorkflowTaskTimeout))
 	s.Equal(identity, attributes.Identity)
 }
 
 func (s *historyBuilderSuite) validateWorkflowTaskScheduledEvent(di *workflowTaskInfo, eventID int64,
-	taskQueue *taskqueuepb.TaskQueue, timeout int32) {
+	taskQueue *taskqueuepb.TaskQueue, timeout time.Duration) {
 	s.NotNil(di)
 	s.Equal(eventID, di.ScheduleID)
 	s.Equal(taskQueue, di.TaskQueue)
@@ -981,7 +983,7 @@ func (s *historyBuilderSuite) validateWorkflowTaskCompletedEvent(event *historyp
 }
 
 func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *historypb.HistoryEvent, eventID, workflowTaskID int64,
-	activityID, activityType, taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout int32) {
+	activityID, activityType, taskQueue string, input *commonpb.Payloads, timeout, queueTimeout, hearbeatTimeout time.Duration) {
 	s.NotNil(event)
 	s.Equal(enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -992,9 +994,9 @@ func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *historyp
 	s.Equal(activityType, attributes.ActivityType.Name)
 	s.Equal(taskQueue, attributes.TaskQueue.Name)
 	s.Equal(input, attributes.Input)
-	s.Equal(timeout, attributes.ScheduleToCloseTimeoutSeconds)
-	s.Equal(queueTimeout, attributes.ScheduleToStartTimeoutSeconds)
-	s.Equal(hearbeatTimeout, attributes.HeartbeatTimeoutSeconds)
+	s.Equal(timeout, timestamp.DurationValue(attributes.ScheduleToCloseTimeout))
+	s.Equal(queueTimeout, timestamp.DurationValue(attributes.ScheduleToStartTimeout))
+	s.Equal(hearbeatTimeout, timestamp.DurationValue(attributes.HeartbeatTimeout))
 }
 
 func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *historypb.HistoryEvent, eventID, scheduleID int64,

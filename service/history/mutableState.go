@@ -117,7 +117,7 @@ type (
 		CopyToPersistence() *persistence.WorkflowMutableState
 		RetryActivity(ai *persistenceblobs.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
-		CreateNewHistoryEventWithTimestamp(eventType enumspb.EventType, timestamp int64) *historypb.HistoryEvent
+		CreateNewHistoryEventWithTime(eventType enumspb.EventType, time time.Time) *historypb.HistoryEvent
 		CreateTransientWorkflowTaskEvents(di *workflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)

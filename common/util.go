@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -367,6 +368,25 @@ func SortInt64Slice(slice []int64) {
 	})
 }
 
+// EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) {
+	if originalPolicy.GetMaximumAttempts() == 0 {
+		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
+	}
+
+	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
+		originalPolicy.InitialInterval = timestamp.DurationPtr(time.Duration(defaultSettings.InitialIntervalInSeconds) * time.Second)
+	}
+
+	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
+		originalPolicy.MaximumInterval = timestamp.DurationPtr(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
+	}
+
+	if originalPolicy.GetBackoffCoefficient() == 0 {
+		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
+	}
+}
+
 // ValidateRetryPolicy validates a retry policy
 func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	if policy == nil {
@@ -378,17 +398,17 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		// rest of the arguments is pointless
 		return nil
 	}
-	if policy.GetInitialIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
+	if timestamp.DurationValue(policy.GetInitialInterval()) < 0 {
+		return serviceerror.NewInvalidArgument("InitialInterval cannot be negative on retry policy.")
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
-	if policy.GetMaximumIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be negative on retry policy.")
+	if timestamp.DurationValue(policy.GetMaximumInterval()) < 0 {
+		return serviceerror.NewInvalidArgument("MaximumInterval cannot be negative on retry policy.")
 	}
-	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy.")
+	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
+		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
 	}
 	if policy.GetMaximumAttempts() < 0 {
 		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
@@ -408,9 +428,8 @@ func CreateHistoryStartWorkflowRequest(
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		Attempt:                1,
 	}
-	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
-		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()
-		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
+	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
+		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
 		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
 

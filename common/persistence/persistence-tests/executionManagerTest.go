@@ -812,9 +812,9 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -1207,9 +1207,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -3005,9 +3005,9 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -3463,7 +3463,7 @@ func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 			Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
 				TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 					TimerId:                      "ID1",
-					StartToFireTimeoutSeconds:    101,
+					StartToFireTimeout:           timestamp.DurationPtr(101 * time.Second),
 					WorkflowTaskCompletedEventId: 5,
 				},
 			},
@@ -3596,7 +3596,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
 				TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 					TimerId:                      "ID1",
-					StartToFireTimeoutSeconds:    101,
+					StartToFireTimeout:           timestamp.DurationPtr(101 * time.Second),
 					WorkflowTaskCompletedEventId: 5,
 				},
 			},
