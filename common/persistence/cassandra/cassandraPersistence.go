@@ -2094,7 +2094,7 @@ func (d *cassandraPersistence) ListCurrentExecutions(
 		response.Executions = append(response.Executions, &p.CurrentWorkflowExecution{
 			DomainID:     result["domain_id"].(gocql.UUID).String(),
 			WorkflowID:   result["workflow_id"].(string),
-			RunID:        result["run_id"].(gocql.UUID).String(),
+			RunID:        permanentRunID,
 			State:        result["workflow_state"].(int),
 			CurrentRunID: result["current_run_id"].(gocql.UUID).String(),
 		})
