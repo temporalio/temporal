@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func TestCRC32OverThrift(t *testing.T) {
+func TestCRC32OverProto(t *testing.T) {
 	// note: do not use a struct with map since
 	// iteration order is not guaranteed in Go and
 	// so, each call to thrift encode will result in

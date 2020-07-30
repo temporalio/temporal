@@ -434,7 +434,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	if err != nil {
 		return err
 	}
-	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
+	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
@@ -445,7 +445,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 			transferTask.GetWorkflowId(),
 			transferTask.GetRunId(),
 			wfTypeName,
-			startTimestamp.UnixNano(),
+			startTime.UnixNano(),
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			transferTask.GetTaskId(),
@@ -459,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		transferTask.GetWorkflowId(),
 		transferTask.GetRunId(),
 		wfTypeName,
-		startTimestamp.UnixNano(),
+		startTime.UnixNano(),
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskId(),
