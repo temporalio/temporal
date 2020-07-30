@@ -1075,7 +1075,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := time.Now()
+	scheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
@@ -1097,7 +1097,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 		RunId:             runID,
 		Version:           version,
 		ScheduledId:       scheduleID,
-		ScheduledTime:     &scheduledTime,
+		ScheduledTime:     scheduledTime,
 		StartedId:         startedID,
 		StartedTime:       &startedTime,
 		Attempt:           attempt,
@@ -1142,7 +1142,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := request.GetLastHeartbeatTime()
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
-		now,
+		*now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
@@ -1160,7 +1160,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := timestamp.TimeNowPtrUtc()
+	scheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
@@ -1226,7 +1226,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := request.GetLastHeartbeatTime()
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
-		now,
+		*now,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		nil,
 		nil,

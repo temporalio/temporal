@@ -219,7 +219,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
-			StatusTime:     replicationAttr.StatusTime,
+			StatusTime:    replicationAttr.StatusTime,
 		},
 	).Return(nil, nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil, nil).Once()
@@ -231,7 +231,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 	replicationAttr := &replicationspb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
-		StatusTime:   timestamp.TimeNowPtrUtcAddDuration(-2 * dropSyncShardTaskTimeThreshold),
+		StatusTime:    timestamp.TimeNowPtrUtcAddDuration(-2 * dropSyncShardTaskTimeThreshold),
 	}
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:   enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK,
@@ -264,7 +264,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
-			StatusTime:     replicationAttr.StatusTime,
+			StatusTime:    replicationAttr.StatusTime,
 		},
 	).Return(nil, nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
