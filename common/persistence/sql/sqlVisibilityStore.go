@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -75,7 +74,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalR
 		WorkflowTypeName: request.WorkflowTypeName,
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), // Underlying value (1) is hardcoded in SQL queries.
 		Memo:             request.Memo.Data,
-		Encoding:         string(request.Memo.GetEncoding()),
+		Encoding:         request.Memo.Encoding.String(),
 	})
 
 	return err
@@ -94,7 +93,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
-		Encoding:         string(request.Memo.GetEncoding()),
+		Encoding:         request.Memo.Encoding.String(),
 	})
 	if err != nil {
 		return err
@@ -274,7 +273,7 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		TypeName:      row.WorkflowTypeName,
 		StartTime:     row.StartTime,
 		ExecutionTime: row.ExecutionTime,
-		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
+		Memo:          p.NewDataBlob(row.Memo, row.Encoding),
 		Status:        enumspb.WorkflowExecutionStatus(row.Status),
 	}
 	if row.CloseTime != nil {
