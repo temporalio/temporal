@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -486,8 +485,8 @@ func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 			WorkflowId:  uuid.New(),
 			RunId:       uuid.New(),
 			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimestampFromTimePtr(&rt1).ToProto(),
-			ExpiryTime:  timestamp.TimestampFromTimePtr(&rt2).ToProto(),
+			CreateTime:  &rt1,
+			ExpiryTime:  &rt2,
 		},
 		TaskId: rand.Int63(),
 	}

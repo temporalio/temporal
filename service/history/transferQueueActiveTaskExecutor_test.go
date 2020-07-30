@@ -1912,8 +1912,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(ai.ScheduleToStartTimeout.Seconds()),
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 	}
 }
 
@@ -1931,18 +1931,18 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := executionInfo.WorkflowRunTimeout
+	timeout := timestamp.DurationFromSeconds(executionInfo.WorkflowRunTimeout)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = executionInfo.StickyScheduleToStartTimeout
+		timeout = timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout)
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId:                   task.GetNamespaceId(),
-		Execution:                     &execution,
-		TaskQueue:                     taskQueue,
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(timeout),
+		NamespaceId:            task.GetNamespaceId(),
+		Execution:              &execution,
+		TaskQueue:              taskQueue,
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: timeout,
 	}
 }
 
