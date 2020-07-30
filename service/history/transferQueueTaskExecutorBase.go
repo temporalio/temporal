@@ -97,7 +97,7 @@ func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *persistenceblobs.TransferTaskInfo,
-	activityScheduleToStartTimeout int64,
+	activityScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -118,8 +118,8 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(activityScheduleToStartTimeout),
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 	})
 
 	return err
@@ -128,7 +128,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *persistenceblobs.TransferTaskInfo,
 	taskqueue *taskqueuepb.TaskQueue,
-	workflowTaskScheduleToStartTimeout int64,
+	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -144,9 +144,9 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		TaskQueue:                     taskqueue,
-		ScheduleId:                    task.GetScheduleId(),
-		ScheduleToStartTimeoutSeconds: int32(workflowTaskScheduleToStartTimeout),
+		TaskQueue:              taskqueue,
+		ScheduleId:             task.GetScheduleId(),
+		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }
