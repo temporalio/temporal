@@ -39,6 +39,7 @@ import (
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -151,15 +152,15 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 }
 
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
-	now := time.Now()
+	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
 		SourceCluster: "standby",
 		ShardId:       0,
-		Timestamp:     now.UnixNano(),
+		StatusTime:    now,
 	}).Return(nil).Times(1)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
-		Timestamp: now.UnixNano(),
+		StatusTime: now,
 	})
 	s.NoError(err)
 }
