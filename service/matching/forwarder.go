@@ -135,8 +135,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo := timestamp.TimeValue(task.event.Data.ExpiryTime)
-	newScheduleToStartTimeout := time.Until(expiryGo)
+	newScheduleToStartTimeout := time.Until(timestamp.TimeValue(task.event.Data.ExpiryTime))
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {
