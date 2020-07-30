@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -727,8 +728,8 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
-	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(resp.GetCloseTime().GetValue()))
+	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetStartTime()).UnixNano()))
+	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetCloseTime()).UnixNano()))
 	s.Equal(req.Status, resp.GetStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
 }
@@ -738,7 +739,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
+	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(timestamp.TimeValue(resp.GetStartTime()).UnixNano()))
 	s.Nil(resp.CloseTime)
 	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	s.Zero(resp.HistoryLength)

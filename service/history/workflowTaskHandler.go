@@ -26,6 +26,7 @@ package history
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -209,7 +211,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 				namespaceID,
 				targetNamespaceID,
 				attr,
-				int32(executionInfo.WorkflowRunTimeout),
+				time.Duration(executionInfo.WorkflowRunTimeout)*time.Second,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
@@ -393,7 +395,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	return handler.retryCronContinueAsNew(
 		startAttributes,
-		int32(cronBackoff.Seconds()),
+		cronBackoff,
 		enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 		nil,
 		attr.Result,
@@ -476,7 +478,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	return handler.retryCronContinueAsNew(
 		startAttributes,
-		int32(backoffInterval.Seconds()),
+		backoffInterval,
 		continueAsNewInitiator,
 		attr.GetFailure(),
 		startAttributes.LastCompletionResult,
@@ -670,7 +672,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if attr.WorkflowRunTimeoutSeconds <= 0 {
+	if timestamp.DurationValue(attr.WorkflowRunTimeout) <= 0 {
 		// TODO(maxim): is workflowTaskCompletedID the correct id?
 		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
 		handler.stopProcessing = true
@@ -897,27 +899,27 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 
 func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
 	attr *historypb.WorkflowExecutionStartedEventAttributes,
-	backoffInterval int32,
+	backoffInterval time.Duration,
 	continueAsNewInitiator enumspb.ContinueAsNewInitiator,
 	failure *failurepb.Failure,
 	lastCompletionResult *commonpb.Payloads,
 ) error {
 
 	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		WorkflowType:                  attr.WorkflowType,
-		TaskQueue:                     attr.TaskQueue,
-		RetryPolicy:                   attr.RetryPolicy,
-		Input:                         attr.Input,
-		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,
-		WorkflowTaskTimeoutSeconds:    attr.WorkflowTaskTimeoutSeconds,
-		CronSchedule:                  attr.CronSchedule,
-		BackoffStartIntervalInSeconds: backoffInterval,
-		Initiator:                     continueAsNewInitiator,
-		Failure:                       failure,
-		LastCompletionResult:          lastCompletionResult,
-		Header:                        attr.Header,
-		Memo:                          attr.Memo,
-		SearchAttributes:              attr.SearchAttributes,
+		WorkflowType:         attr.WorkflowType,
+		TaskQueue:            attr.TaskQueue,
+		RetryPolicy:          attr.RetryPolicy,
+		Input:                attr.Input,
+		WorkflowRunTimeout:   attr.WorkflowRunTimeout,
+		WorkflowTaskTimeout:  attr.WorkflowTaskTimeout,
+		CronSchedule:         attr.CronSchedule,
+		BackoffStartInterval: &backoffInterval,
+		Initiator:            continueAsNewInitiator,
+		Failure:              failure,
+		LastCompletionResult: lastCompletionResult,
+		Header:               attr.Header,
+		Memo:                 attr.Memo,
+		SearchAttributes:     attr.SearchAttributes,
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(

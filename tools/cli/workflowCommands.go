@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history"
 )
 
@@ -143,9 +144,9 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
 
 			if printRawTime {
-				columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
+				columns = append(columns, strconv.FormatInt(timestamp.TimeValue(e.GetEventTime()).UnixNano(), 10))
 			} else if printDateTime {
-				columns = append(columns, convertTime(e.GetTimestamp(), false))
+				columns = append(columns, formatTime(timestamp.TimeValue(e.GetEventTime()), false))
 			}
 			if printVersion {
 				columns = append(columns, fmt.Sprintf("(Version: %v)", e.Version))
@@ -215,11 +216,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Input:                           input,
-		WorkflowExecutionTimeoutSeconds: int32(et),
-		WorkflowTaskTimeoutSeconds:      int32(dt),
-		Identity:                        getCliIdentity(),
-		WorkflowIdReusePolicy:           reusePolicy,
+		Input:                    input,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(et) * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(dt) * time.Second),
+		Identity:                 getCliIdentity(),
+		WorkflowIdReusePolicy:    reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
 		startRequest.CronSchedule = c.String(FlagCronSchedule)
@@ -409,9 +410,9 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 				isTimeElapseExist = false
 			}
 			if showDetails {
-				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
+				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
 			} else {
-				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event))
+				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), formatTime(timestamp.TimeValue(event.GetEventTime()), false), ColorEvent(event))
 			}
 			lastEvent = event
 		}
@@ -875,7 +876,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
 			var row []string
 			row = append(row, pt.GetBinaryChecksum())
-			row = append(row, time.Unix(0, pt.GetCreateTimeNano()).String())
+			row = append(row, timestamp.TimeValue(pt.GetCreateTime()).String())
 			row = append(row, pt.GetRunId())
 			row = append(row, strconv.FormatInt(pt.GetFirstWorkflowTaskCompletedId(), 10))
 			table.Append(row)
@@ -891,8 +892,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
-		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
-		StartTime:         convertTime(info.GetStartTime().GetValue(), false),
+		CloseTime:         formatTime(timestamp.TimeValue(info.GetCloseTime()), false),
+		StartTime:         formatTime(timestamp.TimeValue(info.GetStartTime()), false),
 		Status:            info.GetStatus(),
 		HistoryLength:     info.GetHistoryLength(),
 		ParentNamespaceId: info.GetParentNamespaceId(),
@@ -909,12 +910,12 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			ActivityId:             pa.GetActivityId(),
 			ActivityType:           pa.GetActivityType(),
 			State:                  pa.GetState(),
-			ScheduledTimestamp:     convertTime(pa.GetScheduledTimestamp(), false),
-			LastStartedTimestamp:   convertTime(pa.GetLastStartedTimestamp(), false),
-			LastHeartbeatTimestamp: convertTime(pa.GetLastHeartbeatTimestamp(), false),
+			ScheduledTimestamp:     formatTime(timestamp.TimeValue(pa.GetScheduledTime()), false),
+			LastStartedTimestamp:   formatTime(timestamp.TimeValue(pa.GetLastStartedTime()), false),
+			LastHeartbeatTimestamp: formatTime(timestamp.TimeValue(pa.GetLastHeartbeatTime()), false),
 			Attempt:                pa.GetAttempt(),
 			MaximumAttempts:        pa.GetMaximumAttempts(),
-			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
+			ExpirationTimestamp:    formatTime(timestamp.TimeValue(pa.GetExpirationTime()), false),
 			LastFailure:            convertFailure(pa.GetLastFailure()),
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
@@ -1007,8 +1008,8 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now(), time.Now())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
@@ -1073,13 +1074,13 @@ func appendWorkflowExecutionsToTable(
 	for _, e := range executions {
 		var startTime, executionTime, closeTime string
 		if printRawTime {
-			startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-			executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-			closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+			startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+			executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+			closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 		} else {
-			startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+			startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+			executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+			closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 		}
 		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskQueue(), startTime, executionTime}
 		if !queryOpen {
@@ -1147,15 +1148,15 @@ func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []
 	return response.Executions, response.NextPageToken
 }
 
-func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
 	nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1175,15 +1176,15 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 	return response.Executions, response.NextPageToken
 }
 
-func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime time.Time, workflowID, workflowType string,
 	workflowStatus enumspb.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
 		NextPageToken:   nextPageToken,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: earliestTime,
-			LatestTime:   latestTime,
+			EarliestTime: &earliestTime,
+			LatestTime:   &latestTime,
 		},
 	}
 	if len(workflowID) > 0 {
@@ -1208,8 +1209,8 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*workflowpb.WorkflowExecutionInfo, []byte) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
+	earliestTime := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now(), time.Now())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	pageSize := c.Int(FlagPageSize)
@@ -1293,13 +1294,13 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		for _, e := range result {
 			var startTime, executionTime, closeTime string
 			if printRawTime {
-				startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
-				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-				closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
+				startTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetStartTime()))
+				executionTime = fmt.Sprintf("%v", e.GetExecutionTime())
+				closeTime = fmt.Sprintf("%v", timestamp.TimeValue(e.GetCloseTime()))
 			} else {
-				startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
-				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-				closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
+				startTime = formatTime(timestamp.TimeValue(e.GetStartTime()), !printDateTime)
+				executionTime = formatTime(timestamp.TimeValue(e.GetExecutionTime()), !printDateTime)
+				closeTime = formatTime(timestamp.TimeValue(e.GetCloseTime()), !printDateTime)
 			}
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
@@ -1713,7 +1714,7 @@ func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namesp
 
 		if attr.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE ||
 			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
-			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
+			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, timestamp.TimeValue(firstEvent.GetEventTime()))
 			return true, nil
 		}
 	}

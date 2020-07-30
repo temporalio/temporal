@@ -1137,7 +1137,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(activityInfo, gomock.Any()).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := time.Unix(0, request.GetLastHeartbeatTime())
@@ -1221,7 +1221,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, activityInfo.Version).Return(false).AnyTimes()
 
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(activityInfo, gomock.Any()).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := time.Unix(0, request.GetLastHeartbeatTime())

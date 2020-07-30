@@ -694,9 +694,9 @@ func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
 func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version int64) []*historypb.HistoryEvent {
 	var events []*historypb.HistoryEvent
 
-	timestamp := time.Now().UnixNano()
+	now := time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)
 	for _, eid := range eventIDs {
-		e := &historypb.HistoryEvent{EventId: eid, Version: version, Timestamp: timestamp}
+		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: &now}
 		events = append(events, e)
 	}
 

@@ -219,9 +219,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:         "test-reason",
-				Operator:       "test-operator",
-				CreateTimeNano: 123,
+				Reason:     "test-reason",
+				Operator:   "test-operator",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -338,9 +338,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:         "test-reason",
-				Operator:       "test-operator",
-				CreateTimeNano: 123,
+				Reason:     "test-reason",
+				Operator:   "test-operator",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -475,9 +475,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:         "test-reason",
-				Operator:       "test-operator",
-				CreateTimeNano: 123,
+				Reason:     "test-reason",
+				Operator:   "test-operator",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -633,9 +633,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:         "test-reason",
-				Operator:       "test-operator",
-				CreateTimeNano: 123,
+				Reason:     "test-reason",
+				Operator:   "test-operator",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -900,18 +900,18 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	testBinaries1 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
-				Reason:         "test-reason1",
-				Operator:       "test-operator1",
-				CreateTimeNano: 123,
+				Reason:     "test-reason1",
+				Operator:   "test-operator1",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
 	testBinaries2 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"efg": {
-				Reason:         "test-reason2",
-				Operator:       "test-operator2",
-				CreateTimeNano: 456,
+				Reason:     "test-reason2",
+				Operator:   "test-operator2",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}

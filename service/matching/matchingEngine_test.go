@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -552,14 +553,14 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    activityID,
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
-						ScheduleToCloseTimeoutSeconds: 100,
-						ScheduleToStartTimeoutSeconds: 50,
-						StartToCloseTimeoutSeconds:    50,
-						HeartbeatTimeoutSeconds:       10,
+						ActivityId:             activityID,
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(50 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
 					}),
 			}
 			resp.StartedTimestamp = time.Now().UnixNano()
@@ -666,14 +667,14 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    activityID,
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
-						ScheduleToStartTimeoutSeconds: 1,
-						ScheduleToCloseTimeoutSeconds: 2,
-						StartToCloseTimeoutSeconds:    1,
-						HeartbeatTimeoutSeconds:       1,
+						ActivityId:             activityID,
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -891,15 +892,15 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    activityID,
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
-						Header:                        activityHeader,
-						ScheduleToStartTimeoutSeconds: 1,
-						ScheduleToCloseTimeoutSeconds: 2,
-						StartToCloseTimeoutSeconds:    1,
-						HeartbeatTimeoutSeconds:       1,
+						ActivityId:             activityID,
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						Header:                 activityHeader,
+						ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -1197,14 +1198,14 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    activityID,
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: taskQueue.Name},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
-						ScheduleToStartTimeoutSeconds: 600,
-						ScheduleToCloseTimeoutSeconds: 2,
-						StartToCloseTimeoutSeconds:    1,
-						HeartbeatTimeoutSeconds:       1,
+						ActivityId:             activityID,
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToStartTimeout: timestamp.DurationPtr(600 * time.Second),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -1673,14 +1674,14 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    activityID,
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tlName},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
-						ScheduleToCloseTimeoutSeconds: 100,
-						ScheduleToStartTimeoutSeconds: 50,
-						StartToCloseTimeoutSeconds:    50,
-						HeartbeatTimeoutSeconds:       10,
+						ActivityId:             activityID,
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tlName},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(50 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -1702,16 +1703,16 @@ func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID i
 
 	historyEvent := newHistoryEvent(eventID, enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-		ActivityId:                    scheduleAttributes.ActivityId,
-		ActivityType:                  scheduleAttributes.ActivityType,
-		TaskQueue:                     scheduleAttributes.TaskQueue,
-		Input:                         scheduleAttributes.Input,
-		Header:                        scheduleAttributes.Header,
-		ScheduleToCloseTimeoutSeconds: scheduleAttributes.ScheduleToCloseTimeoutSeconds,
-		ScheduleToStartTimeoutSeconds: scheduleAttributes.ScheduleToStartTimeoutSeconds,
-		StartToCloseTimeoutSeconds:    scheduleAttributes.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:       scheduleAttributes.HeartbeatTimeoutSeconds,
-		WorkflowTaskCompletedEventId:  workflowTaskCompletedEventID,
+		ActivityId:                   scheduleAttributes.ActivityId,
+		ActivityType:                 scheduleAttributes.ActivityType,
+		TaskQueue:                    scheduleAttributes.TaskQueue,
+		Input:                        scheduleAttributes.Input,
+		Header:                       scheduleAttributes.Header,
+		ScheduleToCloseTimeout:       scheduleAttributes.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout:       scheduleAttributes.ScheduleToStartTimeout,
+		StartToCloseTimeout:          scheduleAttributes.StartToCloseTimeout,
+		HeartbeatTimeout:             scheduleAttributes.HeartbeatTimeout,
+		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 	}}
 	return historyEvent
 }
@@ -1719,7 +1720,7 @@ func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID i
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   eventID,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Now()),
 		EventType: eventType,
 	}
 

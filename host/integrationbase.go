@@ -166,13 +166,13 @@ func (s *IntegrationBase) registerNamespace(
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Name:                                 namespace,
-		Description:                          namespace,
-		WorkflowExecutionRetentionPeriodDays: int32(retentionDays),
-		HistoryArchivalState:                 historyArchivalState,
-		HistoryArchivalUri:                   historyArchivalURI,
-		VisibilityArchivalState:              visibilityArchivalState,
-		VisibilityArchivalUri:                visibilityArchivalURI,
+		Name:                             namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
+		HistoryArchivalState:             historyArchivalState,
+		HistoryArchivalUri:               historyArchivalURI,
+		VisibilityArchivalState:          visibilityArchivalState,
+		VisibilityArchivalUri:            visibilityArchivalURI,
 	})
 
 	return err
