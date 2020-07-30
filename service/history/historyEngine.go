@@ -2791,6 +2791,22 @@ func (e *historyEngineImpl) NotifyNewTimerTasks(
 	}
 }
 
+func (e *historyEngineImpl) ResetTransferQueue(
+	ctx context.Context,
+	clusterName string,
+) error {
+	_, err := e.txProcessor.HandleAction(clusterName, queue.NewResetAction())
+	return err
+}
+
+func (e *historyEngineImpl) ResetTimerQueue(
+	ctx context.Context,
+	clusterName string,
+) error {
+	_, err := e.timerProcessor.HandleAction(clusterName, queue.NewResetAction())
+	return err
+}
+
 func validateStartWorkflowExecutionRequest(
 	request *workflow.StartWorkflowExecutionRequest,
 	maxIDLengthLimit int,

@@ -56,6 +56,7 @@ const (
 
 var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
+	errProcessorShutdown   = errors.New("queue processor has been shutdown")
 
 	maxTransferReadLevel = newTransferTaskKey(math.MaxInt64)
 )
@@ -297,6 +298,38 @@ func (t *transferQueueProcessor) FailoverDomain(
 		t.logger.Error("Error update shard ack level", tag.Error(err))
 	}
 	failoverQueueProcessor.Start()
+}
+
+func (t *transferQueueProcessor) HandleAction(clusterName string, action *Action) (*ActionResult, error) {
+	var resultNotificationCh chan actionResultNotification
+	var added bool
+	if clusterName == t.currentClusterName {
+		resultNotificationCh, added = t.activeQueueProcessor.addAction(action)
+	} else {
+		found := false
+		for standbyClusterName, standbyProcessor := range t.standbyQueueProcessors {
+			if clusterName == standbyClusterName {
+				resultNotificationCh, added = standbyProcessor.addAction(action)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("unknown cluster name: %v", clusterName)
+		}
+	}
+
+	if !added {
+		return nil, errProcessorShutdown
+	}
+
+	select {
+	case resultNotification := <-resultNotificationCh:
+		return resultNotification.result, resultNotification.err
+	case <-t.shutdownChan:
+		return nil, errProcessorShutdown
+	}
 }
 
 func (t *transferQueueProcessor) LockTaskProcessing() {

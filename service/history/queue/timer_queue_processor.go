@@ -287,6 +287,38 @@ func (t *timerQueueProcessor) FailoverDomain(
 	failoverQueueProcessor.Start()
 }
 
+func (t *timerQueueProcessor) HandleAction(clusterName string, action *Action) (*ActionResult, error) {
+	var resultNotificationCh chan actionResultNotification
+	var added bool
+	if clusterName == t.currentClusterName {
+		resultNotificationCh, added = t.activeQueueProcessor.addAction(action)
+	} else {
+		found := false
+		for standbyClusterName, standbyProcessor := range t.standbyQueueProcessors {
+			if clusterName == standbyClusterName {
+				resultNotificationCh, added = standbyProcessor.addAction(action)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("unknown cluster name: %v", clusterName)
+		}
+	}
+
+	if !added {
+		return nil, errProcessorShutdown
+	}
+
+	select {
+	case resultNotification := <-resultNotificationCh:
+		return resultNotification.result, resultNotification.err
+	case <-t.shutdownChan:
+		return nil, errProcessorShutdown
+	}
+}
+
 func (t *timerQueueProcessor) LockTaskProcessing() {
 	t.taskAllocator.Lock()
 }
@@ -359,9 +391,9 @@ func (t *timerQueueProcessor) completeTimer() error {
 		panic("Unable to get timer queue processor ack level")
 	}
 
-	newAckLevelTimeStamp := newAckLevel.(timerTaskKey).visibilityTimestamp
-	t.logger.Debug(fmt.Sprintf("Start completing timer task from: %v, to %v", t.ackLevel, newAckLevelTimeStamp))
-	if !t.ackLevel.Before(newAckLevelTimeStamp) {
+	newAckLevelTimestamp := newAckLevel.(timerTaskKey).visibilityTimestamp
+	t.logger.Debug(fmt.Sprintf("Start completing timer task from: %v, to %v", t.ackLevel, newAckLevelTimestamp))
+	if !t.ackLevel.Before(newAckLevelTimestamp) {
 		return nil
 	}
 
@@ -369,12 +401,12 @@ func (t *timerQueueProcessor) completeTimer() error {
 
 	if err := t.shard.GetExecutionManager().RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{
 		InclusiveBeginTimestamp: t.ackLevel,
-		ExclusiveEndTimestamp:   newAckLevelTimeStamp,
+		ExclusiveEndTimestamp:   newAckLevelTimestamp,
 	}); err != nil {
 		return err
 	}
 
-	t.ackLevel = newAckLevelTimeStamp
+	t.ackLevel = newAckLevelTimestamp
 
 	return t.shard.UpdateTimerAckLevel(t.ackLevel)
 }

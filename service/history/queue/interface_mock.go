@@ -447,6 +447,21 @@ func (mr *MockProcessorMockRecorder) NotifyNewTask(clusterName, transferTasks in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTask", reflect.TypeOf((*MockProcessor)(nil).NotifyNewTask), clusterName, transferTasks)
 }
 
+// HandleAction mocks base method
+func (m *MockProcessor) HandleAction(clusterName string, action *Action) (*ActionResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleAction", clusterName, action)
+	ret0, _ := ret[0].(*ActionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleAction indicates an expected call of HandleAction
+func (mr *MockProcessorMockRecorder) HandleAction(clusterName, action interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleAction", reflect.TypeOf((*MockProcessor)(nil).HandleAction), clusterName, action)
+}
+
 // LockTaskProcessing mocks base method
 func (m *MockProcessor) LockTaskProcessing() {
 	m.ctrl.T.Helper()

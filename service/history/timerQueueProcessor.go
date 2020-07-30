@@ -22,6 +22,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -237,6 +238,13 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		t.logger.Error("Error when update shard ack level", tag.Error(err))
 	}
 	failoverTimerProcessor.Start()
+}
+
+func (t *timerQueueProcessorImpl) HandleAction(
+	clusterName string,
+	action *queue.Action,
+) (*queue.ActionResult, error) {
+	return nil, errors.New("action not supported in old queue processing logic")
 }
 
 func (t *timerQueueProcessorImpl) LockTaskProcessing() {

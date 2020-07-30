@@ -73,6 +73,8 @@ type (
 		PurgeDLQMessages(ctx context.Context, messagesRequest *r.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *r.MergeDLQMessagesRequest) (*r.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution workflow.WorkflowExecution) error
+		ResetTransferQueue(ctx context.Context, clusterName string) error
+		ResetTimerQueue(ctx context.Context, clusterName string) error
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []persistence.Task)

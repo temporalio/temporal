@@ -157,7 +157,9 @@ func (t *timerQueueProcessorBase) Start() {
 
 	t.redispatcher.Start()
 
-	t.notifyNewTimer(time.Time{})
+	for _, queueCollections := range t.processingQueueCollections {
+		t.upsertPollTime(queueCollections.Level(), time.Time{})
+	}
 
 	t.shutdownWG.Add(1)
 	go t.processorPump()
@@ -261,6 +263,8 @@ processorPumpLoop:
 				t.options.SplitQueueInterval(),
 				t.options.SplitQueueIntervalJitterCoefficient(),
 			))
+		case notification := <-t.actionNotifyCh:
+			t.handleActionNotification(notification)
 		}
 	}
 }
@@ -411,6 +415,15 @@ func (t *timerQueueProcessorBase) splitQueue() {
 	)
 
 	t.splitProcessingQueueCollection(splitPolicy, t.upsertPollTime)
+}
+
+func (t *timerQueueProcessorBase) handleActionNotification(notification actionNotification) {
+	t.processorBase.handleActionNotification(notification, func() {
+		switch notification.action.ActionType {
+		case ActionTypeReset:
+			t.upsertPollTime(defaultProcessingQueueLevel, time.Time{})
+		}
+	})
 }
 
 func (t *timerQueueProcessorBase) readAndFilterTasks(

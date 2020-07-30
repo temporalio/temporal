@@ -294,6 +294,23 @@ func (adh *AdminHandler) CloseShard(
 	return err
 }
 
+// ResetQueue resets processing queue states
+func (adh *AdminHandler) ResetQueue(
+	ctx context.Context,
+	request *gen.ResetQueueRequest,
+) (retError error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+	scope, sw := adh.startRequestProfile(metrics.AdminResetQueueScope)
+	defer sw.Stop()
+
+	if request == nil || request.ShardID == nil || request.ClusterName == nil || request.Type == nil {
+		return adh.error(errRequestNotSet, scope)
+	}
+	err := adh.GetHistoryClient().ResetQueue(ctx, request)
+	return err
+}
+
 // DescribeHistoryHost returns information about the internal states of a history host
 func (adh *AdminHandler) DescribeHistoryHost(
 	ctx context.Context,

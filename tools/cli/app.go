@@ -144,6 +144,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operations on database",
 					Subcommands: newDBCommands(),
 				},
+				{
+					Name:        "queue",
+					Aliases:     []string{"q"},
+					Usage:       "Run admin operations on queue",
+					Subcommands: newAdminQueueCommands(),
+				},
 			},
 		},
 		{

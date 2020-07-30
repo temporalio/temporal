@@ -66,8 +66,17 @@ func (c *metricClient) StartWorkflowExecution(
 func (c *metricClient) DescribeHistoryHost(
 	context context.Context,
 	request *shared.DescribeHistoryHostRequest,
-	opts ...yarpc.CallOption) (*shared.DescribeHistoryHostResponse, error) {
+	opts ...yarpc.CallOption,
+) (*shared.DescribeHistoryHostResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientDescribeHistoryHostScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientDescribeHistoryHostScope, metrics.CadenceClientLatency)
 	resp, err := c.client.DescribeHistoryHost(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientDescribeHistoryHostScope, metrics.CadenceClientFailures)
+	}
 
 	return resp, err
 }
@@ -75,8 +84,17 @@ func (c *metricClient) DescribeHistoryHost(
 func (c *metricClient) RemoveTask(
 	context context.Context,
 	request *shared.RemoveTaskRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientRemoveTaskScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRemoveTaskScope, metrics.CadenceClientLatency)
 	err := c.client.RemoveTask(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientRemoveTaskScope, metrics.CadenceClientFailures)
+	}
 
 	return err
 }
@@ -84,8 +102,35 @@ func (c *metricClient) RemoveTask(
 func (c *metricClient) CloseShard(
 	context context.Context,
 	request *shared.CloseShardRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientCloseShardScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientCloseShardScope, metrics.CadenceClientLatency)
 	err := c.client.CloseShard(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientCloseShardScope, metrics.CadenceClientFailures)
+	}
+
+	return err
+}
+
+func (c *metricClient) ResetQueue(
+	context context.Context,
+	request *shared.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientResetQueueScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetQueueScope, metrics.CadenceClientLatency)
+	err := c.client.ResetQueue(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientResetQueueScope, metrics.CadenceClientFailures)
+	}
 
 	return err
 }
@@ -93,8 +138,17 @@ func (c *metricClient) CloseShard(
 func (c *metricClient) DescribeMutableState(
 	context context.Context,
 	request *h.DescribeMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.DescribeMutableStateResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.DescribeMutableStateResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientDescribeMutableStateScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientDescribeMutableStateScope, metrics.CadenceClientLatency)
 	resp, err := c.client.DescribeMutableState(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientDescribeMutableStateScope, metrics.CadenceClientFailures)
+	}
 
 	return resp, err
 }

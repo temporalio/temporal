@@ -121,6 +121,22 @@ func (c *clientImpl) CloseShard(
 	return client.CloseShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) ResetQueue(
+	ctx context.Context,
+	request *shared.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ResetQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

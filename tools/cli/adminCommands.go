@@ -405,8 +405,8 @@ func AdminDescribeShard(c *cli.Context) {
 	prettyPrintJSONObject(shard)
 }
 
-// AdminShardManagement describes history host
-func AdminShardManagement(c *cli.Context) {
+// AdminCloseShard closes shard by shard id
+func AdminCloseShard(c *cli.Context) {
 	adminClient := cFactory.ServerAdminClient(c)
 	sid := getRequiredIntOption(c, FlagShardID)
 
@@ -483,5 +483,28 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 		ErrorAndExit("Refresh workflow task failed", err)
 	} else {
 		fmt.Println("Refresh workflow task succeeded.")
+	}
+}
+
+// AdminResetQueue resets task processing queue states
+func AdminResetQueue(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+
+	shardID := getRequiredIntOption(c, FlagShardID)
+	clusterName := getRequiredOption(c, FlagCluster)
+	typeID := getRequiredIntOption(c, FlagQueueType)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &shared.ResetQueueRequest{
+		ShardID:     common.Int32Ptr(int32(shardID)),
+		ClusterName: common.StringPtr(clusterName),
+		Type:        common.Int32Ptr(int32(typeID)),
+	}
+
+	err := adminClient.ResetQueue(ctx, req)
+	if err != nil {
+		ErrorAndExit("Failed to reset queue", err)
 	}
 }

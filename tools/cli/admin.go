@@ -144,7 +144,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) {
-				AdminShardManagement(c)
+				AdminCloseShard(c)
 			},
 		},
 		{
@@ -162,7 +162,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagTaskType,
-					Usage: "task type : 2 (transfer task), 3 (timer task) or 4 (replication task)",
+					Usage: "task type: 2 (transfer task), 3 (timer task) or 4 (replication task)",
 				},
 				cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
@@ -830,6 +830,32 @@ func newAdminDLQCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				AdminMergeDLQMessages(c)
+			},
+		},
+	}
+}
+
+func newAdminQueueCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "reset",
+			Usage: "reset processing queue states for transfer or timer task processor",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "shardID",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "cluster the task processor is responsible for",
+				},
+				cli.IntFlag{
+					Name:  FlagQueueType,
+					Usage: "queue type: 2 (transfer queue) or 3 (timer queue)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminResetQueue(c)
 			},
 		},
 	}

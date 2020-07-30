@@ -274,6 +274,14 @@ const (
 	PersistenceGetDLQAckLevelScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
+	// HistoryClientDescribeHistoryHostScope tracks RPC calls to history service
+	HistoryClientDescribeHistoryHostScope
+	// HistoryClientRemoveTaskScope tracks RPC calls to history service
+	HistoryClientRemoveTaskScope
+	// HistoryClientCloseShardScope tracks RPC calls to history service
+	HistoryClientCloseShardScope
+	// HistoryClientResetQueueScope tracks RPC calls to history service
+	HistoryClientResetQueueScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
 	HistoryClientRecordActivityTaskHeartbeatScope
 	// HistoryClientRespondDecisionTaskCompletedScope tracks RPC calls to history service
@@ -286,6 +294,8 @@ const (
 	HistoryClientRespondActivityTaskFailedScope
 	// HistoryClientRespondActivityTaskCanceledScope tracks RPC calls to history service
 	HistoryClientRespondActivityTaskCanceledScope
+	// HistoryClientDescribeMutableStateScope tracks RPC calls to history service
+	HistoryClientDescribeMutableStateScope
 	// HistoryClientGetMutableStateScope tracks RPC calls to history service
 	HistoryClientGetMutableStateScope
 	// HistoryClientPollMutableStateScope tracks RPC calls to history service
@@ -452,6 +462,10 @@ const (
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
 	AdminClientCloseShardScope
+	// AdminClientRemoveTaskScope tracks RPC calls to admin service
+	AdminClientRemoveTaskScope
+	// AdminClientResetQueueScope tracks RPC calls to admin service
+	AdminClientResetQueueScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowExecutionScope tracks RPC calls to admin service
@@ -680,13 +694,15 @@ const (
 	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
-	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
+	// AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminCloseShardTaskScope
-	//AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
+	// AdminResetQueueScope is the metric scope for admin.AdminResetQueueScope
+	AdminResetQueueScope
+	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
-	//AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
+	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
-	//AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
+	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
 	AdminMergeDLQMessagesScope
 
 	NumAdminScopes
@@ -792,11 +808,15 @@ const (
 	HistoryRespondActivityTaskFailedScope
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope
-	// HistoryGetMutableStateScope tracks GetMutableStateScope API calls received by service
+	// HistoryResetQueueScope tracks ResetQueue API calls received by service
+	HistoryResetQueueScope
+	// HistoryDescribeMutabelStateScope tracks DescribeMutableState API calls received by service
+	HistoryDescribeMutabelStateScope
+	// HistoryGetMutableStateScope tracks GetMutableState API calls received by service
 	HistoryGetMutableStateScope
-	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
+	// HistoryPollMutableStateScope tracks PollMutableState API calls received by service
 	HistoryPollMutableStateScope
-	// HistoryResetStickyTaskListScope tracks ResetStickyTaskListScope API calls received by service
+	// HistoryResetStickyTaskListScope tracks ResetStickyTaskList API calls received by service
 	HistoryResetStickyTaskListScope
 	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
 	HistoryDescribeWorkflowExecutionScope
@@ -1147,12 +1167,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
 		HistoryClientStartWorkflowExecutionScope:              {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeHistoryHostScope:                 {operation: "HistoryClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRemoveTaskScope:                          {operation: "HistoryClientRemoveTask", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientCloseShardScope:                          {operation: "HistoryClientCloseShard", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientResetQueueScope:                          {operation: "HistoryClientResetQueue", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordActivityTaskHeartbeatScope:         {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondDecisionTaskCompletedScope:        {operation: "HistoryClientRespondDecisionTaskCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondDecisionTaskFailedScope:           {operation: "HistoryClientRespondDecisionTaskFailed", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskCompletedScope:        {operation: "HistoryClientRespondActivityTaskCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskFailedScope:           {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskCanceledScope:         {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeMutableStateScope:                {operation: "HistoryClientDescribeMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetMutableStateScope:                     {operation: "HistoryClientGetMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientPollMutableStateScope:                    {operation: "HistoryClientPollMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetStickyTaskListScope:                 {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
@@ -1243,6 +1268,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveTaskScope:                            {operation: "AdminClientRemoveTask", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientResetQueueScope:                            {operation: "AdminClientResetQueue", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientReadDLQMessagesScope:                       {operation: "AdminClientReadDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1396,6 +1423,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRespondActivityTaskCompletedScope:               {operation: "RespondActivityTaskCompleted"},
 		HistoryRespondActivityTaskFailedScope:                  {operation: "RespondActivityTaskFailed"},
 		HistoryRespondActivityTaskCanceledScope:                {operation: "RespondActivityTaskCanceled"},
+		HistoryResetQueueScope:                                 {operation: "ResetQueue"},
+		HistoryDescribeMutabelStateScope:                       {operation: "DescribeMutableState"},
 		HistoryGetMutableStateScope:                            {operation: "GetMutableState"},
 		HistoryPollMutableStateScope:                           {operation: "PollMutableState"},
 		HistoryResetStickyTaskListScope:                        {operation: "ResetStickyTaskListScope"},

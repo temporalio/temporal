@@ -94,6 +94,21 @@ func (c *retryableClient) CloseShard(
 	return err
 }
 
+func (c *retryableClient) ResetQueue(
+	ctx context.Context,
+	request *shared.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		err := c.client.ResetQueue(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return err
+}
+
 func (c *retryableClient) RemoveTask(
 	ctx context.Context,
 	request *shared.RemoveTaskRequest,

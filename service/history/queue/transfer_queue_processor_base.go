@@ -241,6 +241,8 @@ processorPumpLoop:
 				t.options.SplitQueueInterval(),
 				t.options.SplitQueueIntervalJitterCoefficient(),
 			))
+		case notification := <-t.actionNotifyCh:
+			t.handleActionNotification(notification)
 		}
 	}
 }
@@ -374,6 +376,15 @@ func (t *transferQueueProcessorBase) splitQueue() {
 	)
 
 	t.splitProcessingQueueCollection(splitPolicy, t.upsertPollTime)
+}
+
+func (t *transferQueueProcessorBase) handleActionNotification(notification actionNotification) {
+	t.processorBase.handleActionNotification(notification, func() {
+		switch notification.action.ActionType {
+		case ActionTypeReset:
+			t.upsertPollTime(defaultProcessingQueueLevel, time.Time{})
+		}
+	})
 }
 
 func (t *transferQueueProcessorBase) readTasks(

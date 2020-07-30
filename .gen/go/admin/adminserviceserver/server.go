@@ -120,6 +120,11 @@ type Interface interface {
 		ctx context.Context,
 		Request *admin.ResendReplicationTasksRequest,
 	) error
+
+	ResetQueue(
+		ctx context.Context,
+		Request *shared.ResetQueueRequest,
+	) error
 }
 
 // New prepares an implementation of the AdminService service for
@@ -319,10 +324,21 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 				Signature:    "ResendReplicationTasks(Request *admin.ResendReplicationTasksRequest)",
 				ThriftModule: admin.ThriftModule,
 			},
+
+			thrift.Method{
+				Name: "ResetQueue",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ResetQueue),
+				},
+				Signature:    "ResetQueue(Request *shared.ResetQueueRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 17)
+	procedures := make([]transport.Procedure, 0, 18)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -643,6 +659,25 @@ func (h handler) ResendReplicationTasks(ctx context.Context, body wire.Value) (t
 
 	hadError := err != nil
 	result, err := admin.AdminService_ResendReplicationTasks_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ResetQueue(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_ResetQueue_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ResetQueue(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_ResetQueue_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

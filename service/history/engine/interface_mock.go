@@ -594,6 +594,34 @@ func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, domainUUID, executio
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, domainUUID, execution)
 }
 
+// ResetTransferQueue mocks base method
+func (m *MockEngine) ResetTransferQueue(ctx context.Context, clusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetTransferQueue", ctx, clusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetTransferQueue indicates an expected call of ResetTransferQueue
+func (mr *MockEngineMockRecorder) ResetTransferQueue(ctx, clusterName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetTransferQueue", reflect.TypeOf((*MockEngine)(nil).ResetTransferQueue), ctx, clusterName)
+}
+
+// ResetTimerQueue mocks base method
+func (m *MockEngine) ResetTimerQueue(ctx context.Context, clusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetTimerQueue", ctx, clusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetTimerQueue indicates an expected call of ResetTimerQueue
+func (mr *MockEngineMockRecorder) ResetTimerQueue(ctx, clusterName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetTimerQueue", reflect.TypeOf((*MockEngine)(nil).ResetTimerQueue), ctx, clusterName)
+}
+
 // NotifyNewHistoryEvent mocks base method
 func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()

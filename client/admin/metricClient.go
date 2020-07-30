@@ -88,14 +88,14 @@ func (c *metricClient) RemoveTask(
 	opts ...yarpc.CallOption,
 ) error {
 
-	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientRemoveTaskScope, metrics.CadenceClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRemoveTaskScope, metrics.CadenceClientLatency)
 	err := c.client.RemoveTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientRemoveTaskScope, metrics.CadenceClientFailures)
 	}
 	return err
 }
@@ -114,6 +114,24 @@ func (c *metricClient) CloseShard(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
+	}
+	return err
+}
+
+func (c *metricClient) ResetQueue(
+	ctx context.Context,
+	request *shared.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientResetQueueScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientResetQueueScope, metrics.CadenceClientLatency)
+	err := c.client.ResetQueue(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientResetQueueScope, metrics.CadenceClientFailures)
 	}
 	return err
 }

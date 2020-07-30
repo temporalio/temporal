@@ -162,6 +162,11 @@ type Interface interface {
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
 	) error
 
+	ResetQueue(
+		ctx context.Context,
+		Request *shared.ResetQueueRequest,
+	) error
+
 	ResetStickyTaskList(
 		ctx context.Context,
 		ResetRequest *history.ResetStickyTaskListRequest,
@@ -520,6 +525,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ResetQueue",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ResetQueue),
+				},
+				Signature:    "ResetQueue(Request *shared.ResetQueueRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "ResetStickyTaskList",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -675,7 +691,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 39)
+	procedures := make([]transport.Procedure, 0, 40)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -1148,6 +1164,25 @@ func (h handler) RequestCancelWorkflowExecution(ctx context.Context, body wire.V
 
 	hadError := err != nil
 	result, err := history.HistoryService_RequestCancelWorkflowExecution_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ResetQueue(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_ResetQueue_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ResetQueue(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_ResetQueue_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

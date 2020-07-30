@@ -71,7 +71,8 @@ func NewClient(
 func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *h.StartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*workflow.StartWorkflowExecutionResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.StartWorkflowExecutionResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -95,7 +96,8 @@ func (c *clientImpl) StartWorkflowExecution(
 func (c *clientImpl) GetMutableState(
 	ctx context.Context,
 	request *h.GetMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.GetMutableStateResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.GetMutableStateResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -119,7 +121,8 @@ func (c *clientImpl) GetMutableState(
 func (c *clientImpl) PollMutableState(
 	ctx context.Context,
 	request *h.PollMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.PollMutableStateResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -143,7 +146,8 @@ func (c *clientImpl) PollMutableState(
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *workflow.DescribeHistoryHostRequest,
-	opts ...yarpc.CallOption) (*workflow.DescribeHistoryHostResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.DescribeHistoryHostResponse, error) {
 
 	var err error
 	var client historyserviceclient.Interface
@@ -182,7 +186,8 @@ func (c *clientImpl) DescribeHistoryHost(
 func (c *clientImpl) RemoveTask(
 	ctx context.Context,
 	request *workflow.RemoveTaskRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	var err error
 	var client historyserviceclient.Interface
 	if request.ShardID != nil {
@@ -206,7 +211,8 @@ func (c *clientImpl) RemoveTask(
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *workflow.CloseShardRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 
 	var err error
 	var client historyserviceclient.Interface
@@ -231,10 +237,40 @@ func (c *clientImpl) CloseShard(
 	return nil
 }
 
+func (c *clientImpl) ResetQueue(
+	ctx context.Context,
+	request *workflow.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	var err error
+	var client historyserviceclient.Interface
+	if request.ShardID != nil {
+		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return err
+		}
+	}
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		err = client.ResetQueue(ctx, request, opts...)
+		return err
+	}
+
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *h.DescribeMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.DescribeMutableStateResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.DescribeMutableStateResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -258,7 +294,8 @@ func (c *clientImpl) DescribeMutableState(
 func (c *clientImpl) ResetStickyTaskList(
 	ctx context.Context,
 	request *h.ResetStickyTaskListRequest,
-	opts ...yarpc.CallOption) (*h.ResetStickyTaskListResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.ResetStickyTaskListResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -282,7 +319,8 @@ func (c *clientImpl) ResetStickyTaskList(
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *h.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*workflow.DescribeWorkflowExecutionResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.DescribeWorkflowExecutionResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.Request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -306,7 +344,8 @@ func (c *clientImpl) DescribeWorkflowExecution(
 func (c *clientImpl) RecordDecisionTaskStarted(
 	ctx context.Context,
 	request *h.RecordDecisionTaskStartedRequest,
-	opts ...yarpc.CallOption) (*h.RecordDecisionTaskStartedResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.RecordDecisionTaskStartedResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -330,7 +369,8 @@ func (c *clientImpl) RecordDecisionTaskStarted(
 func (c *clientImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *h.RecordActivityTaskStartedRequest,
-	opts ...yarpc.CallOption) (*h.RecordActivityTaskStartedResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.RecordActivityTaskStartedResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -354,7 +394,8 @@ func (c *clientImpl) RecordActivityTaskStarted(
 func (c *clientImpl) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	request *h.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption) (*h.RespondDecisionTaskCompletedResponse, error) {
+	opts ...yarpc.CallOption,
+) (*h.RespondDecisionTaskCompletedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
 		return nil, err
@@ -378,7 +419,8 @@ func (c *clientImpl) RespondDecisionTaskCompleted(
 func (c *clientImpl) RespondDecisionTaskFailed(
 	ctx context.Context,
 	request *h.RespondDecisionTaskFailedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.FailedRequest.TaskToken)
 	if err != nil {
 		return err
@@ -400,7 +442,8 @@ func (c *clientImpl) RespondDecisionTaskFailed(
 func (c *clientImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *h.RespondActivityTaskCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
 		return err
@@ -422,7 +465,8 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 func (c *clientImpl) RespondActivityTaskFailed(
 	ctx context.Context,
 	request *h.RespondActivityTaskFailedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.FailedRequest.TaskToken)
 	if err != nil {
 		return err
@@ -444,7 +488,8 @@ func (c *clientImpl) RespondActivityTaskFailed(
 func (c *clientImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *h.RespondActivityTaskCanceledRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.CancelRequest.TaskToken)
 	if err != nil {
 		return err
@@ -466,7 +511,8 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 func (c *clientImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	request *h.RecordActivityTaskHeartbeatRequest,
-	opts ...yarpc.CallOption) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.HeartbeatRequest.TaskToken)
 	if err != nil {
 		return nil, err
@@ -494,7 +540,8 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *h.RequestCancelWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.CancelRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -511,7 +558,8 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 func (c *clientImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	request *h.SignalWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -530,7 +578,8 @@ func (c *clientImpl) SignalWorkflowExecution(
 func (c *clientImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *h.SignalWithStartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*workflow.StartWorkflowExecutionResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.StartWorkflowExecutionResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.SignalWithStartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -555,7 +604,8 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 func (c *clientImpl) RemoveSignalMutableState(
 	ctx context.Context,
 	request *h.RemoveSignalMutableStateRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -573,7 +623,8 @@ func (c *clientImpl) RemoveSignalMutableState(
 func (c *clientImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *h.TerminateWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.TerminateRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -591,7 +642,8 @@ func (c *clientImpl) TerminateWorkflowExecution(
 func (c *clientImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	request *h.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*workflow.ResetWorkflowExecutionResponse, error) {
+	opts ...yarpc.CallOption,
+) (*workflow.ResetWorkflowExecutionResponse, error) {
 	client, err := c.getClientForWorkflowID(*request.ResetRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -614,7 +666,8 @@ func (c *clientImpl) ResetWorkflowExecution(
 func (c *clientImpl) ScheduleDecisionTask(
 	ctx context.Context,
 	request *h.ScheduleDecisionTaskRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -632,7 +685,8 @@ func (c *clientImpl) ScheduleDecisionTask(
 func (c *clientImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
 	request *h.RecordChildExecutionCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
@@ -650,7 +704,8 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 func (c *clientImpl) ReplicateEvents(
 	ctx context.Context,
 	request *h.ReplicateEventsRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return err
@@ -668,7 +723,8 @@ func (c *clientImpl) ReplicateEvents(
 func (c *clientImpl) ReplicateRawEvents(
 	ctx context.Context,
 	request *h.ReplicateRawEventsRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return err
@@ -686,7 +742,8 @@ func (c *clientImpl) ReplicateRawEvents(
 func (c *clientImpl) ReplicateEventsV2(
 	ctx context.Context,
 	request *h.ReplicateEventsV2Request,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return err
@@ -704,7 +761,8 @@ func (c *clientImpl) ReplicateEventsV2(
 func (c *clientImpl) SyncShardStatus(
 	ctx context.Context,
 	request *h.SyncShardStatusRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 
 	// we do not have a workflow ID here, instead, we have something even better
 	client, err := c.getClientForShardID(int(request.GetShardId()))
@@ -725,7 +783,8 @@ func (c *clientImpl) SyncShardStatus(
 func (c *clientImpl) SyncActivity(
 	ctx context.Context,
 	request *h.SyncActivityRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption,
+) error {
 
 	client, err := c.getClientForWorkflowID(request.GetWorkflowId())
 	if err != nil {
@@ -1004,8 +1063,11 @@ func (c *clientImpl) getClientForShardID(shardID int) (historyserviceclient.Inte
 	return client.(historyserviceclient.Interface), nil
 }
 
-func (c *clientImpl) executeWithRedirect(ctx context.Context, client historyserviceclient.Interface,
-	op func(ctx context.Context, client historyserviceclient.Interface) error) error {
+func (c *clientImpl) executeWithRedirect(
+	ctx context.Context,
+	client historyserviceclient.Interface,
+	op func(ctx context.Context, client historyserviceclient.Interface) error,
+) error {
 	var err error
 	if ctx == nil {
 		ctx = context.Background()

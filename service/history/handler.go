@@ -756,6 +756,40 @@ func (h *Handler) CloseShard(
 	return nil
 }
 
+// ResetQueue resets processing queue states
+func (h *Handler) ResetQueue(
+	ctx context.Context,
+	request *gen.ResetQueueRequest,
+) (retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryResetQueueScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.GetEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		return h.error(err, scope, "", "")
+	}
+
+	switch taskType := common.TaskType(request.GetType()); taskType {
+	case common.TaskTypeTransfer:
+		err = engine.ResetTransferQueue(ctx, request.GetClusterName())
+	case common.TaskTypeTimer:
+		err = engine.ResetTimerQueue(ctx, request.GetClusterName())
+	default:
+		err = errInvalidTaskType
+	}
+
+	if err != nil {
+		return h.error(err, scope, "", "")
+	}
+	return nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(
 	ctx context.Context,
@@ -765,7 +799,7 @@ func (h *Handler) DescribeMutableState(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
+	scope := metrics.HistoryDescribeMutabelStateScope
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()

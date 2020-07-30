@@ -189,6 +189,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	ResetQueue(
+		ctx context.Context,
+		Request *shared.ResetQueueRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	ResetStickyTaskList(
 		ctx context.Context,
 		ResetRequest *history.ResetStickyTaskListRequest,
@@ -870,6 +876,29 @@ func (c client) RequestCancelWorkflowExecution(
 	}
 
 	err = history.HistoryService_RequestCancelWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ResetQueue(
+	ctx context.Context,
+	_Request *shared.ResetQueueRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ResetQueue_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ResetQueue_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ResetQueue_Helper.UnwrapResponse(&result)
 	return
 }
 
