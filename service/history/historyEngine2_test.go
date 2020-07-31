@@ -115,7 +115,7 @@ func (s *engine2Suite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId:          0,
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -152,7 +152,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,

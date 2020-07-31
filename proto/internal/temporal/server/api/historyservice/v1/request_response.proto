@@ -407,7 +407,8 @@ message DescribeHistoryHostRequest {
     //ip:port
     string host_address = 1;
     int32 shard_id_for_host = 2;
-    temporal.api.common.v1.WorkflowExecution execution_for_host = 3;
+    string namespace_id = 3;
+    temporal.api.common.v1.WorkflowExecution execution_for_host = 4;
 }
 
 message DescribeHistoryHostResponse {
