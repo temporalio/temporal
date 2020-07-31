@@ -79,7 +79,7 @@ CREATE TABLE buffered_events (
 
 CREATE TABLE tasks (
   range_hash INT UNSIGNED NOT NULL,
-  task_queue_id VARBINARY(255) NOT NULL,
+  task_queue_id VARBINARY(272) NOT NULL,
   task_id BIGINT NOT NULL,
   --
   data BLOB NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE tasks (
 
 CREATE TABLE task_queues (
   range_hash INT UNSIGNED NOT NULL,
-  task_queue_id VARBINARY(255) NOT NULL,
+  task_queue_id VARBINARY(272) NOT NULL,
   --
   range_id BIGINT NOT NULL,
   data BLOB NOT NULL,
