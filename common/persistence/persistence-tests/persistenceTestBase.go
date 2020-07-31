@@ -236,8 +236,8 @@ func (s *TestBase) Setup() {
 		RangeId:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
-		TimerAckLevelTime:       &types.Timestamp{},
-		ClusterTimerAckLevel:    map[string]*types.Timestamp{},
+		TimerAckLevelTime:       &time.Time{},
+		ClusterTimerAckLevel:    map[string]*time.Time{},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
 

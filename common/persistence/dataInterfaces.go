@@ -1174,7 +1174,7 @@ type (
 	HistoryBranchDetail struct {
 		TreeID   string
 		BranchID string
-		ForkTime time.Time
+		ForkTime *time.Time
 		Info     string
 	}
 
@@ -1499,8 +1499,8 @@ func (d *WorkflowTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
-	return &types.Timestamp{}
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
+	return &time.Time{}
 }
 
 // GetVisibilityTime get the visibility timestamp

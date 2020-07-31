@@ -29,7 +29,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1727,13 +1726,13 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:                     e.namespaceEntry.GetInfo().Id,
-		StartRequest:                    createRequest,
-		ParentExecutionInfo:             parentExecutionInfo,
-		LastCompletionResult:            attributes.LastCompletionResult,
-		ContinuedFailure:                attributes.GetFailure(),
-		ContinueAsNewInitiator:          attributes.Initiator,
-		FirstWorkflowTaskBackoffSeconds: int32(timestamp.DurationValue(attributes.BackoffStartInterval).Seconds()),
+		NamespaceId:              e.namespaceEntry.GetInfo().Id,
+		StartRequest:             createRequest,
+		ParentExecutionInfo:      parentExecutionInfo,
+		LastCompletionResult:     attributes.LastCompletionResult,
+		ContinuedFailure:         attributes.GetFailure(),
+		ContinueAsNewInitiator:   attributes.Initiator,
+		FirstWorkflowTaskBackoff: attributes.BackoffStartInterval,
 	}
 	if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1742,7 +1741,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTimestamp = workflowTimeoutTime.UnixNano()
+		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
 	// History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
@@ -3123,16 +3122,12 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 
 	startToFireTimeout := timestamp.DurationValue(attributes.GetStartToFireTimeout())
 	// TODO: Time skew need to be taken in to account.
-	expiryTime, err := types.TimestampProto(timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout)) // should use the event time, not now
-
-	if err != nil {
-		return nil, err
-	}
+	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
 
 	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerId:    timerID,
-		ExpiryTime: expiryTime,
+		ExpiryTime: &expiryTime,
 		StartedId:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}
