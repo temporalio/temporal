@@ -60,7 +60,7 @@ func NewScanner(
 		itr:              common.NewPersistenceIterator(pr, persistencePageSize, shardID, scanType),
 		failedWriter:     common.NewBlobstoreWriter(id, common.FailedExtension, blobstoreClient, blobstoreFlushThreshold),
 		corruptedWriter:  common.NewBlobstoreWriter(id, common.CorruptedExtension, blobstoreClient, blobstoreFlushThreshold),
-		invariantManager: invariants.NewInvariantManager(invariantCollections, pr),
+		invariantManager: invariants.NewInvariantManager(invariantCollections, pr, scanType),
 		progressReportFn: progressReportFn,
 	}
 }
