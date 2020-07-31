@@ -902,7 +902,7 @@ func createTimerTasks(
 
 			case *p.ActivityRetryTimerTask:
 				info.EventId = t.EventID
-				info.ScheduleAttempt = int64(t.Attempt)
+				info.ScheduleAttempt = t.Attempt
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID

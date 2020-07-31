@@ -232,13 +232,13 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdateTimestamp                    time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
@@ -709,12 +709,12 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		ClientLibraryVersion:              executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
 		ClientImpl:                        executionInfo.ClientImpl,
-		SignalCount:                       int64(executionInfo.SignalCount),
+		SignalCount:                       executionInfo.SignalCount,
 		HistorySize:                       executionInfo.HistorySize,
 		CronSchedule:                      executionInfo.CronSchedule,
 		CompletionEventBatchId:            executionInfo.CompletionEventBatchID,
 		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
-		RetryAttempt:                      int64(executionInfo.Attempt),
+		RetryAttempt:                      executionInfo.Attempt,
 		RetryInitialInterval:              timestamp.DurationFromSeconds(executionInfo.InitialInterval),
 		RetryBackoffCoefficient:           executionInfo.BackoffCoefficient,
 		RetryMaximumInterval:              timestamp.DurationFromSeconds(executionInfo.MaximumInterval),
@@ -792,12 +792,12 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		ClientLibraryVersion:                   info.GetClientLibraryVersion(),
 		ClientFeatureVersion:                   info.GetClientFeatureVersion(),
 		ClientImpl:                             info.GetClientImpl(),
-		SignalCount:                            int32(info.GetSignalCount()),
+		SignalCount:                            info.GetSignalCount(),
 		HistorySize:                            info.GetHistorySize(),
 		CronSchedule:                           info.GetCronSchedule(),
 		CompletionEventBatchID:                 common.EmptyEventID,
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
-		Attempt:                                int32(info.GetRetryAttempt()),
+		Attempt:                                info.GetRetryAttempt(),
 		InitialInterval:                        truncateDurationToSecondsInt64(info.GetRetryInitialInterval()),
 		BackoffCoefficient:                     info.GetRetryBackoffCoefficient(),
 		MaximumInterval:                        truncateDurationToSecondsInt64(info.GetRetryMaximumInterval()),

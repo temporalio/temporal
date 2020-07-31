@@ -142,7 +142,7 @@ message RecordWorkflowTaskStartedResponse {
     int64 scheduled_event_id = 3;
     int64 started_event_id = 4;
     int64 next_event_id = 5;
-    int64 attempt = 6;
+    int32 attempt = 6;
     bool sticky_execution_enabled = 7;
     temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
@@ -166,7 +166,7 @@ message RecordActivityTaskStartedRequest {
 message RecordActivityTaskStartedResponse {
     temporal.api.history.v1.HistoryEvent scheduled_event = 1;
     google.protobuf.Timestamp started_time = 2 [(gogoproto.stdtime) = true];
-    int64 attempt = 3;
+    int32 attempt = 3;
     google.protobuf.Timestamp current_attempt_scheduled_time = 4 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads heartbeat_details = 5;
     temporal.api.common.v1.WorkflowType workflow_type = 6;
@@ -384,7 +384,7 @@ message SyncActivityRequest {
     google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads details = 10;
-    int64 attempt = 11;
+    int32 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
