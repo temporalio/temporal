@@ -1397,7 +1397,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				// If activity is started as part of the current request scope then return a positive response
 				if ai.RequestId == requestID {
 					response.StartedTime = ai.StartedTime
-					response.Attempt = int64(ai.Attempt)
+					response.Attempt = ai.Attempt
 					return nil
 				}
 
@@ -1414,7 +1414,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			}
 
 			response.StartedTime = ai.StartedTime
-			response.Attempt = int64(ai.Attempt)
+			response.Attempt = ai.Attempt
 			response.HeartbeatDetails = ai.LastHeartbeatDetails
 
 			response.WorkflowType = mutableState.GetWorkflowType()
@@ -1511,7 +1511,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			}
 
 			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
 				return ErrActivityTaskNotFound
 			}
 
@@ -1585,7 +1585,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
 				return nil, ErrActivityTaskNotFound
 			}
 
@@ -1670,7 +1670,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			}
 
 			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
 				return ErrActivityTaskNotFound
 			}
 
@@ -1752,7 +1752,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			}
 
 			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
 				return ErrActivityTaskNotFound
 			}
 

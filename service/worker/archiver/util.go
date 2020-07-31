@@ -97,7 +97,7 @@ func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) lo
 	return logger.WithTags(
 		tag.WorkflowID(activityInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-		tag.Attempt(int64(activityInfo.Attempt)))
+		tag.Attempt(activityInfo.Attempt))
 }
 
 func convertSearchAttributesToString(searchAttr map[string]*commonpb.Payload) map[string]string {

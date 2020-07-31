@@ -45,15 +45,7 @@ import (
 
 type (
 	mutableStateWorkflowTaskManager interface {
-		ReplicateWorkflowTaskScheduledEvent(
-			version int64,
-			scheduleID int64,
-			taskQueue *taskqueuepb.TaskQueue,
-			startToCloseTimeoutSeconds int32,
-			attempt int64,
-			scheduleTimestamp int64,
-			originalScheduledTimestamp int64,
-		) (*workflowTaskInfo, error)
+		ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp int64, originalScheduledTimestamp int64) (*workflowTaskInfo, error)
 		ReplicateTransientWorkflowTaskScheduled() (*workflowTaskInfo, error)
 		ReplicateWorkflowTaskStartedEvent(
 			workflowTask *workflowTaskInfo,
@@ -123,15 +115,7 @@ func newMutableStateWorkflowTaskManager(msb *mutableStateBuilder) mutableStateWo
 	}
 }
 
-func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEvent(
-	version int64,
-	scheduleID int64,
-	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
-	attempt int64,
-	scheduleTimestamp int64,
-	originalScheduledTimestamp int64,
-) (*workflowTaskInfo, error) {
+func (m *mutableStateWorkflowTaskManagerImpl) ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp int64, originalScheduledTimestamp int64) (*workflowTaskInfo, error) {
 
 	// set workflow state to running, since workflow task is scheduled
 	// NOTE: for zombie workflow, should not change the state

@@ -230,7 +230,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -916,7 +916,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -966,7 +966,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)

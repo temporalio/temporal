@@ -52,7 +52,7 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 3;
     int64 previous_started_event_id = 4;
     int64 started_event_id = 5;
-    int64 attempt = 6;
+    int32 attempt = 6;
     int64 next_event_id = 7;
     int64 backlog_count_hint = 8;
     bool sticky_execution_enabled = 9;

@@ -682,7 +682,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						StartedTime:        startedTime,
 						LastHeartbeatTime:  heartbeatTime,
 						Details:            activityInfo.LastHeartbeatDetails,
-						Attempt:            int64(activityInfo.Attempt),
+						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
 						VersionHistory:     versionHistory,
