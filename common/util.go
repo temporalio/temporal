@@ -237,9 +237,10 @@ func IsWhitelistServiceTransientError(err error) bool {
 	return false
 }
 
-// WorkflowIDToHistoryShard is used to map workflowID to a shardID
-func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
-	hash := farm.Fingerprint32([]byte(workflowID))
+// WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID
+func WorkflowIDToHistoryShard(namespaceID, workflowID string, numberOfShards int) int {
+	idBytes := []byte(namespaceID + "_" + workflowID)
+	hash := farm.Hash32(idBytes)
 	return int(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -296,8 +297,8 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
 		EventStoreVersion:          historyResponse.EventStoreVersion,
 		BranchToken:                historyResponse.BranchToken,
-		ScheduledTime:              timestamp.UnixOrZeroTimePtr(historyResponse.ScheduledTimestamp),
-		StartedTime:                timestamp.UnixOrZeroTimePtr(historyResponse.StartedTimestamp),
+		ScheduledTime:              historyResponse.ScheduledTime,
+		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
 	}
 
@@ -430,10 +431,10 @@ func CreateHistoryStartWorkflowRequest(
 	}
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
-		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
+		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
 
-	histRequest.FirstWorkflowTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
+	histRequest.FirstWorkflowTaskBackoff = backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
 

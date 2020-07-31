@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/checksum"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func applyWorkflowMutationBatch(
@@ -748,12 +749,6 @@ func createTransferTasks(
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
 		}
 
-		taskVisTs, err := types.TimestampProto(task.GetVisibilityTimestamp())
-
-		if err != nil {
-			return err
-		}
-
 		// todo ~~~ come back for record visibility
 		p := &persistenceblobs.TransferTaskInfo{
 			NamespaceId:             namespaceID,
@@ -768,7 +763,7 @@ func createTransferTasks(
 			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
-			VisibilityTime:          taskVisTs,
+			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTimestamp()),
 			RecordVisibility:        recordVisibility,
 		}
 
@@ -882,7 +877,7 @@ func createTimerTasks(
 
 	for _, task := range timerTasks {
 		eventID := int64(0)
-		attempt := int64(1)
+		attempt := int32(1)
 
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
@@ -903,7 +898,7 @@ func createTimerTasks(
 
 		case *p.ActivityRetryTimerTask:
 			eventID = t.EventID
-			attempt = int64(t.Attempt)
+			attempt = t.Attempt
 
 		case *p.WorkflowBackoffTimerTask:
 			eventID = t.EventID
@@ -922,11 +917,6 @@ func createTimerTasks(
 		// Ignoring possible type cast errors.
 		goTs := task.GetVisibilityTimestamp()
 		dbTs := p.UnixNanoToDBTimestamp(goTs.UnixNano())
-		protoTs, err := types.TimestampProto(goTs)
-
-		if err != nil {
-			return err
-		}
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
 			NamespaceId:         namespaceID,
@@ -939,7 +929,7 @@ func createTimerTasks(
 			ScheduleAttempt:     attempt,
 			EventId:             eventID,
 			TaskId:              task.GetTaskID(),
-			VisibilityTime:      protoTs,
+			VisibilityTime:      &goTs,
 		})
 
 		if err != nil {

@@ -28,7 +28,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type sqlHistoryV2Manager struct {
@@ -95,7 +95,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		treeInfo := &persistenceblobs.HistoryTreeInfo{
 			BranchInfo: branchInfo,
 			Info:       request.Info,
-			ForkTime:   types.TimestampNow(),
+			ForkTime:   timestamp.TimeNowPtrUtc(),
 		}
 
 		blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
@@ -331,7 +331,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 			Ancestors: newAncestors,
 		},
 		Info:     request.Info,
-		ForkTime: types.TimestampNow(),
+		ForkTime: timestamp.TimeNowPtrUtc(),
 	}
 
 	blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)

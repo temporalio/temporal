@@ -223,6 +223,7 @@ func (s *engineSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -248,8 +249,9 @@ func (s *engineSuite) SetupTest() {
 	historyEventNotifier := newHistoryEventNotifier(
 		clock.NewRealTimeSource(),
 		s.mockShard.resource.MetricsClient,
-		func(workflowID string) int {
-			return len(workflowID)
+		func(namespaceID, workflowID string) int {
+			key := namespaceID + "_" + workflowID
+			return len(key)
 		},
 	)
 
@@ -1302,7 +1304,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
-	s.Equal(int64(1), di3.Attempt)
+	s.Equal(int32(1), di3.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
@@ -1381,7 +1383,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	di3, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
-	s.Equal(int64(1), di3.Attempt)
+	s.Equal(int32(1), di3.Attempt)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
@@ -3837,7 +3839,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	di2, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di2.ScheduleID)
-	s.Equal(int64(1), di2.Attempt)
+	s.Equal(int32(1), di2.Attempt)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
@@ -4420,7 +4422,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
 		executionBuilder.GetExecutionInfo().WorkflowTaskScheduleID, executionBuilder.GetExecutionInfo().WorkflowTaskStartedID)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
-	s.Equal(int64(2), di3.Attempt)
+	s.Equal(int32(2), di3.Attempt)
 }
 
 func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {

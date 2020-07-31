@@ -108,7 +108,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId:          0,
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -135,7 +135,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -863,7 +863,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int64(1)
+	attempt := int32(1)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -935,7 +935,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int64(100)
+	attempt := int32(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1007,7 +1007,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int64(100)
+	attempt := int32(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1079,7 +1079,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int64(100)
+	attempt := int32(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
@@ -1164,7 +1164,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
-	attempt := int64(100)
+	attempt := int32(100)
 	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 

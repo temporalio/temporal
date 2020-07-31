@@ -29,8 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -54,7 +52,7 @@ type (
 
 	taskQueueState struct {
 		rangeID     int64
-		lastUpdated types.Timestamp
+		lastUpdated *time.Time
 	}
 
 	stats struct {
@@ -209,7 +207,7 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 		},
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
-			lastUpdated: *info.Data.LastUpdateTime,
+			lastUpdated: info.Data.LastUpdateTime,
 		},
 		scvg: s,
 	}

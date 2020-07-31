@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func applyWorkflowMutationTx(
@@ -751,12 +751,7 @@ func createTransferTasks(
 		info.TaskType = task.GetType()
 		info.Version = task.GetVersion()
 
-		t, err := types.TimestampProto(task.GetVisibilityTimestamp().UTC())
-		if err != nil {
-			return err
-		}
-
-		info.VisibilityTime = t
+		info.VisibilityTime = timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
 		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
@@ -907,7 +902,7 @@ func createTimerTasks(
 
 			case *p.ActivityRetryTimerTask:
 				info.EventId = t.EventID
-				info.ScheduleAttempt = int64(t.Attempt)
+				info.ScheduleAttempt = t.Attempt
 
 			case *p.WorkflowBackoffTimerTask:
 				info.EventId = t.EventID
@@ -930,20 +925,16 @@ func createTimerTasks(
 			info.TaskType = task.GetType()
 			info.TaskId = task.GetTaskID()
 
-			goVisTs := task.GetVisibilityTimestamp()
-			protoVisTs, err := types.TimestampProto(goVisTs)
-			if err != nil {
-				return err
-			}
+			goVisTs := timestamp.TimePtr(task.GetVisibilityTimestamp().UTC())
 
-			info.VisibilityTime = protoVisTs
+			info.VisibilityTime = goVisTs
 			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
 			}
 
 			timerTasksRows[i].ShardID = shardID
-			timerTasksRows[i].VisibilityTimestamp = goVisTs
+			timerTasksRows[i].VisibilityTimestamp = *goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
 			timerTasksRows[i].DataEncoding = blob.Encoding.String()

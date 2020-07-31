@@ -758,7 +758,7 @@ func (d *cassandraPersistence) GetShardID() int {
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -825,7 +825,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -2199,7 +2199,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	if len(request.TaskQueue) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
 	}
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2308,7 +2308,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 // From TaskManager interface
 func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
 	tli := *request.TaskQueueInfo
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskQueueTTL)
@@ -2337,7 +2337,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 		return &p.UpdateTaskQueueResponse{}, nil
 	}
 
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
 		return nil, convertCommonErrors("UpdateTaskQueue", err)
@@ -2450,7 +2450,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	}
 
 	tl := *request.TaskQueueInfo.Data
-	tl.LastUpdateTime = types.TimestampNow()
+	tl.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
 
 	if err != nil {

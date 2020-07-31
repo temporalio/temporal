@@ -146,11 +146,11 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	if ai.Version == request.GetVersion() {
-		if int64(ai.Attempt) > request.GetAttempt() {
+		if ai.Attempt > request.GetAttempt() {
 			// this should not retry, can be caused by failover or reset
 			return nil
 		}
-		if int64(ai.Attempt) == request.GetAttempt() {
+		if ai.Attempt == request.GetAttempt() {
 			lastHeartbeatTime := request.GetLastHeartbeatTime()
 			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(timestamp.TimeValue(lastHeartbeatTime)) {
 				// this should not retry, can be caused by out of order delivery
@@ -170,7 +170,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	resetActivityTimerTaskStatus := false
 	if !r.clusterMetadata.IsVersionFromSameCluster(request.GetVersion(), ai.Version) {
 		resetActivityTimerTaskStatus = true
-	} else if int64(ai.Attempt) < request.GetAttempt() {
+	} else if ai.Attempt < request.GetAttempt() {
 		resetActivityTimerTaskStatus = true
 	}
 	err = mutableState.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)

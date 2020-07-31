@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -569,7 +568,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTimeout := 222 * time.Second
 	runTimeout := 111 * time.Second
 	workflowTaskTimeout := 11 * time.Second
-	workflowTaskAttempt := int64(1)
+	workflowTaskAttempt := int32(1)
 
 	eventID := int64(1)
 	workflowStartEvent := &historypb.HistoryEvent{
@@ -663,7 +662,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	err = s.msBuilder.ReplicateWorkflowTaskFailedEvent()
 	s.Nil(err)
 
-	workflowTaskAttempt = int64(123)
+	workflowTaskAttempt = int32(123)
 	newWorkflowTaskScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
@@ -769,8 +768,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	expiryTime := types.TimestampNow()
-	expiryTime.Seconds += int64(time.Hour.Seconds())
+	expiryTime := timestamp.TimeNowPtrUtcAddDuration(time.Hour)
 	timerInfos := map[string]*persistenceblobs.TimerInfo{
 		"25": {
 			Version:    failoverVersion,

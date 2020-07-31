@@ -29,7 +29,6 @@ import (
 	"sort"
 
 	"github.com/gocql/gocql"
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -38,6 +37,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -118,7 +118,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		h.sortAncestors(&branchInfo.Ancestors)
 		treeInfoDataBlob, err := serialization.HistoryTreeInfoToBlob(&persistenceblobs.HistoryTreeInfo{
 			BranchInfo: branchInfo,
-			ForkTime:   types.TimestampNow(),
+			ForkTime:   timestamp.TimeNowPtrUtc(),
 			Info:       request.Info,
 		})
 
@@ -303,7 +303,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
 		},
-		ForkTime: types.TimestampNow(),
+		ForkTime: timestamp.TimeNowPtrUtc(),
 		Info:     request.Info,
 	}
 
@@ -427,15 +427,10 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
 		}
 
-		goForkTime, err := types.TimestampFromProto(hti.ForkTime)
-		if err != nil {
-			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
-		}
-
 		branchDetail := p.HistoryBranchDetail{
 			TreeID:   treeUUID.String(),
 			BranchID: branchUUID.String(),
-			ForkTime: goForkTime,
+			ForkTime: hti.ForkTime,
 			Info:     hti.Info,
 		}
 		branches = append(branches, branchDetail)
