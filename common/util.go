@@ -240,7 +240,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 // WorkflowIDToHistoryShard is used to map workflowID to a shardID
 func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 	hash := farm.Fingerprint32([]byte(workflowID))
-	return int(hash % uint32(numberOfShards))
+	return int(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
 // PrettyPrintHistory prints history in human readable format
