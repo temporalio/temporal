@@ -164,8 +164,8 @@ func ExecutionOpen(execution interface{}) bool {
 // getExecution returns base Execution
 func getExecution(execution interface{}) *Execution {
 	switch e := execution.(type) {
-	case *Execution:
-		return e
+	case *CurrentExecution:
+		return &e.Execution
 	case *ConcreteExecution:
 		return &e.Execution
 	default:
