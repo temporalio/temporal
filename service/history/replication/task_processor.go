@@ -536,22 +536,20 @@ func (p *taskProcessorImpl) emitDLQSizeMetricsLoop() {
 		select {
 		case <-timer.C:
 			resp, err := p.shard.GetExecutionManager().GetReplicationDLQSize(staticRequest)
-			if err != nil {
-				p.logger.Error("failed to get one task from replication DLQ", tag.Error(err))
-				p.metricsClient.Scope(metrics.ReplicationDLQStatsScope).IncCounter(metrics.ReplicationDLQProbeFailed)
-			}
-
-			p.metricsClient.Scope(
-				metrics.ReplicationDLQStatsScope,
-				metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
-			).UpdateGauge(metrics.ReplicationDLQSize, float64(resp.Size))
-
 			timer.Reset(backoff.JitDuration(
 				dlqMetricsEmitTimerInterval,
 				dlqMetricsEmitTimerCoefficient,
 			))
+			if err != nil {
+				p.logger.Error("failed to get replication DLQ size", tag.Error(err))
+				p.metricsClient.Scope(metrics.ReplicationDLQStatsScope).IncCounter(metrics.ReplicationDLQProbeFailed)
+			} else {
+				p.metricsClient.Scope(
+					metrics.ReplicationDLQStatsScope,
+					metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
+				).UpdateGauge(metrics.ReplicationDLQSize, float64(resp.Size))
+			}
 		case <-p.done:
-			timer.Stop()
 			return
 		}
 	}
