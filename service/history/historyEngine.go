@@ -961,7 +961,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
-		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskQueueScheduleToStartTimeout())*time.Second)
+		stickyContext, cancel := context.WithTimeout(context.Background(), timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
 		stickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchStickyLatency)
 		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
 		stickyStopWatch.Stop()
@@ -1090,7 +1090,7 @@ func (e *historyEngineImpl) getMutableState(
 		ClientLibraryVersion:                  executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:                  executionInfo.ClientFeatureVersion,
 		ClientImpl:                            executionInfo.ClientImpl,
-		StickyTaskQueueScheduleToStartTimeout: int32(executionInfo.StickyScheduleToStartTimeout),
+		StickyTaskQueueScheduleToStartTimeout: timestamp.DurationFromSeconds(executionInfo.StickyScheduleToStartTimeout),
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
@@ -1391,12 +1391,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return err
 			}
 			response.ScheduledEvent = scheduledEvent
-			response.ScheduledTimestampOfThisAttempt = ai.ScheduledTime.UnixNano()
+			response.CurrentAttemptScheduledTime = ai.ScheduledTime
 
 			if ai.StartedId != common.EmptyEventID {
 				// If activity is started as part of the current request scope then return a positive response
 				if ai.RequestId == requestID {
-					response.StartedTimestamp = ai.StartedTime.UnixNano()
+					response.StartedTime = ai.StartedTime
 					response.Attempt = ai.Attempt
 					return nil
 				}
@@ -1413,7 +1413,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return err
 			}
 
-			response.StartedTimestamp = ai.StartedTime.UnixNano()
+			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
 			response.HeartbeatDetails = ai.LastHeartbeatDetails
 

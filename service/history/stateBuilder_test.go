@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -924,11 +923,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 			StartToFireTimeout: &timeoutSecond,
 		}},
 	}
-	expiryTime, _ := types.TimestampProto(timestamp.TimeValue(event.GetEventTime()).Add(timeoutSecond))
+	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(timeoutSecond)
 	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerId:    timerID,
-		ExpiryTime: expiryTime,
+		ExpiryTime: &expiryTime,
 		StartedId:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}

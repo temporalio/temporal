@@ -29,8 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
@@ -110,7 +108,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 		return // avoid deleting our own task queue
 	}
 
-	lastUpdated, _ := types.TimestampFromProto(&state.lastUpdated)
+	lastUpdated := timestamp.TimeValue(state.lastUpdated)
 	delta := time.Now().Sub(lastUpdated)
 	if delta < taskQueueGracePeriod {
 		return

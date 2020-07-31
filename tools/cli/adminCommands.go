@@ -386,6 +386,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 
 // AdminGetShardID get shardID
 func AdminGetShardID(c *cli.Context) {
+	namespaceID := getRequiredOption(c, FlagNamespaceID)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	numberOfShards := c.Int(FlagNumberOfShards)
 
@@ -393,8 +394,8 @@ func AdminGetShardID(c *cli.Context) {
 		ErrorAndExit("numberOfShards is required", nil)
 		return
 	}
-	shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-	fmt.Printf("ShardId for workflowId: %v is %v \n", wid, shardID)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 }
 
 // AdminDescribeTask outputs the details of a task given Task Id, Task Type, Shard Id and Visibility Timestamp

@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // All logging tags are defined in this file.
@@ -56,6 +57,11 @@ func ClusterName(clusterName string) Tag {
 // Timestamp returns tag for Timestamp
 func Timestamp(timestamp time.Time) Tag {
 	return newTimeTag("timestamp", timestamp)
+}
+
+// Timestamp returns tag for Timestamp
+func TimestampPtr(t *time.Time) Tag {
+	return newTimeTag("timestamp", timestamp.TimeValue(t))
 }
 
 // Timestamp returns tag for Timestamp

@@ -475,12 +475,12 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.Identity = request.Identity
 	attributes.RetryPolicy = request.RetryPolicy
 	attributes.Attempt = startRequest.GetAttempt()
-	attributes.WorkflowExecutionExpirationTime = timestamp.TimePtr(timestamp.UnixOrZeroTime(startRequest.WorkflowExecutionExpirationTimestamp))
+	attributes.WorkflowExecutionExpirationTime = startRequest.WorkflowExecutionExpirationTime
 	attributes.CronSchedule = request.CronSchedule
 	attributes.LastCompletionResult = startRequest.LastCompletionResult
 	attributes.ContinuedFailure = startRequest.GetContinuedFailure()
 	attributes.Initiator = startRequest.ContinueAsNewInitiator
-	attributes.FirstWorkflowTaskBackoff = timestamp.DurationPtr(time.Duration(startRequest.FirstWorkflowTaskBackoffSeconds) * time.Second)
+	attributes.FirstWorkflowTaskBackoff = startRequest.FirstWorkflowTaskBackoff
 	attributes.FirstExecutionRunId = firstRunID
 	attributes.OriginalExecutionRunId = originalRunID
 	attributes.Memo = request.Memo

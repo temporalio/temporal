@@ -117,11 +117,11 @@ message ShardInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
-    google.protobuf.Timestamp update_time = 7;
-    google.protobuf.Timestamp timer_ack_level_time = 8;
+    google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true];
     int64 namespace_notification_version = 9;
     map<string, int64> cluster_transfer_ack_level = 10;
-    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11;
+    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true];
     map<string, int64> cluster_replication_level = 12;
     map<string, int64> replication_dlq_ack_level = 13;
 }
@@ -156,7 +156,7 @@ message TimerTaskInfo {
     int32 schedule_attempt = 8;
     int64 event_id = 9;
     int64 task_id = 10;
-    google.protobuf.Timestamp visibility_time = 11;
+    google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
 }
 
 message TransferTaskInfo {
@@ -172,7 +172,7 @@ message TransferTaskInfo {
     int64 schedule_id = 10;
     int64 version = 11;
     int64 task_id = 12;
-    google.protobuf.Timestamp visibility_time = 13;
+    google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
     bool record_visibility = 14;
 }
 
@@ -196,7 +196,7 @@ message HistoryBranch {
 message HistoryTreeInfo {
     HistoryBranch branch_info = 1;
     // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
-    google.protobuf.Timestamp fork_time = 2;
+    google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
 }
@@ -204,7 +204,7 @@ message HistoryTreeInfo {
 message TimerInfo {
     int64 version = 1;
     int64 started_id = 2;
-    google.protobuf.Timestamp expiry_time = 3;
+    google.protobuf.Timestamp expiry_time = 3 [(gogoproto.stdtime) = true];
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
@@ -230,8 +230,8 @@ message TaskQueueInfo {
     temporal.api.enums.v1.TaskQueueType task_type = 3;
     temporal.api.enums.v1.TaskQueueKind kind = 5;
     int64 ack_level = 6;
-    google.protobuf.Timestamp expiry_time = 7;
-    google.protobuf.Timestamp last_update_time = 8;
+    google.protobuf.Timestamp expiry_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_update_time = 8 [(gogoproto.stdtime) = true];
 }
 
 message SignalInfo {
@@ -346,7 +346,7 @@ message NamespaceDetail {
     int64 config_version = 9;
     int64 failover_notification_version = 11;
     int64 failover_version = 12;
-    int64 failover_end_time = 13;
+    google.protobuf.Timestamp failover_end_time = 13 [(gogoproto.stdtime) = true];
 }
 
 message NamespaceInfo {

@@ -29,7 +29,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
@@ -64,12 +63,12 @@ func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 		Data: &persistenceblobs.TaskQueueInfo{
 			NamespaceId:    uuid.New(),
 			Name:           name,
-			LastUpdateTime: types.TimestampNow(),
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
 		},
 		RangeID: 22,
 	}
 	if idle {
-		tq.Data.LastUpdateTime, _ = types.TimestampProto(time.Unix(1000, 1000))
+		tq.Data.LastUpdateTime = timestamp.TimePtr(time.Unix(1000, 1000))
 	}
 	tbl.info = append(tbl.info, &tq)
 }

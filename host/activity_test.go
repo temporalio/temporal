@@ -1041,7 +1041,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		s.Logger.Info("End Heartbeating", tag.WorkflowActivityID(activityID))
 
 		s.Logger.Info("Sleeping activity before completion (should timeout)", tag.WorkflowActivityID(activityID))
-		time.Sleep(5 * time.Second)
+		time.Sleep(8 * time.Second)
 
 		return payloads.EncodeString("Should never reach this point"), false, nil
 	}
@@ -1063,7 +1063,11 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	for i := 0; i < activityCount; i++ {
 		go func() {
 			err := poller.PollAndProcessActivityTask(false)
-			s.Logger.Error("Activity Processing Completed", tag.Error(err))
+			if err == nil {
+				s.Logger.Error("Activity expected to time out but got completed instead")
+			} else {
+				s.Logger.Info("Activity processing completed with error", tag.Error(err))
+			}
 		}()
 	}
 
@@ -1076,6 +1080,14 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if workflowComplete {
 			break
 		}
+	}
+
+	if !workflowComplete || failWorkflow {
+		s.Logger.Error("Test completed with unexpected result.  Dumping workflow execution history: ")
+		s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		})
 	}
 
 	s.True(workflowComplete)

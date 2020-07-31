@@ -1225,7 +1225,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			},
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(
+		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(
 			attributes.GetCronSchedule(),
 			now,
 			now,

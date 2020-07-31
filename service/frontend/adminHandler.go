@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/xdc"
@@ -203,7 +204,9 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return nil, adh.error(err, scope)
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(request.Execution.WorkflowId, adh.numberOfHistoryShards)
+	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDstr := string(shardID)
 	shardIDForOutput := strconv.Itoa(shardID)
 
@@ -211,8 +214,6 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-
-	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	historyAddr := historyHost.GetAddress()
 	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
@@ -242,10 +243,10 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardId:             request.GetShardId(),
-		Category:            request.GetCategory(),
-		TaskId:              request.GetTaskId(),
-		VisibilityTimestamp: request.GetVisibilityTimestamp(),
+		ShardId:        request.GetShardId(),
+		Category:       request.GetCategory(),
+		TaskId:         request.GetTaskId(),
+		VisibilityTime: timestamp.UnixOrZeroTimePtr(request.GetVisibilityTimestamp()),
 	})
 	return &adminservice.RemoveTaskResponse{}, err
 }
@@ -275,7 +276,14 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
+	var err error
+	namespaceID := ""
 	if request.ExecutionForHost != nil {
+		namespaceID, err = adh.GetNamespaceCache().GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
 		if err := validateExecution(request.ExecutionForHost); err != nil {
 			return nil, adh.error(err, scope)
 		}
@@ -284,6 +292,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	resp, err := adh.GetHistoryClient().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
 		HostAddress:      request.GetHostAddress(),
 		ShardIdForHost:   request.GetShardIdForHost(),
+		NamespaceId:      namespaceID,
 		ExecutionForHost: request.GetExecutionForHost(),
 	})
 
@@ -398,7 +407,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	// TODO need to deal with transient workflow task if to be used by client getting history
 	var historyBatches []*historypb.History
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+		adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
 		true, // this means that we are getting history by batch
@@ -532,6 +542,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 	pageSize := int(request.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID,
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)

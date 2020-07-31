@@ -29,8 +29,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"github.com/gogo/protobuf/types"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/log"
@@ -165,13 +163,10 @@ func initializeLoggerForTask(
 	task queueTaskInfo,
 	logger log.Logger,
 ) log.Logger {
-
-	t, _ := types.TimestampFromProto(task.GetVisibilityTime())
 	taskLogger := logger.WithTags(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
-		tag.TaskVisibilityTimestamp(t.UnixNano()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().GetSeconds()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().UnixNano()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
 		tag.WorkflowNamespaceID(task.GetNamespaceId()),

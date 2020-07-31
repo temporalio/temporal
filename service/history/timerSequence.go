@@ -31,7 +31,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -240,11 +239,11 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	timerInfo *persistenceblobs.TimerInfo,
 ) *timerSequenceID {
 
-	expiryTime, _ := types.TimestampFromProto(timerInfo.ExpiryTime)
+	expiryTime := timerInfo.ExpiryTime
 
 	return &timerSequenceID{
 		eventID:      timerInfo.GetStartedId(),
-		timestamp:    expiryTime,
+		timestamp:    timestamp.TimeValue(expiryTime),
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      1,

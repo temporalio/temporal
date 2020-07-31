@@ -174,8 +174,8 @@ func (c *shardController) isShuttingDown() bool {
 	return atomic.LoadInt32(&c.shuttingDown) != 0
 }
 
-func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := c.config.GetShardID(workflowID)
+func (c *shardController) GetEngine(namespaceID, workflowID string) (Engine, error) {
+	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.getEngineForShard(shardID)
 }
 
@@ -352,7 +352,7 @@ func (c *shardController) acquireShards() {
 		}()
 	}
 	// Submit tasks to the channel.
-	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
+	for shardID := 1; shardID <= c.config.NumberOfShards; shardID++ {
 		shardActionCh <- shardID
 		if c.isShuttingDown() {
 			return

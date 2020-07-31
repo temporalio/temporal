@@ -111,7 +111,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	)
 
 	execMgrFactory := s.active.GetExecutionManagerFactory()
-	executionManager, err := execMgrFactory.NewExecutionManager(0)
+	executionManager, err := execMgrFactory.NewExecutionManager(1)
 	s.NoError(err)
 
 	expectedDLQMsgs := map[int64]bool{}

@@ -512,7 +512,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 				resp2.Namespace.ConfigVersion,
 				resp2.Namespace.FailoverVersion,
 				resp2.Namespace.FailoverNotificationVersion,
-				0,
+				&time.Time{},
 				notificationVersion,
 			)
 			if err3 == nil {
@@ -575,7 +575,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	failoverEndTime := time.Now().UnixNano()
+	failoverEndTime := time.Now()
 	isGlobalNamespace := true
 	clusters := []string{clusterActive, clusterStandby}
 
@@ -664,7 +664,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
-		failoverEndTime,
+		&failoverEndTime,
 		notificationVersion,
 	)
 	m.NoError(err3)
@@ -694,7 +694,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp4.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp4.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp4.NotificationVersion)
-	m.Equal(failoverEndTime, resp4.Namespace.FailoverEndTime)
+	m.EqualTimes(failoverEndTime, *resp4.Namespace.FailoverEndTime)
 
 	resp5, err5 := m.GetNamespace(id, "")
 	m.NoError(err5)
@@ -720,7 +720,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp5.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp5.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp5.NotificationVersion)
-	m.Equal(failoverEndTime, resp4.Namespace.FailoverEndTime)
+	m.EqualTimes(failoverEndTime, *resp4.Namespace.FailoverEndTime)
 
 	notificationVersion++
 	err6 := m.UpdateNamespace(
@@ -747,7 +747,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
-		0,
+		&time.Time{},
 		notificationVersion,
 	)
 	m.NoError(err6)
@@ -777,7 +777,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp6.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp6.NotificationVersion)
-	m.Equal(int64(0), resp6.Namespace.FailoverEndTime)
+	m.EqualTimes(time.Unix(0, 0), *resp6.Namespace.FailoverEndTime)
 }
 
 // TestDeleteNamespace test
@@ -1041,7 +1041,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 	configVersion int64,
 	failoverVersion int64,
 	failoverNotificationVersion int64,
-	failoverEndTime int64,
+	failoverEndTime *time.Time,
 	notificationVersion int64,
 ) error {
 	return m.MetadataManager.UpdateNamespace(&p.UpdateNamespaceRequest{

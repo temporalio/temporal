@@ -152,7 +152,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId:          0,
+				ShardId:          1,
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
@@ -198,7 +198,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		logger:               s.logger,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int { return 1 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -1807,7 +1807,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 				CronSchedule:             cronSchedule,
 			},
-			FirstWorkflowTaskBackoffSeconds: int32(backoff.Seconds()),
+			FirstWorkflowTaskBackoff: &backoff,
 		},
 	)
 	s.Nil(err)
@@ -2072,8 +2072,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			Execution:   &execution,
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now),
-		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
+		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 	}
 }
 
