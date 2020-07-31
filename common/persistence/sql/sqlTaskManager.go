@@ -27,7 +27,6 @@ package sql
 import (
 	"bytes"
 	"database/sql"
-	"encoding/binary"
 	"fmt"
 	"math"
 	"time"
@@ -505,20 +504,20 @@ func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTask
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
 func (m *sqlTaskManager) calculateTaskQueueHash(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) uint32 {
-	return farm.Hash32(m.taskQueueId(namespaceID, name, taskType))
+	return farm.Fingerprint32(m.taskQueueId(namespaceID, name, taskType))
 }
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) ([]byte, uint32) {
 	id := m.taskQueueId(namespaceID, name, taskType)
-	return id, farm.Hash32(id)
+	return id, farm.Fingerprint32(id)
 }
 
 func (m *sqlTaskManager) taskQueueId(namespaceID primitives.UUID, name string, taskType enumspb.TaskQueueType) []byte {
-	idBytes := make([]byte, 0, 16+len(name)+2+8)
+	idBytes := make([]byte, 0, 16+len(name)+1)
 	idBytes = append(idBytes, namespaceID...)
-	idBytes = append(idBytes, []byte("_"+name+"_")...)
-	binary.BigEndian.PutUint64(idBytes, uint64(taskType))
+	idBytes = append(idBytes, []byte(name)...)
+	idBytes = append(idBytes, uint8(taskType))
 	return idBytes
 }
 

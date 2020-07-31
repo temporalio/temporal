@@ -50,7 +50,7 @@ type (
 
 const (
 	// taskQueuePartitionPrefix is the required naming prefix for any task queue partition other than partition 0
-	taskQueuePartitionPrefix = "/__temporal_sys/"
+	taskQueuePartitionPrefix = "/_sys/"
 )
 
 // newTaskQueueName returns a fully qualified task queue name.
@@ -60,7 +60,7 @@ const (
 // one partition for a user specified task queue, each of the
 // individual partitions have an internal name of the form
 //
-//     /__temporal_sys/[original-name]/[partitionID]
+//     /_sys/[original-name]/[partitionID]
 //
 // The name of the root partition is always the same as the user specified name. Rest of
 // the partitions follow the naming convention above. In addition, the task queues partitions

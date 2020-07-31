@@ -77,7 +77,7 @@ type (
 )
 
 const (
-	reservedTaskQueuePrefix = "/__temporal_sys/"
+	reservedTaskQueuePrefix = "/_sys/"
 )
 
 func newCommandAttrValidator(
