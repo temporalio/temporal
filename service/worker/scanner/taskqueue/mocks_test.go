@@ -68,7 +68,7 @@ func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 		RangeID: 22,
 	}
 	if idle {
-		tq.Data.LastUpdateTime = timestamp.TimePtr(time.Unix(1000, 1000)).UTC()
+		tq.Data.LastUpdateTime = timestamp.TimePtr(time.Unix(1000, 1000).UTC())
 	}
 	tbl.info = append(tbl.info, &tq)
 }
@@ -129,7 +129,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 			TaskId: tbl.nextTaskID,
 		}
 		if expired {
-			ti.Data.ExpiryTime = timestamp.TimePtr(time.Unix(0, time.Now().UTC().UnixNano()-int64(time.Second*33))).UTC()
+			ti.Data.ExpiryTime = timestamp.TimePtr(time.Unix(0, time.Now().UTC().UnixNano()-int64(time.Second*33)).UTC())
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++
