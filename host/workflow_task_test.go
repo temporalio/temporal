@@ -601,7 +601,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(1), resp1.GetAttempt())
+	s.Equal(int32(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 7, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	// then terminate the worklfow
