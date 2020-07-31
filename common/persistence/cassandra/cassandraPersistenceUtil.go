@@ -882,7 +882,7 @@ func createTimerTasks(
 
 	for _, task := range timerTasks {
 		eventID := int64(0)
-		attempt := int64(1)
+		attempt := int32(1)
 
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
@@ -903,7 +903,7 @@ func createTimerTasks(
 
 		case *p.ActivityRetryTimerTask:
 			eventID = t.EventID
-			attempt = int64(t.Attempt)
+			attempt = t.Attempt
 
 		case *p.WorkflowBackoffTimerTask:
 			eventID = t.EventID

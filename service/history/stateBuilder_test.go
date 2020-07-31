@@ -461,7 +461,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		}},
 	}
 
-	newRunWorkflowTaskAttempt := int64(123)
+	newRunWorkflowTaskAttempt := int32(123)
 	newRunWorkflowTaskEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   3,
@@ -687,7 +687,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	timeout := time.Duration(11) * time.Second
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
-	workflowTaskAttempt := int64(111)
+	workflowTaskAttempt := int32(111)
 	event := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   130,

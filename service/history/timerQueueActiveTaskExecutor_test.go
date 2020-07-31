@@ -895,7 +895,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 	s.True(ok)
 	s.True(workflowTask.ScheduleID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedID)
-	s.Equal(int64(2), workflowTask.Attempt)
+	s.Equal(int32(2), workflowTask.Attempt)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
@@ -1000,7 +1000,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 	s.True(ok)
 	s.True(workflowTask.ScheduleID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedID)
-	s.Equal(int64(1), workflowTask.Attempt)
+	s.Equal(int32(1), workflowTask.Attempt)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
@@ -1125,7 +1125,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime:  protoTaskTime,
 		EventId:         activityInfo.ScheduleId,
-		ScheduleAttempt: int64(activityInfo.Attempt),
+		ScheduleAttempt: activityInfo.Attempt,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -1218,7 +1218,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 		TimeoutType:     enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTime:  protoTaskTime,
 		EventId:         activityInfo.ScheduleId,
-		ScheduleAttempt: int64(activityInfo.Attempt),
+		ScheduleAttempt: activityInfo.Attempt,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())

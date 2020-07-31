@@ -1120,7 +1120,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	return getBackoffInterval(
 		e.timeSource.Now(),
 		info.WorkflowExpirationTime,
-		int64(info.Attempt),
+		info.Attempt,
 		info.MaximumAttempts,
 		*timestamp.DurationFromSeconds(info.InitialInterval),
 		*timestamp.DurationFromSeconds(info.MaximumInterval),
@@ -1955,7 +1955,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 	scheduleID int64,
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeoutSeconds int32,
-	attempt int64,
+	attempt int32,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
 ) (*workflowTaskInfo, error) {

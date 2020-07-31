@@ -461,7 +461,7 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)
@@ -565,7 +565,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if dropWorkflowTask {
 			_, err = poller.PollAndProcessWorkflowTask(true, true)
 		} else {
-			_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, int64(2))
+			_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -2294,7 +2294,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 5 times
 	for i := 1; i <= 5; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
+		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
 		s.NoError(err)
 	}
 
@@ -2313,26 +2313,26 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 2 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
+		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed workflow task
 	sendSignal = true
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(3))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 3)
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
 	// fail workflow task 1 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int64(i))
+		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, int64(3))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 3)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -2565,7 +2565,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
 	s.NoError(err)
 
 	// Now process signal and complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, int64(2))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -2752,7 +2752,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, int64(2))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -2960,7 +2960,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -2990,7 +2990,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
+		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -3006,7 +3006,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
+		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -3022,7 +3022,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(3))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
 
 	// Assert for single workflow task failed and workflow completion
 	failedWorkflowTasks := 0
@@ -3118,7 +3118,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -3154,7 +3154,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
+		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -3170,7 +3170,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(i))
+		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -3186,7 +3186,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int64(3))
+	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
 
 	// Assert for single workflow task failed and workflow completion
 	failedWorkflowTasks := 0
@@ -3309,7 +3309,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		false,
 		false,
 		false,
-		int64(0),
+		0,
 		1,
 		true,
 		nil)

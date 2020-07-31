@@ -90,15 +90,13 @@ func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *historyservic
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
+func (b *historyBuilder) AddWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32) *historypb.HistoryEvent {
 	event := b.newWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32, attempt int64, time time.Time) *historypb.HistoryEvent {
+func (b *historyBuilder) AddTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, time time.Time) *historypb.HistoryEvent {
 	event := b.newTransientWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeoutSeconds, attempt, time)
 
 	return b.addTransientEvent(event)
@@ -499,15 +497,13 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	return historyEvent
 }
 
-func (b *historyBuilder) newWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
-	attempt int64) *historypb.HistoryEvent {
+func (b *historyBuilder) newWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
 }
 
-func (b *historyBuilder) newTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
-	attempt int64, time time.Time) *historypb.HistoryEvent {
+func (b *historyBuilder) newTransientWorkflowTaskScheduledEvent(taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, time time.Time) *historypb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEventWithTime(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, time)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
@@ -1011,8 +1007,7 @@ func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string
 	return historyEvent
 }
 
-func newWorkflowTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32,
-	attempt int64) *historypb.HistoryEvent {
+func newWorkflowTaskScheduledEventWithInfo(eventID, timestamp int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds, attempt int32) *historypb.HistoryEvent {
 	historyEvent := createNewHistoryEvent(eventID, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, timestamp)
 
 	return setWorkflowTaskScheduledEventInfo(historyEvent, taskQueue, startToCloseTimeoutSeconds, attempt)
@@ -1034,8 +1029,7 @@ func createNewHistoryEvent(eventID int64, eventType enumspb.EventType, eventTime
 	return historyEvent
 }
 
-func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32, attempt int64) *historypb.HistoryEvent {
+func setWorkflowTaskScheduledEventInfo(historyEvent *historypb.HistoryEvent, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32) *historypb.HistoryEvent {
 	attributes := &historypb.WorkflowTaskScheduledEventAttributes{}
 	attributes.TaskQueue = taskQueue
 	attributes.StartToCloseTimeout = timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second)

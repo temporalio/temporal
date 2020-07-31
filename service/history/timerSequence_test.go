@@ -190,7 +190,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduleId,
-		Attempt:             int64(activityInfo.Attempt),
+		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
 	}).Times(1)
 
@@ -232,7 +232,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 		VisibilityTimestamp: taskVisibilityTimestamp,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduleId,
-		Attempt:             int64(activityInfo.Attempt),
+		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
 	}).Times(1)
 

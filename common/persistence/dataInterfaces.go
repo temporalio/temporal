@@ -222,13 +222,13 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdatedTimestamp                   time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
@@ -333,7 +333,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		ScheduleAttempt     int64
+		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
@@ -394,7 +394,7 @@ type (
 		TaskID              int64
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
-		Attempt             int64
+		Attempt             int32
 		Version             int64
 	}
 
@@ -412,7 +412,7 @@ type (
 		TaskID              int64
 		EventID             int64
 		Version             int64
-		Attempt             int64
+		Attempt             int32
 	}
 
 	// WorkflowBackoffTimerTask to schedule first workflow task for retried workflow

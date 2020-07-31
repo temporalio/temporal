@@ -63,7 +63,7 @@ type (
 		timestamp    time.Time
 		timerType    enumspb.TimeoutType
 		timerCreated bool
-		attempt      int64
+		attempt      int32
 	}
 
 	timerSequenceIDs []timerSequenceID
@@ -175,7 +175,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 		VisibilityTimestamp: firstTimerTask.timestamp,
 		TimeoutType:         firstTimerTask.timerType,
 		EventID:             firstTimerTask.eventID,
-		Attempt:             int64(firstTimerTask.attempt),
+		Attempt:             firstTimerTask.attempt,
 		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil

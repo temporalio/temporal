@@ -1247,7 +1247,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				LastFirstEventID:           common.FirstEventID,
 				NextEventID:                rand.Int63(),
 				LastProcessedEvent:         int64(rand.Int31()),
-				SignalCount:                rand.Int31(),
+				SignalCount:                rand.Int63(),
 				WorkflowTaskVersion:        int64(rand.Int31()),
 				WorkflowTaskScheduleID:     int64(rand.Int31()),
 				WorkflowTaskStartedID:      int64(rand.Int31()),
@@ -1380,7 +1380,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedID)
 	s.Equal(int64(1), info0.WorkflowTaskTimeout)
-	s.Equal(int64(0), info0.WorkflowTaskAttempt)
+	s.Equal(int32(0), info0.WorkflowTaskAttempt)
 	s.Equal(int64(0), info0.WorkflowTaskStartedTimestamp)
 	s.Equal(int64(0), info0.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(0), info0.WorkflowTaskOriginalScheduledTimestamp)
@@ -1403,7 +1403,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.WorkflowTaskVersion = int64(666)
-	updatedInfo.WorkflowTaskAttempt = int64(123)
+	updatedInfo.WorkflowTaskAttempt = 123
 	updatedInfo.WorkflowTaskStartedTimestamp = int64(321)
 	updatedInfo.WorkflowTaskScheduledTimestamp = int64(654)
 	updatedInfo.WorkflowTaskOriginalScheduledTimestamp = int64(655)
