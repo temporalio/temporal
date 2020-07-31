@@ -287,7 +287,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 		return nil, err
 	}
 
-	return response.GetMessagesByShard(), err
+	return response.GetShardMessages(), err
 }
 
 // GetSourceCluster returns the source cluster for the fetcher

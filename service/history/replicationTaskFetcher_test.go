@@ -106,7 +106,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
 	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	response, err := s.replicationTaskFetcher.getMessages(requestByShard)
@@ -135,7 +135,7 @@ func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
 	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	err := s.replicationTaskFetcher.fetchAndDistributeTasks(requestByShard)

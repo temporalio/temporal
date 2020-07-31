@@ -523,9 +523,9 @@ var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	resp := &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:                "test-shard-id",
-		HistoryAddr:            "ip:port",
-		MutableStateInDatabase: `{"ExecutionInfo":{"BranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
+		ShardId:              "test-shard-id",
+		HistoryAddr:          "ip:port",
+		DatabaseMutableState: `{"ExecutionInfo":{"BranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)

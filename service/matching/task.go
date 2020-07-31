@@ -94,7 +94,7 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		forwardedFrom: request.GetForwardedFrom(),
+		forwardedFrom: request.GetForwardedSource(),
 		responseC:     make(chan error, 1),
 	}
 }

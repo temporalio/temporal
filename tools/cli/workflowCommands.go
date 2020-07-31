@@ -892,8 +892,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
-		CloseTime:         formatTime(timestamp.TimeValue(info.GetCloseTime()), false),
-		StartTime:         formatTime(timestamp.TimeValue(info.GetStartTime()), false),
+		CloseTime:         info.GetCloseTime(),
+		StartTime:         info.GetStartTime(),
 		Status:            info.GetStatus(),
 		HistoryLength:     info.GetHistoryLength(),
 		ParentNamespaceId: info.GetParentNamespaceId(),
@@ -907,17 +907,17 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	var tmpAct *clispb.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
 		tmpAct = &clispb.PendingActivityInfo{
-			ActivityId:             pa.GetActivityId(),
-			ActivityType:           pa.GetActivityType(),
-			State:                  pa.GetState(),
-			ScheduledTimestamp:     formatTime(timestamp.TimeValue(pa.GetScheduledTime()), false),
-			LastStartedTimestamp:   formatTime(timestamp.TimeValue(pa.GetLastStartedTime()), false),
-			LastHeartbeatTimestamp: formatTime(timestamp.TimeValue(pa.GetLastHeartbeatTime()), false),
-			Attempt:                pa.GetAttempt(),
-			MaximumAttempts:        pa.GetMaximumAttempts(),
-			ExpirationTimestamp:    formatTime(timestamp.TimeValue(pa.GetExpirationTime()), false),
-			LastFailure:            convertFailure(pa.GetLastFailure()),
-			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
+			ActivityId:         pa.GetActivityId(),
+			ActivityType:       pa.GetActivityType(),
+			State:              pa.GetState(),
+			ScheduledTime:      pa.GetScheduledTime(),
+			LastStartedTime:    pa.GetLastStartedTime(),
+			LastHeartbeatTime:  pa.GetLastHeartbeatTime(),
+			Attempt:            pa.GetAttempt(),
+			MaximumAttempts:    pa.GetMaximumAttempts(),
+			ExpirationTime:     pa.GetExpirationTime(),
+			LastFailure:        convertFailure(pa.GetLastFailure()),
+			LastWorkerIdentity: pa.GetLastWorkerIdentity(),
 		}
 
 		if pa.HeartbeatDetails != nil {
