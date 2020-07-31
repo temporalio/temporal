@@ -879,15 +879,15 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 		WorkflowID:       source.WorkflowID,
 		RunID:            source.RunID,
 		TypeName:         source.WorkflowType,
-		StartTime:        time.Unix(0, source.StartTime),
-		ExecutionTime:    time.Unix(0, source.ExecutionTime),
+		StartTime:        time.Unix(0, source.StartTime).UTC(),
+		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
 		Memo:             p.NewDataBlob(source.Memo, source.Encoding),
 		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
 		Status:           source.ExecutionStatus,
 	}
 	if source.CloseTime != 0 {
-		record.CloseTime = time.Unix(0, source.CloseTime)
+		record.CloseTime = time.Unix(0, source.CloseTime).UTC()
 		record.HistoryLength = source.HistoryLength
 	}
 

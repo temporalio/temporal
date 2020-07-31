@@ -608,7 +608,7 @@ func parseTime(timeStr string, defaultValue time.Time, now time.Time) time.Time 
 	// treat as raw unix time
 	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
 	if err == nil {
-		return time.Unix(0, resultValue)
+		return time.Unix(0, resultValue).UTC()
 	}
 
 	// treat as time range format
@@ -668,7 +668,7 @@ func parseTimeRange(timeRange string, now time.Time) (time.Time, error) {
 	}
 
 	res := now.Add(time.Duration(-num) * dur) // using server's local timezone
-	epochTime := time.Unix(0, 0)
+	epochTime := time.Unix(0, 0).UTC()
 	if res.Before(epochTime) {
 		res = epochTime
 	}

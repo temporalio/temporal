@@ -1200,7 +1200,7 @@ Loop:
 	for {
 		response, err := s.ExecutionManager.GetTimerIndexTasks(&p.GetTimerIndexTasksRequest{
 			MinTimestamp:  time.Time{},
-			MaxTimestamp:  time.Unix(0, math.MaxInt64),
+			MaxTimestamp:  time.Unix(0, math.MaxInt64).UTC(),
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})

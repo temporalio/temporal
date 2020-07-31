@@ -49,7 +49,7 @@ func (c *converter) ToPostgresDateTime(t time.Time) time.Time {
 	zn, _ := t.Zone()
 	if zn != localZone {
 		nano := t.UnixNano()
-		t := time.Unix(0, nano)
+		t := time.Unix(0, nano).UTC()
 		return t
 	}
 	return t

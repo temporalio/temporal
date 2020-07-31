@@ -419,7 +419,7 @@ func AdminDescribeTask(c *cli.Context) {
 
 	if category == enumsspb.TASK_CATEGORY_TIMER {
 		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
-		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis)}
+		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis).UTC()}
 		task, err := executionManager.GetTimerTask(req)
 		if err != nil {
 			ErrorAndExit("Failed to get Timer Task", err)

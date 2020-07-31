@@ -114,7 +114,7 @@ func NewRuntimeMetricsReporter(
 	if err != nil || sec < 0 {
 		sec = 0
 	}
-	rReporter.buildTime = time.Unix(sec, 0)
+	rReporter.buildTime = time.Unix(sec, 0).UTC()
 	return rReporter
 }
 

@@ -4641,7 +4641,7 @@ func (e *mutableStateBuilder) shouldVerifyChecksum() bool {
 func (e *mutableStateBuilder) shouldInvalidateCheckum() bool {
 	invalidateBeforeEpochSecs := int64(e.config.MutableStateChecksumInvalidateBefore())
 	if invalidateBeforeEpochSecs > 0 {
-		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0)
+		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0).UTC()
 		return e.executionInfo.LastUpdatedTimestamp.Before(invalidateBefore)
 	}
 	return false
@@ -4665,7 +4665,7 @@ func (_ *mutableStateBuilder) unixNanoToTime(
 	timestampNanos int64,
 ) time.Time {
 
-	return time.Unix(0, timestampNanos)
+	return time.Unix(0, timestampNanos).UTC()
 }
 
 func (e *mutableStateBuilder) logInfo(msg string, tags ...tag.Tag) {

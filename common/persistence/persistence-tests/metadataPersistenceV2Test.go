@@ -777,7 +777,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp6.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp6.NotificationVersion)
-	m.EqualTimes(time.Unix(0, 0), *resp6.Namespace.FailoverEndTime)
+	m.EqualTimes(time.Unix(0, 0).UTC(), *resp6.Namespace.FailoverEndTime)
 }
 
 // TestDeleteNamespace test
