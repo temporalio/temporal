@@ -215,7 +215,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
 
-	versions := []int64{101, 1, 201, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
+	versions := []int64{102, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
 		runID := uuid.New()
 		var historyBatch []*historypb.History
