@@ -404,7 +404,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
-	forwardedFrom := "/__temporal_sys/makeToast/1"
+	forwardedFrom := "/_sys/makeToast/1"
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
