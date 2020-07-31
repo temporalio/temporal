@@ -690,8 +690,8 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	}
 
 	resp := &historyservice.DescribeHistoryHostResponse{
-		NumberOfShards: int32(h.controller.numShards()),
-		ShardIds:       h.controller.shardIDs(),
+		ShardsNumber: int32(h.controller.numShards()),
+		ShardIds:     h.controller.shardIDs(),
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
@@ -1534,7 +1534,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	h.GetLogger().Debug("GetReplicationMessages succeeded.")
 
-	return &historyservice.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
+	return &historyservice.GetReplicationMessagesResponse{ShardMessages: messagesByShard}, nil
 }
 
 // GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging

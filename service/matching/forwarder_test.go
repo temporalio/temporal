@@ -107,7 +107,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	schedToStart := int32(request.GetScheduleToStartTimeout().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds())
 	t.EqualValues(schedToStart, rewritten)
-	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
+	t.Equal(t.taskQueue.name, request.GetForwardedSource())
 }
 
 func (t *ForwarderTestSuite) TestForwardActivityTask() {
@@ -133,7 +133,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 	t.EqualValues(convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds()),
 		int32(request.GetScheduleToStartTimeout().Seconds()))
-	t.Equal(t.taskQueue.name, request.GetForwardedFrom())
+	t.Equal(t.taskQueue.name, request.GetForwardedSource())
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {

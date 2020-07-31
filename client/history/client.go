@@ -150,10 +150,10 @@ func (c *clientImpl) DescribeHistoryHost(
 	var err error
 	var client historyservice.HistoryServiceClient
 
-	if request.GetShardIdForHost() != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardIdForHost()))
-	} else if request.ExecutionForHost != nil {
-		client, err = c.getClientForWorkflowID(request.GetNamespaceId(), request.ExecutionForHost.GetWorkflowId())
+	if request.GetShardId() != 0 {
+		client, err = c.getClientForShardID(int(request.GetShardId()))
+	} else if request.GetWorkflowExecution() != nil {
+		client, err = c.getClientForWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
 		ret, err := c.clients.GetClientForClientKey(request.GetHostAddress())
 		if err != nil {
@@ -916,10 +916,10 @@ func (c *clientImpl) GetReplicationMessages(
 	wg.Wait()
 	close(respChan)
 
-	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicationspb.ReplicationMessages)}
+	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
-		for shardID, tasks := range resp.MessagesByShard {
-			response.MessagesByShard[shardID] = tasks
+		for shardID, tasks := range resp.ShardMessages {
+			response.ShardMessages[shardID] = tasks
 		}
 	}
 

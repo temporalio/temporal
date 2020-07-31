@@ -157,7 +157,7 @@ func (h *Handler) AddActivityTask(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -190,7 +190,7 @@ func (h *Handler) AddWorkflowTask(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -221,7 +221,7 @@ func (h *Handler) PollActivityTaskQueue(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -257,7 +257,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
@@ -293,7 +293,7 @@ func (h *Handler) QueryWorkflow(
 	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if request.GetForwardedFrom() != "" {
+	if request.GetForwardedSource() != "" {
 		hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	}
 
