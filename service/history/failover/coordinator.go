@@ -276,6 +276,10 @@ func (c *coordinatorImpl) handleFailoverMarkers(
 			metrics.GracefulFailoverLatency,
 			now.Sub(time.Unix(0, marker.GetCreationTime())),
 		)
+		c.logger.Info("Updated domain from pending-active to active",
+			tag.WorkflowDomainID(domainID),
+			tag.FailoverVersion(*marker.FailoverVersion),
+		)
 	}
 }
 

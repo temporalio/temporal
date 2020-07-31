@@ -495,7 +495,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 					e.clusterMetadata.ClusterNameForFailoverVersion(previousFailoverVersion) == e.currentClusterName {
 					failoverMarkerTasks = append(failoverMarkerTasks, &persistence.FailoverMarkerTask{
 						VisibilityTimestamp: e.timeSource.Now(),
-						Version:             shardNotificationVersion,
+						Version:             nextDomain.GetFailoverVersion(),
 						DomainID:            nextDomain.GetInfo().ID,
 					})
 				}
