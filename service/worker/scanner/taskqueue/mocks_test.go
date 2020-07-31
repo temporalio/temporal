@@ -117,7 +117,7 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 
 func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
-		exp := time.Now().Add(time.Hour)
+		exp := time.Now().UTC()().Add(time.Hour)
 		ti := &persistenceblobs.AllocatedTaskInfo{
 			Data: &persistenceblobs.TaskInfo{
 				NamespaceId: tbl.namespaceID,
@@ -129,7 +129,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 			TaskId: tbl.nextTaskID,
 		}
 		if expired {
-			ti.Data.ExpiryTime = timestamp.TimePtr(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
+			ti.Data.ExpiryTime = timestamp.TimePtr(time.Unix(0, time.Now().UTC()().UnixNano()-int64(time.Second*33)))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++

@@ -124,10 +124,10 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	taskQueue := "archival-visibility-task-queue"
 	numActivities := 3
 	numRuns := 5
-	startTime := time.Now().UnixNano()
+	startTime := time.Now().UTC()().UnixNano()
 	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
 	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
-	endTime := time.Now().UnixNano()
+	endTime := time.Now().UTC()().UnixNano()
 
 	var executions []*workflowpb.WorkflowExecutionInfo
 

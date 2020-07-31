@@ -4127,8 +4127,8 @@ func TestFindAutoResetPoint(t *testing.T) {
 		Resettable:     false,
 	}
 
-	expiredNow := time.Now().Add(-1 * time.Hour)
-	notExpiredNow := time.Now().Add(time.Hour)
+	expiredNow := time.Now().UTC()().Add(-1 * time.Hour)
+	notExpiredNow := time.Now().UTC()().Add(time.Hour)
 	pt4 := &workflowpb.ResetPointInfo{
 		BinaryChecksum: "expired",
 		Resettable:     true,
