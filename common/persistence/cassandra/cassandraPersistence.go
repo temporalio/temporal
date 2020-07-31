@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -757,7 +758,7 @@ func (d *cassandraPersistence) GetShardID() int {
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -773,7 +774,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId())
 
 	previous := make(map[string]interface{})
@@ -824,7 +825,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = types.TimestampNow()
+	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
@@ -833,7 +834,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 
 	query := d.session.Query(templateUpdateShardQuery,
 		data.Data,
-		data.Encoding,
+		data.Encoding.String(),
 		shardInfo.GetRangeId(),
 		shardInfo.GetShardId(), // Where
 		rowTypeShard,
@@ -1088,7 +1089,6 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
-
 
 	if state.VersionHistories != nil && state.ReplicationState != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."))
@@ -1398,7 +1398,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 		newRunID,
 		stateDatablob.Data,
-		stateDatablob.Encoding,
+		stateDatablob.Encoding.String(),
 		replicationVersions.Data,
 		replicationVersions.Encoding.String(),
 		lastWriteVersion,
@@ -2199,7 +2199,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	if len(request.TaskQueue) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
 	}
-	now := types.TimestampNow()
+	now := timestamp.TimeNowPtrUtc()
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2240,7 +2240,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 				taskQueueTaskID,
 				initialRangeID,
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 			)
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
@@ -2277,7 +2277,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		query = d.session.Query(templateUpdateTaskQueueQuery,
 			rangeID+1,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			request.NamespaceID,
 			&request.TaskQueue,
 			request.TaskType,
@@ -2308,7 +2308,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 // From TaskManager interface
 func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
 	tli := *request.TaskQueueInfo
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskQueueTTL)
@@ -2326,7 +2326,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 			taskQueueTaskID,
 			request.RangeID,
 			datablob.Data,
-			datablob.Encoding,
+			datablob.Encoding.String(),
 			stickyTaskQueueTTL,
 		)
 		err = query.Exec()
@@ -2337,7 +2337,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 		return &p.UpdateTaskQueueResponse{}, nil
 	}
 
-	tli.LastUpdateTime = types.TimestampNow()
+	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
 		return nil, convertCommonErrors("UpdateTaskQueue", err)
@@ -2346,7 +2346,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
@@ -2431,7 +2431,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding)
+				datablob.Encoding.String())
 		} else {
 			if ttl > maxCassandraTTL {
 				ttl = maxCassandraTTL
@@ -2444,13 +2444,13 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				rowTypeTask,
 				task.GetTaskId(),
 				datablob.Data,
-				datablob.Encoding,
+				datablob.Encoding.String(),
 				ttl)
 		}
 	}
 
 	tl := *request.TaskQueueInfo.Data
-	tl.LastUpdateTime = types.TimestampNow()
+	tl.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
 
 	if err != nil {
@@ -2461,7 +2461,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	batch.Query(templateUpdateTaskQueueQuery,
 		request.TaskQueueInfo.RangeID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
@@ -2492,10 +2492,14 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 	var ttl int64 = 0
 	if task.ExpiryTime != nil {
-		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
-		// and we'd have checked this upstream
-		expiryGo, _ := types.TimestampFromProto(task.ExpiryTime)
-		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
+		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(task.ExpiryTime)).Seconds())
+
+		// 0 means no ttl, we dont want that.
+		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
+		if expiryTtl < 1 {
+			expiryTtl = 1
+		}
+
 		ttl = expiryTtl
 	}
 	return ttl
@@ -2698,7 +2702,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		datablob.Data,
-		datablob.Encoding,
+		datablob.Encoding.String(),
 		defaultVisibilityTimestamp,
 		task.GetTaskId())
 

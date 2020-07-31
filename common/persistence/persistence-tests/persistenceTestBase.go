@@ -236,8 +236,8 @@ func (s *TestBase) Setup() {
 		RangeId:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
-		TimerAckLevelTime:       &types.Timestamp{},
-		ClusterTimerAckLevel:    map[string]*types.Timestamp{},
+		TimerAckLevelTime:       &time.Time{},
+		ClusterTimerAckLevel:    map[string]*time.Time{},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
 
@@ -1263,7 +1263,7 @@ func (s *TestBase) CreateWorkflowTask(namespaceID string, workflowExecution comm
 				WorkflowId:  workflowExecution.WorkflowId,
 				RunId:       workflowExecution.RunId,
 				ScheduleId:  workflowTaskScheduleID,
-				CreateTime:  types.TimestampNow(),
+				CreateTime:  timestamp.TimeNowPtrUtc(),
 			},
 		},
 	}
@@ -1307,8 +1307,8 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 					WorkflowId:  workflowExecution.WorkflowId,
 					RunId:       workflowExecution.RunId,
 					ScheduleId:  activityScheduleID,
-					ExpiryTime:  timestamp.TimestampNowAddSeconds(defaultScheduleToStartTimeout).ToProto(),
-					CreateTime:  types.TimestampNow(),
+					ExpiryTime:  timestamp.TimeNowPtrUtcAddSeconds(defaultScheduleToStartTimeout),
+					CreateTime:  timestamp.TimeNowPtrUtc(),
 				},
 				TaskId: taskID,
 			},
@@ -1602,17 +1602,6 @@ func GenerateRandomDBName(n int) string {
 	return prefix.String()
 }
 
-func pickRandomEncoding() common.EncodingType {
-	// randomly pick json/thriftrw/empty as encoding type
-	var encoding common.EncodingType
-	i := rand.Intn(3)
-	switch i {
-	case 0:
-		encoding = common.EncodingTypeJSON
-	case 1:
-		encoding = common.EncodingTypeProto3
-	case 2:
-		encoding = common.EncodingType("")
-	}
-	return encoding
+func pickRandomEncoding() enumspb.EncodingType {
+	return enumspb.ENCODING_TYPE_PROTO3
 }

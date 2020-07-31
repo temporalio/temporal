@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
@@ -58,15 +59,15 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  20,
-		WorkflowTaskTimeoutSeconds: 3,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(20 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(3 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -87,7 +88,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(1), resp1.GetAttempt())
+	s.Equal(int32(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	taskToken := resp1.GetTaskToken()
@@ -97,8 +98,8 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-				WorkerTaskQueue:               stikyTaskQueue,
-				ScheduleToStartTimeoutSeconds: 5,
+				WorkerTaskQueue:        stikyTaskQueue,
+				ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,
@@ -134,8 +135,8 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:               stikyTaskQueue,
-			ScheduleToStartTimeoutSeconds: 5,
+			WorkerTaskQueue:        stikyTaskQueue,
+			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
@@ -164,15 +165,15 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  20,
-		WorkflowTaskTimeoutSeconds: 5,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(20 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(5 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -193,15 +194,15 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(1), resp1.GetAttempt())
+	s.Equal(int32(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:               stikyTaskQueue,
-			ScheduleToStartTimeoutSeconds: 5,
+			WorkerTaskQueue:        stikyTaskQueue,
+			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -221,8 +222,8 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:               stikyTaskQueue,
-			ScheduleToStartTimeoutSeconds: 5,
+			WorkerTaskQueue:        stikyTaskQueue,
+			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -242,8 +243,8 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:               stikyTaskQueue,
-			ScheduleToStartTimeoutSeconds: 5,
+			WorkerTaskQueue:        stikyTaskQueue,
+			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -261,8 +262,8 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:               stikyTaskQueue,
-			ScheduleToStartTimeoutSeconds: 5,
+			WorkerTaskQueue:        stikyTaskQueue,
+			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
@@ -302,15 +303,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTas
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -342,7 +343,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTas
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(1), resp1.GetAttempt())
+	s.Equal(int32(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	// then terminate the worklfow
@@ -375,15 +376,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -448,15 +449,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -533,15 +534,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -562,7 +563,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i+1), resp1.GetAttempt())
+		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
@@ -600,7 +601,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 	})
 	s.NoError(err1)
 
-	s.Equal(int64(1), resp1.GetAttempt())
+	s.Equal(int32(1), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 7, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	// then terminate the worklfow
@@ -636,15 +637,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -665,7 +666,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i+1), resp1.GetAttempt())
+		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())
@@ -736,15 +737,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  3,
-		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -765,7 +766,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		s.Equal(int64(i+1), resp1.GetAttempt())
+		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular workflow task
 			s.Equal(int64(3), resp1.GetStartedEventId())

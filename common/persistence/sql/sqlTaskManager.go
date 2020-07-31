@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type sqlTaskManager struct {
@@ -85,7 +85,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 				AckLevel:       ackLevel,
 				Kind:           request.TaskQueueKind,
 				ExpiryTime:     nil,
-				LastUpdateTime: types.TimestampNow(),
+				LastUpdateTime: timestamp.TimeNowPtrUtc(),
 			}
 			blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
 			if err != nil {
@@ -131,7 +131,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 		}
 
 		// todo: we shoudnt edit protobufs
-		tqInfo.LastUpdateTime = types.TimestampNow()
+		tqInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
 		blob, err1 := serialization.TaskQueueInfoToBlob(tqInfo)
 		if err1 != nil {
@@ -142,7 +142,7 @@ func (m *sqlTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueReque
 			TaskQueueID:  tqId,
 			RangeID:      row.RangeID + 1,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -172,11 +172,11 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
 
 	tq := request.TaskQueueInfo
-	tq.LastUpdateTime = types.TimestampNow()
+	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
 	var blob serialization.DataBlob
 	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		tq.ExpiryTime, err = types.TimestampProto(stickyTaskQueueTTL())
+		tq.ExpiryTime = stickyTaskQueueTTL()
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +189,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		}); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Failed to make sticky task queue. Error: %v", err))
 		}
@@ -209,7 +209,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueReq
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		})
 		if err1 != nil {
 			return err1
@@ -408,7 +408,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			TaskQueueID:  tqId,
 			TaskID:       v.GetTaskId(),
 			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			DataEncoding: blob.Encoding.String(),
 		}
 	}
 	var resp *persistence.CreateTasksResponse
@@ -535,6 +535,6 @@ func lockTaskQueue(tx sqlplugin.Tx, tqHash uint32, tqId []byte, oldRangeID int64
 	return nil
 }
 
-func stickyTaskQueueTTL() time.Time {
-	return time.Now().Add(24 * time.Hour)
+func stickyTaskQueueTTL() *time.Time {
+	return timestamp.TimePtr(time.Now().Add(24 * time.Hour))
 }

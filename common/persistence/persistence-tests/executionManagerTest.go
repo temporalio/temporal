@@ -812,9 +812,9 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -1207,9 +1207,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -1247,7 +1247,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				LastFirstEventID:           common.FirstEventID,
 				NextEventID:                rand.Int63(),
 				LastProcessedEvent:         int64(rand.Int31()),
-				SignalCount:                rand.Int31(),
+				SignalCount:                rand.Int63(),
 				WorkflowTaskVersion:        int64(rand.Int31()),
 				WorkflowTaskScheduleID:     int64(rand.Int31()),
 				WorkflowTaskStartedID:      int64(rand.Int31()),
@@ -1380,7 +1380,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info0.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedID)
 	s.Equal(int64(1), info0.WorkflowTaskTimeout)
-	s.Equal(int64(0), info0.WorkflowTaskAttempt)
+	s.Equal(int32(0), info0.WorkflowTaskAttempt)
 	s.Equal(int64(0), info0.WorkflowTaskStartedTimestamp)
 	s.Equal(int64(0), info0.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(0), info0.WorkflowTaskOriginalScheduledTimestamp)
@@ -1389,7 +1389,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Empty(info0.ClientLibraryVersion)
 	s.Empty(info0.ClientFeatureVersion)
 	s.Empty(info0.ClientImpl)
-	s.Equal(int32(0), info0.SignalCount)
+	s.Equal(int64(0), info0.SignalCount)
 	s.True(reflect.DeepEqual(info0.AutoResetPoints, &workflowpb.ResetPoints{}))
 	s.True(len(info0.SearchAttributes) == 0)
 	s.True(len(info0.Memo) == 0)
@@ -1403,7 +1403,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.WorkflowTaskVersion = int64(666)
-	updatedInfo.WorkflowTaskAttempt = int64(123)
+	updatedInfo.WorkflowTaskAttempt = 123
 	updatedInfo.WorkflowTaskStartedTimestamp = int64(321)
 	updatedInfo.WorkflowTaskScheduledTimestamp = int64(654)
 	updatedInfo.WorkflowTaskOriginalScheduledTimestamp = int64(655)
@@ -1452,7 +1452,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info1.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info1.WorkflowTaskStartedID)
 	s.Equal(int64(1), info1.WorkflowTaskTimeout)
-	s.Equal(int64(123), info1.WorkflowTaskAttempt)
+	s.Equal(int32(123), info1.WorkflowTaskAttempt)
 	s.Equal(int64(321), info1.WorkflowTaskStartedTimestamp)
 	s.Equal(int64(654), info1.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(655), info1.WorkflowTaskOriginalScheduledTimestamp)
@@ -1506,7 +1506,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info2.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info2.WorkflowTaskStartedID)
 	s.Equal(int64(1), info2.WorkflowTaskTimeout)
-	s.Equal(int64(123), info2.WorkflowTaskAttempt)
+	s.Equal(int32(123), info2.WorkflowTaskAttempt)
 	s.Equal(int64(321), info2.WorkflowTaskStartedTimestamp)
 	s.Equal(int64(654), info2.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(655), info2.WorkflowTaskOriginalScheduledTimestamp)
@@ -1552,7 +1552,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info3.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info3.WorkflowTaskStartedID)
 	s.Equal(int64(1), info3.WorkflowTaskTimeout)
-	s.Equal(int64(123), info3.WorkflowTaskAttempt)
+	s.Equal(int32(123), info3.WorkflowTaskAttempt)
 	s.Equal(int64(321), info3.WorkflowTaskStartedTimestamp)
 	s.Equal(int64(654), info3.WorkflowTaskScheduledTimestamp)
 	s.Equal(int64(655), info3.WorkflowTaskOriginalScheduledTimestamp)
@@ -1600,7 +1600,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info4.WorkflowTaskScheduleID)
 	s.Equal(common.EmptyEventID, info4.WorkflowTaskStartedID)
 	s.Equal(int64(1), info4.WorkflowTaskTimeout)
-	s.Equal(int64(123), info4.WorkflowTaskAttempt)
+	s.Equal(int32(123), info4.WorkflowTaskAttempt)
 	s.Equal(int64(321), info4.WorkflowTaskStartedTimestamp)
 	s.Equal(updatedInfo.SignalCount, info4.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state4.ExecutionStats.HistorySize)
@@ -2307,9 +2307,8 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		t, err := types.TimestampFromProto(txTasks[index].VisibilityTime)
-		s.NoError(err)
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
+		t := txTasks[index].VisibilityTime
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), *t, TimePrecision))
 	}
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, txTasks[0].TaskType)
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, txTasks[1].TaskType)
@@ -2404,9 +2403,8 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		t, err := types.TimestampFromProto(txTasks[index].VisibilityTime)
-		s.NoError(err)
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
+		t := txTasks[index].VisibilityTime
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), *t, TimePrecision))
 	}
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, txTasks[0].TaskType)
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, txTasks[1].TaskType)
@@ -2483,12 +2481,9 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	s.Equal(int64(14), timerTasks[3].Version)
 	s.Equal(int64(15), timerTasks[4].Version)
 
-	visTimer0, err := types.TimestampFromProto(timerTasks[0].VisibilityTime)
-	s.NoError(err)
-	visTimer4, err := types.TimestampFromProto(timerTasks[4].VisibilityTime)
-	s.NoError(err)
-	visTimer4 = visTimer4.Add(1 * time.Second)
-	err2 = s.RangeCompleteTimerTask(visTimer0, visTimer4)
+	visTimer0 := timerTasks[0].VisibilityTime
+	visTimer4 := timerTasks[4].VisibilityTime.Add(1 * time.Second)
+	err2 = s.RangeCompleteTimerTask(*visTimer0, visTimer4)
 	s.NoError(err2)
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
@@ -2545,19 +2540,19 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[0].VisibilityTime, timerTasks[0].GetTaskId())
+	err2 = s.CompleteTimerTask(*timerTasks[0].VisibilityTime, timerTasks[0].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[1].VisibilityTime, timerTasks[1].GetTaskId())
+	err2 = s.CompleteTimerTask(*timerTasks[1].VisibilityTime, timerTasks[1].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[2].VisibilityTime, timerTasks[2].GetTaskId())
+	err2 = s.CompleteTimerTask(*timerTasks[2].VisibilityTime, timerTasks[2].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[3].VisibilityTime, timerTasks[3].GetTaskId())
+	err2 = s.CompleteTimerTask(*timerTasks[3].VisibilityTime, timerTasks[3].GetTaskId())
 	s.NoError(err2)
 
-	err2 = s.CompleteTimerTaskProto(timerTasks[4].VisibilityTime, timerTasks[4].GetTaskId())
+	err2 = s.CompleteTimerTask(*timerTasks[4].VisibilityTime, timerTasks[4].GetTaskId())
 	s.NoError(err2)
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
@@ -2696,7 +2691,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := types.TimestampNow()
+	currentTime := timestamp.TimePtr(time.Date(2078, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
@@ -2714,8 +2709,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].GetTimerId())
-	s.Equal(currentTime.Nanos, state.TimerInfos[timerID].ExpiryTime.Nanos)
-	s.Equal(currentTime.Seconds, state.TimerInfos[timerID].ExpiryTime.Seconds)
+	s.Equal(currentTime, state.TimerInfos[timerID].ExpiryTime)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].GetStartedId())
 
@@ -3005,9 +2999,9 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 				BinaryChecksum:               "test-binary-checksum",
 				RunId:                        "test-runID",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
-				ExpireTimeNano:               789,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -3463,7 +3457,7 @@ func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 			Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
 				TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 					TimerId:                      "ID1",
-					StartToFireTimeoutSeconds:    101,
+					StartToFireTimeout:           timestamp.DurationPtr(101 * time.Second),
 					WorkflowTaskCompletedEventId: 5,
 				},
 			},
@@ -3573,9 +3567,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now().UTC()
-	expiryTime, _ := types.TimestampProto(currentTime)
-	expiryTime.Seconds += 10
+	currentTime := time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)
+	expiryTime := timestamp.TimePtr(currentTime.Add(10 * time.Second))
 	eventsBatch1 := []*historypb.HistoryEvent{
 		{
 			EventId:   5,
@@ -3596,7 +3589,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
 				TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 					TimerId:                      "ID1",
-					StartToFireTimeoutSeconds:    101,
+					StartToFireTimeout:           timestamp.DurationPtr(101 * time.Second),
 					WorkflowTaskCompletedEventId: 5,
 				},
 			},
@@ -5132,16 +5125,15 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	shardInfo.ClusterTransferAckLevel = map[string]int64{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTransferAck,
 	}
-	shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
+	shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
 	}
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
-	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevelTime.UnixNano(), resp.ShardInfo.TimerAckLevelTime.UnixNano())
 	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
 	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5173,7 +5165,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 		},
-		ClusterTimerAckLevel: map[string]*types.Timestamp{
+		ClusterTimerAckLevel: map[string]*time.Time{
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
@@ -5187,11 +5179,10 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.Nil(s.ShardMgr.CreateShard(createRequest))
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
-	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevelTime.UnixNano(), resp.ShardInfo.TimerAckLevelTime.UnixNano())
 	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
 	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5217,7 +5208,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 		},
-		ClusterTimerAckLevel: map[string]*types.Timestamp{
+		ClusterTimerAckLevel: map[string]*time.Time{
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
@@ -5233,11 +5224,10 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 
 	resp, err = s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevelTime.Nanos, resp.ShardInfo.TimerAckLevelTime.Nanos)
-	s.Equal(shardInfo.TimerAckLevelTime.Seconds, resp.ShardInfo.TimerAckLevelTime.Seconds)
+	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevelTime.UnixNano(), resp.ShardInfo.TimerAckLevelTime.UnixNano())
 	resp.ShardInfo.UpdateTime = shardInfo.UpdateTime
 	resp.ShardInfo.TimerAckLevelTime = shardInfo.TimerAckLevelTime
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5334,13 +5324,12 @@ func copyExecutionStats(sourceStats *persistenceblobs.ExecutionStats) *persisten
 // Note: cassandra only provide millisecond precision timestamp
 // ref: https://docs.datastax.com/en/cql/3.3/cql/cql_reference/timestamp_type_r.html
 // so to use equal function, we need to do conversion, getting rid of sub milliseconds
-func timestampConvertor(t time.Time) *types.Timestamp {
-	r, _ := types.TimestampProto(time.Unix(
+func timestampConvertor(t time.Time) *time.Time {
+	r := time.Unix(
 		0,
-		p.DBTimestampToUnixNano(p.UnixNanoToDBTimestamp(t.UnixNano())),
-	).UTC())
+		p.DBTimestampToUnixNano(p.UnixNanoToDBTimestamp(t.UnixNano()))).UTC()
 
-	return r
+	return &r
 }
 
 func timeComparator(r1, r2 *types.Timestamp, timeTolerance time.Duration) bool {
@@ -5348,6 +5337,10 @@ func timeComparator(r1, r2 *types.Timestamp, timeTolerance time.Duration) bool {
 	t2, _ := types.TimestampFromProto(r2)
 
 	return timeComparatorGo(t1, t2, timeTolerance)
+}
+
+func timeComparatorGoPtr(t1, t2 *time.Time, timeTolerance time.Duration) bool {
+	return timeComparatorGo(timestamp.TimeValue(t1), timestamp.TimeValue(t2), timeTolerance)
 }
 
 func timeComparatorGo(t1, t2 time.Time, timeTolerance time.Duration) bool {

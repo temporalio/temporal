@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -59,6 +60,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 )
@@ -75,6 +77,10 @@ const (
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
+
+var (
+	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
+)
 
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
@@ -227,7 +233,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowExecutionRetentionPeriodDays() > common.MaxWorkflowRetentionPeriodInDays {
+	if timestamp.DurationValue(request.GetWorkflowExecutionRetentionPeriod()) > common.MaxWorkflowRetentionPeriod {
 		return nil, errInvalidRetention
 	}
 
@@ -443,15 +449,15 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
@@ -1118,22 +1124,22 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                     matchingResponse.TaskToken,
-		WorkflowExecution:             matchingResponse.WorkflowExecution,
-		ActivityId:                    matchingResponse.ActivityId,
-		ActivityType:                  matchingResponse.ActivityType,
-		Input:                         matchingResponse.Input,
-		ScheduledTimestamp:            matchingResponse.ScheduledTimestamp,
-		ScheduleToCloseTimeoutSeconds: matchingResponse.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:              matchingResponse.StartedTimestamp,
-		StartToCloseTimeoutSeconds:    matchingResponse.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:       matchingResponse.HeartbeatTimeoutSeconds,
-		Attempt:                       matchingResponse.Attempt,
-		ScheduledTimestampThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
-		HeartbeatDetails:              matchingResponse.HeartbeatDetails,
-		WorkflowType:                  matchingResponse.WorkflowType,
-		WorkflowNamespace:             matchingResponse.WorkflowNamespace,
-		Header:                        matchingResponse.Header,
+		TaskToken:                   matchingResponse.TaskToken,
+		WorkflowExecution:           matchingResponse.WorkflowExecution,
+		ActivityId:                  matchingResponse.ActivityId,
+		ActivityType:                matchingResponse.ActivityType,
+		Input:                       matchingResponse.Input,
+		ScheduledTime:               matchingResponse.ScheduledTime,
+		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
+		StartedTime:                 matchingResponse.StartedTime,
+		StartToCloseTimeout:         matchingResponse.StartToCloseTimeout,
+		HeartbeatTimeout:            matchingResponse.HeartbeatTimeout,
+		Attempt:                     matchingResponse.Attempt,
+		CurrentAttemptScheduledTime: matchingResponse.CurrentAttemptScheduledTime,
+		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
+		WorkflowType:                matchingResponse.WorkflowType,
+		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
+		Header:                      matchingResponse.Header,
 	}, nil
 }
 
@@ -2135,15 +2141,15 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
 	}
 
-	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
@@ -2339,10 +2345,14 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
+	}
+
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2365,8 +2375,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2435,10 +2445,14 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
+	}
+
+	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
 		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
@@ -2461,8 +2475,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: request.StartTimeFilter.GetEarliestTime(),
-		LatestStartTime:   request.StartTimeFilter.GetLatestTime(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2658,8 +2672,8 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if execution.GetExecutionTime() == 0 {
-			execution.ExecutionTime = execution.GetStartTime().GetValue()
+		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
 
@@ -3196,7 +3210,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
 	resp, err := wh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -3210,18 +3224,9 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	var encoding enumspb.EncodingType
 	for _, data := range resp.HistoryEventBlobs {
-		switch data.Encoding {
-		case common.EncodingTypeJSON:
-			encoding = enumspb.ENCODING_TYPE_JSON
-		case common.EncodingTypeProto3:
-			encoding = enumspb.ENCODING_TYPE_PROTO3
-		default:
-			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
-		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: encoding,
+			EncodingType: data.Encoding,
 			Data:         data.Data,
 		})
 	}
@@ -3236,7 +3241,7 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.Error(err))
 		}
 
-		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, common.EncodingTypeProto3)
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3245,7 +3250,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			Data:         blob.Data,
 		})
 
-		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, common.EncodingTypeProto3)
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientWorkflowTaskInfo.StartedEvent, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3272,7 +3277,7 @@ func (wh *WorkflowHandler) getHistory(
 	var size int
 
 	isFirstPage := len(nextPageToken) == 0
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
@@ -3517,8 +3522,8 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		History:                    history,
 		NextPageToken:              continuation,
 		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
-		ScheduledTimestamp:         matchingResp.ScheduledTimestamp,
-		StartedTimestamp:           matchingResp.StartedTimestamp,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
 	}
 

@@ -74,7 +74,7 @@ func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.StartWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.StartRequest.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (c *clientImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 	opts ...grpc.CallOption) (*historyservice.GetMutableStateResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (c *clientImpl) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
 	opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -150,10 +150,10 @@ func (c *clientImpl) DescribeHistoryHost(
 	var err error
 	var client historyservice.HistoryServiceClient
 
-	if request.GetShardIdForHost() != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardIdForHost()))
-	} else if request.ExecutionForHost != nil {
-		client, err = c.getClientForWorkflowID(request.ExecutionForHost.GetWorkflowId())
+	if request.GetShardId() != 0 {
+		client, err = c.getClientForShardID(int(request.GetShardId()))
+	} else if request.GetWorkflowExecution() != nil {
+		client, err = c.getClientForWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
 		ret, err := c.clients.GetClientForClientKey(request.GetHostAddress())
 		if err != nil {
@@ -241,7 +241,7 @@ func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *historyservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption) (*historyservice.DescribeMutableStateResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +265,7 @@ func (c *clientImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *historyservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +289,7 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.Request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (c *clientImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 	opts ...grpc.CallOption) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +337,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	opts ...grpc.CallOption) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +365,7 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +447,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +476,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +505,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +529,7 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.CancelRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.CancelRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +553,7 @@ func (c *clientImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.SignalWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.SignalWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.SignalRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +578,7 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.SignalWithStartWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.SignalWithStartRequest.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.SignalWithStartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +602,7 @@ func (c *clientImpl) RemoveSignalMutableState(
 	ctx context.Context,
 	request *historyservice.RemoveSignalMutableStateRequest,
 	opts ...grpc.CallOption) (*historyservice.RemoveSignalMutableStateResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -625,7 +625,7 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.TerminateWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.TerminateRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.TerminateRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +650,7 @@ func (c *clientImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ResetWorkflowExecutionRequest,
 	opts ...grpc.CallOption) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	client, err := c.getClientForWorkflowID(request.ResetRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.ResetRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +673,7 @@ func (c *clientImpl) ScheduleWorkflowTask(
 	ctx context.Context,
 	request *historyservice.ScheduleWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +698,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	opts ...grpc.CallOption) (*historyservice.RecordChildExecutionCompletedResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -723,7 +723,7 @@ func (c *clientImpl) ReplicateEvents(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsRequest,
 	opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -748,7 +748,7 @@ func (c *clientImpl) ReplicateRawEvents(
 	ctx context.Context,
 	request *historyservice.ReplicateRawEventsRequest,
 	opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -773,7 +773,7 @@ func (c *clientImpl) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,
 	opts ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
-	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +826,7 @@ func (c *clientImpl) SyncActivity(
 	request *historyservice.SyncActivityRequest,
 	opts ...grpc.CallOption) (*historyservice.SyncActivityResponse, error) {
 
-	client, err := c.getClientForWorkflowID(request.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -852,7 +852,7 @@ func (c *clientImpl) QueryWorkflow(
 	request *historyservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.QueryWorkflowResponse, error) {
-	client, err := c.getClientForWorkflowID(request.GetRequest().GetExecution().GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -916,10 +916,10 @@ func (c *clientImpl) GetReplicationMessages(
 	wg.Wait()
 	close(respChan)
 
-	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicationspb.ReplicationMessages)}
+	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
-		for shardID, tasks := range resp.MessagesByShard {
-			response.MessagesByShard[shardID] = tasks
+		for shardID, tasks := range resp.ShardMessages {
+			response.ShardMessages[shardID] = tasks
 		}
 	}
 
@@ -932,8 +932,9 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.GetDLQReplicationMessagesResponse, error) {
 	// All workflow IDs are in the same shard per request
+	namespaceID := request.GetTaskInfos()[0].GetNamespaceId()
 	workflowID := request.GetTaskInfos()[0].GetWorkflowId()
-	client, err := c.getClientForWorkflowID(workflowID)
+	client, err := c.getClientForWorkflowID(namespaceID, workflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -950,7 +951,8 @@ func (c *clientImpl) ReapplyEvents(
 	request *historyservice.ReapplyEventsRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReapplyEventsResponse, error) {
-	client, err := c.getClientForWorkflowID(request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId,
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -1015,7 +1017,7 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	request *historyservice.RefreshWorkflowTasksRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RefreshWorkflowTasksResponse, error) {
-	client, err := c.getClientForWorkflowID(request.GetRequest().GetExecution().GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.RefreshWorkflowTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1035,8 +1037,8 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) getClientForWorkflowID(workflowID string) (historyservice.HistoryServiceClient, error) {
-	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (historyservice.HistoryServiceClient, error) {
+	key := common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
 	return c.getClientForShardID(key)
 }
 

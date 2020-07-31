@@ -23,6 +23,10 @@ syntax = "proto3";
 package temporal.server.api.adminservice.v1;
 option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
@@ -42,20 +46,21 @@ message DescribeWorkflowExecutionRequest {
 message DescribeWorkflowExecutionResponse {
     string shard_id = 1;
     string history_addr = 2;
-    string mutable_state_in_cache = 3;
-    string mutable_state_in_database = 4;
+    string cache_mutable_state = 3;
+    string database_mutable_state = 4;
 }
 
 //At least one of the parameters needs to be provided
 message DescribeHistoryHostRequest {
     //ip:port
     string host_address = 1;
-    int32 shard_id_for_host = 2;
-    temporal.api.common.v1.WorkflowExecution execution_for_host = 3;
+    int32 shard_id = 2;
+    string namespace = 3;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 4;
 }
 
 message DescribeHistoryHostResponse {
-    int32 number_of_shards = 1;
+    int32 shards_number = 1;
     repeated int32
     shard_ids = 2;
     temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
@@ -74,7 +79,7 @@ message RemoveTaskRequest {
     int32 shard_id = 1;
     temporal.server.api.enums.v1.TaskCategory category = 2;
     int64 task_id = 3;
-    int64 visibility_timestamp = 4;
+    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
 
 message RemoveTaskResponse {
@@ -123,7 +128,7 @@ message GetReplicationMessagesRequest {
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, temporal.server.api.replication.v1.ReplicationMessages> messages_by_shard = 1;
+    map<int32, temporal.server.api.replication.v1.ReplicationMessages> shard_messages = 1;
 }
 
 message GetNamespaceReplicationMessagesRequest {

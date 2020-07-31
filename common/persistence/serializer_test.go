@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -83,7 +84,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
 		EventId:   999,
-		Timestamp: time.Now().UnixNano(),
+		EventTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
@@ -108,9 +109,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 				BinaryChecksum:               "bad-binary-cs",
 				RunId:                        "test-run-id",
 				FirstWorkflowTaskCompletedId: 123,
-				CreateTimeNano:               456,
-				ExpireTimeNano:               789,
+				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 				Resettable:                   true,
+				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -118,9 +119,9 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	badBinaries0 := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"bad-binary-cs": {
-				CreateTimeNano: 456,
-				Operator:       "test-operattor",
-				Reason:         "test-reason",
+				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				Operator:   "test-operattor",
+				Reason:     "test-reason",
 			},
 		},
 	}
@@ -165,90 +166,74 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize event
 
-			nilEvent, err := serializer.SerializeEvent(nil, common.EncodingTypeProto3)
+			nilEvent, err := serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.Nil(nilEvent)
 
-			_, err = serializer.SerializeEvent(event0, common.EncodingTypeGob)
+			_, err = serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok := err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dJSON, err := serializer.SerializeEvent(event0, common.EncodingTypeJSON)
+			dJSON, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(dJSON)
 
-			dThrift, err := serializer.SerializeEvent(event0, common.EncodingTypeProto3)
+			dThrift, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(dThrift)
 
-			dEmpty, err := serializer.SerializeEvent(event0, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(dEmpty)
-
 			// serialize batch events
 
-			nilEvents, err := serializer.SerializeBatchEvents(nil, common.EncodingTypeProto3)
+			nilEvents, err := serializer.SerializeBatchEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			_, err = serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeGob)
+			_, err = serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dsJSON, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeJSON)
+			dsJSON, err := serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(dsJSON)
 
-			dsProto, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeProto3)
+			dsProto, err := serializer.SerializeBatchEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(dsProto)
 
-			dsEmpty, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(dsEmpty)
-
-			_, err = serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeGob)
+			_, err = serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
 			// serialize visibility memo
 
-			nilMemo, err := serializer.SerializeVisibilityMemo(nil, common.EncodingTypeProto3)
+			nilMemo, err := serializer.SerializeVisibilityMemo(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.Nil(nilMemo)
 
-			mJSON, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeJSON)
+			mJSON, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(mJSON)
 
-			mThrift, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeProto3)
+			mThrift, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(mThrift)
 
-			mEmpty, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(mEmpty)
-
 			// serialize version histories
 
-			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeProto3)
+			nilHistories, err := serializer.SerializeVersionHistories(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.Nil(nilHistories)
 
-			historiesJSON, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeJSON)
+			historiesJSON, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(historiesJSON)
 
-			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeProto3)
+			historiesThrift, err := serializer.SerializeVersionHistories(histories, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(historiesThrift)
-
-			historiesEmpty, err := serializer.SerializeVersionHistories(histories, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(historiesEmpty)
 
 			// deserialize event
 
@@ -263,10 +248,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			event2, err := serializer.DeserializeEvent(dThrift)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(event0, event2))
-
-			event3, err := serializer.DeserializeEvent(dEmpty)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(event0, event3))
 
 			// deserialize batch events
 
@@ -284,11 +265,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
 
-			events, err = serializer.DeserializeBatchEvents(dsEmpty)
-			history3 := &historypb.History{Events: events}
-			s.Nil(err)
-			s.True(reflect.DeepEqual(history0, history3))
-
 			// deserialize visibility memo
 
 			dNilMemo, err := serializer.DeserializeVisibilityMemo(nilMemo)
@@ -302,32 +278,25 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			memo2, err := serializer.DeserializeVisibilityMemo(mThrift)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(memo0, memo2))
-			memo3, err := serializer.DeserializeVisibilityMemo(mEmpty)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(memo0, memo3))
 
 			// serialize reset points
 
-			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeProto3)
+			nilResetPoints, err := serializer.SerializeResetPoints(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilResetPoints)
 
-			_, err = serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeGob)
+			_, err = serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			resetPointsJSON, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeJSON)
+			resetPointsJSON, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(resetPointsJSON)
 
-			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeProto3)
+			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(resetPointsThrift)
-
-			resetPointsEmpty, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(resetPointsEmpty)
 
 			// deserialize reset points
 
@@ -347,32 +316,24 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.True(reflect.DeepEqual(resetPoints2, resetPoints0))
 
-			resetPoints3, err := serializer.DeserializeResetPoints(resetPointsEmpty)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(resetPoints3, resetPoints0))
-
 			// serialize bad binaries
 
-			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeProto3)
+			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilBadBinaries)
 
-			_, err = serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeGob)
+			_, err = serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			badBinariesJSON, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeJSON)
+			badBinariesJSON, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_JSON)
 			s.Nil(err)
 			s.NotNil(badBinariesJSON)
 
-			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeProto3)
+			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(badBinariesThrift)
-
-			badBinariesEmpty, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingType(""))
-			s.Nil(err)
-			s.NotNil(badBinariesEmpty)
 
 			// deserialize bad binaries
 
@@ -392,10 +353,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.True(reflect.DeepEqual(badBinaries2, badBinaries0))
 
-			badBinaries3, err := serializer.DeserializeBadBinaries(badBinariesEmpty)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(badBinaries3, badBinaries0))
-
 			// serialize version histories
 
 			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
@@ -413,10 +370,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			dHistoriesThrift, err := serializer.DeserializeVersionHistories(historiesThrift)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(dHistoriesThrift, histories))
-
-			dHistoriesEmpty, err := serializer.DeserializeVersionHistories(historiesEmpty)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(dHistoriesEmpty, histories))
 		}()
 	}
 

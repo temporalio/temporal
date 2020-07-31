@@ -90,11 +90,11 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
 	token := &replicationspb.ReplicationToken{
-		ShardId:                0,
+		ShardId:                1,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	requestByShard[0] = &request{
+	requestByShard[1] = &request{
 		token: token,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
@@ -104,9 +104,9 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 		ClusterName: "active",
 	}
 	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
-	messageByShared[0] = &replicationspb.ReplicationMessages{}
+	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	response, err := s.replicationTaskFetcher.getMessages(requestByShard)
@@ -117,12 +117,12 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
 	token := &replicationspb.ReplicationToken{
-		ShardId:                0,
+		ShardId:                1,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
-	requestByShard[0] = &request{
+	requestByShard[1] = &request{
 		token:    token,
 		respChan: respChan,
 	}
@@ -133,13 +133,13 @@ func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 		ClusterName: "active",
 	}
 	messageByShared := make(map[int32]*replicationspb.ReplicationMessages)
-	messageByShared[0] = &replicationspb.ReplicationMessages{}
+	messageByShared[1] = &replicationspb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: messageByShared,
+		ShardMessages: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
 	err := s.replicationTaskFetcher.fetchAndDistributeTasks(requestByShard)
 	s.NoError(err)
 	respToken := <-respChan
-	s.Equal(messageByShared[0], respToken)
+	s.Equal(messageByShared[1], respToken)
 }

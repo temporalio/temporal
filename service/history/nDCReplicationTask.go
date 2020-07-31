@@ -35,12 +35,12 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -126,15 +126,15 @@ func newNDCReplicationTask(
 
 	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(version)
 
-	eventTime := int64(0)
+	eventTime := time.Time{}
 	for _, event := range events {
-		if event.GetTimestamp() > eventTime {
-			eventTime = event.GetTimestamp()
+		if timestamp.TimeValue(event.GetEventTime()).After(eventTime) {
+			eventTime = timestamp.TimeValue(event.GetEventTime())
 		}
 	}
 	for _, event := range newEvents {
-		if event.GetTimestamp() > eventTime {
-			eventTime = event.GetTimestamp()
+		if timestamp.TimeValue(event.GetEventTime()).After(eventTime) {
+			eventTime = timestamp.TimeValue(event.GetEventTime())
 		}
 	}
 
@@ -154,7 +154,7 @@ func newNDCReplicationTask(
 		version:        version,
 		firstEvent:     firstEvent,
 		lastEvent:      lastEvent,
-		eventTime:      time.Unix(0, eventTime),
+		eventTime:      eventTime,
 		events:         events,
 		newEvents:      newEvents,
 		versionHistory: persistence.NewVersionHistoryFromProto(versionHistory),
@@ -250,10 +250,10 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	newFirstEvent := newHistoryEvents[0]
 	newLastEvent := newHistoryEvents[len(newHistoryEvents)-1]
 
-	newEventTime := int64(0)
+	newEventTime := time.Time{}
 	for _, event := range newHistoryEvents {
-		if event.GetTimestamp() > newEventTime {
-			newEventTime = event.GetTimestamp()
+		if timestamp.TimeValue(event.GetEventTime()).After(newEventTime) {
+			newEventTime = timestamp.TimeValue(event.GetEventTime())
 		}
 	}
 
@@ -284,7 +284,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		version:        t.version,
 		firstEvent:     newFirstEvent,
 		lastEvent:      newLastEvent,
-		eventTime:      time.Unix(0, newEventTime),
+		eventTime:      newEventTime,
 		events:         newHistoryEvents,
 		newEvents:      []*historypb.HistoryEvent{},
 		versionHistory: newVersionHistory,
@@ -380,7 +380,7 @@ func deserializeBlob(
 	}
 
 	events, err := historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeProto3,
+		Encoding: enumspb.ENCODING_TYPE_PROTO3,
 		Data:     blob.Data,
 	})
 

@@ -1310,7 +1310,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// Use the history from the same cluster to reapply events
 	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
 		reapplyEvents,
-		common.EncodingTypeProto3,
+		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	if err != nil {
 		return err

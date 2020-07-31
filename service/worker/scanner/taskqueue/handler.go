@@ -29,8 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
@@ -110,7 +108,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 		return // avoid deleting our own task queue
 	}
 
-	lastUpdated, _ := types.TimestampFromProto(&state.lastUpdated)
+	lastUpdated := timestamp.TimeValue(state.lastUpdated)
 	delta := time.Now().Sub(lastUpdated)
 	if delta < taskQueueGracePeriod {
 		return
@@ -146,8 +144,8 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 }
 
 func IsTaskExpired(t *persistenceblobs.AllocatedTaskInfo) bool {
-	tExpiry := timestamp.TimestampFromProto(t.Data.ExpiryTime)
-	tEpoch := timestamp.TimestampEpoch()
-	tNow := timestamp.TimestampNow()
+	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
+	tEpoch := time.Unix(0, 0)
+	tNow := time.Now()
 	return tExpiry.After(tEpoch) && tNow.After(tExpiry)
 }

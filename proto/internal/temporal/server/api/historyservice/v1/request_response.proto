@@ -23,6 +23,11 @@ syntax = "proto3";
 package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -48,11 +53,11 @@ message StartWorkflowExecutionRequest {
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
     temporal.server.api.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
     int32 attempt = 4;
-    int64 workflow_execution_expiration_timestamp = 5;
+    google.protobuf.Timestamp workflow_execution_expiration_time = 5 [(gogoproto.stdtime) = true];
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
-    int32 first_workflow_task_backoff_seconds = 9;
+    google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
 }
 
 message StartWorkflowExecutionResponse {
@@ -77,7 +82,9 @@ message GetMutableStateResponse {
     string client_library_version = 8;
     string client_feature_version = 9;
     string client_impl = 10;
-    int32 sticky_task_queue_schedule_to_start_timeout = 11;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
     int32 event_store_version = 12;
     bytes current_branch_token = 13;
     map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 14;
@@ -105,7 +112,9 @@ message PollMutableStateResponse {
     string client_library_version = 8;
     string client_feature_version = 9;
     string client_impl = 10;
-    int32 sticky_task_queue_schedule_to_start_timeout = 11;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
     bytes current_branch_token = 12;
     map<string, temporal.server.api.replication.v1.ReplicationInfo> replication_info = 13;
     temporal.server.api.history.v1.VersionHistories version_histories = 14;
@@ -137,14 +146,14 @@ message RecordWorkflowTaskStartedResponse {
     int64 scheduled_event_id = 3;
     int64 started_event_id = 4;
     int64 next_event_id = 5;
-    int64 attempt = 6;
+    int32 attempt = 6;
     bool sticky_execution_enabled = 7;
     temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     int32 event_store_version = 10;
     bytes branch_token = 11;
-    int64 scheduled_timestamp = 12;
-    int64 started_timestamp = 13;
+    google.protobuf.Timestamp scheduled_time = 12 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
 }
 
@@ -160,9 +169,9 @@ message RecordActivityTaskStartedRequest {
 
 message RecordActivityTaskStartedResponse {
     temporal.api.history.v1.HistoryEvent scheduled_event = 1;
-    int64 started_timestamp = 2;
-    int64 attempt = 3;
-    int64 scheduled_timestamp_of_this_attempt = 4;
+    google.protobuf.Timestamp started_time = 2 [(gogoproto.stdtime) = true];
+    int32 attempt = 3;
+    google.protobuf.Timestamp current_attempt_scheduled_time = 4 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads heartbeat_details = 5;
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
@@ -230,6 +239,8 @@ message SignalWorkflowExecutionResponse {
 
 message SignalWithStartWorkflowExecutionRequest {
     string namespace_id = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "with" is needed here. --)
     temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest signal_with_start_request = 2;
 }
 
@@ -362,7 +373,7 @@ message ReplicateEventsV2Response {
 message SyncShardStatusRequest {
     string source_cluster = 1;
     int64 shard_id = 2;
-    int64 timestamp = 3;
+    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
 }
 
 message SyncShardStatusResponse {
@@ -374,10 +385,10 @@ message SyncActivityRequest {
     string run_id = 3;
     int64 version = 4;
     int64 scheduled_id = 5;
-    int64 scheduled_time = 6;
+    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
     int64 started_id = 7;
-    int64 started_time = 8;
-    int64 last_heartbeat_time = 9;
+    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads details = 10;
     int32 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
@@ -394,20 +405,21 @@ message DescribeMutableStateRequest {
 }
 
 message DescribeMutableStateResponse {
-    string mutable_state_in_cache = 1;
-    string mutable_state_in_database = 2;
+    string cache_mutable_state = 1;
+    string database_mutable_state = 2;
 }
 
 //At least one of the parameters needs to be provided
 message DescribeHistoryHostRequest {
     //ip:port
     string host_address = 1;
-    int32 shard_id_for_host = 2;
-    temporal.api.common.v1.WorkflowExecution execution_for_host = 3;
+    int32 shard_id = 2;
+    string namespace_id = 3;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 4;
 }
 
 message DescribeHistoryHostResponse {
-    int32 number_of_shards = 1;
+    int32 shards_number = 1;
     repeated int32
     shard_ids = 2;
     temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
@@ -426,7 +438,7 @@ message RemoveTaskRequest {
     int32 shard_id = 1;
     temporal.server.api.enums.v1.TaskCategory category = 2;
     int64 task_id = 3;
-    int64 visibility_timestamp = 4;
+    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
 
 message RemoveTaskResponse {
@@ -438,7 +450,7 @@ message GetReplicationMessagesRequest {
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, temporal.server.api.replication.v1.ReplicationMessages> messages_by_shard = 1;
+    map<int32, temporal.server.api.replication.v1.ReplicationMessages> shard_messages = 1;
 }
 
 message GetDLQReplicationMessagesRequest {

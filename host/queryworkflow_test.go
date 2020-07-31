@@ -45,6 +45,7 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -61,19 +62,19 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl}
-	stickyScheduleToStartTimeoutSeconds := 10
+	stickyScheduleToStartTimeout := 10 * time.Second
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -95,14 +96,14 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "1",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             "1",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -133,21 +134,21 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 
 	poller := &TaskPoller{
-		Engine:                              s.engine,
-		Namespace:                           s.namespace,
-		TaskQueue:                           taskQueue,
-		Identity:                            identity,
-		WorkflowTaskHandler:                 wtHandler,
-		ActivityTaskHandler:                 atHandler,
-		QueryHandler:                        queryHandler,
-		Logger:                              s.Logger,
-		T:                                   s.T(),
-		StickyTaskQueue:                     stickyTaskQueue,
-		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
+		Engine:                       s.engine,
+		Namespace:                    s.namespace,
+		TaskQueue:                    taskQueue,
+		Identity:                     identity,
+		WorkflowTaskHandler:          wtHandler,
+		ActivityTaskHandler:          atHandler,
+		QueryHandler:                 queryHandler,
+		Logger:                       s.Logger,
+		T:                            s.T(),
+		StickyTaskQueue:              stickyTaskQueue,
+		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -221,19 +222,19 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl}
-	stickyScheduleToStartTimeoutSeconds := 10
+	stickyScheduleToStartTimeout := 10 * time.Second
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -255,14 +256,14 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "1",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             "1",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -293,21 +294,21 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:                              s.engine,
-		Namespace:                           s.namespace,
-		TaskQueue:                           taskQueue,
-		Identity:                            identity,
-		WorkflowTaskHandler:                 wtHandler,
-		ActivityTaskHandler:                 atHandler,
-		QueryHandler:                        queryHandler,
-		Logger:                              s.Logger,
-		T:                                   s.T(),
-		StickyTaskQueue:                     stickyTaskQueue,
-		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
+		Engine:                       s.engine,
+		Namespace:                    s.namespace,
+		TaskQueue:                    taskQueue,
+		Identity:                     identity,
+		WorkflowTaskHandler:          wtHandler,
+		ActivityTaskHandler:          atHandler,
+		QueryHandler:                 queryHandler,
+		Logger:                       s.Logger,
+		T:                            s.T(),
+		StickyTaskQueue:              stickyTaskQueue,
+		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -369,15 +370,15 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -399,14 +400,14 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -577,15 +578,15 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -608,14 +609,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -724,7 +725,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		false,
 		false,
 		false,
-		int64(0),
+		0,
 		5,
 		false,
 		&querypb.WorkflowQueryResult{
@@ -761,15 +762,15 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time takes to handle signal
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -791,14 +792,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
-					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time it takes to handle signal
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second), // ensure longer than time takes to handle signal
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -919,15 +920,15 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time takes to handle signal
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -950,14 +951,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
-					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time it takes to handle signal
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second), // ensure longer than time takes to handle signal
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -1103,19 +1104,19 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{}
 	stickyTaskQueue.Name = stl
-	stickyScheduleToStartTimeoutSeconds := 10
+	stickyScheduleToStartTimeout := 10 * time.Second
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 10, // ensure longer than time takes to handle signal
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time takes to handle signal
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1137,14 +1138,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
-					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second), // ensure longer than time it takes to handle signal
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second), // ensure longer than time takes to handle signal
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -1183,21 +1184,21 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 	}
 
 	poller := &TaskPoller{
-		Engine:                              s.engine,
-		Namespace:                           s.namespace,
-		TaskQueue:                           taskQueue,
-		Identity:                            identity,
-		WorkflowTaskHandler:                 wtHandler,
-		ActivityTaskHandler:                 atHandler,
-		QueryHandler:                        queryHandler,
-		Logger:                              s.Logger,
-		T:                                   s.T(),
-		StickyTaskQueue:                     stickyTaskQueue,
-		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
+		Engine:                       s.engine,
+		Namespace:                    s.namespace,
+		TaskQueue:                    taskQueue,
+		Identity:                     identity,
+		WorkflowTaskHandler:          wtHandler,
+		ActivityTaskHandler:          atHandler,
+		QueryHandler:                 queryHandler,
+		Logger:                       s.Logger,
+		T:                            s.T(),
+		StickyTaskQueue:              stickyTaskQueue,
+		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, int64(1))
+	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1282,7 +1283,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 		false,
 		true,
 		true,
-		int64(0),
+		0,
 		5,
 		false,
 		&querypb.WorkflowQueryResult{
@@ -1319,15 +1320,15 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstWorkflowTask() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

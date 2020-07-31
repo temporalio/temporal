@@ -28,7 +28,6 @@ package history
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -151,8 +151,8 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 			return nil
 		}
 		if ai.Attempt == request.GetAttempt() {
-			lastHeartbeatTime := time.Unix(0, request.GetLastHeartbeatTime())
-			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+			lastHeartbeatTime := request.GetLastHeartbeatTime()
+			if ai.LastHeartbeatUpdateTime != nil && ai.LastHeartbeatUpdateTime.After(timestamp.TimeValue(lastHeartbeatTime)) {
 				// this should not retry, can be caused by out of order delivery
 				return nil
 			}
@@ -179,16 +179,18 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	// see whether we need to refresh the activity timer
-	eventTime := request.GetScheduledTime()
-	if eventTime < request.GetStartedTime() {
-		eventTime = request.GetStartedTime()
+	eventTime := timestamp.TimeValue(request.GetScheduledTime())
+	startedTime := timestamp.TimeValue(request.GetStartedTime())
+	lhTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
+	if eventTime.Before(startedTime) {
+		eventTime = startedTime
 	}
-	if eventTime < request.GetLastHeartbeatTime() {
-		eventTime = request.GetLastHeartbeatTime()
+	if eventTime.Before(lhTime) {
+		eventTime = lhTime
 	}
 
 	// passive logic need to explicitly call create timer
-	now := time.Unix(0, eventTime)
+	now := eventTime
 	if _, err := newTimerSequence(
 		clock.NewEventTimeSource().Update(now),
 		mutableState,

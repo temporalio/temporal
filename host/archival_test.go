@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -153,9 +154,9 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
 		s.Equal(workflowType, execution.GetType().GetName())
-		s.NotZero(execution.StartTime.Value)
+		s.NotZero(execution.StartTime)
 		s.NotZero(execution.ExecutionTime)
-		s.NotZero(execution.CloseTime.Value)
+		s.NotZero(execution.CloseTime)
 	}
 }
 
@@ -184,7 +185,9 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *common
 }
 
 func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
-	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
 		ShardID: convert.IntPtr(shardID),
@@ -229,15 +232,15 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 		Name: tq,
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
@@ -265,14 +268,14 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tq},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 100,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    50,
-					HeartbeatTimeoutSeconds:       5,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -284,11 +287,11 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:               workflowType,
-					TaskQueue:                  &taskqueuepb.TaskQueue{Name: tq},
-					Input:                      nil,
-					WorkflowRunTimeoutSeconds:  100,
-					WorkflowTaskTimeoutSeconds: 1,
+					WorkflowType:        workflowType,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+					Input:               nil,
+					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}

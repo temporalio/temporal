@@ -804,18 +804,18 @@ func (mr *MockmutableStateMockRecorder) CreateNewHistoryEvent(eventType interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEvent", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEvent), eventType)
 }
 
-// CreateNewHistoryEventWithTimestamp mocks base method.
-func (m *MockmutableState) CreateNewHistoryEventWithTimestamp(eventType enums.EventType, timestamp int64) *history.HistoryEvent {
+// CreateNewHistoryEventWithTime mocks base method.
+func (m *MockmutableState) CreateNewHistoryEventWithTime(eventType enums.EventType, time time.Time) *history.HistoryEvent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateNewHistoryEventWithTimestamp", eventType, timestamp)
+	ret := m.ctrl.Call(m, "CreateNewHistoryEventWithTime", eventType, time)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	return ret0
 }
 
-// CreateNewHistoryEventWithTimestamp indicates an expected call of CreateNewHistoryEventWithTimestamp.
-func (mr *MockmutableStateMockRecorder) CreateNewHistoryEventWithTimestamp(eventType, timestamp interface{}) *gomock.Call {
+// CreateNewHistoryEventWithTime indicates an expected call of CreateNewHistoryEventWithTime.
+func (mr *MockmutableStateMockRecorder) CreateNewHistoryEventWithTime(eventType, time interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEventWithTimestamp", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEventWithTimestamp), eventType, timestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewHistoryEventWithTime", reflect.TypeOf((*MockmutableState)(nil).CreateNewHistoryEventWithTime), eventType, time)
 }
 
 // CreateTransientWorkflowTaskEvents mocks base method.
@@ -1828,7 +1828,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateWorkflowTaskFailedEvent() *gomo
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3 int32, arg4, arg5, arg6 int64) (*workflowTaskInfo, error) {
+func (m *MockmutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *taskqueue.TaskQueue, arg3, arg4 int32, arg5, arg6 int64) (*workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*workflowTaskInfo)

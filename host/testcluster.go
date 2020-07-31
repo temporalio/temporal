@@ -223,7 +223,7 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 
 func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logger log.Logger) {
 	// shard 0 is always created, we create additional shards if needed
-	for shardID := 1; shardID < numHistoryShards; shardID++ {
+	for shardID := 1; shardID <= numHistoryShards; shardID++ {
 		err := testBase.CreateShard(int32(shardID), "", 0)
 		if err != nil {
 			logger.Fatal("Failed to create shard", tag.Error(err))

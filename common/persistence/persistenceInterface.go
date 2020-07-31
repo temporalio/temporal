@@ -232,13 +232,13 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdateTimestamp                    time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
@@ -638,16 +638,19 @@ type (
 )
 
 // NewDataBlob returns a new DataBlob
-func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.DataBlob {
-	if data == nil || len(data) == 0 {
+func NewDataBlob(data []byte, encodingTypeStr string) *serialization.DataBlob {
+	if len(data) == 0 {
 		return nil
 	}
-	if encodingType != common.EncodingTypeProto3 && data[0] == 'Y' {
-		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
+
+	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
+	if !ok || enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 {
+		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingTypeStr))
 	}
+
 	return &serialization.DataBlob{
 		Data:     data,
-		Encoding: encodingType,
+		Encoding: enumspb.EncodingType(encodingType),
 	}
 }
 
@@ -656,24 +659,14 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 	if blob == nil || len(blob.Data) == 0 {
 		return nil, ""
 	}
-	return blob.Data, string(blob.Encoding)
+	return blob.Data, blob.Encoding.String()
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation
 func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
-	switch blob.GetEncodingType() {
-	case enumspb.ENCODING_TYPE_JSON:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeJSON,
-			Data:     blob.Data,
-		}
-	case enumspb.ENCODING_TYPE_PROTO3:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeProto3,
-			Data:     blob.Data,
-		}
-	default:
-		panic(fmt.Sprintf("NewDataBlobFromProto seeing unsupported enconding type: %v", blob.GetEncodingType()))
+	return &serialization.DataBlob{
+		Encoding: blob.GetEncodingType(),
+		Data:     blob.Data,
 	}
 }
 
@@ -716,12 +709,12 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		ClientLibraryVersion:              executionInfo.ClientLibraryVersion,
 		ClientFeatureVersion:              executionInfo.ClientFeatureVersion,
 		ClientImpl:                        executionInfo.ClientImpl,
-		SignalCount:                       int64(executionInfo.SignalCount),
+		SignalCount:                       executionInfo.SignalCount,
 		HistorySize:                       executionInfo.HistorySize,
 		CronSchedule:                      executionInfo.CronSchedule,
 		CompletionEventBatchId:            executionInfo.CompletionEventBatchID,
 		HasRetryPolicy:                    executionInfo.HasRetryPolicy,
-		RetryAttempt:                      int64(executionInfo.Attempt),
+		RetryAttempt:                      executionInfo.Attempt,
 		RetryInitialInterval:              timestamp.DurationFromSeconds(executionInfo.InitialInterval),
 		RetryBackoffCoefficient:           executionInfo.BackoffCoefficient,
 		RetryMaximumInterval:              timestamp.DurationFromSeconds(executionInfo.MaximumInterval),
@@ -799,12 +792,12 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		ClientLibraryVersion:                   info.GetClientLibraryVersion(),
 		ClientFeatureVersion:                   info.GetClientFeatureVersion(),
 		ClientImpl:                             info.GetClientImpl(),
-		SignalCount:                            int32(info.GetSignalCount()),
+		SignalCount:                            info.GetSignalCount(),
 		HistorySize:                            info.GetHistorySize(),
 		CronSchedule:                           info.GetCronSchedule(),
 		CompletionEventBatchID:                 common.EmptyEventID,
 		HasRetryPolicy:                         info.GetHasRetryPolicy(),
-		Attempt:                                int32(info.GetRetryAttempt()),
+		Attempt:                                info.GetRetryAttempt(),
 		InitialInterval:                        truncateDurationToSecondsInt64(info.GetRetryInitialInterval()),
 		BackoffCoefficient:                     info.GetRetryBackoffCoefficient(),
 		MaximumInterval:                        truncateDurationToSecondsInt64(info.GetRetryMaximumInterval()),
@@ -814,7 +807,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		SearchAttributes:                       info.GetSearchAttributes(),
 		Memo:                                   info.GetMemo(),
 		CompletionEvent:                        info.GetCompletionEvent(),
-		AutoResetPoints:					    info.GetAutoResetPoints(),
+		AutoResetPoints:                        info.GetAutoResetPoints(),
 	}
 
 	if info.GetRetryExpirationTime() != nil {

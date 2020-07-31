@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -82,8 +81,8 @@ func (s *timerSequenceSuite) TearDownTest() {
 }
 
 func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated() {
-	now := types.TimestampNow()
-	timer1Expiry := addDurationToGogoTime(now, 100)
+	now := timestamp.TimeNowPtrUtc()
+	timer1Expiry := timestamp.TimePtr(now.Add(100))
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
@@ -99,13 +98,9 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated() {
 	s.False(modified)
 }
 
-func addDurationToGogoTime(timestamp *types.Timestamp, seconds int) *types.Timestamp {
-	return &types.Timestamp{Seconds: timestamp.Seconds + int64(seconds), Nanos: timestamp.Nanos}
-}
-
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
-	now := types.TimestampNow()
-	now = addDurationToGogoTime(now, 100)
+	now := timestamp.TimeNowPtrUtc()
+	now = timestamp.TimePtr(now.Add(100))
 	currentVersion := int64(999)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
@@ -124,7 +119,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.UserTimerTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: time.Unix(now.Seconds, int64(now.Nanos)).UTC(),
+		VisibilityTimestamp: *now,
 		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
 	}).Times(1)
@@ -190,7 +185,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduleId,
-		Attempt:             int64(activityInfo.Attempt),
+		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
 	}).Times(1)
 
@@ -232,7 +227,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 		VisibilityTimestamp: taskVisibilityTimestamp,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduleId,
-		Attempt:             int64(activityInfo.Attempt),
+		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
 	}).Times(1)
 
@@ -250,8 +245,8 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_None() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
-	now := types.TimestampNow()
-	timer1Expiry := addDurationToGogoTime(now, 100)
+	now := timestamp.TimeNowPtrUtc()
+	timer1Expiry := timestamp.TimePtr(now.Add(100))
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
@@ -265,7 +260,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Equal([]timerSequenceID{{
 		eventID:      timerInfo.GetStartedId(),
-		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
+		timestamp:    *timer1Expiry,
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
 		attempt:      1,
@@ -273,9 +268,9 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
-	now := types.TimestampNow()
-	timer1Expiry := addDurationToGogoTime(now, 100)
-	timer2Expiry := addDurationToGogoTime(now, 200)
+	now := timestamp.TimeNowPtrUtc()
+	timer1Expiry := timestamp.TimePtr(now.Add(100))
+	timer2Expiry := timestamp.TimePtr(now.Add(200))
 	timerInfo1 := &persistenceblobs.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
@@ -287,7 +282,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 		Version:    1234,
 		TimerId:    "other random timer ID",
 		StartedId:  4567,
-		ExpiryTime: addDurationToGogoTime(now, 200),
+		ExpiryTime: timestamp.TimePtr(now.Add(200)),
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistenceblobs.TimerInfo{
@@ -300,14 +295,14 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 	s.Equal([]timerSequenceID{
 		{
 			eventID:      timerInfo1.GetStartedId(),
-			timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
+			timestamp:    *timer1Expiry,
 			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: true,
 			attempt:      1,
 		},
 		{
 			eventID:      timerInfo2.GetStartedId(),
-			timestamp:    time.Unix(timer2Expiry.Seconds, int64(timer2Expiry.Nanos)).UTC(),
+			timestamp:    *timer2Expiry,
 			timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			timerCreated: false,
 			attempt:      1,
@@ -626,8 +621,8 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 }
 
 func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
-	now := types.TimestampNow()
-	timer1Expiry := addDurationToGogoTime(now, 100)
+	now := timestamp.TimeNowPtrUtc()
+	timer1Expiry := timestamp.TimePtr(now.Add(100))
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
 		TimerId:    "some random timer ID",
@@ -638,7 +633,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 
 	expectedTimerSequence := &timerSequenceID{
 		eventID:      timerInfo.StartedId,
-		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
+		timestamp:    *timer1Expiry,
 		timerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timerCreated: true,
 		attempt:      1,

@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -66,16 +67,16 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		Header:                     header,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		Header:              header,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -97,15 +98,15 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					Header:                        header,
-					ScheduleToCloseTimeoutSeconds: 15,
-					ScheduleToStartTimeoutSeconds: 1,
-					StartToCloseTimeoutSeconds:    15,
-					HeartbeatTimeoutSeconds:       1,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					Header:                 header,
+					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -186,15 +187,15 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -213,19 +214,19 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 				{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    "0",
-						ActivityType:                  &commonpb.ActivityType{Name: activityName},
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-						Input:                         nil,
-						ScheduleToCloseTimeoutSeconds: 4,
-						ScheduleToStartTimeoutSeconds: 4,
-						StartToCloseTimeoutSeconds:    4,
-						HeartbeatTimeoutSeconds:       1,
+						ActivityId:             "0",
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						Input:                  nil,
+						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(4 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
-							InitialIntervalInSeconds: 1,
-							MaximumAttempts:          3,
-							MaximumIntervalInSeconds: 1,
-							BackoffCoefficient:       1,
+							InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+							MaximumAttempts:    3,
+							MaximumInterval:    timestamp.DurationPtr(1 * time.Second),
+							BackoffCoefficient: 1,
 						},
 					},
 					}},
@@ -324,15 +325,15 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			}
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 
-			scheduledTS := pendingActivity.ScheduledTimestamp
-			lastHeartbeatTS := pendingActivity.LastHeartbeatTimestamp
-			expirationTS := pendingActivity.ExpirationTimestamp
+			scheduledTS := pendingActivity.ScheduledTime
+			lastHeartbeatTS := pendingActivity.LastHeartbeatTime
+			expirationTS := pendingActivity.ExpirationTime
 			s.NotZero(scheduledTS)
 			s.NotZero(lastHeartbeatTS)
 			s.NotZero(expirationTS)
-			s.Zero(pendingActivity.LastStartedTimestamp)
-			s.True(scheduledTS > lastHeartbeatTS)
-			s.True(expirationTS > scheduledTS)
+			s.Zero(pendingActivity.LastStartedTime)
+			s.True(scheduledTS.After(timestamp.TimeValue(lastHeartbeatTS)))
+			s.True(expirationTS.After(timestamp.TimeValue(scheduledTS)))
 
 			s.Equal(heartbeatDetails, pendingActivity.GetHeartbeatDetails())
 		}
@@ -359,15 +360,15 @@ func (s *integrationSuite) TestActivityRetry() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -388,33 +389,33 @@ func (s *integrationSuite) TestActivityRetry() {
 				{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    "A",
-						ActivityType:                  &commonpb.ActivityType{Name: activityName},
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-						Input:                         payloads.EncodeString("1"),
-						ScheduleToCloseTimeoutSeconds: 4,
-						ScheduleToStartTimeoutSeconds: 4,
-						StartToCloseTimeoutSeconds:    4,
-						HeartbeatTimeoutSeconds:       1,
+						ActivityId:             "A",
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						Input:                  payloads.EncodeString("1"),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(4 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
-							InitialIntervalInSeconds: 1,
-							MaximumAttempts:          3,
-							MaximumIntervalInSeconds: 1,
-							NonRetryableErrorTypes:   []string{"bad-bug"},
-							BackoffCoefficient:       1,
+							InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+							MaximumAttempts:        3,
+							MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+							NonRetryableErrorTypes: []string{"bad-bug"},
+							BackoffCoefficient:     1,
 						},
 					}}},
 				{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    "B",
-						ActivityType:                  &commonpb.ActivityType{Name: timeoutActivityName},
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue"},
-						Input:                         payloads.EncodeString("2"),
-						ScheduleToCloseTimeoutSeconds: 5,
-						ScheduleToStartTimeoutSeconds: 5,
-						StartToCloseTimeoutSeconds:    5,
-						HeartbeatTimeoutSeconds:       0,
+						ActivityId:             "B",
+						ActivityType:           &commonpb.ActivityType{Name: timeoutActivityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue"},
+						Input:                  payloads.EncodeString("2"),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(5 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(5 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 					}}},
 			}, nil
 		} else if previousStartedEventID > 0 {
@@ -570,15 +571,15 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -603,14 +604,14 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 15,
-					ScheduleToStartTimeoutSeconds: 1,
-					StartToCloseTimeoutSeconds:    15,
-					HeartbeatTimeoutSeconds:       1,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -671,15 +672,15 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  300,
-		WorkflowTaskTimeoutSeconds: 2,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -700,50 +701,50 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "A",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: "NoWorker"},
-					Input:                         payloads.EncodeString("ScheduleToStart"),
-					ScheduleToCloseTimeoutSeconds: 35,
-					ScheduleToStartTimeoutSeconds: 3, // ActivityID A is expected to timeout using ScheduleToStart
-					StartToCloseTimeoutSeconds:    30,
-					HeartbeatTimeoutSeconds:       0,
+					ActivityId:             "A",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "NoWorker"},
+					Input:                  payloads.EncodeString("ScheduleToStart"),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(35 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(3 * time.Second), // ActivityID A is expected to timeout using ScheduleToStart
+					StartToCloseTimeout:    timestamp.DurationPtr(30 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 				},
 				}}, {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "B",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeString("ScheduleClose"),
-					ScheduleToCloseTimeoutSeconds: 7, // ActivityID B is expected to timeout using ScheduleClose
-					ScheduleToStartTimeoutSeconds: 5,
-					StartToCloseTimeoutSeconds:    10,
-					HeartbeatTimeoutSeconds:       0,
+					ActivityId:             "B",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeString("ScheduleClose"),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(7 * time.Second), // ActivityID B is expected to timeout using ScheduleClose
+					ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(10 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 				},
 				}}, {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "C",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeString("StartToClose"),
-					ScheduleToCloseTimeoutSeconds: 15,
-					ScheduleToStartTimeoutSeconds: 1,
-					StartToCloseTimeoutSeconds:    5, // ActivityID C is expected to timeout using StartToClose
-					HeartbeatTimeoutSeconds:       0,
+					ActivityId:             "C",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeString("StartToClose"),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(5 * time.Second), // ActivityID C is expected to timeout using StartToClose
+					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 				},
 				}}, {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    "D",
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeString("Heartbeat"),
-					ScheduleToCloseTimeoutSeconds: 35,
-					ScheduleToStartTimeoutSeconds: 20,
-					StartToCloseTimeoutSeconds:    15,
-					HeartbeatTimeoutSeconds:       3, // ActivityID D is expected to timeout using Heartbeat
+					ActivityId:             "D",
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeString("Heartbeat"),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(35 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(20 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(3 * time.Second), // ActivityID D is expected to timeout using Heartbeat
 				}}},
 			}, nil
 		} else if previousStartedEventID > 0 {
@@ -905,15 +906,15 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  90,
-		WorkflowTaskTimeoutSeconds: 2,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(90 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -938,13 +939,13 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 				d := &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:                    aID,
-						ActivityType:                  &commonpb.ActivityType{Name: activityName},
-						TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-						Input:                         payloads.EncodeString("Heartbeat"),
-						ScheduleToCloseTimeoutSeconds: 60,
-						StartToCloseTimeoutSeconds:    60,
-						HeartbeatTimeoutSeconds:       4,
+						ActivityId:             aID,
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						Input:                  payloads.EncodeString("Heartbeat"),
+						ScheduleToCloseTimeout: timestamp.DurationPtr(60 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(60 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(4 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
 							MaximumAttempts: 1,
 						},
@@ -1040,7 +1041,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		s.Logger.Info("End Heartbeating", tag.WorkflowActivityID(activityID))
 
 		s.Logger.Info("Sleeping activity before completion (should timeout)", tag.WorkflowActivityID(activityID))
-		time.Sleep(5 * time.Second)
+		time.Sleep(8 * time.Second)
 
 		return payloads.EncodeString("Should never reach this point"), false, nil
 	}
@@ -1062,7 +1063,11 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	for i := 0; i < activityCount; i++ {
 		go func() {
 			err := poller.PollAndProcessActivityTask(false)
-			s.Logger.Error("Activity Processing Completed", tag.Error(err))
+			if err == nil {
+				s.Logger.Error("Activity expected to time out but got completed instead")
+			} else {
+				s.Logger.Info("Activity processing completed with error", tag.Error(err))
+			}
 		}()
 	}
 
@@ -1075,6 +1080,14 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if workflowComplete {
 			break
 		}
+	}
+
+	if !workflowComplete || failWorkflow {
+		s.Logger.Error("Test completed with unexpected result.  Dumping workflow execution history: ")
+		s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		})
 	}
 
 	s.True(workflowComplete)
@@ -1099,15 +1112,15 @@ func (s *integrationSuite) TestActivityCancellation() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1131,14 +1144,14 @@ func (s *integrationSuite) TestActivityCancellation() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 15,
-					ScheduleToStartTimeoutSeconds: 10,
-					StartToCloseTimeoutSeconds:    15,
-					HeartbeatTimeoutSeconds:       0,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1226,15 +1239,15 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                  uuid.New(),
-		Namespace:                  s.namespace,
-		WorkflowId:                 id,
-		WorkflowType:               workflowType,
-		TaskQueue:                  taskQueue,
-		Input:                      nil,
-		WorkflowRunTimeoutSeconds:  100,
-		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                   identity,
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1258,14 +1271,14 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonpb.ActivityType{Name: activityName},
-					TaskQueue:                     &taskqueuepb.TaskQueue{Name: tl},
-					Input:                         payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeoutSeconds: 15,
-					ScheduleToStartTimeoutSeconds: 2,
-					StartToCloseTimeoutSeconds:    15,
-					HeartbeatTimeoutSeconds:       0,
+					ActivityId:             strconv.Itoa(int(activityCounter)),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
+					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
+					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
 				}},
 			}}, nil
 		}

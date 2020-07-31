@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -357,7 +358,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
 		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
-		EventEncodingType:                   dc.GetStringPropertyFnWithNamespaceFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeProto3)),
+		EventEncodingType:                   dc.GetStringPropertyFnWithNamespaceFilter(dynamicconfig.DefaultEventEncoding, enumspb.ENCODING_TYPE_PROTO3.String()),
 		EnableParentClosePolicy:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableParentClosePolicy, true),
 		NumParentClosePolicySystemWorkflows: dc.GetIntProperty(dynamicconfig.NumParentClosePolicySystemWorkflows, 10),
 		EnableParentClosePolicyWorker:       dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
@@ -414,9 +415,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 	return cfg
 }
 
-// GetShardID return the corresponding shard ID for a given workflow ID
-func (config *Config) GetShardID(workflowID string) int {
-	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
+// GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
+func (config *Config) GetShardID(namespaceID, workflowID string) int {
+	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
 }
 
 // Service represents the history service

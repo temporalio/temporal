@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -389,7 +390,7 @@ Update_History_Loop:
 		} else {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
 			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-			executionInfo.StickyScheduleToStartTimeout = int64(request.StickyAttributes.GetScheduleToStartTimeoutSeconds())
+			executionInfo.StickyScheduleToStartTimeout = int64(timestamp.DurationValue(request.StickyAttributes.GetScheduleToStartTimeout()).Seconds())
 		}
 		executionInfo.ClientLibraryVersion = clientLibVersion
 		executionInfo.ClientFeatureVersion = clientFeatureVersion
@@ -608,8 +609,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	response.ScheduledTimestamp = workflowTask.ScheduledTimestamp
-	response.StartedTimestamp = workflowTask.StartedTimestamp
+	response.ScheduledTime = timestamp.UnixOrZeroTimePtr(workflowTask.ScheduledTimestamp)
+	response.StartedTime = timestamp.UnixOrZeroTimePtr(workflowTask.StartedTimestamp)
 
 	if workflowTask.Attempt > 1 {
 		// This workflowTask is retried from mutable state

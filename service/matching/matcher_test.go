@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -168,7 +167,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1
-			task.forwardedFrom = req.GetForwardedFrom()
+			task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			if taskSource != enumsspb.TASK_SOURCE_DB_BACKLOG {
 				// when task is not from backlog, wait a bit for poller
@@ -186,7 +185,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.NotNil(req)
 	t.NoError(err)
 	t.True(remoteSyncMatch)
-	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.name, req.GetForwardedSource())
 	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
@@ -273,7 +272,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest) {
 			req = arg1
-			task.forwardedFrom = req.GetForwardedFrom()
+			task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
 			t.rootMatcher.OfferQuery(ctx, task)
@@ -291,7 +290,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	err = payloads.Decode(result.GetQueryResult(), &answer)
 	t.NoError(err)
 	t.Equal("answer", answer)
-	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.name, req.GetForwardedSource())
 	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
@@ -401,7 +400,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1
-			task := newInternalTask(task.event.AllocatedTaskInfo, nil, enumsspb.TASK_SOURCE_DB_BACKLOG, req.GetForwardedFrom(), true)
+			task := newInternalTask(task.event.AllocatedTaskInfo, nil, enumsspb.TASK_SOURCE_DB_BACKLOG, req.GetForwardedSource(), true)
 			close(pollSigC)
 			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
 		},
@@ -413,7 +412,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.NoError(err)
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
-	t.Equal(t.taskQueue.name, req.GetForwardedFrom())
+	t.Equal(t.taskQueue.name, req.GetForwardedSource())
 	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
 }
 
@@ -486,8 +485,8 @@ func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 			WorkflowId:  uuid.New(),
 			RunId:       uuid.New(),
 			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimestampFromTimePtr(&rt1).ToProto(),
-			ExpiryTime:  timestamp.TimestampFromTimePtr(&rt2).ToProto(),
+			CreateTime:  &rt1,
+			ExpiryTime:  &rt2,
 		},
 		TaskId: rand.Int63(),
 	}

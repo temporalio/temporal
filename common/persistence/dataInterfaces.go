@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -223,13 +222,13 @@ type (
 		StartTimestamp                         time.Time
 		LastUpdatedTimestamp                   time.Time
 		CreateRequestID                        string
-		SignalCount                            int32
+		SignalCount                            int64
 		WorkflowTaskVersion                    int64
 		WorkflowTaskScheduleID                 int64
 		WorkflowTaskStartedID                  int64
 		WorkflowTaskRequestID                  string
 		WorkflowTaskTimeout                    int64
-		WorkflowTaskAttempt                    int64
+		WorkflowTaskAttempt                    int32
 		WorkflowTaskStartedTimestamp           int64
 		WorkflowTaskScheduledTimestamp         int64
 		WorkflowTaskOriginalScheduledTimestamp int64
@@ -334,7 +333,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		ScheduleAttempt     int64
+		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
 	}
@@ -395,7 +394,7 @@ type (
 		TaskID              int64
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
-		Attempt             int64
+		Attempt             int32
 		Version             int64
 	}
 
@@ -577,7 +576,7 @@ type (
 
 		NewWorkflowSnapshot *WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -599,7 +598,7 @@ type (
 		//  basically should use CurrentWorkflowMutation instead
 		CurrentWorkflowCAS *CurrentWorkflowCAS
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// CurrentWorkflowCAS represent a compare and swap on current record
@@ -628,7 +627,7 @@ type (
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
 
-		Encoding common.EncodingType // optional binary encoding type
+		Encoding enumspb.EncodingType // optional binary encoding type
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -1055,7 +1054,7 @@ type (
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
-		Encoding common.EncodingType
+		Encoding enumspb.EncodingType
 		// The shard to get history node data
 		ShardID *int
 	}
@@ -1175,7 +1174,7 @@ type (
 	HistoryBranchDetail struct {
 		TreeID   string
 		BranchID string
-		ForkTime time.Time
+		ForkTime *time.Time
 		Info     string
 	}
 
@@ -1500,8 +1499,8 @@ func (d *WorkflowTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTime get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *types.Timestamp {
-	return &types.Timestamp{}
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
+	return &time.Time{}
 }
 
 // GetVisibilityTime get the visibility timestamp
