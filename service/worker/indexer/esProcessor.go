@@ -29,11 +29,11 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
 	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	es "go.temporal.io/server/common/elasticsearch"
@@ -237,7 +237,10 @@ func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 		return 0
 	}
 	numOfShards := p.config.IndexerConcurrency()
-	return uint32(common.WorkflowIDToHistoryShard(id, numOfShards))
+
+	idBytes := []byte(id)
+	hash := farm.Hash32(idBytes)
+	return hash % uint32(numOfShards)
 }
 
 func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) string {
