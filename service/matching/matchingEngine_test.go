@@ -427,7 +427,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
 			if isForwarded {
-				addRequest.ForwardedFrom = forwardedFrom
+				addRequest.ForwardedSource = forwardedFrom
 			}
 			_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		} else {
@@ -439,7 +439,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
 			if isForwarded {
-				addRequest.ForwardedFrom = forwardedFrom
+				addRequest.ForwardedSource = forwardedFrom
 			}
 			_, err = s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
 		}

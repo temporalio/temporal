@@ -224,10 +224,10 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return &adminservice.DescribeWorkflowExecutionResponse{}, err
 	}
 	return &adminservice.DescribeWorkflowExecutionResponse{
-		ShardId:                shardIDForOutput,
-		HistoryAddr:            historyAddr,
-		MutableStateInDatabase: resp2.MutableStateInDatabase,
-		MutableStateInCache:    resp2.MutableStateInCache,
+		ShardId:              shardIDForOutput,
+		HistoryAddr:          historyAddr,
+		DatabaseMutableState: resp2.DatabaseMutableState,
+		CacheMutableState:    resp2.CacheMutableState,
 	}, err
 }
 
@@ -271,28 +271,28 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
 	defer sw.Stop()
 
-	if request == nil || request.ExecutionForHost == nil {
+	if request == nil || request.WorkflowExecution == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
 	var err error
 	namespaceID := ""
-	if request.ExecutionForHost != nil {
+	if request.WorkflowExecution != nil {
 		namespaceID, err = adh.GetNamespaceCache().GetNamespaceID(request.Namespace)
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
 
-		if err := validateExecution(request.ExecutionForHost); err != nil {
+		if err := validateExecution(request.WorkflowExecution); err != nil {
 			return nil, adh.error(err, scope)
 		}
 	}
 
 	resp, err := adh.GetHistoryClient().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
-		HostAddress:      request.GetHostAddress(),
-		ShardIdForHost:   request.GetShardIdForHost(),
-		NamespaceId:      namespaceID,
-		ExecutionForHost: request.GetExecutionForHost(),
+		HostAddress:       request.GetHostAddress(),
+		ShardId:           request.GetShardId(),
+		NamespaceId:       namespaceID,
+		WorkflowExecution: request.GetWorkflowExecution(),
 	})
 
 	if resp == nil {
@@ -300,7 +300,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}
 
 	return &adminservice.DescribeHistoryHostResponse{
-		NumberOfShards:        resp.GetNumberOfShards(),
+		ShardsNumber:          resp.GetShardsNumber(),
 		ShardIds:              resp.GetShardIds(),
 		NamespaceCache:        resp.GetNamespaceCache(),
 		ShardControllerStatus: resp.GetShardControllerStatus(),
@@ -675,7 +675,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	return &adminservice.GetReplicationMessagesResponse{MessagesByShard: resp.GetMessagesByShard()}, nil
+	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.

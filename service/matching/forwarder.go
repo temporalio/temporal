@@ -154,7 +154,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduleId:             task.event.Data.GetScheduleId(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &newScheduleToStartTimeout,
-			ForwardedFrom:          fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -168,7 +168,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduleId:             task.event.Data.GetScheduleId(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &newScheduleToStartTimeout,
-			ForwardedFrom:          fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.name,
 		})
 	default:
 		return errInvalidTaskQueueType
@@ -198,8 +198,8 @@ func (fwdr *Forwarder) ForwardQueryTask(
 			Name: name,
 			Kind: fwdr.taskQueueKind,
 		},
-		QueryRequest:  task.query.request.QueryRequest,
-		ForwardedFrom: fwdr.taskQueueID.name,
+		QueryRequest:    task.query.request.QueryRequest,
+		ForwardedSource: fwdr.taskQueueID.name,
 	})
 
 	return resp, fwdr.handleErr(err)
@@ -231,7 +231,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -248,7 +248,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 				},
 				Identity: identity,
 			},
-			ForwardedFrom: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)

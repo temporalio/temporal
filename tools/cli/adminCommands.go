@@ -127,10 +127,10 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 
 	if resp != nil {
-		msStr := resp.GetMutableStateInDatabase()
+		msStr := resp.GetDatabaseMutableState()
 		ms := persistence.WorkflowMutableState{}
 		// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
-		// Proper refactoring is required here: resp.GetMutableStateInDatabase() should return proto object.
+		// Proper refactoring is required here: resp.GetDatabaseMutableState() should return proto object.
 		err := json.Unmarshal([]byte(msStr), &ms)
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
@@ -217,7 +217,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	msStr := resp.GetMutableStateInDatabase()
+	msStr := resp.GetDatabaseMutableState()
 	ms := persistence.WorkflowMutableState{}
 	err := json.Unmarshal([]byte(msStr), &ms)
 	if err != nil {
@@ -544,10 +544,10 @@ func AdminRemoveTask(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.RemoveTaskRequest{
-		ShardId:             int32(shardID),
-		Category:            category,
-		TaskId:              taskID,
-		VisibilityTime: 	 timestamp.UnixOrZeroTimePtr(visibilityTimestamp),
+		ShardId:        int32(shardID),
+		Category:       category,
+		TaskId:         taskID,
+		VisibilityTime: timestamp.UnixOrZeroTimePtr(visibilityTimestamp),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
@@ -664,10 +664,10 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &commonpb.WorkflowExecution{WorkflowId: wid}
+		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
-		req.ShardIdForHost = int32(sid)
+		req.ShardId = int32(sid)
 	}
 	if len(addr) > 0 {
 		req.HostAddress = addr

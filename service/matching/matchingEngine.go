@@ -262,7 +262,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
@@ -308,7 +308,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedFrom(),
+		forwardedFrom: addRequest.GetForwardedSource(),
 	})
 }
 
@@ -346,7 +346,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -445,7 +445,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -848,12 +848,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	return resp, err
 }
 
-func (e *matchingEngineImpl) emitForwardedFromStats(
+func (e *matchingEngineImpl) emitForwardedSourceStats(
 	scope metrics.Scope,
 	isTaskForwarded bool,
-	pollForwardedFrom string,
+	pollForwardedSource string,
 ) {
-	isPollForwarded := len(pollForwardedFrom) > 0
+	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
 		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)
