@@ -212,7 +212,7 @@ func UnixOrZeroTime(nanos int64) time.Time {
 		return time.Time{}
 	}
 
-	return time.Unix(0, nanos)
+	return time.Unix(0, nanos).UTC()
 }
 
 func UnixOrZeroTimePtr(nano int64) *time.Time {

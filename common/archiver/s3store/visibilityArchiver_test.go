@@ -197,7 +197,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	closeTimestamp := time.Now()
+	closeTimestamp := timestamp.TimeNowPtrUtc()
 	request := &archiverproto.ArchiveVisibilityRequest{
 		NamespaceId:      testNamespaceID,
 		Namespace:        testNamespace,
@@ -206,7 +206,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		WorkflowTypeName: testWorkflowTypeName,
 		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
 		ExecutionTime:    nil, // workflow without backoff
-		CloseTime:        timestamp.TimePtr(closeTimestamp),
+		CloseTime:        closeTimestamp,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:    int64(101),
 		Memo: &commonpb.Memo{
