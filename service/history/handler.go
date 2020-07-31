@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -1412,13 +1413,11 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 		return nil, h.error(errSourceClusterNotSet, scope, "", "")
 	}
 
-	// TODO: Disabling this check as 0 is a valid ShardID.  Correct long term fix is to have ShardID start from 1
-	// so we can enable this check to validate ShardID is not set.
-	// if request.GetShardId() == 0 {
-	// 	return nil, h.error(errShardIDNotSet, scope, "", "")
-	// }
+	if request.GetShardId() == 0 {
+		return nil, h.error(errShardIDNotSet, scope, "", "")
+	}
 
-	if request.GetTimestamp() == 0 {
+	if timestamp.TimeValue(request.GetStatusTime()).IsZero() {
 		return nil, h.error(errTimestampNotSet, scope, "", "")
 	}
 

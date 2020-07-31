@@ -63,7 +63,7 @@ type (
 		timestamp    time.Time
 		timerType    enumspb.TimeoutType
 		timerCreated bool
-		attempt      int32
+		attempt      int64
 	}
 
 	timerSequenceIDs []timerSequenceID

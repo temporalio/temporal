@@ -818,6 +818,8 @@ const (
 	lastFilterTypeForTest
 )
 
+const DefaultNumTaskQueuePartitions = 4
+
 // FilterOption is used to provide filters for dynamic config keys
 type FilterOption func(filterMap map[Filter]interface{})
 
