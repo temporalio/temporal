@@ -435,7 +435,7 @@ func (s *UtilSuite) TestDeleteExecution() {
 			execManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(tc.deleteCurrentErr).Once()
 		}
 		pr := NewPersistenceRetryer(execManager, nil)
-		result := DeleteExecution(&Execution{}, pr)
+		result := DeleteExecution(&ConcreteExecution{}, pr)
 		s.Equal(tc.expectedFixResult, result)
 	}
 }
