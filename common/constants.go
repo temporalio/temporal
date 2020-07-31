@@ -32,7 +32,7 @@ const (
 	// FirstEventID is the id of the first event in the history
 	FirstEventID int64 = 1
 	// EmptyEventID is the id of the empty event
-	EmptyEventID int64 = -23
+	EmptyEventID int64 = 0
 	// EmptyVersion is used as the default value for failover version when no value is provided
 	EmptyVersion int64 = -24
 	// EndEventID is the id of the end event, here we use the int64 max
@@ -40,7 +40,7 @@ const (
 	// BufferedEventID is the id of the buffered event
 	BufferedEventID int64 = -123
 	// EmptyEventTaskID is uninitialized id of the task id within event
-	EmptyEventTaskID int64 = -1234
+	EmptyEventTaskID int64 = 0
 	// TransientEventID is the id of the transient event
 	TransientEventID int64 = -124
 	// FirstBlobPageToken is the page token identifying the first blob for each history archival

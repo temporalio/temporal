@@ -772,8 +772,8 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag 
 }
 
 // ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
-func ArchivalRequestCloseTimestamp(requestCloseTimeStamp int64) Tag {
-	return newInt64("archival-request-close-timestamp", requestCloseTimeStamp)
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *time.Time) Tag {
+	return newTimeTag("archival-request-close-timestamp", timestamp.TimeValue(requestCloseTimeStamp))
 }
 
 // ArchivalRequestStatus returns tag for RequestStatus
