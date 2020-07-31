@@ -1944,7 +1944,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
@@ -2064,7 +2064,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	errRet := serviceerror.NewInternal("")
 	// the test above already assert the create workflow request, so here just use anyting
@@ -2180,7 +2180,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
@@ -2316,7 +2316,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
@@ -2453,7 +2453,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
@@ -2590,7 +2590,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version - 1
@@ -2728,7 +2728,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
@@ -2892,7 +2892,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
@@ -3069,7 +3069,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
@@ -3243,7 +3243,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
@@ -3399,7 +3399,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
@@ -3570,7 +3570,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
-	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
+	msBuilder.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentNextEventID := int64(2333)
