@@ -72,7 +72,7 @@ type (
 )
 
 const (
-	taskQueuePartitionPrefix = "/__temporal_sys/"
+	taskQueuePartitionPrefix = "/_sys/"
 )
 
 // NewLoadBalancer returns an instance of matching load balancer that
