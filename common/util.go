@@ -422,7 +422,7 @@ func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
 ) *historyservice.StartWorkflowExecutionRequest {
-	now := time.Now()
+	now := time.Now().UTC()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID,
 		StartRequest:           startRequest,

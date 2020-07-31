@@ -1257,7 +1257,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				InitialInterval:            int64(rand.Int31()),
 				BackoffCoefficient:         7.78,
 				MaximumInterval:            int64(rand.Int31()),
-				WorkflowExpirationTime:     time.Now(),
+				WorkflowExpirationTime:     time.Now().UTC(),
 				MaximumAttempts:            rand.Int31(),
 				NonRetryableErrorTypes:     []string{"badRequestError", "accessDeniedError"},
 				CronSchedule:               "* * * * *",
@@ -1417,7 +1417,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.BackoffCoefficient = 4.45
 	updatedInfo.MaximumInterval = math.MaxInt32
 	updatedInfo.MaximumAttempts = math.MaxInt32
-	updatedInfo.WorkflowExpirationTime = time.Now()
+	updatedInfo.WorkflowExpirationTime = time.Now().UTC()
 	updatedInfo.NonRetryableErrorTypes = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
@@ -2290,7 +2290,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	targetWorkflowID := "some random target namespace ID"
 	targetRunID := uuid.New()
 	currentTransferID := s.GetTransferReadLevel()
-	now := time.Now()
+	now := time.Now().UTC()
 	tasks := []p.Task{
 		&p.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
 		&p.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222, false},
@@ -2386,7 +2386,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	targetWorkflowID := "some random target namespace ID"
 	targetRunID := uuid.New()
 	currentTransferID := s.GetTransferReadLevel()
-	now := time.Now()
+	now := time.Now().UTC()
 	tasks := []p.Task{
 		&p.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
 		&p.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222, false},
@@ -2441,7 +2441,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	initialTasks := []p.Task{&p.WorkflowTaskTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3, 0, 2, initialTasks)
@@ -2513,11 +2513,11 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	tasks := []p.Task{
-		&p.WorkflowTaskTimeoutTask{time.Now(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
-		&p.WorkflowTimeoutTask{time.Now(), 2, 12},
-		&p.DeleteHistoryEventTask{time.Now(), 3, 13},
-		&p.ActivityTimeoutTask{time.Now(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&p.UserTimerTask{time.Now(), 5, 7, 15},
+		&p.WorkflowTaskTimeoutTask{time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
+		&p.WorkflowTimeoutTask{time.Now().UTC(), 2, 12},
+		&p.DeleteHistoryEventTask{time.Now().UTC(), 3, 13},
+		&p.ActivityTimeoutTask{time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
+		&p.UserTimerTask{time.Now().UTC(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2581,7 +2581,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now()
+	currentTime := time.Now().UTC()
 
 	activityInfos := []*persistenceblobs.ActivityInfo{{
 		Version:                     7789,
@@ -5104,13 +5104,13 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	// test create && get
 	currentReplicationAck := int64(27)
 	currentClusterTransferAck := int64(21)
-	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
+	currentClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-10 * time.Second))
 	shardInfo := &persistenceblobs.ShardInfo{
 		ShardId:                 shardID,
 		Owner:                   "some random owner",
 		RangeId:                 rangeID,
 		StolenSinceRenew:        12,
-		UpdateTime:              timestampConvertor(time.Now()),
+		UpdateTime:              timestampConvertor(time.Now().UTC()),
 		ReplicationAckLevel:     currentReplicationAck,
 		TransferAckLevel:        currentClusterTransferAck,
 		TimerAckLevelTime:       currentClusterTimerAck,
@@ -5149,15 +5149,15 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentReplicationAck := int64(27)
 	currentClusterTransferAck := int64(21)
 	alternativeClusterTransferAck := int64(32)
-	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
-	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
+	currentClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-10 * time.Second))
+	alternativeClusterTimerAck := timestampConvertor(time.Now().UTC().Add(-20 * time.Second))
 	namespaceNotificationVersion := int64(8192)
 	shardInfo := &persistenceblobs.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             rangeID,
 		StolenSinceRenew:    12,
-		UpdateTime:          timestampConvertor(time.Now()),
+		UpdateTime:          timestampConvertor(time.Now().UTC()),
 		ReplicationAckLevel: currentReplicationAck,
 		TransferAckLevel:    currentClusterTransferAck,
 		TimerAckLevelTime:   currentClusterTimerAck,
@@ -5192,15 +5192,15 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentReplicationAck = int64(270)
 	currentClusterTransferAck = int64(210)
 	alternativeClusterTransferAck = int64(320)
-	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
-	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
+	currentClusterTimerAck = timestampConvertor(time.Now().UTC().Add(-100 * time.Second))
+	alternativeClusterTimerAck = timestampConvertor(time.Now().UTC().Add(-200 * time.Second))
 	namespaceNotificationVersion = int64(16384)
 	shardInfo = &persistenceblobs.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             int64(28),
 		StolenSinceRenew:    4,
-		UpdateTime:          timestampConvertor(time.Now()),
+		UpdateTime:          timestampConvertor(time.Now().UTC()),
 		ReplicationAckLevel: currentReplicationAck,
 		TransferAckLevel:    currentClusterTransferAck,
 		TimerAckLevelTime:   currentClusterTimerAck,

@@ -218,7 +218,7 @@ func (fc *fileBasedClient) UpdateValue(name Key, value interface{}) error {
 
 func (fc *fileBasedClient) update() error {
 	defer func() {
-		fc.lastUpdatedTime = time.Now()
+		fc.lastUpdatedTime = time.Now().UTC()
 	}()
 
 	newValues := make(map[string][]*constrainedValue)

@@ -132,7 +132,7 @@ getTasksPumpLoop:
 			break getTasksPumpLoop
 		case <-tr.notifyC:
 			{
-				lastTimeWriteTask = time.Now()
+				lastTimeWriteTask = time.Now().UTC()
 
 				tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
 				if err != nil {
@@ -273,7 +273,7 @@ func (tr *taskReader) persistAckLevel() error {
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
-	return time.Now().Sub(lastAddTime) <= tr.tlMgr.config.MaxTaskqueueIdleTime()
+	return time.Now().UTC().Sub(lastAddTime) <= tr.tlMgr.config.MaxTaskqueueIdleTime()
 }
 
 func (tr *taskReader) logger() log.Logger {

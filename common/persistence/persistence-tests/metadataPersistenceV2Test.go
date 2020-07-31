@@ -575,7 +575,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	failoverEndTime := time.Now()
+	failoverEndTime := time.Now().UTC()
 	isGlobalNamespace := true
 	clusters := []string{clusterActive, clusterStandby}
 

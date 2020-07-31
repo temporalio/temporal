@@ -193,7 +193,7 @@ func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	task, err := newNDCReplicationTask(
 		r.clusterMetadata,
 		r.historySerializer,
@@ -581,7 +581,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithCon
 	releaseFn(nil)
 
 	// step 2
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	task, newTask, err := task.splitTask(startTime)
 	if err != nil {
 		return err

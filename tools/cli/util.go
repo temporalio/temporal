@@ -631,10 +631,10 @@ func parseTime(timeStr string, defaultValue time.Time, now time.Time) time.Time 
 // - month/M
 // - year/y
 // For example, possible input values, and their result:
-// - "3d" or "3day" --> three days --> time.Now().Add(-3 * 24 * time.Hour)
-// - "2m" or "2minute" --> two minutes --> time.Now().Add(-2 * time.Minute)
-// - "1w" or "1week" --> one week --> time.Now().Add(-7 * 24 * time.Hour)
-// - "30s" or "30second" --> thirty seconds --> time.Now().Add(-30 * time.Second)
+// - "3d" or "3day" --> three days --> time.Now().UTC().Add(-3 * 24 * time.Hour)
+// - "2m" or "2minute" --> two minutes --> time.Now().UTC().Add(-2 * time.Minute)
+// - "1w" or "1week" --> one week --> time.Now().UTC().Add(-7 * 24 * time.Hour)
+// - "30s" or "30second" --> thirty seconds --> time.Now().UTC().Add(-30 * time.Second)
 // Note: Duration strings are case-sensitive, and should be used as mentioned above only.
 // Limitation: Value of numerical multiplier, X should be in b/w 0 - 1e6 (1 million), boundary values excluded i.e.
 // 0 < X < 1e6. Also, the maximum time in the past can be 1 January 1970 00:00:00 UTC (epoch time),

@@ -481,8 +481,8 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_TIMER {
-		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now())
-		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now())
+		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
+		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
 		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -624,7 +624,7 @@ func AdminListClusterMembership(c *cli.Context) {
 		ErrorAndExit("Failed to map membership role", err)
 	}
 	// TODO: refactor this: parseTime shouldn't be used for duration.
-	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now()).UnixNano()
+	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
 	pFactory := CreatePersistenceFactory(c)

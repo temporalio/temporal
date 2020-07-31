@@ -57,7 +57,7 @@ func NewRealTimeSource() *RealTimeSource {
 
 // Now return the real current time
 func (ts *RealTimeSource) Now() time.Time {
-	return time.Now()
+	return time.Now().UTC()
 }
 
 // NewEventTimeSource returns a time source that servers

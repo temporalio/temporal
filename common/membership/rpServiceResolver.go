@@ -233,7 +233,7 @@ func (r *ringpopServiceResolver) refresh() error {
 func (r *ringpopServiceResolver) refreshWithBackoff() error {
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
-	if r.lastRefreshTime.After(time.Now().Add(-minRefreshInternal)) {
+	if r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
 		// refresh too frequently
 		return nil
 	}
@@ -258,7 +258,7 @@ func (r *ringpopServiceResolver) refreshNoLock() error {
 	}
 
 	r.membersMap = newMembersMap
-	r.lastRefreshTime = time.Now()
+	r.lastRefreshTime = time.Now().UTC()
 	r.ringValue.Store(ring)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 	return nil

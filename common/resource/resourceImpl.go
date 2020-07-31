@@ -379,7 +379,7 @@ func (h *Impl) Start() {
 	// The service is now started up
 	h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 	// seed the random generator once for this service
-	rand.Seed(time.Now().UTC().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 }
 
 // Stop stops all resources

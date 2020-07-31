@@ -143,7 +143,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
 					ScheduleID:          2,
-					VisibilityTimestamp: time.Now(),
+					VisibilityTimestamp: time.Now().UTC(),
 				},
 			},
 			TimerTasks: nil,
@@ -248,7 +248,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
 					ScheduleID:          2,
-					VisibilityTimestamp: time.Now(),
+					VisibilityTimestamp: time.Now().UTC(),
 				},
 			},
 			TimerTasks: nil,
@@ -822,7 +822,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	currTransTasks := []p.Task{
 		&p.CloseExecutionTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Now(),
+			VisibilityTimestamp: time.Now().UTC(),
 			Version:             100,
 		},
 	}
@@ -830,7 +830,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	currTimerTasks := []p.Task{
 		&p.DeleteHistoryEventTask{
 			TaskID:              20,
-			VisibilityTimestamp: time.Now(),
+			VisibilityTimestamp: time.Now().UTC(),
 			Version:             101,
 		},
 	}
@@ -859,7 +859,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		&p.WorkflowTask{
 			TaskID:              s.GetNextSequenceNumber(),
 			NamespaceID:         namespaceID,
-			VisibilityTimestamp: time.Now(),
+			VisibilityTimestamp: time.Now().UTC(),
 			ScheduleID:          13,
 			Version:             200,
 		},
@@ -868,7 +868,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	insertTimerTasks := []p.Task{
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Now().Add(time.Minute),
+			VisibilityTimestamp: time.Now().UTC().Add(time.Minute),
 			Version:             201,
 		},
 	}
@@ -1275,7 +1275,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		&p.WorkflowTask{
 			TaskID:              s.GetNextSequenceNumber(),
 			NamespaceID:         namespaceID,
-			VisibilityTimestamp: time.Now(),
+			VisibilityTimestamp: time.Now().UTC(),
 			ScheduleID:          13,
 			Version:             200,
 		},
@@ -1284,7 +1284,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	insertTimerTasks := []p.Task{
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Now().Add(time.Minute),
+			VisibilityTimestamp: time.Now().UTC().Add(time.Minute),
 			Version:             201,
 		},
 	}
@@ -1577,7 +1577,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		&p.WorkflowTask{
 			TaskID:              s.GetNextSequenceNumber(),
 			NamespaceID:         namespaceID,
-			VisibilityTimestamp: time.Now(),
+			VisibilityTimestamp: time.Now().UTC(),
 			ScheduleID:          13,
 			Version:             200,
 		},
@@ -1586,7 +1586,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	insertTimerTasks := []p.Task{
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Now().Add(time.Minute),
+			VisibilityTimestamp: time.Now().UTC().Add(time.Minute),
 			Version:             201,
 		},
 	}

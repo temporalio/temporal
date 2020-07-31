@@ -260,7 +260,7 @@ SubmitLoop:
 func (p *replicationTaskProcessor) initLogger(msg messaging.Message) log.Logger {
 	return p.logger.WithTags(tag.KafkaPartition(msg.Partition()),
 		tag.KafkaOffset(msg.Offset()),
-		tag.AttemptStart(time.Now()))
+		tag.AttemptStart(time.Now().UTC()))
 }
 
 func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logger) {
@@ -273,7 +273,7 @@ func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logg
 
 func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, logger log.Logger) {
 	p.updateFailureMetric(metrics.ReplicatorScope, err)
-	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now()))
+	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now().UTC()))
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	if err = msg.Nack(); err != nil {
