@@ -47,7 +47,6 @@ import (
 	archiverproto "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // encoding & decoding util
@@ -272,9 +271,9 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *wor
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.StartTimestamp)),
-		ExecutionTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(record.ExecutionTimestamp)),
-		CloseTime:     timestamp.TimePtr(timestamp.UnixOrZeroTime(record.CloseTimestamp)),
+		StartTime:     record.StartTime,
+		ExecutionTime: record.ExecutionTime,
+		CloseTime:     record.CloseTime,
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

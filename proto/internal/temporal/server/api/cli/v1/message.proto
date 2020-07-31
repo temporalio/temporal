@@ -24,6 +24,10 @@ package temporal.server.api.cli.v1;
 
 option go_package = "go.temporal.io/server/api/cli/v1;cli";
 
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -44,7 +48,7 @@ message WorkflowExecutionInfo {
     int64 history_length = 6;
     string parent_namespace_id = 7;
     temporal.api.common.v1.WorkflowExecution parent_execution = 8;
-    int64 execution_time = 9;
+    google.protobuf.Timestamp execution_time = 9 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Memo memo = 10;
     SearchAttributes search_attributes = 11;
     temporal.api.workflow.v1.ResetPoints auto_reset_points = 12;

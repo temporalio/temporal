@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -65,8 +65,8 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   1580896574804475000,
-			CloseTimestamp:   1580896575946478000,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1580896574804475000),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(1580896575946478000),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			HistoryLength:    36,
 		},
@@ -182,16 +182,16 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 
 	request := &archiverproto.ArchiveVisibilityRequest{
-		Namespace:          testNamespace,
-		NamespaceId:        testNamespaceID,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     time.Now().UnixNano(),
-		ExecutionTimestamp: 0, // workflow without backoff
-		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		HistoryLength:      int64(101),
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, request)

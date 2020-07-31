@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -154,9 +155,9 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		WorkflowId:         request.WorkflowID,
 		RunId:              request.RunID,
 		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		CloseTimestamp:     request.CloseTimestamp,
+		StartTime:          timestamp.UnixOrZeroTimePtr(request.StartTimestamp),
+		ExecutionTime:      timestamp.UnixOrZeroTimePtr(request.ExecutionTimestamp),
+		CloseTime:          timestamp.UnixOrZeroTimePtr(request.CloseTimestamp),
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -153,10 +154,10 @@ func (v *visibilityArchiver) Archive(
 }
 func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []indexToArchive {
 	return []indexToArchive{
-		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
-		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, request.StartTimestamp},
-		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
-		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, request.StartTimestamp},
+		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime).UnixNano()},
+		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime).UnixNano()},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime).UnixNano()},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime).UnixNano()},
 	}
 }
 
