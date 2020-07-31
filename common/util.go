@@ -241,7 +241,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 func WorkflowIDToHistoryShard(namespaceID, workflowID string, numberOfShards int) int {
 	idBytes := []byte(namespaceID + "_" + workflowID)
 	hash := farm.Hash32(idBytes)
-	return int(hash % uint32(numberOfShards))
+	return int(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
 // PrettyPrintHistory prints history in human readable format

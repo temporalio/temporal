@@ -182,7 +182,7 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: map[int32]*replicationspb.ReplicationMessages{0: replicationMessage},
+			MessagesByShard: map[int32]*replicationspb.ReplicationMessages{1: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
