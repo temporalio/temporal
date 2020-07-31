@@ -134,8 +134,8 @@ func NewTestRingpopCluster(
 					HostID:        uuid.NewUUID(),
 					RPCAddress:    seedAddress,
 					RPCPort:       seedPort + 1,
-					SessionStart:  time.Now().UTC().UTC(),
-					LastHeartbeat: time.Now().UTC().UTC(),
+					SessionStart:  time.Now().UTC(),
+					LastHeartbeat: time.Now().UTC(),
 				}
 				res = &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember, badSeedMember}}
 			}
