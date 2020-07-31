@@ -28,7 +28,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -717,7 +716,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		})
 	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
+			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
 			TaskID:              request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_REPLICATION:

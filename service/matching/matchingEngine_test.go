@@ -314,8 +314,8 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 		},
 		EventStoreVersion: 0,
 		BranchToken:       nil,
-		ScheduledTime:     &time.Time{},
-		StartedTime:       &time.Time{},
+		ScheduledTime:     nil,
+		StartedTime:       nil,
 		Queries:           nil,
 	}
 
@@ -563,7 +563,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
 					}),
 			}
-			resp.StartedTimestamp = time.Now().UnixNano()
+			resp.StartedTime = timestamp.TimeNowPtrUtc()
 			return resp, nil
 		}).AnyTimes()
 

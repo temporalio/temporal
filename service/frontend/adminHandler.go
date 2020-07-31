@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/xdc"
@@ -242,10 +243,10 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardId:             request.GetShardId(),
-		Category:            request.GetCategory(),
-		TaskId:              request.GetTaskId(),
-		VisibilityTimestamp: request.GetVisibilityTimestamp(),
+		ShardId:        request.GetShardId(),
+		Category:       request.GetCategory(),
+		TaskId:         request.GetTaskId(),
+		VisibilityTime: timestamp.UnixOrZeroTimePtr(request.GetVisibilityTimestamp()),
 	})
 	return &adminservice.RemoveTaskResponse{}, err
 }
