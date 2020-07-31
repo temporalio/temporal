@@ -214,7 +214,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	}
 
 	now := time.Now()
-	evenType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
+	eventType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
 		ParentWorkflowNamespace:  testParentNamespace,
 		Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
@@ -225,7 +225,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		Version:    version,
 		EventId:    1,
 		EventTime:  &now,
-		EventType:  evenType,
+		EventType:  eventType,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: startWorkflowAttribute},
 	}
 

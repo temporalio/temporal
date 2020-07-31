@@ -547,7 +547,7 @@ func AdminRemoveTask(c *cli.Context) {
 		ShardId:             int32(shardID),
 		Category:            category,
 		TaskId:              taskID,
-		VisibilityTimestamp: visibilityTimestamp,
+		VisibilityTime: 	 timestamp.UnixOrZeroTimePtr(visibilityTimestamp),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
