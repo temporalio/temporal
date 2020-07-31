@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/api/persistenceblobs/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/checksum"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -165,7 +165,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := types.TimestampNow()
+	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
@@ -268,7 +268,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := types.TimestampNow()
+	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
@@ -679,7 +679,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		RunId:      runID,
 	}
 
-	currentTime := types.TimestampNow()
+	currentTime := time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)
 	txTasks := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
@@ -700,7 +700,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	},
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
+			VisibilityTimestamp: currentTime,
 		}}
 
 	task0, err0 := s.createWorkflowExecutionWithReplication(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3,
@@ -734,7 +734,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	taskT, err := s.GetTimerIndexTasks(2, false)
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
 	s.EqualValues(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[0].TaskType)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")
@@ -895,7 +895,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerId:    "id101",
-		ExpiryTime: currentTime,
+		ExpiryTime: &currentTime,
 		TaskStatus: 102,
 		StartedId:  103,
 	}}
@@ -959,11 +959,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(2, len(taskT), "Expected 2 timer task.")
 	s.EqualValues(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, taskT[0].TaskType)
 	s.Equal(int64(101), taskT[0].Version)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	s.EqualValues(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[1].TaskType)
 	s.Equal(int64(201), taskT[1].Version)
-	err = s.CompleteTimerTaskProto(taskT[1].VisibilityTime, taskT[1].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[1].VisibilityTime, taskT[1].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")
@@ -1111,7 +1111,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		RunId:      runID,
 	}
 
-	currentTime := types.TimestampNow()
+	currentTime := time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)
 	txTasks := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
@@ -1132,7 +1132,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	},
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
+			VisibilityTimestamp: currentTime,
 		}}
 
 	task0, err0 := s.createWorkflowExecutionWithReplication(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3,
@@ -1166,7 +1166,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	taskT, err := s.GetTimerIndexTasks(2, false)
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
 	s.EqualValues(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[0].TaskType)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")
@@ -1310,7 +1310,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerId:    "id101",
-		ExpiryTime: currentTime,
+		ExpiryTime: &currentTime,
 		TaskStatus: 102,
 		StartedId:  103,
 	}}
@@ -1371,7 +1371,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
 	s.EqualValues(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[0].TaskType)
 	s.Equal(int64(201), taskT[0].Version)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")
@@ -1518,11 +1518,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		RunId:      runID,
 	}
 
-	currentTime := types.TimestampNow()
+	currentTime := time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)
 	txTasks := []p.Task{
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
+			VisibilityTimestamp: currentTime,
 		}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", 20, 13, 3, 0, 2, txTasks)
@@ -1540,7 +1540,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	taskT, err := s.GetTimerIndexTasks(2, false)
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
 	s.Equal(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[0].TaskType)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")
@@ -1594,7 +1594,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerId:    "id101",
-		ExpiryTime: currentTime,
+		ExpiryTime: &currentTime,
 		TaskStatus: 102,
 		StartedId:  103,
 	}}
@@ -1638,7 +1638,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
 	s.EqualValues(enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT, taskT[0].TaskType)
 	s.Equal(int64(201), taskT[0].Version)
-	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTime, taskT[0].GetTaskId())
+	err = s.CompleteTimerTask(*taskT[0].VisibilityTime, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)
 	s.Equal(0, len(taskT), "Expected 0 timer task.")

@@ -28,7 +28,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -130,7 +130,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		TaskId:          12345,
-		VisibilityTime:  types.TimestampNow(),
+		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),

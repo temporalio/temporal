@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -141,7 +142,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 		errorsOnSplitting := 0
 		// send all tasks
 		for _, br := range resp.Branches {
-			if time.Now().Add(-cleanUpThreshold).Before(br.ForkTime) {
+			if time.Now().Add(-cleanUpThreshold).Before(timestamp.TimeValue(br.ForkTime)) {
 				batchCount--
 				skips++
 				s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)

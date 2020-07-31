@@ -28,9 +28,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -103,9 +102,9 @@ func (s *queueAckMgrSuite) SetupTest() {
 			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtcAddSeconds(-8),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 		},
 		config,
@@ -292,9 +291,9 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*types.Timestamp{
-					cluster.TestCurrentClusterName:     types.TimestampNow(),
-					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				ClusterTimerAckLevel: map[string]*time.Time{
+					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
+					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
 		},
 		config,
