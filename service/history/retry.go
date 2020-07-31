@@ -45,7 +45,7 @@ const defaultMaximumAttempts = 0
 func getBackoffInterval(
 	now time.Time,
 	expirationTime time.Time,
-	currentAttemptCounterValue int64,
+	currentAttemptCounterValue int32,
 	maxAttempts int32,
 	initInterval time.Duration,
 	maxInterval time.Duration,
@@ -74,7 +74,7 @@ func getBackoffInterval(
 	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
 	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
 	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 time already).
-	if maxAttempts > 0 && currentAttemptCounterValue+1 > int64(maxAttempts) {
+	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 

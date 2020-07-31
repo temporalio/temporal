@@ -75,17 +75,17 @@ type (
 
 // PollAndProcessWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, int64(1))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, 1)
 }
 
 // PollAndProcessWorkflowTaskWithSticky for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, int64(1))
+	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, 1)
 }
 
 // PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(1), 1)
+	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, 1, 1)
 }
 
 // PollAndProcessWorkflowTaskWithAttempt for workflow tasks
@@ -94,7 +94,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttempt(
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 ) (isQueryTask bool, err error) {
 
 	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(
@@ -112,7 +112,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetry(
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 	retryCount int,
 ) (isQueryTask bool, err error) {
 
@@ -134,7 +134,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWor
 	dropTask bool,
 	pollStickyTaskQueue bool,
 	respondStickyTaskQueue bool,
-	workflowTaskAttempt int64,
+	workflowTaskAttempt int32,
 	retryCount int,
 	forceCreateNewWorkflowTask bool,
 	queryResult *querypb.WorkflowQueryResult,
