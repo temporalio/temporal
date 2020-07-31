@@ -301,9 +301,9 @@ func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
 		PreviousStartedEventId: scheduleID,
-		StartedEventId:         0, // TODO should be common.EmptyEventID
+		StartedEventId:         common.EmptyEventID,
 		Attempt:                1,
-		NextEventId:            0, // TODO should be common.EmptyEventID
+		NextEventId:            common.EmptyEventID,
 		BacklogCountHint:       1,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
