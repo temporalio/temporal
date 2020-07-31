@@ -195,8 +195,12 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 		return metadata.currentClusterName
 	}
 
+	initialFailoverVersion := failoverVersion % metadata.failoverVersionIncrement
 	// Failover version starts with 1.  Zero is an invalid value for failover version
-	initialFailoverVersion := (failoverVersion % metadata.failoverVersionIncrement) + 1
+	if initialFailoverVersion == common.EmptyVersion {
+		initialFailoverVersion = metadata.failoverVersionIncrement
+	}
+
 	clusterName, ok := metadata.versionToClusterName[initialFailoverVersion]
 	if !ok {
 		panic(fmt.Sprintf(
