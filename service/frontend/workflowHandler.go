@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -76,6 +77,10 @@ const (
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
+
+var (
+	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
+)
 
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
@@ -2340,7 +2345,11 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
+	}
+
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
 	}
 
 	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
@@ -2436,7 +2445,11 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(errStartTimeFilterNotSet, scope)
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
+	}
+
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
+		request.GetStartTimeFilter().LatestTime = &maxTime
 	}
 
 	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {

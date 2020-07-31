@@ -58,7 +58,6 @@ var (
 	errTaskQueueTooLong                                   = serviceerror.NewInvalidArgument("TaskQueue length exceeds limit.")
 	errRequestIDTooLong                                   = serviceerror.NewInvalidArgument("RequestId length exceeds limit.")
 	errIdentityTooLong                                    = serviceerror.NewInvalidArgument("Identity length exceeds limit.")
-	errStartTimeFilterNotSet                              = serviceerror.NewInvalidArgument("StartTimeFilter is not set on request.")
 	errEarliestTimeIsGreaterThanLatestTime                = serviceerror.NewInvalidArgument("EarliestTime in StartTimeFilter should not be larger than LatestTime.")
 	errPageSizeTooBig                                     = serviceerror.NewInvalidArgument("PageSize is larger than allowed %d.")
 	errClusterIsNotConfiguredForVisibilityArchival        = serviceerror.NewInvalidArgument("Cluster is not configured for visibility archival.")
