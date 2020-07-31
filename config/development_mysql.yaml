@@ -127,4 +127,4 @@ kafka:
       cluster: test
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "127.0.0.1:7233"
