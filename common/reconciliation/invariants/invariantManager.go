@@ -37,9 +37,10 @@ type (
 func NewInvariantManager(
 	invariantCollections []common.InvariantCollection,
 	pr common.PersistenceRetryer,
+	scanType common.ScanType,
 ) common.InvariantManager {
 	manager := &invariantManager{}
-	manager.invariants, manager.types = flattenInvariants(invariantCollections, pr)
+	manager.invariants, manager.types = flattenInvariants(invariantCollections, pr, scanType)
 	return manager
 }
 
@@ -127,14 +128,15 @@ func (i *invariantManager) nextCheckResultType(
 func flattenInvariants(
 	collections []common.InvariantCollection,
 	pr common.PersistenceRetryer,
+	scanType common.ScanType,
 ) ([]common.Invariant, []common.InvariantType) {
 	var ivs []common.Invariant
 	for _, collection := range collections {
 		switch collection {
 		case common.InvariantCollectionHistory:
-			ivs = append(ivs, getHistoryCollection(pr)...)
+			ivs = append(ivs, getHistoryCollection(pr, scanType)...)
 		case common.InvariantCollectionMutableState:
-			ivs = append(ivs, getMutableStateCollection(pr)...)
+			ivs = append(ivs, getMutableStateCollection(pr, scanType)...)
 		}
 	}
 	types := make([]common.InvariantType, len(ivs), len(ivs))
@@ -144,10 +146,24 @@ func flattenInvariants(
 	return ivs, types
 }
 
-func getHistoryCollection(pr common.PersistenceRetryer) []common.Invariant {
-	return []common.Invariant{NewHistoryExists(pr)}
+func getHistoryCollection(pr common.PersistenceRetryer, scanType common.ScanType) []common.Invariant {
+	switch scanType {
+	case common.ConcreteExecutionType:
+		return []common.Invariant{NewHistoryExists(pr)}
+	case common.CurrentExecutionType:
+		return []common.Invariant{}
+	default:
+		panic("unknown scanType")
+	}
 }
 
-func getMutableStateCollection(pr common.PersistenceRetryer) []common.Invariant {
-	return []common.Invariant{NewOpenCurrentExecution(pr)}
+func getMutableStateCollection(pr common.PersistenceRetryer, scanType common.ScanType) []common.Invariant {
+	switch scanType {
+	case common.ConcreteExecutionType:
+		return []common.Invariant{NewOpenCurrentExecution(pr)}
+	case common.CurrentExecutionType:
+		return []common.Invariant{NewConcreteExecutionExists(pr)}
+	default:
+		panic("unknown scanType")
+	}
 }

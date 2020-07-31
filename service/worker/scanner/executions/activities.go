@@ -64,6 +64,7 @@ type (
 	// ScannerConfigActivityParams is the parameter for ScannerConfigActivity
 	ScannerConfigActivityParams struct {
 		Overwrites ScannerWorkflowConfigOverwrites
+		ScanType   common.ScanType
 	}
 
 	// ScanShardActivityParams is the parameter for ScanShardActivity
@@ -101,12 +102,14 @@ type (
 		ScannerWorkflowWorkflowID string
 		ScannerWorkflowRunID      string
 		StartingShardID           *int
+		ScanType                  common.ScanType
 	}
 
 	// FixShardActivityParams is the parameter for FixShardActivity
 	FixShardActivityParams struct {
 		CorruptedKeysEntries        []CorruptedKeysEntry
 		ResolvedFixerWorkflowConfig ResolvedFixerWorkflowConfig
+		ScanType                    common.ScanType
 	}
 
 	// FixerCorruptedKeysActivityResult is the result of FixerCorruptedKeysActivity
@@ -141,7 +144,7 @@ func ScannerEmitMetricsActivity(
 	activityCtx context.Context,
 	params ScannerEmitMetricsActivityParams,
 ) error {
-	scope := activityCtx.Value(ScannerContextKey).(ScannerContext).Scope.
+	scope := activityCtx.Value(ScanTypeScannerContextKeyMap[params.ScanType]).(ScannerContext).Scope.
 		Tagged(metrics.ActivityTypeTag(scanTypePrefixMap[params.ScanType] + ScannerEmitMetricsActivityName))
 	scope.UpdateGauge(metrics.CadenceShardSuccessGauge, float64(params.ShardSuccessCount))
 	scope.UpdateGauge(metrics.CadenceShardFailureGauge, float64(params.ShardControlFlowFailureCount))
@@ -181,7 +184,7 @@ func ScanShardActivity(
 	}
 	for i := heartbeatDetails.LastShardIndexHandled + 1; i < len(params.Shards); i++ {
 		currentShardID := params.Shards[i]
-		shardReport, err := scanShard(activityCtx, params, currentShardID, heartbeatDetails, params.ScanType)
+		shardReport, err := scanShard(activityCtx, params, currentShardID, heartbeatDetails)
 		if err != nil {
 			return nil, err
 		}
@@ -198,9 +201,8 @@ func scanShard(
 	params ScanShardActivityParams,
 	shardID int,
 	heartbeatDetails ScanShardHeartbeatDetails,
-	scanType common.ScanType,
 ) (*common.ShardScanReport, error) {
-	ctx := activityCtx.Value(ScannerContextKey).(ScannerContext)
+	ctx := activityCtx.Value(ScanTypeScannerContextKeyMap[params.ScanType]).(ScannerContext)
 	resources := ctx.Resource
 	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(scanTypePrefixMap[params.ScanType] + ScannerScanShardActivityName))
 	sw := scope.StartTimer(metrics.CadenceLatency)
@@ -226,7 +228,7 @@ func scanShard(
 		params.BlobstoreFlushThreshold,
 		collections,
 		func() { activity.RecordHeartbeat(activityCtx, heartbeatDetails) },
-		scanType)
+		params.ScanType)
 	report := scanner.Scan()
 	if report.Result.ControlFlowFailure != nil {
 		scope.IncCounter(metrics.CadenceFailures)
@@ -239,7 +241,7 @@ func ScannerConfigActivity(
 	activityCtx context.Context,
 	params ScannerConfigActivityParams,
 ) (ResolvedScannerWorkflowConfig, error) {
-	dc := activityCtx.Value(ScannerContextKey).(ScannerContext).ScannerWorkflowDynamicConfig
+	dc := activityCtx.Value(ScanTypeScannerContextKeyMap[params.ScanType]).(ScannerContext).ScannerWorkflowDynamicConfig
 	result := ResolvedScannerWorkflowConfig{
 		Enabled:                 dc.Enabled(),
 		Concurrency:             dc.Concurrency(),
@@ -281,7 +283,7 @@ func FixerCorruptedKeysActivity(
 	activityCtx context.Context,
 	params FixerCorruptedKeysActivityParams,
 ) (*FixerCorruptedKeysActivityResult, error) {
-	resource := activityCtx.Value(FixerContextKey).(FixerContext).Resource
+	resource := activityCtx.Value(ScanTypeFixerContextKeyMap[params.ScanType]).(FixerContext).Resource
 	client := resource.GetSDKClient()
 	descResp, err := client.DescribeWorkflowExecution(activityCtx, &shared.DescribeWorkflowExecutionRequest{
 		Domain: c.StringPtr(c.SystemLocalDomainName),
@@ -380,7 +382,7 @@ func fixShard(
 	corruptedKeys common.Keys,
 	heartbeatDetails FixShardHeartbeatDetails,
 ) (*common.ShardFixReport, error) {
-	ctx := activityCtx.Value(FixerContextKey).(FixerContext)
+	ctx := activityCtx.Value(ScanTypeFixerContextKeyMap[params.ScanType]).(FixerContext)
 	resources := ctx.Resource
 	scope := ctx.Scope.Tagged(metrics.ActivityTypeTag(FixerFixShardActivityName))
 	sw := scope.StartTimer(metrics.CadenceLatency)
@@ -405,7 +407,8 @@ func fixShard(
 		corruptedKeys,
 		params.ResolvedFixerWorkflowConfig.BlobstoreFlushThreshold,
 		collections,
-		func() { activity.RecordHeartbeat(activityCtx, heartbeatDetails) })
+		func() { activity.RecordHeartbeat(activityCtx, heartbeatDetails) },
+		params.ScanType)
 	report := fixer.Fix()
 	if report.Result.ControlFlowFailure != nil {
 		scope.IncCounter(metrics.CadenceFailures)

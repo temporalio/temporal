@@ -57,12 +57,19 @@ const (
 	historyScannerTaskListName   = "cadence-sys-history-scanner-tasklist-0"
 	historyScavengerActivityName = "cadence-sys-history-scanner-scvg-activity"
 
-	executionsScannerWFID         = "cadence-sys-executions-scanner"
-	executionsScannerWFTypeName   = "cadence-sys-executions-scanner-workflow"
-	executionsScannerTaskListName = "cadence-sys-executions-scanner-tasklist-0"
+	concreteExecutionsScannerWFID         = "cadence-sys-executions-scanner"
+	concreteExecutionsScannerWFTypeName   = "cadence-sys-executions-scanner-workflow"
+	concreteExecutionsScannerTaskListName = "cadence-sys-executions-scanner-tasklist-0"
 
-	executionsFixerWFTypeName   = "cadence-sys-executions-fixer-workflow"
-	executionsFixerTaskListName = "cadence-sys-executions-fixer-tasklist-0"
+	concreteExecutionsFixerWFTypeName   = "cadence-sys-executions-fixer-workflow"
+	concreteExecutionsFixerTaskListName = "cadence-sys-executions-fixer-tasklist-0"
+
+	currentExecutionsScannerWFID         = "cadence-sys-current-executions-scanner"
+	currentExecutionsScannerWFTypeName   = "cadence-sys-current-executions-scanner-workflow"
+	currentExecutionsScannerTaskListName = "cadence-sys-current-executions-scanner-tasklist-0"
+
+	currentExecutionsFixerWFTypeName   = "cadence-sys-current-executions-fixer-workflow"
+	currentExecutionsFixerTaskListName = "cadence-sys-current-executions-fixer-tasklist-0"
 )
 
 var (
@@ -95,9 +102,16 @@ var (
 		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
 		CronSchedule:                 "0 */12 * * *",
 	}
-	executionsScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                           executionsScannerWFID,
-		TaskList:                     executionsScannerTaskListName,
+	concreteExecutionsScannerWFStartOptions = cclient.StartWorkflowOptions{
+		ID:                           concreteExecutionsScannerWFID,
+		TaskList:                     concreteExecutionsScannerTaskListName,
+		ExecutionStartToCloseTimeout: infiniteDuration,
+		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:                 "* * * * *",
+	}
+	currentExecutionsScannerWFStartOptions = cclient.StartWorkflowOptions{
+		ID:                           currentExecutionsScannerWFID,
+		TaskList:                     currentExecutionsScannerTaskListName,
 		ExecutionStartToCloseTimeout: infiniteDuration,
 		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
 		CronSchedule:                 "* * * * *",
@@ -111,12 +125,14 @@ func init() {
 	workflow.RegisterWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
 	activity.RegisterWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 
-	workflow.RegisterWithOptions(executions.ScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
+	workflow.RegisterWithOptions(executions.ScannerWorkflow, workflow.RegisterOptions{Name: concreteExecutionsScannerWFTypeName})
 	activity.RegisterWithOptions(executions.ScannerEmitMetricsActivity, activity.RegisterOptions{Name: executions.ScannerEmitMetricsActivityName})
 	activity.RegisterWithOptions(executions.ScanShardActivity, activity.RegisterOptions{Name: executions.ScannerScanShardActivityName})
 	activity.RegisterWithOptions(executions.ScannerConfigActivity, activity.RegisterOptions{Name: executions.ScannerConfigActivityName})
+	workflow.RegisterWithOptions(executions.ScannerWorkflow, workflow.RegisterOptions{Name: currentExecutionsScannerWFTypeName})
 
-	workflow.RegisterWithOptions(executions.FixerWorkflow, workflow.RegisterOptions{Name: executionsFixerWFTypeName})
+	workflow.RegisterWithOptions(executions.FixerWorkflow, workflow.RegisterOptions{Name: concreteExecutionsFixerWFTypeName})
+	workflow.RegisterWithOptions(executions.FixerWorkflow, workflow.RegisterOptions{Name: currentExecutionsFixerWFTypeName})
 	activity.RegisterWithOptions(executions.FixerCorruptedKeysActivity, activity.RegisterOptions{Name: executions.FixerCorruptedKeysActivityName})
 	activity.RegisterWithOptions(executions.FixShardActivity, activity.RegisterOptions{Name: executions.FixerFixShardActivityName})
 }

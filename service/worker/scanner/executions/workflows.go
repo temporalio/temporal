@@ -33,10 +33,14 @@ import (
 )
 
 const (
-	// ScannerContextKey is the key used to access ScannerContext in activities
-	ScannerContextKey = ContextKey(0)
-	// FixerContextKey is the key used to access FixerContext in activities
-	FixerContextKey = ContextKey(1)
+	// ConcreteScannerContextKey is the key used to access ScannerContext in activities for concrete executions
+	ConcreteScannerContextKey = ContextKey(0)
+	// ConcreteFixerContextKey is the key used to access FixerContext in activities for concrete executions
+	ConcreteFixerContextKey = ContextKey(1)
+	// ConcreteScannerContextKey is the key used to access ScannerContext in activities for current executions
+	CurrentScannerContextKey = ContextKey(2)
+	// ConcreteFixerContextKey is the key used to access FixerContext in activities for current executions
+	CurrentFixerContextKey = ContextKey(3)
 
 	// ShardReportQuery is the query name for the query used to get a single shard's report
 	ShardReportQuery = "shard_report"
@@ -64,18 +68,28 @@ const (
 	maxShardQueryResult = 1000
 )
 
+var ScanTypeScannerContextKeyMap = map[common.ScanType]interface{}{
+	common.ConcreteExecutionType: ConcreteScannerContextKey,
+	common.CurrentExecutionType:  CurrentScannerContextKey,
+}
+
+var ScanTypeFixerContextKeyMap = map[common.ScanType]interface{}{
+	common.ConcreteExecutionType: ConcreteFixerContextKey,
+	common.CurrentExecutionType:  CurrentFixerContextKey,
+}
+
 type (
 	// ContextKey is the type which identifies context keys
 	ContextKey int
 
-	// ScannerContext is the resource that is available in activities under ScannerContextKey context key
+	// ScannerContext is the resource that is available in activities under ConcreteScannerContextKey context key
 	ScannerContext struct {
 		Resource                     resource.Resource
 		Scope                        metrics.Scope
 		ScannerWorkflowDynamicConfig *ScannerWorkflowDynamicConfig
 	}
 
-	// FixerContext is the resource that is available to activities under FixerContextKey
+	// FixerContext is the resource that is available to activities under ConcreteFixerContextKey
 	FixerContext struct {
 		Resource resource.Resource
 		Scope    metrics.Scope
@@ -93,6 +107,7 @@ type (
 		ScannerWorkflowWorkflowID     string
 		ScannerWorkflowRunID          string
 		FixerWorkflowConfigOverwrites FixerWorkflowConfigOverwrites
+		ScanType                      common.ScanType
 	}
 
 	// Shards identify the shards that should be scanned.
@@ -237,7 +252,7 @@ func (s Shards) Flatten() ([]int, int, int) {
 	return shardList, min, max
 }
 
-// ScannerWorkflow is the workflow that scans over all concrete executions
+// ScannerWorkflow is the workflow that scans over all executions for the given scan type
 func ScannerWorkflow(
 	ctx workflow.Context,
 	params ScannerWorkflowParams,
@@ -282,6 +297,7 @@ func ScannerWorkflow(
 	var resolvedConfig ResolvedScannerWorkflowConfig
 	if err := workflow.ExecuteActivity(activityCtx, ScannerConfigActivityName, ScannerConfigActivityParams{
 		Overwrites: params.ScannerWorkflowConfigOverwrites,
+		ScanType:   params.ScanType,
 	}).Get(ctx, &resolvedConfig); err != nil {
 		return err
 	}
@@ -404,6 +420,7 @@ func FixerWorkflow(
 				if err := workflow.ExecuteActivity(activityCtx, FixerFixShardActivityName, FixShardActivityParams{
 					CorruptedKeysEntries:        batch,
 					ResolvedFixerWorkflowConfig: resolvedConfig,
+					ScanType:                    params.ScanType,
 				}).Get(ctx, &reports); err != nil {
 					errStr := err.Error()
 					shardReportChan.Send(ctx, FixReportError{
