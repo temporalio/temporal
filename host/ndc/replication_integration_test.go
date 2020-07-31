@@ -44,7 +44,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	taskqueue := "event-generator-taskQueue"
 
 	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 2)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()

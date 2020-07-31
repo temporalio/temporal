@@ -175,7 +175,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	updated := false
 	var resp3 *workflowservice.DescribeNamespaceResponse
@@ -190,7 +190,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	}
 	s.True(updated)
 	s.NotNil(resp3)
-	s.Equal(int64(1), resp3.GetFailoverVersion())
+	s.Equal(int64(2), resp3.GetFailoverVersion())
 
 	// start workflow in new cluster
 	id := "integration-namespace-failover-test"
@@ -432,7 +432,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
@@ -660,7 +660,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -693,7 +693,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[0], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(10), updateResp.GetFailoverVersion())
+	s.Equal(int64(11), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessWorkflowTask(true, false)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -805,7 +805,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
@@ -950,7 +950,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
@@ -1142,7 +1142,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
@@ -1282,7 +1282,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -1500,7 +1500,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -1674,7 +1674,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -1831,7 +1831,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -1924,7 +1924,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -2031,7 +2031,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfig.GetActiveClusterName())
-	s.Equal(int64(1), updateResp.GetFailoverVersion())
+	s.Equal(int64(2), updateResp.GetFailoverVersion())
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
