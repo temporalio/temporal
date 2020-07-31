@@ -23,6 +23,10 @@ syntax = "proto3";
 package temporal.server.api.adminservice.v1;
 option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
@@ -75,7 +79,7 @@ message RemoveTaskRequest {
     int32 shard_id = 1;
     temporal.server.api.enums.v1.TaskCategory category = 2;
     int64 task_id = 3;
-    int64 visibility_timestamp = 4;
+    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
 
 message RemoveTaskResponse {
