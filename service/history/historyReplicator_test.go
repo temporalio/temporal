@@ -1359,8 +1359,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_MissingReplicationInfo() {
 	runID := uuid.New()
 
-	currentLastWriteVersion := int64(10)
-	currentLastEventID := int64(98)
+	currentLastWriteVersion := int64(11)
+	currentLastEventID := int64(99)
 	currentReplicationInfoLastWriteVersion := currentLastWriteVersion - 10
 	currentReplicationInfoLastEventID := currentLastEventID - 11
 	incomingVersion := currentLastWriteVersion + 10
