@@ -2073,7 +2073,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			InitiatedId: task.GetScheduleId(),
 		},
 		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
-		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 	}
 }
 

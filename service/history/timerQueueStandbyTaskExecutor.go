@@ -133,7 +133,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			}
 
 			if isExpired := timerSequence.isExpired(
-				*timerTask.VisibilityTime,
+				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -191,7 +191,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			}
 
 			if isExpired := timerSequence.isExpired(
-				*timerTask.VisibilityTime,
+				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)

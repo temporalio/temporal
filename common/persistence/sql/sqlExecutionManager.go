@@ -1056,8 +1056,8 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 
 	if len(resp.Timers) > request.BatchSize {
 		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
+		if goVisibilityTimestamp == nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
 		}
 
 		pageToken = &timerTaskPageToken{
