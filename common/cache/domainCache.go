@@ -805,11 +805,6 @@ func (entry *DomainCacheEntry) IsDomainPendingActive() bool {
 	return entry.failoverEndTime != nil
 }
 
-// GetDomainFailoverEndTime returns domain failover end time if it exists
-func (entry *DomainCacheEntry) GetDomainFailoverEndTime() *int64 {
-	return entry.failoverEndTime
-}
-
 // GetReplicationPolicy return the derived workflow replication policy
 func (entry *DomainCacheEntry) GetReplicationPolicy() ReplicationPolicy {
 	// frontend guarantee that the clusters always contains the active domain, so if the # of clusters is 1

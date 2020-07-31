@@ -51,5 +51,6 @@ func NewDomainPendingActiveError(domainName string, currentCluster string) *work
 		),
 		DomainName:     domainName,
 		CurrentCluster: currentCluster,
+		ActiveCluster:  currentCluster,
 	}
 }

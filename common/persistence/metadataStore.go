@@ -136,6 +136,7 @@ func (m *metadataManagerImpl) ListDomains(request *ListDomainsRequest) (*ListDom
 			ConfigVersion:               d.ConfigVersion,
 			FailoverVersion:             d.FailoverVersion,
 			FailoverNotificationVersion: d.FailoverNotificationVersion,
+			FailoverEndTime:             d.FailoverEndTime,
 			PreviousFailoverVersion:     d.PreviousFailoverVersion,
 			NotificationVersion:         d.NotificationVersion,
 		})

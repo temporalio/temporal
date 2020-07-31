@@ -151,8 +151,8 @@ func (p *failoverWatcherImpl) handleFailoverTimeout(
 	domain *cache.DomainCacheEntry,
 ) {
 
-	failoverEndTime := domain.GetDomainFailoverEndTime()
-	if failoverEndTime != nil && p.timeSource.Now().After(time.Unix(0, *failoverEndTime)) {
+	failoverEndTime := domain.GetFailoverEndTime()
+	if domain.IsDomainPendingActive() && p.timeSource.Now().After(time.Unix(0, *failoverEndTime)) {
 		domainID := domain.GetInfo().ID
 		// force failover the domain without setting the failover timeout
 		if err := CleanPendingActiveState(

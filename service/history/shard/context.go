@@ -1306,6 +1306,7 @@ func (s *contextImpl) AddingPendingFailoverMarker(
 	}
 	// domain is active, the marker is expired
 	if domainEntry.IsDomainActive() || domainEntry.GetFailoverVersion() > marker.GetFailoverVersion() {
+		s.logger.Info("Skipped out-of-date failover marker", tag.WorkflowDomainName(domainEntry.GetInfo().Name))
 		return nil
 	}
 
@@ -1314,6 +1315,7 @@ func (s *contextImpl) AddingPendingFailoverMarker(
 
 	s.pendingFailoverMarkers = append(s.pendingFailoverMarkers, marker)
 	if err := s.updateFailoverMarkersInShardInfoLocked(); err != nil {
+		s.logger.Error("Failed to add failover marker.", tag.Error(err))
 		return err
 	}
 	return s.updateShardInfoLocked()
@@ -1352,6 +1354,7 @@ func (s *contextImpl) ValidateAndUpdateFailoverMarkers() ([]*replicator.Failover
 		}
 	}
 	if err := s.updateFailoverMarkersInShardInfoLocked(); err != nil {
+		s.logger.Error("Failed to update failover marker in shard.", tag.Error(err))
 		return nil, err
 	}
 	if err := s.updateShardInfoLocked(); err != nil {
