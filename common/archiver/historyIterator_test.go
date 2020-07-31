@@ -741,5 +741,5 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	size, err := e.EstimateSize(h)
 	s.NoError(err)
-	s.Equal(268, size)
+	s.Equal(266, size)
 }

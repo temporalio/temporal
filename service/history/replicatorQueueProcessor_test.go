@@ -296,7 +296,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityScheduleID := scheduleID
 	activityScheduledTime := time.Now()
 	activityStartedID := common.EmptyEventID
-	activityAttempt := int64(16384)
+	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
@@ -406,7 +406,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityStartedID := activityScheduleID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
-	activityAttempt := int64(16384)
+	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
