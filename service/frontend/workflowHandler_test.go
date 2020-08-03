@@ -450,6 +450,57 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
 }
 
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonEmptyRetryPolicyInitialized() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy:              &commonpb.RetryPolicy{},
+		RequestId:                uuid.New(),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
+	s.Equal(&commonpb.RetryPolicy{
+		BackoffCoefficient: 2.0,
+		InitialInterval:    timestamp.DurationPtr(time.Second),
+		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+	}, startWorkflowExecutionRequest.RetryPolicy)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNotInitialized() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RequestId:                uuid.New(),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
+	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
+}
+
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTimeout() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
