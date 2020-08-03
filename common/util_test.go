@@ -186,3 +186,18 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 		})
 	}
 }
+
+func Test_FromConfigToRetryPolicy(t *testing.T) {
+	options := map[string]interface{}{
+		"InitialIntervalInSeconds":   2,
+		"MaximumIntervalCoefficient": 100.0,
+		"BackoffCoefficient":         4.0,
+		"MaximumAttempts":            5,
+	}
+
+	defaultSettings := FromConfigToDefaultRetrySettings(options)
+	assert.Equal(t, int32(2), defaultSettings.InitialIntervalInSeconds)
+	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
+	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
+	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
+}

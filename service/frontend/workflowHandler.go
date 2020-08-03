@@ -87,15 +87,16 @@ type (
 	WorkflowHandler struct {
 		resource.Resource
 
-		shuttingDown              int32
-		healthStatus              int32
-		tokenSerializer           common.TaskTokenSerializer
-		rateLimiter               quotas.Policy
-		config                    *Config
-		versionChecker            headers.VersionChecker
-		namespaceHandler          namespace.Handler
-		visibilityQueryValidator  *validator.VisibilityQueryValidator
-		searchAttributesValidator *validator.SearchAttributesValidator
+		shuttingDown                 int32
+		healthStatus                 int32
+		tokenSerializer              common.TaskTokenSerializer
+		rateLimiter                  quotas.Policy
+		config                       *Config
+		versionChecker               headers.VersionChecker
+		namespaceHandler             namespace.Handler
+		visibilityQueryValidator     *validator.VisibilityQueryValidator
+		searchAttributesValidator    *validator.SearchAttributesValidator
+		defaultWorkflowRetrySettings common.DefaultRetrySettings
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -151,6 +152,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
+		defaultWorkflowRetrySettings: common.FromConfigToDefaultRetrySettings(config.DefaultWorkflowRetryPolicy()),
 	}
 
 	return handler
@@ -425,7 +427,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errWorkflowIDTooLong, scope)
 	}
 
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2153,7 +2155,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -3740,4 +3742,14 @@ func (hs HealthStatus) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+func (wh *WorkflowHandler) validateRetryPolicy(retryPolicy *commonpb.RetryPolicy) error {
+	if retryPolicy == nil {
+		// By default, if the user does not explicitly set a retry policy for a Workflow, do not perform any retries.
+		return nil
+	}
+
+	common.EnsureRetryPolicyDefaults(retryPolicy, wh.defaultWorkflowRetrySettings)
+	return common.ValidateRetryPolicy(retryPolicy)
 }

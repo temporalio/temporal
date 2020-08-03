@@ -79,6 +79,11 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	defaultInitialIntervalInSeconds   = 1
+	defaultMaximumIntervalCoefficient = 100.0
+	defaultBackoffCoefficient         = 2.0
+	defaultMaximumAttempts            = 0
+
 	contextExpireThreshold = 10 * time.Millisecond
 
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
@@ -394,6 +399,7 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		// nil policy is valid which means no retry
 		return nil
 	}
+
 	if policy.GetMaximumAttempts() == 1 {
 		// One maximum attempt effectively disable retries. Validating the
 		// rest of the arguments is pointless
@@ -415,6 +421,57 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 	}
 	return nil
+}
+
+func GetDefaultRetryPolicyConfigOptions() map[string]interface{} {
+	return map[string]interface{}{
+		"InitialIntervalInSeconds": defaultInitialIntervalInSeconds,
+		"MaximumIntervalInSeconds": defaultMaximumIntervalCoefficient,
+		"BackoffCoefficient":       defaultBackoffCoefficient,
+		"MaximumAttempts":          defaultMaximumAttempts,
+	}
+}
+
+func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRetrySettings {
+	defaultSettings := DefaultRetrySettings{
+		InitialIntervalInSeconds:   defaultInitialIntervalInSeconds,
+		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
+		BackoffCoefficient:         defaultBackoffCoefficient,
+		MaximumAttempts:            defaultMaximumAttempts,
+	}
+
+	initialIntervalInSeconds, ok := options["InitialIntervalInSeconds"]
+	if ok {
+		defaultSettings.InitialIntervalInSeconds = int32(initialIntervalInSeconds.(int))
+	}
+
+	maximumIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
+	if ok {
+		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
+	}
+
+	backoffCoefficient, ok := options["BackoffCoefficient"]
+	if ok {
+		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
+	}
+
+	maximumAttempts, ok := options["MaximumAttempts"]
+	if ok {
+		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
+	}
+
+	var empty commonpb.RetryPolicy
+	EnsureRetryPolicyDefaults(&empty, defaultSettings)
+	err := ValidateRetryPolicy(&empty)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Bad Default Retry Settings defined: %+v failed validation %v",
+				defaultSettings,
+				err))
+	}
+
+	return defaultSettings
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history

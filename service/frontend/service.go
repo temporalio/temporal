@@ -97,6 +97,10 @@ type Config struct {
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	// DefaultWorkflowRetryPolicy represents default values for unset fields on a Workflow's
+	// specified RetryPolicy
+	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFn
+
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
@@ -144,6 +148,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
 		EnableRPCReplication:                   dc.GetBoolProperty(dynamicconfig.FrontendEnableRPCReplication, false),
 		EnableCleanupReplicationTask:           dc.GetBoolProperty(dynamicconfig.FrontendEnableCleanupReplicationTask, true),
+		DefaultWorkflowRetryPolicy:             dc.GetMapProperty(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 	}
 }
 
