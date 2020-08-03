@@ -667,7 +667,7 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(attributes *commandpb
 		return nil
 	}
 
-	// Otherwise, for any unset fields on the retry policy, assume defaults
+	// Otherwise, for any unset fields on the retry policy, set with defaults
 	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
