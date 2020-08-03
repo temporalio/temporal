@@ -136,17 +136,17 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	return true
 }
 
-func getDefaultActivityRetryPolicyConfigOptions() map[string]interface{} {
+func getDefaultRetryPolicyConfigOptions() map[string]interface{} {
 	return map[string]interface{}{
-		"InitialIntervalInSeconds": 1,
-		"MaximumIntervalInSeconds": 100,
-		"BackoffCoefficient":       2.0,
-		"MaximumAttempts":          0,
+		"InitialIntervalInSeconds": defaultInitialIntervalInSeconds,
+		"MaximumIntervalInSeconds": defaultMaximumIntervalCoefficient,
+		"BackoffCoefficient":       defaultBackoffCoefficient,
+		"MaximumAttempts":          defaultMaximumAttempts,
 	}
 }
 
-func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) common.DefaultActivityRetrySettings {
-	defaultSettings := common.DefaultActivityRetrySettings{
+func fromConfigToDefaultRetrySettings(options map[string]interface{}) common.DefaultRetrySettings {
+	defaultSettings := common.DefaultRetrySettings{
 		InitialIntervalInSeconds:   defaultInitialIntervalInSeconds,
 		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
 		BackoffCoefficient:         defaultBackoffCoefficient,
@@ -179,7 +179,7 @@ func fromConfigToDefaultActivityRetrySettings(options map[string]interface{}) co
 	if err != nil {
 		panic(
 			fmt.Sprintf(
-				"Bad Default Activity Retry Settings defined: %+v failed validation %v",
+				"Bad Default Retry Settings defined: %+v failed validation %v",
 				defaultSettings,
 				err))
 	}

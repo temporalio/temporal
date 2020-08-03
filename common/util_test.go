@@ -92,7 +92,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 }
 
 func TestEnsureRetryPolicyDefaults(t *testing.T) {
-	defaultActivityRetrySettings := DefaultActivityRetrySettings{
+	defaultRetrySettings := DefaultRetrySettings{
 		InitialIntervalInSeconds:   1,
 		MaximumIntervalCoefficient: 100,
 		BackoffCoefficient:         2.0,
@@ -181,7 +181,7 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			EnsureRetryPolicyDefaults(tt.input, defaultActivityRetrySettings)
+			EnsureRetryPolicyDefaults(tt.input, defaultRetrySettings)
 			assert.Equal(t, tt.want, tt.input)
 		})
 	}

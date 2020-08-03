@@ -51,11 +51,12 @@ import (
 
 type (
 	commandAttrValidator struct {
-		namespaceCache               cache.NamespaceCache
-		config                       *Config
-		maxIDLengthLimit             int
-		searchAttributesValidator    *validator.SearchAttributesValidator
-		defaultActivityRetrySettings common.DefaultActivityRetrySettings
+		namespaceCache                    cache.NamespaceCache
+		config                            *Config
+		maxIDLengthLimit                  int
+		searchAttributesValidator         *validator.SearchAttributesValidator
+		defaultActivityRetrySettings      common.DefaultRetrySettings
+		defaultChildWorkflowRetrySettings common.DefaultRetrySettings
 	}
 
 	workflowSizeChecker struct {
@@ -96,7 +97,8 @@ func newCommandAttrValidator(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		defaultActivityRetrySettings: fromConfigToDefaultActivityRetrySettings(config.DefaultActivityRetryPolicy()),
+		defaultActivityRetrySettings:      fromConfigToDefaultRetrySettings(config.DefaultActivityRetryPolicy()),
+		defaultChildWorkflowRetrySettings: fromConfigToDefaultRetrySettings(config.DefaultChildWorkflowRetryPolicy()),
 	}
 }
 
@@ -590,7 +592,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+	if err := v.validateChildWorkflowRetryPolicy(attributes); err != nil {
 		return err
 	}
 
@@ -656,6 +658,17 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb
 	}
 
 	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
+	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+}
+
+func (v *commandAttrValidator) validateChildWorkflowRetryPolicy(attributes *commandpb.StartChildWorkflowExecutionCommandAttributes) error {
+	if attributes.RetryPolicy == nil {
+		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
+		return nil
+	}
+
+	// Otherwise, for any unset fields on the retry policy, assume defaults
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultChildWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 

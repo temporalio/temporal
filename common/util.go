@@ -370,7 +370,7 @@ func SortInt64Slice(slice []int64) {
 }
 
 // EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
-func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultActivityRetrySettings) {
+func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
 	if originalPolicy.GetMaximumAttempts() == 0 {
 		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
 	}

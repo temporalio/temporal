@@ -258,6 +258,7 @@ var keys = map[Key]string{
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
 	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
+	DefaultChildWorkflowRetryPolicy:                        "history.defaultChildWorkflowRetryPolicy",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -635,6 +636,9 @@ const (
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy
+	// DefaultChildWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
+	// where the user has set an explicit RetryPolicy, but not specified all the fields
+	DefaultChildWorkflowRetryPolicy
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
