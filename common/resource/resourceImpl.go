@@ -396,9 +396,6 @@ func (h *Impl) Stop() {
 	h.namespaceCache.Stop()
 	h.membershipMonitor.Stop()
 	h.ringpopChannel.Close()
-	if err := h.grpcListener.Close(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to close gRPC listener")
-	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
 	h.visibilityMgr.Close()

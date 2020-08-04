@@ -1194,11 +1194,9 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	childInfo *persistenceblobs.ChildExecutionInfo,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (string, error) {
-
-	now := t.shard.GetTimeSource().Now()
-	request := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId: task.GetTargetNamespaceId(),
-		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+	request := common.CreateHistoryStartWorkflowRequest(
+		task.GetTargetNamespaceId(),
+		&workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                targetNamespace,
 			WorkflowId:               attributes.WorkflowId,
 			WorkflowType:             attributes.WorkflowType,
@@ -1208,6 +1206,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
 			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
+
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             childInfo.CreateRequestId,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
@@ -1216,7 +1215,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 		},
-		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.GetNamespaceId(),
 			Namespace:   namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -1225,14 +1224,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			},
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(
-			attributes.GetCronSchedule(),
-			now,
-			now,
-		),
-		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
-		Attempt:                1,
-	}
+		t.shard.GetTimeSource().Now(),
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()

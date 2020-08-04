@@ -266,6 +266,7 @@ func (c *namespaceCache) Start() {
 
 // Start start the background refresh of namespace
 func (c *namespaceCache) Stop() {
+
 	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheStarted, namespaceCacheStopped) {
 		return
 	}
@@ -399,12 +400,11 @@ func (c *namespaceCache) refreshLoop() {
 			return
 		case <-timer.C:
 			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
-				select {
-				case <-c.shutdownChan:
+				c.logger.Error("Error refreshing namespace cache", tag.Error(err))
+				time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
+
+				if _, opened := <-c.shutdownChan; !opened {
 					return
-				default:
-					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
-					time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
 				}
 			}
 		}
