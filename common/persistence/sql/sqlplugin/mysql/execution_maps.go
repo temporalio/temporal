@@ -156,9 +156,17 @@ func expandBatchInsertQuery(q string, rowCount int) string {
 		b.WriteString(q[valStartIdx:valEndIdx])
 	}
 
-	// sqlx does not like VALUES() and is generating an artifact into the sql code.
-	// Removing that while writing the second half of the query.
-	b.WriteString(q[valEndIdx:strings.LastIndex(q, ",")])
+	// sqlx does not like VALUES() and is generating an artifact
+	// into the sql query when we don't use a semicolon when we don't terminate with a `;`.
+	// Removing that while writing the second half of the query if it exists.
+	lastIdx := strings.LastIndex(q, ",")
+	if lastIdx == -1  || lastIdx <= valEndIdx{
+		b.WriteString(q[valEndIdx:])
+	} else {
+		b.WriteString(q[valEndIdx:lastIdx])
+	}
+
+
 	return b.String()
 }
 
@@ -383,9 +391,10 @@ workflow_id = ? AND
 run_id = ?
 `
 
-	createSignalsRequestedSetQry = `INSERT IGNORE INTO signals_requested_sets
+	createSignalsRequestedSetQry = `INSERT INTO signals_requested_sets
 (shard_id, namespace_id, workflow_id, run_id, signal_id) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)`
+(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)
+ON DUPLICATE KEY UPDATE signal_id=VALUES(signal_id);`
 
 	deleteSignalsRequestedSetQry = `DELETE FROM signals_requested_sets
 WHERE 
@@ -404,7 +413,14 @@ run_id = ?`
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
 func (mdb *db) InsertIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedSetsRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(createSignalsRequestedSetQry, rows)
+	q, args, err := mdb.db.BindNamed(createSignalsRequestedSetQry, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	q = expandBatchInsertQuery(q, len(rows))
+
+	return mdb.conn.Exec(q, args...)
 }
 
 // SelectFromSignalsRequestedSets reads one or more rows from signals_requested_sets table
