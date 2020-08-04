@@ -165,3 +165,6 @@ const (
 	// TaskTypeReplication is the task type for replication task
 	TaskTypeReplication
 )
+
+// StickyTaskConditionFailedErrorMsg error msg for sticky task ConditionFailedError
+const StickyTaskConditionFailedErrorMsg = "StickyTaskConditionFailedError"
