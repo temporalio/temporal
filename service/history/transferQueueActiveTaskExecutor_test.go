@@ -2049,8 +2049,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}
-	now := s.timeSource.Now()
-.UTC()
+	now := s.timeSource.Now().UTC()
 	return &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: task.GetTargetNamespaceId(),
