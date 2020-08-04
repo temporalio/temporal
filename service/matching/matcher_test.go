@@ -406,8 +406,11 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
+	time.Sleep(time.Second)
+
 	t.NoError(t.matcher.MustOffer(ctx, task))
 	cancel()
+
 	t.NotNil(req)
 	t.NoError(err)
 	t.True(remoteSyncMatch)
