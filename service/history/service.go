@@ -201,11 +201,11 @@ type Config struct {
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
-	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFn
+	DefaultActivityRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
 
 	// DefaultWorkflowRetryPolicy specifies the out-of-box retry policy for
 	// any unset fields on a RetryPolicy configured on a Workflow
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFn
+	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
 
 	// Workflow task settings
 	// StickyTTL is to expire a sticky taskqueue if no update more than this duration
@@ -381,8 +381,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
-		DefaultActivityRetryPolicy:                       dc.GetMapProperty(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowRetryPolicy:                       dc.GetMapProperty(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultActivityRetryPolicy:                       dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:                       dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		ValidSearchAttributes:                            dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),

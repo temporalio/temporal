@@ -128,6 +128,9 @@ type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
 // StringPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithNamespaceFilter func(namespace string) string
 
+// MapPropertyFnWithNamespaceFilter is a wrapper to get map property from dynamic config
+type MapPropertyFnWithNamespaceFilter func(namespace string) map[string]interface{}
+
 // BoolPropertyFnWithNamespaceFilter is a wrapper to get bool property from dynamic config
 type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
 
@@ -354,6 +357,18 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 			c.logError(key, err)
 		}
 		c.logValue(key, val, defaultValue, stringCompareEquals)
+		return val
+	}
+}
+
+// GetMapPropertyFnWithNamespaceFilter gets property and asserts that it's a map
+func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue map[string]interface{}) MapPropertyFnWithNamespaceFilter {
+	return func(namespace string) map[string]interface{} {
+		val, err := c.client.GetMapValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, reflect.DeepEqual)
 		return val
 	}
 }

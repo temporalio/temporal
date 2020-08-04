@@ -47,16 +47,17 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
 	commandAttrValidator struct {
-		namespaceCache               cache.NamespaceCache
-		config                       *Config
-		maxIDLengthLimit             int
-		searchAttributesValidator    *validator.SearchAttributesValidator
-		defaultActivityRetrySettings common.DefaultRetrySettings
-		defaultWorkflowRetrySettings common.DefaultRetrySettings
+		namespaceCache                  cache.NamespaceCache
+		config                          *Config
+		maxIDLengthLimit                int
+		searchAttributesValidator       *validator.SearchAttributesValidator
+		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
 	workflowSizeChecker struct {
@@ -97,8 +98,8 @@ func newCommandAttrValidator(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		defaultActivityRetrySettings: common.FromConfigToDefaultRetrySettings(config.DefaultActivityRetryPolicy()),
-		defaultWorkflowRetrySettings: common.FromConfigToDefaultRetrySettings(config.DefaultWorkflowRetryPolicy()),
+		getDefaultActivityRetrySettings: config.DefaultActivityRetryPolicy,
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 }
 
@@ -657,7 +658,8 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
+	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(attributes.GetNamespace()))
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
@@ -668,7 +670,8 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(attributes *commandpb
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultWorkflowRetrySettings)
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(attributes.GetNamespace()))
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 

@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -87,16 +88,16 @@ type (
 	WorkflowHandler struct {
 		resource.Resource
 
-		shuttingDown                 int32
-		healthStatus                 int32
-		tokenSerializer              common.TaskTokenSerializer
-		rateLimiter                  quotas.Policy
-		config                       *Config
-		versionChecker               headers.VersionChecker
-		namespaceHandler             namespace.Handler
-		visibilityQueryValidator     *validator.VisibilityQueryValidator
-		searchAttributesValidator    *validator.SearchAttributesValidator
-		defaultWorkflowRetrySettings common.DefaultRetrySettings
+		shuttingDown                    int32
+		healthStatus                    int32
+		tokenSerializer                 common.TaskTokenSerializer
+		rateLimiter                     quotas.Policy
+		config                          *Config
+		versionChecker                  headers.VersionChecker
+		namespaceHandler                namespace.Handler
+		visibilityQueryValidator        *validator.VisibilityQueryValidator
+		searchAttributesValidator       *validator.SearchAttributesValidator
+		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -152,7 +153,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		defaultWorkflowRetrySettings: common.FromConfigToDefaultRetrySettings(config.DefaultWorkflowRetryPolicy()),
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 
 	return handler
@@ -427,7 +428,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errWorkflowIDTooLong, scope)
 	}
 
-	if err := wh.validateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2155,7 +2156,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
-	if err := wh.validateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -3744,12 +3745,13 @@ func (hs HealthStatus) String() string {
 	}
 }
 
-func (wh *WorkflowHandler) validateRetryPolicy(retryPolicy *commonpb.RetryPolicy) error {
+func (wh *WorkflowHandler) validateRetryPolicy(namespace string, retryPolicy *commonpb.RetryPolicy) error {
 	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Workflow, do not perform any retries.
 		return nil
 	}
 
-	common.EnsureRetryPolicyDefaults(retryPolicy, wh.defaultWorkflowRetrySettings)
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespace))
+	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(retryPolicy)
 }

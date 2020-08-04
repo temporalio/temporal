@@ -80,10 +80,15 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
-	defaultInitialIntervalInSeconds   = 1
+	defaultInitialInterval            = time.Second
 	defaultMaximumIntervalCoefficient = 100.0
 	defaultBackoffCoefficient         = 2.0
 	defaultMaximumAttempts            = 0
+
+	initialIntervalInSecondsConfigKey   = "InitialIntervalInSeconds"
+	maximumIntervalCoefficientConfigKey = "MaximumIntervalCoefficient"
+	backoffCoefficientConfigKey         = "BackoffCoefficient"
+	maximumAttemptsConfigKey            = "MaximumAttempts"
 
 	contextExpireThreshold = 10 * time.Millisecond
 
@@ -382,7 +387,7 @@ func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSett
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
-		originalPolicy.InitialInterval = timestamp.DurationPtr(time.Duration(defaultSettings.InitialIntervalInSeconds) * time.Second)
+		originalPolicy.InitialInterval = timestamp.DurationPtr(defaultSettings.InitialInterval)
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
@@ -426,37 +431,37 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 
 func GetDefaultRetryPolicyConfigOptions() map[string]interface{} {
 	return map[string]interface{}{
-		"InitialIntervalInSeconds": defaultInitialIntervalInSeconds,
-		"MaximumIntervalInSeconds": defaultMaximumIntervalCoefficient,
-		"BackoffCoefficient":       defaultBackoffCoefficient,
-		"MaximumAttempts":          defaultMaximumAttempts,
+		initialIntervalInSecondsConfigKey:   int(defaultInitialInterval.Seconds()),
+		maximumIntervalCoefficientConfigKey: defaultMaximumIntervalCoefficient,
+		backoffCoefficientConfigKey:         defaultBackoffCoefficient,
+		maximumAttemptsConfigKey:            defaultMaximumAttempts,
 	}
 }
 
 func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRetrySettings {
 	defaultSettings := DefaultRetrySettings{
-		InitialIntervalInSeconds:   defaultInitialIntervalInSeconds,
+		InitialInterval:            defaultInitialInterval,
 		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
 		BackoffCoefficient:         defaultBackoffCoefficient,
 		MaximumAttempts:            defaultMaximumAttempts,
 	}
 
-	initialIntervalInSeconds, ok := options["InitialIntervalInSeconds"]
+	initialIntervalInSeconds, ok := options[initialIntervalInSecondsConfigKey]
 	if ok {
-		defaultSettings.InitialIntervalInSeconds = int32(initialIntervalInSeconds.(int))
+		defaultSettings.InitialInterval = time.Duration(initialIntervalInSeconds.(int)) * time.Second
 	}
 
-	maximumIntervalCoefficient, ok := options["MaximumIntervalCoefficient"]
+	maximumIntervalCoefficient, ok := options[maximumIntervalCoefficientConfigKey]
 	if ok {
 		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
 	}
 
-	backoffCoefficient, ok := options["BackoffCoefficient"]
+	backoffCoefficient, ok := options[backoffCoefficientConfigKey]
 	if ok {
 		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
 	}
 
-	maximumAttempts, ok := options["MaximumAttempts"]
+	maximumAttempts, ok := options[maximumAttemptsConfigKey]
 	if ok {
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
 	}
