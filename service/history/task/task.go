@@ -276,6 +276,7 @@ func (t *taskBase) HandleErr(
 
 			t.attempt++
 			if t.attempt > t.maxRetryCount() {
+				t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
 				t.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(t.GetTaskType()))
 			}
