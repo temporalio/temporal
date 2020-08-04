@@ -508,7 +508,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug("Start workflow execution request namespaceID", tag.WorkflowNamespaceID(namespaceID))
-	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request, nil, time.Now()))
+	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request, nil, time.Now().UTC()))
 
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -783,7 +783,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	tagsForErrorLog := []tag.Tag{tag.WorkflowNamespace(request.GetNamespace())}
-	callTime := time.Now()
+	callTime := time.Now().UTC()
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollWorkflowTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()
@@ -1050,7 +1050,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(ctx context.Context, reques
 func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *workflowservice.PollActivityTaskQueueRequest) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	callTime := time.Now()
+	callTime := time.Now().UTC()
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollActivityTaskQueueScope, request.GetNamespace())
 	defer sw.Stop()

@@ -142,7 +142,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 		errorsOnSplitting := 0
 		// send all tasks
 		for _, br := range resp.Branches {
-			if time.Now().Add(-cleanUpThreshold).Before(timestamp.TimeValue(br.ForkTime)) {
+			if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(br.ForkTime)) {
 				batchCount--
 				skips++
 				s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)

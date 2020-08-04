@@ -704,7 +704,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -1398,7 +1398,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -1993,7 +1993,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -2698,7 +2698,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -3299,7 +3299,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -3918,7 +3918,7 @@ func (s *resetorSuite) TestApplyReset() {
 	}
 
 	eid := int64(0)
-	eventTime := time.Unix(0, 1000)
+	eventTime := time.Unix(0, 1000).UTC()
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
@@ -4127,8 +4127,8 @@ func TestFindAutoResetPoint(t *testing.T) {
 		Resettable:     false,
 	}
 
-	expiredNow := time.Now().Add(-1 * time.Hour)
-	notExpiredNow := time.Now().Add(time.Hour)
+	expiredNow := time.Now().UTC().Add(-1 * time.Hour)
+	notExpiredNow := time.Now().UTC().Add(time.Hour)
 	pt4 := &workflowpb.ResetPointInfo{
 		BinaryChecksum: "expired",
 		Resettable:     true,

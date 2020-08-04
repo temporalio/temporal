@@ -59,8 +59,8 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 		return NoBackoff
 	}
 
-	scheduledUTCTime := scheduledTime.In(time.UTC)
-	nowUTC := now.In(time.UTC)
+	scheduledUTCTime := scheduledTime.UTC()
+	nowUTC := now.UTC()
 
 	var nextScheduleTime time.Time
 	if nowUTC.Before(scheduledUTCTime) {

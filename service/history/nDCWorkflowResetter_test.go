@@ -128,7 +128,7 @@ func (s *nDCWorkflowResetterSuite) TearDownTest() {
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)
@@ -208,7 +208,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(500)

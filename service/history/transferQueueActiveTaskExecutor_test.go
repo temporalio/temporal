@@ -136,7 +136,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.childNamespace = testChildNamespace
 	s.childNamespaceEntry = testGlobalChildNamespaceEntry
 	s.version = s.namespaceEntry.GetFailoverVersion()
-	s.now = time.Now()
+	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
 	s.controller = gomock.NewController(s.T())
@@ -2049,8 +2049,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}
-	now := s.timeSource.Now()
-
+	now := s.timeSource.Now().UTC()
 	return &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: task.GetTargetNamespaceId(),

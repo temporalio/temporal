@@ -62,7 +62,7 @@ func (ts *mockTimeSource) advance(d time.Duration) {
 }
 
 func (s *TokenBucketSuite) TestRpsEnforced() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := New(99, ts)
 	for i := 0; i < 2; i++ {
 		total, attempts := s.testRpsEnforcedHelper(tb, ts, 11, 90, 10)
@@ -78,7 +78,7 @@ func (s *TokenBucketSuite) TestRpsEnforced() {
 }
 
 func (s *TokenBucketSuite) TestLowRpsEnforced() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := New(3, ts)
 
 	total, attempts := s.testRpsEnforcedHelper(tb, ts, 10, 3, 1)
@@ -88,7 +88,7 @@ func (s *TokenBucketSuite) TestLowRpsEnforced() {
 
 func (s *TokenBucketSuite) TestDynamicRpsEnforced() {
 	rpsConfigFn, rpsPtr := s.getTestRPSConfigFn(99)
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	dtb := NewDynamicTokenBucket(rpsConfigFn, ts)
 	total, attempts := s.testRpsEnforcedHelper(dtb, ts, 11, 90, 10)
 	s.Equal(90, total, "Token bucket failed to enforce limit")
@@ -126,7 +126,7 @@ func (s *TokenBucketSuite) getTestRPSConfigFn(defaultValue int) (dynamicconfig.I
 }
 
 func (s *TokenBucketSuite) TestPriorityRpsEnforced() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := NewPriorityTokenBucket(1, 99, ts) // behavior same to tokenBucketImpl
 
 	for i := 0; i < 2; i++ {
@@ -157,7 +157,7 @@ func (s *TokenBucketSuite) TestPriorityRpsEnforced() {
 }
 
 func (s *TokenBucketSuite) TestPriorityLowRpsEnforced() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := NewPriorityTokenBucket(1, 3, ts) // behavior same to tokenBucketImpl
 
 	total := 0
@@ -178,7 +178,7 @@ func (s *TokenBucketSuite) TestPriorityLowRpsEnforced() {
 }
 
 func (s *TokenBucketSuite) TestPriorityTokenBucket() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := NewPriorityTokenBucket(2, 100, ts)
 
 	for i := 0; i < 2; i++ {
@@ -203,7 +203,7 @@ func (s *TokenBucketSuite) TestPriorityTokenBucket() {
 }
 
 func (s *TokenBucketSuite) TestFullPriorityTokenBucket() {
-	ts := &mockTimeSource{currTime: time.Now()}
+	ts := &mockTimeSource{currTime: time.Now().UTC()}
 	tb := NewFullPriorityTokenBucket(2, 100, ts)
 
 	ok2, _ := tb.GetToken(1, 10)

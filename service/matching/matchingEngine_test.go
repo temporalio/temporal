@@ -1688,10 +1688,10 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 }
 
 func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Duration) bool {
-	expiry := time.Now().Add(timeout)
+	expiry := time.Now().UTC().Add(timeout)
 	for !cond() {
 		time.Sleep(time.Millisecond * 5)
-		if time.Now().After(expiry) {
+		if time.Now().UTC().After(expiry) {
 			return false
 		}
 	}
@@ -1720,7 +1720,7 @@ func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID i
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   eventID,
-		EventTime: timestamp.TimePtr(time.Now()),
+		EventTime: timestamp.TimePtr(time.Now().UTC()),
 		EventType: eventType,
 	}
 
@@ -1993,7 +1993,7 @@ func (m *testTaskManager) String() string {
 }
 
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
-	currentTime := time.Now()
+	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
 	if diff > expectedDuration {
 		fmt.Printf("Current time: %v, Application time: %v, Difference: %v \n", currentTime, t, diff)

@@ -618,7 +618,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 		Identity:            identity,
 		CronSchedule:        cronSpec,
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -644,7 +644,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	var workflowTaskDelay time.Duration
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		workflowTaskDelay = time.Now().Sub(now)
+		workflowTaskDelay = time.Now().UTC().Sub(now)
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1354,7 +1354,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now()),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1391,7 +1391,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now()),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,

@@ -154,13 +154,13 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -244,13 +244,13 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   4,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: midRunID1,
@@ -263,7 +263,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: beginingRunID,
@@ -272,7 +272,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   5,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
@@ -282,7 +282,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: "",
@@ -291,7 +291,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   5,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: endingRunID,
@@ -304,7 +304,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: midRunID2,
@@ -313,7 +313,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 	}
@@ -471,19 +471,19 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -493,13 +493,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		{
 			EventId:   4,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
@@ -593,19 +593,19 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -615,13 +615,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		{
 			EventId:   4,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   5,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: newRunID,
@@ -634,7 +634,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		{
 			EventId:   1,
 			Version:   223,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: runID,
@@ -857,7 +857,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		{
 			EventId:   1,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
@@ -969,7 +969,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 		{
 			EventId:   lastEventID + 1,
 			Version:   lastVersion + 1,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 		},
 	}
@@ -1022,7 +1022,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 		{
 			EventId:   common.FirstEventID,
 			Version:   1,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		},
 	}
@@ -1109,7 +1109,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 			{
 				EventId:   1,
 				Version:   123,
-				EventTime: timestamp.TimePtr(time.Now()),
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					ContinuedExecutionRunId: prevRunID,
@@ -1118,7 +1118,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 			{
 				EventId:   2,
 				Version:   223,
-				EventTime: timestamp.TimePtr(time.Now()),
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			},
 		}
@@ -1186,13 +1186,13 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 		{
 			EventId:   233,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:   234,
 			Version:   223,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: nextRunID,
@@ -1215,13 +1215,13 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 		{
 			EventId:   233,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		},
 		{
 			EventId:    234,
 			Version:    223,
-			EventTime:  timestamp.TimePtr(time.Now()),
+			EventTime:  timestamp.TimePtr(time.Now().UTC()),
 			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},

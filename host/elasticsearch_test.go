@@ -118,7 +118,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	request.SearchAttributes = searchAttr
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
@@ -126,7 +126,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	startFilter.EarliestTime = &startTime
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = timestamp.TimePtr(time.Now())
+		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultTestValueOfESIndexMaxResultWindow,
@@ -176,7 +176,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UnixNano()+int64(time.Minute))
+	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UTC().UnixNano()+int64(time.Minute))
 	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
 
 	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
@@ -452,7 +452,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			intVal, _ := payload.Encode(i)
 			doubleVal, _ := payload.Encode(float64(i))
 			strVal, _ := payload.Encode(strconv.Itoa(i))
-			timeVal, _ := payload.Encode(time.Now())
+			timeVal, _ := payload.Encode(time.Now().UTC())
 			searchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					definition.CustomIntField:      intVal,

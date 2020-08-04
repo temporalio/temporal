@@ -175,8 +175,8 @@ func (s *timerQueueAckMgrSuite) TestIsProcessNow() {
 }
 
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
-	minTimestamp := time.Now().Add(-10 * time.Second)
-	maxTimestamp := time.Now().Add(10 * time.Second)
+	minTimestamp := time.Now().UTC().Add(-10 * time.Second)
+	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
@@ -212,8 +212,8 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 }
 
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
-	minTimestamp := time.Now().Add(-10 * time.Second)
-	maxTimestamp := time.Now().Add(10 * time.Second)
+	minTimestamp := time.Now().UTC().Add(-10 * time.Second)
+	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
@@ -322,7 +322,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
@@ -570,8 +570,8 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.namespaceID = "deadd0d0-c001-face-d00d-020000000000"
-	s.minLevel = time.Now().Add(-10 * time.Minute)
-	s.maxLevel = time.Now().Add(10 * time.Minute)
+	s.minLevel = time.Now().UTC().Add(-10 * time.Minute)
+	s.maxLevel = time.Now().UTC().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
 		s.mockShard,
 		s.mockShard.GetMetricsClient(),
@@ -657,7 +657,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2}, timers)
@@ -689,7 +689,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 
-	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
+	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]*persistenceblobs.TimerTaskInfo{}, timers)
@@ -708,7 +708,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_InTheFuture() {
 
 	// when namespace failover happen, it is possible that remote cluster's time is after
 	// current cluster's time
-	maxQueryLevel := time.Now()
+	maxQueryLevel := time.Now().UTC()
 	s.timerQueueFailoverAckMgr.minQueryLevel = maxQueryLevel.Add(1 * time.Second)
 	s.timerQueueFailoverAckMgr.maxQueryLevel = maxQueryLevel
 
@@ -725,7 +725,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_InTheFuture() {
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
-	from := time.Now().Add(-10 * time.Second)
+	from := time.Now().UTC().Add(-10 * time.Second)
 	s.timerQueueFailoverAckMgr.minQueryLevel = from
 	s.timerQueueFailoverAckMgr.maxQueryLevel = from
 	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}

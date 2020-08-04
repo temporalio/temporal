@@ -322,7 +322,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 					NamespaceID:         namespaceID,
 					TaskQueue:           taskQueue,
 					ScheduleID:          workflowTaskScheduleID,
-					VisibilityTimestamp: time.Now(),
+					VisibilityTimestamp: time.Now().UTC(),
 				},
 			},
 			TimerTasks: timerTasks,
@@ -1200,7 +1200,7 @@ Loop:
 	for {
 		response, err := s.ExecutionManager.GetTimerIndexTasks(&p.GetTimerIndexTasksRequest{
 			MinTimestamp:  time.Time{},
-			MaxTimestamp:  time.Unix(0, math.MaxInt64),
+			MaxTimestamp:  time.Unix(0, math.MaxInt64).UTC(),
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -1442,7 +1442,7 @@ func (s *TestBase) EqualTimes(t1, t2 time.Time) {
 }
 
 func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
-	currentTime := time.Now()
+	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
 	if diff > expectedDuration {
 		s.logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
@@ -1593,7 +1593,7 @@ func randString(length int) string {
 // GenerateRandomDBName helper
 // Format: MMDDHHMMSS_abc
 func GenerateRandomDBName(n int) string {
-	now := time.Now()
+	now := time.Now().UTC()
 	rand.Seed(now.UnixNano())
 	var prefix strings.Builder
 	prefix.WriteString(now.Format("0102150405"))

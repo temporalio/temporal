@@ -1111,7 +1111,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 				{
 					EventId:   baseBranchLastEvent.GetEventId() + 1,
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-					EventTime: timestamp.TimePtr(time.Now()),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   baseBranchLastEvent.GetVersion(), // dummy event from other cluster
 					TaskId:    taskID,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1652,7 +1652,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 
 	newRunFirstEvent := &historypb.HistoryEvent{
 		EventId:   common.FirstEventID,
-		EventTime: timestamp.TimePtr(time.Now()),
+		EventTime: timestamp.TimePtr(time.Now().UTC()),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Version:   version,
 		TaskId:    1,
@@ -1676,7 +1676,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 			Identity:                        "NDC-test",
 			FirstExecutionRunId:             runID,
 			Attempt:                         1,
-			WorkflowExecutionExpirationTime: timestamp.TimePtr(time.Now().Add(time.Minute)),
+			WorkflowExecutionExpirationTime: timestamp.TimePtr(time.Now().UTC().Add(time.Minute)),
 		}},
 	}
 

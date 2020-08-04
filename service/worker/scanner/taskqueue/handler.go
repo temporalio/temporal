@@ -109,7 +109,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 	}
 
 	lastUpdated := timestamp.TimeValue(state.lastUpdated)
-	delta := time.Now().Sub(lastUpdated)
+	delta := time.Now().UTC().Sub(lastUpdated)
 	if delta < taskQueueGracePeriod {
 		return
 	}
@@ -145,7 +145,7 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 
 func IsTaskExpired(t *persistenceblobs.AllocatedTaskInfo) bool {
 	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
-	tEpoch := time.Unix(0, 0)
-	tNow := time.Now()
+	tEpoch := time.Unix(0, 0).UTC()
+	tNow := time.Now().UTC()
 	return tExpiry.After(tEpoch) && tNow.After(tExpiry)
 }

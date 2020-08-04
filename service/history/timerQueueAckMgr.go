@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	maximumTime = time.Unix(0, math.MaxInt64)
+	maximumTime = time.Unix(0, math.MaxInt64).UTC()
 )
 
 type (

@@ -216,7 +216,7 @@ func (s *namespaceCacheSuite) TestGetNamespace_NonLoaded_GetByName() {
 						"abc": {
 							Reason:     "test reason",
 							Operator:   "test operator",
-							CreateTime: timestamp.TimePtr(time.Unix(0, 123)),
+							CreateTime: timestamp.TimePtr(time.Unix(0, 123).UTC()),
 						},
 					},
 				}},

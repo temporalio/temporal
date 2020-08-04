@@ -130,7 +130,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 }
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -155,7 +155,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated() {
 }
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	currentVersion := int64(999)
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
@@ -195,7 +195,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 }
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
-	now := time.Now()
+	now := time.Now().UTC()
 	currentVersion := int64(999)
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
@@ -341,7 +341,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_NotScheduled() {
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStarted() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -380,7 +380,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_WithHeartbeatTimeout() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -426,7 +426,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_WithoutHeartbeatTimeout() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -465,7 +465,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_Heartbeated_WithHeartbeatTimeout() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -511,7 +511,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started_Heartbeated_WithoutHeartbeatTimeout() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -550,7 +550,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 }
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo1 := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -649,7 +649,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_NotScheduled() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              common.EmptyEventID,
@@ -671,7 +671,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_NotScheduled(
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_NotStarted() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -706,7 +706,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Not
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Started() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -732,7 +732,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_Scheduled_Sta
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_NotScheduled() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              common.EmptyEventID,
@@ -754,7 +754,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_NotScheduled(
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_Scheduled() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -789,7 +789,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_Scheduled() {
 }
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_NotStarted() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -811,7 +811,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_NotStarted() {
 }
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_Started() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -846,7 +846,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_Started() {
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotStarted() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -868,7 +868,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotSt
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Started_NoHeartbeat() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -903,7 +903,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Started_Heartbeated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -938,7 +938,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_NotStarted() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -960,7 +960,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_No
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_NoHeartbeat() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -986,7 +986,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_Heartbeated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	activityInfo := &persistenceblobs.ActivityInfo{
 		Version:                 123,
 		ScheduleId:              234,
@@ -1026,7 +1026,7 @@ func (s *timerSequenceSuite) TestConversion() {
 }
 
 func (s *timerSequenceSuite) TestLess_CompareTime() {
-	now := time.Now()
+	now := time.Now().UTC()
 	timerSequenceID1 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
@@ -1049,7 +1049,7 @@ func (s *timerSequenceSuite) TestLess_CompareTime() {
 }
 
 func (s *timerSequenceSuite) TestLess_CompareEventID() {
-	now := time.Now()
+	now := time.Now().UTC()
 	timerSequenceID1 := timerSequenceID{
 		eventID:      122,
 		timestamp:    now,
@@ -1072,7 +1072,7 @@ func (s *timerSequenceSuite) TestLess_CompareEventID() {
 }
 
 func (s *timerSequenceSuite) TestLess_CompareType() {
-	now := time.Now()
+	now := time.Now().UTC()
 	timerSequenceID1 := timerSequenceID{
 		eventID:      123,
 		timestamp:    now,
