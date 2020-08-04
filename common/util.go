@@ -466,17 +466,6 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
 	}
 
-	var empty commonpb.RetryPolicy
-	EnsureRetryPolicyDefaults(&empty, defaultSettings)
-	err := ValidateRetryPolicy(&empty)
-	if err != nil {
-		panic(
-			fmt.Sprintf(
-				"Bad Default Retry Settings defined: %+v failed validation %v",
-				defaultSettings,
-				err))
-	}
-
 	return defaultSettings
 }
 
