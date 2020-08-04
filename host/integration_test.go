@@ -615,7 +615,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        &initialInterval,
+			// Intentionally test server-initialization of Initial Interval value (which should be 1 second)
 			MaximumAttempts:        int32(maximumAttempts),
 			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
