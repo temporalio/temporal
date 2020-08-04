@@ -1715,6 +1715,8 @@ const (
 	TransferTaskThrottledCounter
 	TimerTaskThrottledCounter
 
+	TransferTaskMissingEventCounter
+
 	ProcessingQueuePendingTaskSplitCounter
 	ProcessingQueueStuckTaskSplitCounter
 	ProcessingQueueSelectedDomainSplitCounter
@@ -2159,6 +2161,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskRedispatchQueuePendingTasksTimer:              {metricName: "task_redispatch_queue_pending_tasks", metricType: Timer},
 		TransferTaskThrottledCounter:                      {metricName: "transfer_task_throttled_counter", metricType: Counter},
 		TimerTaskThrottledCounter:                         {metricName: "timer_task_throttled_counter", metricType: Counter},
+		TransferTaskMissingEventCounter:                   {metricName: "transfer_task_missing_event_counter", metricType: Counter},
 		ProcessingQueuePendingTaskSplitCounter:            {metricName: "processing_queue_pending_task_split_counter", metricType: Counter},
 		ProcessingQueueStuckTaskSplitCounter:              {metricName: "processing_queue_stuck_task_split_counter", metricType: Counter},
 		ProcessingQueueSelectedDomainSplitCounter:         {metricName: "processing_queue_selected_domain_split_counter", metricType: Counter},

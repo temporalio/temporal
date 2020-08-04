@@ -47,6 +47,7 @@ var keys = map[Key]string{
 	testGetDurationPropertyFilteredByDomainKey:       "testGetDurationPropertyFilteredByDomainKey",
 	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
 	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
+	testGetBoolPropertyFilteredByDomainIDKey:         "testGetBoolPropertyFilteredByDomainIDKey",
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
@@ -273,6 +274,7 @@ var keys = map[Key]string{
 	ReplicationEventsFromCurrentCluster:                   "history.ReplicationEventsFromCurrentCluster",
 	NotifyFailoverMarkerInterval:                          "history.NotifyFailoverMarkerInterval",
 	NotifyFailoverMarkerTimerJitterCoefficient:            "history.NotifyFailoverMarkerTimerJitterCoefficient",
+	EnableDropStuckTaskByDomainID:                         "history.DropStuckTaskByDomain",
 
 	WorkerPersistenceMaxQPS:                                  "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                            "worker.persistenceGlobalMaxQPS",
@@ -335,6 +337,7 @@ const (
 	testGetDurationPropertyFilteredByDomainKey
 	testGetIntPropertyFilteredByTaskListInfoKey
 	testGetDurationPropertyFilteredByTaskListInfoKey
+	testGetBoolPropertyFilteredByDomainIDKey
 	testGetBoolPropertyFilteredByTaskListInfoKey
 
 	// EnableGlobalDomain is key for enable global domain
@@ -736,6 +739,9 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
+
+	// EnableDropStuckTaskByDomainID is whether stuck timer/transfer task should be dropped for a domain
+	EnableDropStuckTaskByDomainID
 
 	// key for worker
 
