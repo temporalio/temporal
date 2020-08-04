@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -359,12 +360,15 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 }
 
 func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
-	pollSigC := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
 
+	pollSigC := make(chan struct{})
 	var remotePollErr error
 	var remotePollResp matchingservice.PollWorkflowTaskQueueResponse
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) {
+			wg.Done()
 			<-pollSigC
 			time.Sleep(time.Millisecond * 500) // delay poll to verify that offer blocks on parent
 			task, err := t.rootMatcher.Poll(arg0)
@@ -406,10 +410,10 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
-	// This sleep ensures that the poll request has been forwarded to the parent partition before the offer is made.
-	// Without this sleep, there is a chance that the request is matched on the child partition, which will
-	// fail the test as the PollWorkflowTaskQueue and the 2nd AddWorkflowTask expectation is never met.
-	time.Sleep(time.Second)
+	// This ensures that the poll request has been forwarded to the parent partition before the offer is made.
+	// Without this, there is a chance that the request is matched on the child partition, which will
+	// fail the test as the PollWorkflowTaskQueue and the 2nd AddWorkflowTask expectations would then never be met.
+	wg.Wait()
 
 	t.NoError(t.matcher.MustOffer(ctx, task))
 	cancel()
