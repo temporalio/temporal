@@ -154,7 +154,7 @@ func (s *conflictResolverSuite) TestReset() {
 	prevState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 
 	sourceCluster := cluster.TestAlternativeClusterName
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	version := int64(12)
 
 	namespaceID := s.mockContext.namespaceID

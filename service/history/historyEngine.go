@@ -1991,7 +1991,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	// Start workflow and signal
-	startRequest := getStartRequest(namespaceID, sRequest)
+	startRequest := e.getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
 	if err != nil {
@@ -2744,7 +2744,7 @@ func getScheduleID(
 	return activityInfo.ScheduleId, nil
 }
 
-func getStartRequest(
+func (e *historyEngineImpl) getStartRequest(
 	namespaceID string,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) *historyservice.StartWorkflowExecutionRequest {
@@ -2768,7 +2768,7 @@ func getStartRequest(
 		Header:                   request.GetHeader(),
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(namespaceID, req)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID, req, nil, e.shard.GetTimeSource().Now())
 }
 
 func setTaskInfo(

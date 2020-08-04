@@ -260,7 +260,7 @@ func (r *mutableStateTaskGeneratorImpl) generateScheduleWorkflowTaskTasks(
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
-		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp)
+		scheduledTime := time.Unix(0, workflowTask.ScheduledTimestamp).UTC()
 		scheduleToStartTimeout := time.Duration(
 			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
 		) * time.Second
@@ -290,7 +290,7 @@ func (r *mutableStateTaskGeneratorImpl) generateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
-	startedTime := time.Unix(0, workflowTask.StartedTimestamp)
+	startedTime := time.Unix(0, workflowTask.StartedTimestamp).UTC()
 	workflowTaskTimeout := time.Duration(
 		workflowTask.WorkflowTaskTimeout,
 	) * time.Second

@@ -59,7 +59,7 @@ func (c *converter) FromMySQLDateTime(t time.Time) time.Time {
 func getMinMySQLDateTime() time.Time {
 	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
 	if err != nil {
-		return time.Unix(0, 0)
+		return time.Unix(0, 0).UTC()
 	}
 	return t
 }

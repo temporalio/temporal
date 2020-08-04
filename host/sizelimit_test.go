@@ -190,7 +190,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
 				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now()),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,

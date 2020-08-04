@@ -65,11 +65,11 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			WorkflowID:    source.WorkflowID,
 			RunID:         source.RunID,
 			TypeName:      source.WorkflowType,
-			StartTime:     time.Unix(0, source.StartTime),
-			ExecutionTime: time.Unix(0, source.ExecutionTime),
+			StartTime:     time.Unix(0, source.StartTime).UTC(),
+			ExecutionTime: time.Unix(0, source.ExecutionTime).UTC(),
 			Memo:          p.NewDataBlob(source.Memo, source.Encoding),
 			TaskQueue:     source.TaskQueue,
-			CloseTime:     time.Unix(0, source.CloseTime),
+			CloseTime:     time.Unix(0, source.CloseTime).UTC(),
 			Status:        source.ExecutionStatus,
 			HistoryLength: source.HistoryLength,
 		}
@@ -94,12 +94,12 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			WorkflowID:    source[definition.WorkflowID].(string),
 			RunID:         source[definition.RunID].(string),
 			TypeName:      source[definition.WorkflowType].(string),
-			StartTime:     time.Unix(0, startTime),
-			ExecutionTime: time.Unix(0, executionTime),
+			StartTime:     time.Unix(0, startTime).UTC(),
+			ExecutionTime: time.Unix(0, executionTime).UTC(),
 			TaskQueue:     source[definition.TaskQueue].(string),
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), source[definition.Encoding].(string)),
 		}
-		record.CloseTime = time.Unix(0, closeTime)
+		record.CloseTime = time.Unix(0, closeTime).UTC()
 		statusEnum := enumspb.WorkflowExecutionStatus(status)
 		record.Status = statusEnum
 		record.HistoryLength = historyLen

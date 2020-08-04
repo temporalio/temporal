@@ -117,8 +117,8 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
 			// cassandra uses TTL and expiry isn't stored as part of task state
-			s.True(time.Now().Before(eTime))
-			s.True(eTime.Before(time.Now().Add((defaultScheduleToStartTimeout + 1) * time.Second)))
+			s.True(time.Now().UTC().Before(eTime))
+			s.True(eTime.Before(time.Now().UTC().Add((defaultScheduleToStartTimeout + 1) * time.Second)))
 		}
 	}
 }
@@ -301,7 +301,7 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	namespaceID := primitives.MustValidateUUID("00136543-72ad-4615-b7e9-44bca9775b45")
 	taskQueue := "aaaaaaa"
-	leaseTime := time.Now()
+	leaseTime := time.Now().UTC()
 	response, err := s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
@@ -315,7 +315,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskQueue() {
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
-	leaseTime = time.Now()
+	leaseTime = time.Now().UTC()
 	response, err = s.TaskMgr.LeaseTaskQueue(&p.LeaseTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
@@ -457,7 +457,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskQueue() {
 		ackLevel++
 		updateTL := resp.Items[0].Data
 		updateTL.AckLevel = ackLevel
-		updatedTime = time.Now()
+		updatedTime = time.Now().UTC()
 		_, err = s.TaskMgr.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
 			TaskQueueInfo: updateTL,
 			RangeID:       rangeID,

@@ -236,7 +236,7 @@ forLoop:
 		case tm.taskC <- task:
 			return nil
 		case token := <-tm.fwdrAddReqTokenC():
-			childCtx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*2))
+			childCtx, cancel := context.WithDeadline(ctx, time.Now().UTC().Add(time.Second*2))
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
 			if err != nil {
@@ -273,7 +273,7 @@ forLoop:
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(ctx, tm.taskC, tm.queryTaskC); err == nil {
+	if task, err := tm.pollNonBlocking(tm.taskC, tm.queryTaskC); err == nil {
 		return task, nil
 	}
 	// there is no local poller available to pickup this task. Now block waiting
@@ -286,7 +286,7 @@ func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) {
 	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(ctx, nil, tm.queryTaskC); err == nil {
+	if task, err := tm.pollNonBlocking(nil, tm.queryTaskC); err == nil {
 		return task, nil
 	}
 	// there is no local poller available to pickup this task. Now block waiting
@@ -366,7 +366,6 @@ func (tm *TaskMatcher) poll(
 }
 
 func (tm *TaskMatcher) pollNonBlocking(
-	ctx context.Context,
 	taskC <-chan *internalTask,
 	queryTaskC <-chan *internalTask,
 ) (*internalTask, error) {
@@ -417,7 +416,7 @@ func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error)
 
 	rsv := tm.limiter.Reserve()
 	// If we have to wait too long for reservation, give up and return
-	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now()) {
+	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now().UTC()) {
 		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
 			rsv.Cancel()
 		}

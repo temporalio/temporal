@@ -409,13 +409,13 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 
 	// long poll, new event happen before long poll timeout
 	go asycWorkflowUpdate(time.Second * 2)
-	start := time.Now()
+	start := time.Now().UTC()
 	pollResponse, err := s.mockHistoryEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
-	s.True(time.Now().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
@@ -474,13 +474,13 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 
 	// long poll, new event happen before long poll timeout
 	go asyncBranchTokenUpdate(time.Second * 2)
-	start := time.Now()
+	start := time.Now().UTC()
 	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 10,
 	})
-	s.True(time.Now().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
 	s.Nil(err)
 	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
@@ -784,9 +784,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
-	start := time.Now()
+	start := time.Now().UTC()
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.True(time.Now().After(start.Add(time.Second)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
 	var queryResult []byte
@@ -847,9 +847,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
-	start := time.Now()
+	start := time.Now().UTC()
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.True(time.Now().After(start.Add(time.Second)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
 	var queryResult []byte
@@ -1739,7 +1739,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Hour).UnixNano()
 
 	commands := []*commandpb.Command{}
 
@@ -1783,7 +1783,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
+	msBuilder.executionInfo.WorkflowTaskOriginalScheduledTimestamp = time.Now().UTC().Add(-time.Minute).UnixNano()
 
 	commands := []*commandpb.Command{}
 
@@ -4571,7 +4571,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	di2 := addWorkflowTaskScheduledEvent(msBuilder)
 	addWorkflowTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 	addTimerFiredEvent(msBuilder, timerID)
-	_, _, err := msBuilder.CloseTransactionAsMutation(time.Now(), transactionPolicyActive)
+	_, _, err := msBuilder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)

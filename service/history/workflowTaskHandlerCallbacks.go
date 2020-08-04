@@ -352,7 +352,7 @@ Update_History_Loop:
 		if workflowTaskHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace)
-			if currentWorkflowTask.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentWorkflowTask.OriginalScheduledTimestamp).Add(timeout)) {
+			if currentWorkflowTask.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentWorkflowTask.OriginalScheduledTimestamp).UTC().Add(timeout)) {
 				workflowTaskHeartbeatTimeout = true
 				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace))
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)

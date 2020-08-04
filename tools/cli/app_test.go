@@ -411,8 +411,8 @@ var (
 				Type: &commonpb.WorkflowType{
 					Name: "test-list-workflow-type",
 				},
-				StartTime:     timestamp.TimePtr(time.Now()),
-				CloseTime:     timestamp.TimePtr(time.Now().Add(time.Hour)),
+				StartTime:     timestamp.TimePtr(time.Now().UTC()),
+				CloseTime:     timestamp.TimePtr(time.Now().UTC().Add(time.Hour)),
 				Status:        status,
 				HistoryLength: 12,
 			},
@@ -429,8 +429,8 @@ var (
 				Type: &commonpb.WorkflowType{
 					Name: "test-list-open-workflow-type",
 				},
-				StartTime:     timestamp.TimePtr(time.Now()),
-				CloseTime:     timestamp.TimePtr(time.Now().Add(time.Hour)),
+				StartTime:     timestamp.TimePtr(time.Now().UTC()),
+				CloseTime:     timestamp.TimePtr(time.Now().UTC().Add(time.Hour)),
 				HistoryLength: 12,
 			},
 		},
@@ -515,7 +515,7 @@ func (s *cliAppSuite) TestCountWorkflow() {
 var describeTaskQueueResponse = &workflowservice.DescribeTaskQueueResponse{
 	Pollers: []*taskqueuepb.PollerInfo{
 		{
-			LastAccessTime: timestamp.TimePtr(time.Now()),
+			LastAccessTime: timestamp.TimePtr(time.Now().UTC()),
 			Identity:       "tester",
 		},
 	},
@@ -591,17 +591,17 @@ func (s *cliAppSuite) TestObserveWorkflowWithID() {
 
 // TestParseTime tests the parsing of date argument in UTC and UnixNano formats
 func (s *cliAppSuite) TestParseTime() {
-	s.Equal("1978-08-22 00:00:00 +0000 UTC", parseTime("", time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC), time.Now()).String())
+	s.Equal("1978-08-22 00:00:00 +0000 UTC", parseTime("", time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC), time.Now().UTC()).String())
 	s.Equal("2018-06-07T15:04:05+07:00", parseTime("2018-06-07T15:04:05+07:00", time.Time{}, time.Now()).Format(time.RFC3339))
 	expected, err := time.Parse(defaultDateTimeFormat, "2018-06-07T15:04:05+07:00")
 	s.NoError(err)
-	s.Equal(expected.Local(), parseTime("1528358645000000000", time.Time{}, time.Now().Local()))
+	s.Equal(expected.UTC(), parseTime("1528358645000000000", time.Time{}, time.Now().UTC()))
 }
 
 // TestParseTimeDateRange tests the parsing of date argument in time range format, N<duration>
 // where N is the integral multiplier, and duration can be second/minute/hour/day/week/month/year
 func (s *cliAppSuite) TestParseTimeDateRange() {
-	now := time.Now()
+	now := time.Now().UTC()
 	tests := []struct {
 		timeStr  string    // input
 		defVal   time.Time // input
@@ -680,7 +680,7 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 		{
 			timeStr:  "100y", // epoch time will be returned as that's the minimum unix timestamp possible
 			defVal:   time.Time{},
-			expected: time.Unix(0, 0),
+			expected: time.Unix(0, 0).UTC(),
 		},
 	}
 	const delta = 5 * time.Millisecond

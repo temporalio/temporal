@@ -150,7 +150,7 @@ func constructHistoryKeyPrefix(path, namespaceID, workflowID, runID string) stri
 }
 
 func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	var timeFormat = ""
 	switch precision {
 	case PrecisionSecond:
@@ -170,7 +170,7 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 }
 
 func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
+	t := time.Unix(0, timestamp).UTC()
 	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
 }
 

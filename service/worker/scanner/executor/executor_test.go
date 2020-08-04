@@ -84,8 +84,8 @@ func (s *ExecutorTestSuite) TestTaskExecution() {
 }
 
 func (s *ExecutorTestSuite) awaitCompletion(e Executor) bool {
-	expiry := time.Now().Add(time.Second * 10)
-	for time.Now().Before(expiry) {
+	expiry := time.Now().UTC().Add(time.Second * 10)
+	for time.Now().UTC().Before(expiry) {
 		if e.TaskCount() == 0 {
 			return true
 		}

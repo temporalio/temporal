@@ -47,15 +47,17 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
 	commandAttrValidator struct {
-		namespaceCache               cache.NamespaceCache
-		config                       *Config
-		maxIDLengthLimit             int
-		searchAttributesValidator    *validator.SearchAttributesValidator
-		defaultActivityRetrySettings common.DefaultActivityRetrySettings
+		namespaceCache                  cache.NamespaceCache
+		config                          *Config
+		maxIDLengthLimit                int
+		searchAttributesValidator       *validator.SearchAttributesValidator
+		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
 	workflowSizeChecker struct {
@@ -96,7 +98,8 @@ func newCommandAttrValidator(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		defaultActivityRetrySettings: fromConfigToDefaultActivityRetrySettings(config.DefaultActivityRetryPolicy()),
+		getDefaultActivityRetrySettings: config.DefaultActivityRetryPolicy,
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 }
 
@@ -523,7 +526,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// handleCommandContinueAsNewWorkflow must handle negative runTimeout value
 	timeoutTime := executionInfo.WorkflowExpirationTime
 	if !timeoutTime.IsZero() {
-		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now()))
+		runTimeout := timestamp.RoundUp(timeoutTime.Sub(time.Now().UTC()))
 		if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) > 0 {
 			runTimeout = timestamp.MinDuration(runTimeout, timestamp.DurationValue(attributes.GetWorkflowRunTimeout()))
 		} else {
@@ -590,7 +593,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+	if err := v.validateWorkflowRetryPolicy(attributes); err != nil {
 		return err
 	}
 
@@ -655,7 +658,20 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(attributes *commandpb
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, v.defaultActivityRetrySettings)
+	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(attributes.GetNamespace()))
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
+	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+}
+
+func (v *commandAttrValidator) validateWorkflowRetryPolicy(attributes *commandpb.StartChildWorkflowExecutionCommandAttributes) error {
+	if attributes.RetryPolicy == nil {
+		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
+		return nil
+	}
+
+	// Otherwise, for any unset fields on the retry policy, set with defaults
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(attributes.GetNamespace()))
+	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 

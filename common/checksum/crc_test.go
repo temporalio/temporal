@@ -49,7 +49,7 @@ func TestCRC32OverProto(t *testing.T) {
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},
-		StartTime:     timestamp.TimePtr(time.Now()),
+		StartTime:     timestamp.TimePtr(time.Now().UTC()),
 		HistoryLength: 550,
 	}
 

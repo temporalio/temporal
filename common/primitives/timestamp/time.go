@@ -32,7 +32,7 @@ import (
 
 var (
 	// This is the maximal time value we support
-	maxValidTimeGo    = time.Unix(0, MaxValidTimeNanoseconds)
+	maxValidTimeGo    = time.Unix(0, MaxValidTimeNanoseconds).UTC()
 	maxValidTimestamp = TimestampFromTimePtr(&maxValidTimeGo)
 )
 
@@ -62,7 +62,7 @@ func TimestampFromProto(ts *types.Timestamp) *Timestamp {
 //noinspection GoNameStartsWithPackageName
 func TimestampFromTime(t time.Time) *Timestamp {
 	// todo: should we validate against proto min/max time here?
-	c := time.Unix(0, t.UnixNano())
+	c := time.Unix(0, t.UnixNano()).UTC()
 	return &Timestamp{
 		goTime: &c,
 	}
@@ -72,7 +72,7 @@ func TimestampFromTime(t time.Time) *Timestamp {
 //noinspection GoNameStartsWithPackageName
 func TimestampFromTimePtr(t *time.Time) *Timestamp {
 	// todo: should we validate against proto min/max time here?
-	c := time.Unix(0, t.UnixNano())
+	c := time.Unix(0, t.UnixNano()).UTC()
 	return &Timestamp{
 		goTime: &c,
 	}
@@ -94,10 +94,10 @@ func TimestampNowAddSeconds(seconds int64) *Timestamp {
 	return t
 }
 
-// TimestampEpoch returns the unix epoch -TimestampFromTime(time.Unix(0, 0))
+// TimestampEpoch returns the unix epoch -TimestampFromTime(time.Unix(0, 0)).UTC()
 //noinspection GoNameStartsWithPackageName
 func TimestampEpoch() *Timestamp {
-	epoch := time.Unix(0, 0)
+	epoch := time.Unix(0, 0).UTC()
 	return TimestampFromTimePtr(&epoch)
 }
 

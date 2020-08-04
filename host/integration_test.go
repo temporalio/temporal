@@ -615,7 +615,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        &initialInterval,
+			// Intentionally test server-initialization of Initial Interval value (which should be 1 second)
 			MaximumAttempts:        int32(maximumAttempts),
 			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
@@ -875,7 +875,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		SearchAttributes:    searchAttr,
 	}
 
-	startWorkflowTS := time.Now()
+	startWorkflowTS := time.Now().UTC()
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
@@ -919,7 +919,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = &startWorkflowTS
-	startFilter.LatestTime = timestamp.TimePtr(time.Now())
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 
 	// Sleep some time before checking the open executions.
 	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
@@ -942,7 +942,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
-	backoffDuration := time.Now().Sub(startWorkflowTS)
+	backoffDuration := time.Now().UTC().Sub(startWorkflowTS)
 	s.True(backoffDuration > targetBackoffDuration)
 	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
@@ -998,7 +998,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
-	startFilter.LatestTime = timestamp.TimePtr(time.Now())
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -1561,7 +1561,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 }
 
 func (s *integrationSuite) TestVisibility() {
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
 	id1 := "integration-visibility-test1"
@@ -1649,7 +1649,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = &startTime
-	startFilter.LatestTime = timestamp.TimePtr(time.Now())
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 
 	closedCount := 0
 	openCount := 0
@@ -1918,7 +1918,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		Identity:            identity,
 	}
 
-	startParentWorkflowTS := time.Now()
+	startParentWorkflowTS := time.Now().UTC()
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1935,7 +1935,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
-			startChildWorkflowTS = time.Now()
+			startChildWorkflowTS = time.Now().UTC()
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -2011,7 +2011,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		// Sleep some time before checking the open executions.
 		// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
 		time.Sleep(2 * time.Second)
-		startFilter.LatestTime = timestamp.TimePtr(time.Now())
+		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
@@ -2027,9 +2027,9 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 
-		backoffDuration := time.Now().Sub(startChildWorkflowTS)
+		backoffDuration := time.Now().UTC().Sub(startChildWorkflowTS)
 		s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
-		startChildWorkflowTS = time.Now()
+		startChildWorkflowTS = time.Now().UTC()
 	}
 
 	// terminate the childworkflow
@@ -2052,7 +2052,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
 
 	startFilter.EarliestTime = &startParentWorkflowTS
-	startFilter.LatestTime = timestamp.TimePtr(time.Now())
+	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -2089,7 +2089,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 }
 
 func (s *integrationSuite) TestWorkflowTimeout() {
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 
 	id := "integration-workflow-timeout"
 	wt := "integration-workflow-timeout-type"
@@ -2143,7 +2143,7 @@ GetHistoryLoop:
 
 	startFilter := &filterpb.StartTimeFilter{
 		EarliestTime: &startTime,
-		LatestTime:   timestamp.TimePtr(time.Now()),
+		LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 	}
 
 	closedCount := 0
@@ -2451,7 +2451,7 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 		return responseInner.Pollers
 	}
 
-	before := time.Now()
+	before := time.Now().UTC()
 
 	// when no one polling on the taskqueue (activity or workflow), there shall be no poller information
 	pollerInfos := testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -3731,7 +3731,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
 				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now()),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -3786,7 +3786,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
 				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now()),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,

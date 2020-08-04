@@ -316,7 +316,7 @@ func toTimeStr(s interface{}) string {
 	if err != nil {
 		return s.(string)
 	}
-	t := time.Unix(0, intTime)
+	t := time.Unix(0, intTime).UTC()
 	return t.Format(time.RFC3339)
 }
 

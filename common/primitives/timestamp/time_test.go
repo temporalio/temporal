@@ -42,7 +42,7 @@ func TestTimestampSuite(t *testing.T) {
 }
 
 func (s *TimestampSuite) TestCreateTimestampFromGoToProto() {
-	t := time.Now()
+	t := time.Now().UTC()
 	ts := TimestampFromTimePtr(&t)
 	tp := ts.ToProto()
 	t2, err := types.TimestampFromProto(tp)
@@ -72,7 +72,7 @@ func (s *TimestampSuite) TestTimestampBeforeAfterProtoProto() {
 
 func (s *TimestampSuite) TestTimestampBeforeAfterProtoGo() {
 	t := types.TimestampNow()
-	a := time.Now().Add(time.Nanosecond)
+	a := time.Now().UTC().Add(time.Nanosecond)
 
 	before := TimestampFromProto(t)
 	after := TimestampFromTimePtr(&a)
@@ -80,7 +80,7 @@ func (s *TimestampSuite) TestTimestampBeforeAfterProtoGo() {
 }
 
 func (s *TimestampSuite) TestTimestampBeforeAfterGoProto() {
-	t := time.Now()
+	t := time.Now().UTC()
 	a := types.TimestampNow()
 	a.Nanos += 1
 
@@ -90,7 +90,7 @@ func (s *TimestampSuite) TestTimestampBeforeAfterGoProto() {
 }
 
 func (s *TimestampSuite) TestTimestampBeforeAfterGoGo() {
-	t := time.Now()
+	t := time.Now().UTC()
 	a := t.Add(time.Nanosecond)
 	s.NotEqual(t.UnixNano(), a.UnixNano())
 

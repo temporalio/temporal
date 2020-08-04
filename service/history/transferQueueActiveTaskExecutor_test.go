@@ -136,7 +136,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.childNamespace = testChildNamespace
 	s.childNamespaceEntry = testGlobalChildNamespaceEntry
 	s.version = s.namespaceEntry.GetFailoverVersion()
-	s.now = time.Now()
+	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
 	s.controller = gomock.NewController(s.T())
@@ -2049,7 +2049,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}
-	now := time.Now()
+	now := s.timeSource.Now().UTC()
 	return &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: task.GetTargetNamespaceId(),
@@ -2072,8 +2072,9 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			Execution:   &execution,
 			InitiatedId: task.GetScheduleId(),
 		},
-		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
-		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
+		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		WorkflowExecutionExpirationTime: timestamp.TimePtr(now.Add(*attributes.WorkflowExecutionTimeout).Round(time.Millisecond)),
 	}
 }
 
