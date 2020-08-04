@@ -591,7 +591,7 @@ func (s *cliAppSuite) TestObserveWorkflowWithID() {
 
 // TestParseTime tests the parsing of date argument in UTC and UnixNano formats
 func (s *cliAppSuite) TestParseTime() {
-	s.Equal("1978-08-22 00:00:00 +0000 UTC", parseTime("", time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC), time.Now()).String())
+	s.Equal("1978-08-22 00:00:00 +0000 UTC", parseTime("", time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC), time.Now().UTC()).String())
 	s.Equal("2018-06-07T15:04:05+07:00", parseTime("2018-06-07T15:04:05+07:00", time.Time{}, time.Now()).Format(time.RFC3339))
 	expected, err := time.Parse(defaultDateTimeFormat, "2018-06-07T15:04:05+07:00")
 	s.NoError(err)
