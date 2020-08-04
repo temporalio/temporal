@@ -39,6 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/persistenceblobs/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -88,7 +89,8 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
-		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFn(getDefaultActivityRetryPolicyConfigOptions()),
+		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,

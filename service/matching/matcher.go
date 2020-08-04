@@ -273,7 +273,7 @@ forLoop:
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(ctx, tm.taskC, tm.queryTaskC); err == nil {
+	if task, err := tm.pollNonBlocking(tm.taskC, tm.queryTaskC); err == nil {
 		return task, nil
 	}
 	// there is no local poller available to pickup this task. Now block waiting
@@ -286,7 +286,7 @@ func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) {
 	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(ctx, nil, tm.queryTaskC); err == nil {
+	if task, err := tm.pollNonBlocking(nil, tm.queryTaskC); err == nil {
 		return task, nil
 	}
 	// there is no local poller available to pickup this task. Now block waiting
@@ -366,7 +366,6 @@ func (tm *TaskMatcher) poll(
 }
 
 func (tm *TaskMatcher) pollNonBlocking(
-	ctx context.Context,
 	taskC <-chan *internalTask,
 	queryTaskC <-chan *internalTask,
 ) (*internalTask, error) {

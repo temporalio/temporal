@@ -395,18 +395,3 @@ func Test_NextRetry(t *testing.T) {
 	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 	ai.Attempt++
 }
-
-func Test_FromConfigToActivityRetryPolicy(t *testing.T) {
-	options := map[string]interface{}{
-		"InitialIntervalInSeconds":   2,
-		"MaximumIntervalCoefficient": 100.0,
-		"BackoffCoefficient":         4.0,
-		"MaximumAttempts":            5,
-	}
-
-	defaultSettings := fromConfigToDefaultActivityRetrySettings(options)
-	assert.Equal(t, int32(2), defaultSettings.InitialIntervalInSeconds)
-	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
-	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
-	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
-}

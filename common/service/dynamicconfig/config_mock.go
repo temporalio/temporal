@@ -86,3 +86,8 @@ func GetStringPropertyFn(value string) func(opts ...FilterOption) string {
 func GetMapPropertyFn(value map[string]interface{}) func(opts ...FilterOption) map[string]interface{} {
 	return func(...FilterOption) map[string]interface{} { return value }
 }
+
+// GetMapPropertyFnWithNamespaceFilter returns value as MapPropertyFn
+func GetMapPropertyFnWithNamespaceFilter(value map[string]interface{}) func(namespace string) map[string]interface{} {
+	return func(namespace string) map[string]interface{} { return value }
+}
