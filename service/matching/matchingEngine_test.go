@@ -226,14 +226,14 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResult() {
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResultWithShortContext() {
-	shortContextTimeout := returnEmptyTaskTimeBudget + 20*time.Millisecond
+	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortContext() {
-	shortContextTimeout := returnEmptyTaskTimeBudget + 20*time.Millisecond
+	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
