@@ -40,6 +40,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -478,14 +479,17 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
-	now := time.Now()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID,
 		StartRequest:           startRequest,
 		ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		Attempt:                1,
+		ParentExecutionInfo:    parentExecutionInfo,
 	}
+
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
 		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
