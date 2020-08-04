@@ -322,6 +322,13 @@ func (t *taskProcessor) handleTaskError(
 		return nil
 	}
 
+	if taskInfo.attempt > t.config.TimerTaskMaxRetryCount() && common.IsStickyTaskConditionError(err) {
+		// sticky task could end up into endless loop in rare cases and
+		// cause worker to keep getting decision timeout unless restart.
+		// return nil here to break the endless loop
+		return nil
+	}
+
 	taskInfo.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }

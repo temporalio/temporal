@@ -791,3 +791,11 @@ func ConvertDynamicConfigMapPropertyToIntMap(
 	}
 	return intMap, nil
 }
+
+// IsStickyTaskConditionError is error from matching engine
+func IsStickyTaskConditionError(err error) bool {
+	if e, ok := err.(*workflow.InternalServiceError); ok {
+		return e.GetMessage() == StickyTaskConditionFailedErrorMsg
+	}
+	return false
+}

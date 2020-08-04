@@ -205,8 +205,7 @@ func (c *taskListManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
-	c.engine.removeTaskListManager(c.taskListID)
-	c.logger.Info("Task list manager state changed", tag.LifeCycleStopped)
+	c.logger.Info("", tag.LifeCycleStopped)
 }
 
 // AddTask adds a task to the task list. This method will first attempt a synchronous
@@ -479,6 +478,9 @@ func (c *taskListManagerImpl) executeWithRetry(
 		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskListCounter)
 		c.logger.Debug(fmt.Sprintf("Stopping task list due to persistence condition failure. Err: %v", err))
 		c.Stop()
+		if c.taskListKind == s.TaskListKindSticky {
+			err = &s.InternalServiceError{Message: common.StickyTaskConditionFailedErrorMsg}
+		}
 	}
 	return
 }
