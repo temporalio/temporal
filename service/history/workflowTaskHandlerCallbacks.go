@@ -567,6 +567,10 @@ Update_History_Loop:
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("workflow task heartbeat timeout"))
 		}
 
+		if failWorkflowTask != nil {
+			return nil, serviceerror.NewInvalidArgument(failWorkflowTask.message)
+		}
+
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
 		if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
 			workflowTask, _ := msBuilder.GetWorkflowTaskInfo(newWorkflowTaskScheduledID)
