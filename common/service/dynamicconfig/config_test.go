@@ -197,6 +197,15 @@ func (s *configSuite) TestGetBoolProperty() {
 	s.Equal(false, value())
 }
 
+func (s *configSuite) TestGetBoolPropertyFilteredByDomainID() {
+	key := testGetBoolPropertyFilteredByDomainIDKey
+	domainID := "testDomainID"
+	value := s.cln.GetBoolPropertyFilteredByDomainID(key, true)
+	s.Equal(true, value(domainID))
+	s.client.SetValue(key, false)
+	s.Equal(false, value(domainID))
+}
+
 func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
 	key := testGetBoolPropertyFilteredByTaskListInfoKey
 	domain := "testDomain"
