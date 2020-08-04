@@ -406,6 +406,9 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
+	// This sleep ensures that the poll request has been forwarded to the parent partition before the offer is made.
+	// Without this sleep, there is a chance that the request is matched on the child partition, which will
+	// fail the test as the PollWorkflowTaskQueue and the 2nd AddWorkflowTask expectation is never met.
 	time.Sleep(time.Second)
 
 	t.NoError(t.matcher.MustOffer(ctx, task))

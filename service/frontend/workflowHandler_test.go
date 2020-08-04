@@ -450,7 +450,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonEmptyRetryPolicyInitialized() {
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolicyInitialized() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
@@ -469,8 +469,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonEmptyRetryPol
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
-	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
+	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
 		InitialInterval:    timestamp.DurationPtr(time.Second),
@@ -496,8 +495,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
-	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
+	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
 }
 
