@@ -37,13 +37,19 @@ type (
 	}
 )
 
+var scanTypeExecFnMap = map[ScanType]func(data []byte) (*ScanOutputEntity, error){
+	ConcreteExecutionType: deserializeConcreteExecution,
+	CurrentExecutionType:  deserializeCurrentExecution,
+}
+
 // NewBlobstoreIterator constructs a new iterator backed by blobstore.
 func NewBlobstoreIterator(
 	client blobstore.Client,
 	keys Keys,
+	scanType ScanType,
 ) ScanOutputIterator {
 	return &blobstoreIterator{
-		itr: pagination.NewIterator(keys.MinPage, getBlobstoreFetchPageFn(client, keys)),
+		itr: pagination.NewIterator(keys.MinPage, getBlobstoreFetchPageFn(client, keys, scanTypeExecFnMap[scanType])),
 	}
 }
 
@@ -64,6 +70,7 @@ func (i *blobstoreIterator) HasNext() bool {
 func getBlobstoreFetchPageFn(
 	client blobstore.Client,
 	keys Keys,
+	execDeserializeFunc func(data []byte) (*ScanOutputEntity, error),
 ) pagination.FetchFn {
 	return func(token pagination.PageToken) (pagination.Page, error) {
 		index := token.(int)
@@ -83,17 +90,11 @@ func getBlobstoreFetchPageFn(
 			if len(p) == 0 {
 				continue
 			}
-			// TODO handle multiple execution types
-			soe := ScanOutputEntity{
-				Execution: &ConcreteExecution{},
-			}
-			if err := json.Unmarshal(p, &soe); err != nil {
+			soe, err := execDeserializeFunc(p)
+			if err != nil {
 				return pagination.Page{}, err
 			}
-			if err := ValidateConcreteExecution(soe.Execution.(*ConcreteExecution)); err != nil {
-				return pagination.Page{}, err
-			}
-			executions = append(executions, &soe)
+			executions = append(executions, soe)
 		}
 		var nextPageToken interface{} = index + 1
 		if nextPageToken.(int) > keys.MaxPage {
@@ -105,4 +106,30 @@ func getBlobstoreFetchPageFn(
 			Entities:     executions,
 		}, nil
 	}
+}
+
+func deserializeConcreteExecution(data []byte) (*ScanOutputEntity, error) {
+	soe := &ScanOutputEntity{
+		Execution: &ConcreteExecution{},
+	}
+	if err := json.Unmarshal(data, &soe); err != nil {
+		return nil, err
+	}
+	if err := ValidateConcreteExecution(soe.Execution.(*ConcreteExecution)); err != nil {
+		return nil, err
+	}
+	return soe, nil
+}
+
+func deserializeCurrentExecution(data []byte) (*ScanOutputEntity, error) {
+	soe := &ScanOutputEntity{
+		Execution: &CurrentExecution{},
+	}
+	if err := json.Unmarshal(data, &soe); err != nil {
+		return nil, err
+	}
+	if err := ValidateCurrentExecution(soe.Execution.(*CurrentExecution)); err != nil {
+		return nil, err
+	}
+	return soe, nil
 }

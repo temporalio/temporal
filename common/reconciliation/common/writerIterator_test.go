@@ -92,8 +92,9 @@ func (s *WriterIteratorSuite) TestWriterIterator() {
 	s.Equal(0, flushedKeys.MinPage)
 	s.Equal(9, flushedKeys.MaxPage)
 	s.Equal(Extension("test"), flushedKeys.Extension)
-	blobstoreItr := NewBlobstoreIterator(blobstore, *flushedKeys)
+	blobstoreItr := NewBlobstoreIterator(blobstore, *flushedKeys, ConcreteExecutionType)
 	i := 0
+	s.True(blobstoreItr.HasNext())
 	for blobstoreItr.HasNext() {
 		exec, err := blobstoreItr.Next()
 		s.NoError(err)
