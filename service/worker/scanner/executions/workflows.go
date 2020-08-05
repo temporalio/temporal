@@ -354,6 +354,7 @@ func ScannerWorkflow(
 		ShardControlFlowFailureCount: aggregator.statusSummary[ShardStatusControlFlowFailure],
 		AggregateReportResult:        aggregator.aggregation,
 		ShardDistributionStats:       aggregator.getShardDistributionStats(),
+		ScanType:                     params.ScanType,
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
@@ -460,6 +461,7 @@ func getCorruptedKeys(
 		ScannerWorkflowWorkflowID: params.ScannerWorkflowWorkflowID,
 		ScannerWorkflowRunID:      params.ScannerWorkflowRunID,
 		StartingShardID:           nil,
+		ScanType:                  params.ScanType,
 	}
 	var minShardID *int
 	var maxShardID *int
