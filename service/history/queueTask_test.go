@@ -161,10 +161,10 @@ func (s *queueTaskSuite) TestHandleErr_ErrNamespaceNotActive() {
 
 	err := &serviceerror.NamespaceNotActive{}
 
-	queueTaskBase.submitTime = time.Now().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
+	queueTaskBase.submitTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
 	s.NoError(queueTaskBase.HandleErr(err))
 
-	queueTaskBase.submitTime = time.Now()
+	queueTaskBase.submitTime = time.Now().UTC()
 	s.Equal(err, queueTaskBase.HandleErr(err))
 }
 

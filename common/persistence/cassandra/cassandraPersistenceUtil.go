@@ -447,8 +447,8 @@ func createExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the start time and last update time on business logic layer
-	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
-	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.StartTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {
@@ -557,7 +557,7 @@ func updateExecution(
 	runID := executionInfo.RunID
 
 	// TODO we should set the last update time on business logic layer
-	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis))
+	executionInfo.LastUpdateTimestamp = time.Unix(0, p.DBTimestampToUnixNano(cqlNowTimestampMillis)).UTC()
 
 	protoExecution, protoState, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
 	if err != nil {

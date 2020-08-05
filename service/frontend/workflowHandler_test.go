@@ -166,7 +166,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 		Namespace: testNamespace,
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now()),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -189,7 +189,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 		Namespace: testNamespace,
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now()),
+			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",

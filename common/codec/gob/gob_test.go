@@ -45,7 +45,7 @@ func TestGobEncoder(t *testing.T) {
 	namespace := "test-namespace"
 	wid := uuid.New()
 	rid := uuid.New()
-	startTime := time.Now().UnixNano()
+	startTime := time.Now().UTC().UnixNano()
 
 	// test encode and decode 1 object
 	msg := &testStruct{

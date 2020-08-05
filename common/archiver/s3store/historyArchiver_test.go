@@ -345,7 +345,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now()),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -409,12 +409,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now()),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now()),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -423,7 +423,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now()),
+					EventTime: timestamp.TimePtr(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},

@@ -91,7 +91,7 @@ func newTaskInfo(
 		processor:         processor,
 		task:              task,
 		attempt:           1,
-		startTime:         time.Now(), // used for metrics
+		startTime:         time.Now().UTC(), // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
 	}

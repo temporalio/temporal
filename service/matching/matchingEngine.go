@@ -247,7 +247,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
-	now := timestamp.TimePtr(time.Now())
+	now := timestamp.TimePtr(time.Now().UTC())
 	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: namespaceID,
@@ -293,7 +293,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	now := timestamp.TimePtr(time.Now())
+	now := timestamp.TimePtr(time.Now().UTC())
 	expiry := now.Add(timestamp.DurationValue(addRequest.GetScheduleToStartTimeout()))
 	taskInfo := &persistenceblobs.TaskInfo{
 		NamespaceId: sourceNamespaceID,

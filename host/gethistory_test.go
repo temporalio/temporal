@@ -152,10 +152,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
-	start := time.Now()
+	start := time.Now().UTC()
 	events, token = getHistory(s.namespace, workflowID, token, true)
 	allEvents = append(allEvents, events...)
-	s.True(time.Now().Before(start.Add(time.Second * 5)))
+	s.True(time.Now().UTC().Before(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
 	s.NotNil(token)
 
@@ -165,10 +165,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
-	start = time.Now()
+	start = time.Now().UTC()
 	events, token = getHistory(s.namespace, workflowID, token, true)
 	allEvents = append(allEvents, events...)
-	s.True(time.Now().After(start.Add(time.Second * 5)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
 	s.NotNil(token)
 
@@ -319,9 +319,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
-	start := time.Now()
+	start := time.Now().UTC()
 	events, token = getHistory(s.namespace, workflowID, token, true)
-	s.True(time.Now().After(start.Add(time.Second * 10)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 10)))
 	// since we are only interested in close event
 	s.Empty(events)
 	s.NotNil(token)
@@ -332,9 +332,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
-	start = time.Now()
+	start = time.Now().UTC()
 	events, token = getHistory(s.namespace, workflowID, token, true)
-	s.True(time.Now().After(start.Add(time.Second * 10)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 10)))
 	// since we are only interested in close event
 	s.Empty(events)
 	s.NotNil(token)
@@ -509,11 +509,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	var events []*historypb.HistoryEvent
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
-	start := time.Now()
+	start := time.Now().UTC()
 	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
-	s.True(time.Now().Before(start.Add(time.Second * 5)))
+	s.True(time.Now().UTC().Before(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
 	s.NotNil(token)
 
@@ -523,11 +523,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
-	start = time.Now()
+	start = time.Now().UTC()
 	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
-	s.True(time.Now().After(start.Add(time.Second * 5)))
+	s.True(time.Now().UTC().After(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
 	s.NotNil(token)
 

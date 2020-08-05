@@ -859,7 +859,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := time.Now()
+	scheduledTime := time.Now().UTC()
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
@@ -931,7 +931,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	runID := uuid.New()
 	version := int64(100)
 	scheduleID := int64(144)
-	scheduledTime := time.Now()
+	scheduledTime := time.Now().UTC()
 	startedID := scheduleID + 1
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)

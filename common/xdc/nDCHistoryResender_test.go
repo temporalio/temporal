@@ -147,13 +147,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now()),
+			EventTime: timestamp.TimePtr(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}

@@ -244,7 +244,7 @@ This usually means workflow history is corrupted due to some bug. For example, t
 
 * Changing duration of timer 
 
-* Using time.Now() instead of workflow.Now()
+* Using time.Now().UTC() instead of workflow.Now()
 
 * Use golang builtin "go" to start goroutine in workflow, instead of “workflow.Go”
 

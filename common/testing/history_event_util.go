@@ -945,7 +945,7 @@ func getDefaultHistoryEvent(
 	globalTaskID++
 	return &historypb.HistoryEvent{
 		EventId:   eventID,
-		EventTime: timestamp.TimePtr(time.Now()),
+		EventTime: timestamp.TimePtr(time.Now().UTC()),
 		TaskId:    globalTaskID,
 		Version:   version,
 	}

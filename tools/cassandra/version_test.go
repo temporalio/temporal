@@ -139,7 +139,7 @@ func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 func (s *VersionTestSuite) runCheckCompatibleVersion(
 	expected string, actual string, errStr string, expectedFail bool,
 ) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	keyspace := fmt.Sprintf("version_test_%v", r.Int63())
 	defer s.createKeyspace(keyspace)()
 

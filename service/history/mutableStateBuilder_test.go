@@ -130,7 +130,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   newWorkflowTaskStartedEvent.GetEventId() + 1,
-		EventTime: timestamp.TimePtr(time.Now()),
+		EventTime: timestamp.TimePtr(time.Now().UTC()),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
 			ScheduledEventId: newWorkflowTaskScheduleEvent.GetEventId(),
@@ -286,7 +286,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(8),
 		LastProcessedEvent:         int64(3),
-		LastUpdatedTimestamp:       time.Now(),
+		LastUpdatedTimestamp:       time.Now().UTC(),
 		WorkflowTaskVersion:        common.EmptyVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
@@ -298,9 +298,9 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		5: {
 			Version:                int64(1),
 			ScheduleId:             int64(5),
-			ScheduledTime:          timestamp.TimePtr(time.Now()),
+			ScheduledTime:          timestamp.TimePtr(time.Now().UTC()),
 			StartedId:              common.EmptyEventID,
-			StartedTime:            timestamp.TimePtr(time.Now()),
+			StartedTime:            timestamp.TimePtr(time.Now().UTC()),
 			ActivityId:             activityID,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
@@ -370,7 +370,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now(), transactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
 					return checksum.Checksum{}, err
 				}
@@ -381,7 +381,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now(), transactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyPassive)
 				if err != nil {
 					return checksum.Checksum{}, err
 				}
@@ -470,7 +470,7 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
 	s.False(s.msBuilder.shouldInvalidateCheckum())
-	s.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now()
+	s.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now().UTC()
 	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
 	}
@@ -562,7 +562,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		RunId:      runID,
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	workflowType := "some random workflow type"
 	taskqueue := "some random taskqueue"
 	workflowTimeout := 222 * time.Second
@@ -745,7 +745,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		Status:                     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		NextEventID:                int64(101),
 		LastProcessedEvent:         int64(99),
-		LastUpdatedTimestamp:       time.Now(),
+		LastUpdatedTimestamp:       time.Now().UTC(),
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleID:     common.EmptyEventID,
 		WorkflowTaskStartedID:      common.EmptyEventID,
@@ -757,9 +757,9 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		5: {
 			Version:                failoverVersion,
 			ScheduleId:             int64(90),
-			ScheduledTime:          timestamp.TimePtr(time.Now()),
+			ScheduledTime:          timestamp.TimePtr(time.Now().UTC()),
 			StartedId:              common.EmptyEventID,
-			StartedTime:            timestamp.TimePtr(time.Now()),
+			StartedTime:            timestamp.TimePtr(time.Now().UTC()),
 			ActivityId:             "activityID_5",
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),

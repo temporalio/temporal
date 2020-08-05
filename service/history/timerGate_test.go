@@ -55,7 +55,7 @@ func BenchmarkLocalTimer(b *testing.B) {
 	timer := NewLocalTimerGate(clock.NewRealTimeSource())
 
 	for i := 0; i < b.N; i++ {
-		timer.Update(time.Now())
+		timer.Update(time.Now().UTC())
 	}
 }
 
@@ -98,7 +98,7 @@ func (s *remoteTimerGateSuite) TearDownSuite() {
 func (s *remoteTimerGateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.currentTime = time.Now().Add(-10 * time.Minute)
+	s.currentTime = time.Now().UTC().Add(-10 * time.Minute)
 	s.remoteTimerGate = NewRemoteTimerGate()
 	s.remoteTimerGate.SetCurrentTime(s.currentTime)
 }
@@ -108,7 +108,7 @@ func (s *remoteTimerGateSuite) TearDownTest() {
 }
 
 func (s *localTimerGateSuite) TestTimerFire() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(1 * time.Second)
 	deadline := now.Add(2 * time.Second)
 	s.localTimerGate.Update(newTimer)
@@ -121,7 +121,7 @@ func (s *localTimerGateSuite) TestTimerFire() {
 }
 
 func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_Updated_BeforeNow() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(9 * time.Second)
 	updatedNewTimer := now.Add(-1 * time.Second)
 	deadline := now.Add(3 * time.Second)
@@ -142,7 +142,7 @@ func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_Updated_BeforeNow(
 }
 
 func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_Updated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(5 * time.Second)
 	updatedNewTimer := now.Add(1 * time.Second)
 	deadline := now.Add(3 * time.Second)
@@ -157,7 +157,7 @@ func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_Updated() {
 }
 
 func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_NotUpdated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(1 * time.Second)
 	updatedNewTimer := now.Add(3 * time.Second)
 	deadline := now.Add(2 * time.Second)
@@ -172,7 +172,7 @@ func (s *localTimerGateSuite) TestTimerFireAfterUpdate_Active_NotUpdated() {
 }
 
 func (s *localTimerGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(-5 * time.Second)
 	updatedNewTimer := now.Add(1 * time.Second)
 	deadline := now.Add(3 * time.Second)
@@ -192,7 +192,7 @@ func (s *localTimerGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
 }
 
 func (s *localTimerGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(-5 * time.Second)
 	updatedNewTimer := now.Add(-1 * time.Second)
 	deadline := now.Add(1 * time.Second)
@@ -214,14 +214,14 @@ func (s *localTimerGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
 func (s *localTimerGateSuite) TestTimerWillFire_Zero() {
 	// this test is to validate initial notification will trigger a scan of timer
 	s.localTimerGate.Update(time.Time{})
-	s.False(s.localTimerGate.FireAfter(time.Now()))
+	s.False(s.localTimerGate.FireAfter(time.Now().UTC()))
 
 	select { // this is to drain existing signal
 	case <-s.localTimerGate.FireChan():
 	case <-time.NewTimer(time.Second).C:
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(1 * time.Second)
 	deadline := now.Add(2 * time.Second)
 	s.localTimerGate.Update(newTimer)
@@ -237,7 +237,7 @@ func (s *localTimerGateSuite) TestTimerWillFire_Zero() {
 		s.Fail("timer should fire")
 	}
 
-	now = time.Now()
+	now = time.Now().UTC()
 	newTimer = now.Add(1 * time.Second)
 	s.localTimerGate.Update(newTimer)
 	s.localTimerGate.Update(time.Time{})
@@ -249,7 +249,7 @@ func (s *localTimerGateSuite) TestTimerWillFire_Zero() {
 }
 
 func (s *localTimerGateSuite) TestTimerWillFire() {
-	now := time.Now()
+	now := time.Now().UTC()
 	newTimer := now.Add(2 * time.Second)
 	timeBeforeNewTimer := now.Add(1 * time.Second)
 	timeAfterNewTimer := now.Add(3 * time.Second)
@@ -459,7 +459,7 @@ func (s *remoteTimerGateSuite) TestTimerSetCurrentTime_Update_TimerFired() {
 func (s *remoteTimerGateSuite) TestTimerWillFire_Zero() {
 	// this test is to validate initial notification will trigger a scan of timer
 	s.remoteTimerGate.Update(time.Time{})
-	s.False(s.remoteTimerGate.FireAfter(time.Now()))
+	s.False(s.remoteTimerGate.FireAfter(time.Now().UTC()))
 }
 
 func (s *remoteTimerGateSuite) TestTimerWillFire_Active() {

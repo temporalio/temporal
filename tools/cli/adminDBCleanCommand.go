@@ -130,7 +130,7 @@ func AdminDBClean(c *cli.Context) {
 		}(i)
 	}
 
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	progressReport := &CleanProgressReport{}
 	for i := 0; i < numShards; i++ {
 		report := <-reports
@@ -250,7 +250,7 @@ func includeShardCleanInProgressReport(report *ShardCleanReport, progressReport 
 		progressReport.SuccessfullyCleanedCount += report.Handled.SuccessfullyCleanedCount
 	}
 
-	pastTime := time.Now().Sub(startTime)
+	pastTime := time.Now().UTC().Sub(startTime)
 	hoursPast := float64(pastTime) / float64(time.Hour)
 	progressReport.ShardsPerHour = math.Round(float64(progressReport.NumberOfShardsFinished) / hoursPast)
 	progressReport.ExecutionsPerHour = math.Round(float64(progressReport.TotalExecutionsCount) / hoursPast)
@@ -285,7 +285,7 @@ func createShardCleanOutputFiles(shardID int, cod *CleanOutputDirectories) (*Sha
 }
 
 func createCleanOutputDirectories() *CleanOutputDirectories {
-	now := time.Now().Unix()
+	now := time.Now().UTC().Unix()
 	cod := &CleanOutputDirectories{
 		ShardCleanReportDirectoryPath:    fmt.Sprintf("./clean_%v/shard_clean_report", now),
 		SuccessfullyCleanedDirectoryPath: fmt.Sprintf("./clean_%v/successfully_cleaned", now),

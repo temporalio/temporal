@@ -110,7 +110,7 @@ func (c *lru) Iterator() Iterator {
 	c.mut.Lock()
 	iterator := &iteratorImpl{
 		lru:        c,
-		createTime: time.Now(),
+		createTime: time.Now().UTC(),
 		nextItem:   c.byAccess.Front(),
 	}
 	iterator.prepareNext()
@@ -171,7 +171,7 @@ func (c *lru) Get(key interface{}) interface{} {
 
 	entry := element.Value.(*entryImpl)
 
-	if c.isEntryExpired(entry, time.Now()) {
+	if c.isEntryExpired(entry, time.Now().UTC()) {
 		// Entry has expired
 		c.deleteInternal(element)
 		return nil
@@ -249,7 +249,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	elt := c.byKey[key]
 	if elt != nil {
 		entry := elt.Value.(*entryImpl)
-		if c.isEntryExpired(entry, time.Now()) {
+		if c.isEntryExpired(entry, time.Now().UTC()) {
 			// Entry has expired
 			c.deleteInternal(elt)
 		} else {
@@ -257,7 +257,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 			if allowUpdate {
 				entry.value = value
 				if c.ttl != 0 {
-					entry.createTime = time.Now()
+					entry.createTime = time.Now().UTC()
 				}
 			}
 
@@ -279,7 +279,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	if c.ttl != 0 {
-		entry.createTime = time.Now()
+		entry.createTime = time.Now().UTC()
 	}
 
 	c.byKey[key] = c.byAccess.PushFront(entry)

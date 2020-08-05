@@ -294,7 +294,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	activityVersion := int64(333)
 	activityScheduleID := scheduleID
-	activityScheduledTime := time.Now()
+	activityScheduledTime := time.Now().UTC()
 	activityStartedID := common.EmptyEventID
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")

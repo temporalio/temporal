@@ -206,7 +206,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Identity:            identity,
 		SearchAttributes:    searchAttr,
 	}
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -225,7 +225,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult := func(client host.FrontendClient) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
-			startFilter.LatestTime = timestamp.TimePtr(time.Now())
+			startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(host.NewContext(), listRequest)
 			s.NoError(err)

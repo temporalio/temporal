@@ -535,5 +535,5 @@ func lockTaskQueue(tx sqlplugin.Tx, tqHash uint32, tqId []byte, oldRangeID int64
 }
 
 func stickyTaskQueueTTL() *time.Time {
-	return timestamp.TimePtr(time.Now().Add(24 * time.Hour))
+	return timestamp.TimePtr(time.Now().UTC().Add(24 * time.Hour))
 }

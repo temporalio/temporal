@@ -236,7 +236,7 @@ forLoop:
 		case tm.taskC <- task:
 			return nil
 		case token := <-tm.fwdrAddReqTokenC():
-			childCtx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*2))
+			childCtx, cancel := context.WithDeadline(ctx, time.Now().UTC().Add(time.Second*2))
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
 			if err != nil {
@@ -416,7 +416,7 @@ func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error)
 
 	rsv := tm.limiter.Reserve()
 	// If we have to wait too long for reservation, give up and return
-	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now()) {
+	if !rsv.OK() || rsv.Delay() > deadline.Sub(time.Now().UTC()) {
 		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
 			rsv.Cancel()
 		}
