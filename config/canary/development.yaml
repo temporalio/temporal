@@ -1,6 +1,6 @@
 canary:
   domains: ["cadence-canary"]
-  excludes: ["workflow.searchAttributes", "workflow.batch"]
+  excludes: ["workflow.searchAttributes", "workflow.batch", "workflow.archival.visibility"]
 
 cadence:
   service: "cadence-frontend"

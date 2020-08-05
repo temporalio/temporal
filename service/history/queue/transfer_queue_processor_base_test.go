@@ -147,7 +147,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(maxLevel, queueCollection.Queues()[0].State().ReadLevel()))
 
-	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now()))
+	s.True(processorBase.nextPollTime[queueLevel].time.Before(processorBase.shard.GetTimeSource().Now()))
 	time.Sleep(time.Millisecond * 100)
 	select {
 	case <-processorBase.nextPollTimer.FireChan():
@@ -211,7 +211,8 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_NoNextPage
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(shardMaxLevel, queueCollection.Queues()[0].State().ReadLevel()))
 
-	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now().Add(nonDefaultQueueBackoffDuration)))
+	_, ok := processorBase.nextPollTime[queueLevel]
+	s.True(ok) // this is the poll time for max poll interval
 	time.Sleep(time.Millisecond * 100)
 	select {
 	case <-processorBase.nextPollTimer.FireChan():
@@ -278,7 +279,7 @@ func (s *transferQueueProcessorBaseSuite) TestProcessQueueCollections_WithNextPa
 	s.NotNil(queueCollection.ActiveQueue())
 	s.True(taskKeyEquals(newTransferTaskKey(500), queueCollection.Queues()[0].State().ReadLevel()))
 
-	s.True(processorBase.nextPollTime[queueLevel].Before(processorBase.shard.GetTimeSource().Now()))
+	s.True(processorBase.nextPollTime[queueLevel].time.Before(processorBase.shard.GetTimeSource().Now()))
 	time.Sleep(time.Millisecond * 100)
 	select {
 	case <-processorBase.nextPollTimer.FireChan():

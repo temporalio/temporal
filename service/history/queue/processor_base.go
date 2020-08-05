@@ -47,27 +47,29 @@ type (
 	queueShutdownFn         func() error
 
 	queueProcessorOptions struct {
-		BatchSize                           dynamicconfig.IntPropertyFn
-		MaxPollRPS                          dynamicconfig.IntPropertyFn
-		MaxPollInterval                     dynamicconfig.DurationPropertyFn
-		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
-		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
-		UpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-		RedispatchInterval                  dynamicconfig.DurationPropertyFn
-		RedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
-		SplitQueueInterval                  dynamicconfig.DurationPropertyFn
-		SplitQueueIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		EnableSplit                         dynamicconfig.BoolPropertyFn
-		SplitMaxLevel                       dynamicconfig.IntPropertyFn
-		EnableRandomSplitByDomainID         dynamicconfig.BoolPropertyFnWithDomainIDFilter
-		RandomSplitProbability              dynamicconfig.FloatPropertyFn
-		EnablePendingTaskSplit              dynamicconfig.BoolPropertyFn
-		PendingTaskSplitThreshold           dynamicconfig.MapPropertyFn
-		EnableStuckTaskSplit                dynamicconfig.BoolPropertyFn
-		StuckTaskSplitThreshold             dynamicconfig.MapPropertyFn
-		SplitLookAheadDurationByDomainID    dynamicconfig.DurationPropertyFnWithDomainIDFilter
-		MetricScope                         int
+		BatchSize                            dynamicconfig.IntPropertyFn
+		MaxPollRPS                           dynamicconfig.IntPropertyFn
+		MaxPollInterval                      dynamicconfig.DurationPropertyFn
+		MaxPollIntervalJitterCoefficient     dynamicconfig.FloatPropertyFn
+		UpdateAckInterval                    dynamicconfig.DurationPropertyFn
+		UpdateAckIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+		RedispatchInterval                   dynamicconfig.DurationPropertyFn
+		RedispatchIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
+		MaxRedispatchQueueSize               dynamicconfig.IntPropertyFn
+		SplitQueueInterval                   dynamicconfig.DurationPropertyFn
+		SplitQueueIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
+		EnableSplit                          dynamicconfig.BoolPropertyFn
+		SplitMaxLevel                        dynamicconfig.IntPropertyFn
+		EnableRandomSplitByDomainID          dynamicconfig.BoolPropertyFnWithDomainIDFilter
+		RandomSplitProbability               dynamicconfig.FloatPropertyFn
+		EnablePendingTaskSplit               dynamicconfig.BoolPropertyFn
+		PendingTaskSplitThreshold            dynamicconfig.MapPropertyFn
+		EnableStuckTaskSplit                 dynamicconfig.BoolPropertyFn
+		StuckTaskSplitThreshold              dynamicconfig.MapPropertyFn
+		SplitLookAheadDurationByDomainID     dynamicconfig.DurationPropertyFnWithDomainIDFilter
+		PollBackoffInterval                  dynamicconfig.DurationPropertyFn
+		PollBackoffIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MetricScope                          int
 	}
 
 	actionNotification struct {
@@ -169,6 +171,11 @@ func (p *processorBase) updateAckLevel() (bool, error) {
 	totalPengingTasks := 0
 	for _, queueCollection := range p.processingQueueCollections {
 		ackLevel, numPendingTasks := queueCollection.UpdateAckLevels()
+		if ackLevel == nil {
+			// ack level may be nil if the queueCollection doesn't contain any processing queue
+			// after updating ack levels
+			continue
+		}
 
 		totalPengingTasks += numPendingTasks
 		if minAckLevel == nil {
@@ -342,12 +349,23 @@ func (p *processorBase) resetProcessingQueueStates() (*ActionResult, error) {
 	var minAckLevel task.Key
 	for _, queueCollection := range p.processingQueueCollections {
 		ackLevel, _ := queueCollection.UpdateAckLevels()
+		if ackLevel == nil {
+			// ack level may be nil if the queueCollection doesn't contain any processing queue
+			// after updating ack levels
+			continue
+		}
 
 		if minAckLevel == nil {
 			minAckLevel = ackLevel
 		} else {
 			minAckLevel = minTaskKey(minAckLevel, ackLevel)
 		}
+	}
+
+	if minAckLevel == nil {
+		// reset queue can't be invoked for failover queue, so if this happens, there's must be a
+		// bug in the queue split implementation
+		p.logger.Fatal("unable to find minAckLevel during reset", tag.Value(p.processingQueueCollections))
 	}
 
 	var maxReadLevel task.Key

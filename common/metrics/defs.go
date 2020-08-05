@@ -1721,6 +1721,7 @@ const (
 	ProcessingQueueStuckTaskSplitCounter
 	ProcessingQueueSelectedDomainSplitCounter
 	ProcessingQueueRandomSplitCounter
+	ProcessingQueueThrottledCounter
 
 	ActivityE2ELatency
 	AckLevelUpdateCounter
@@ -2166,6 +2167,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ProcessingQueueStuckTaskSplitCounter:              {metricName: "processing_queue_stuck_task_split_counter", metricType: Counter},
 		ProcessingQueueSelectedDomainSplitCounter:         {metricName: "processing_queue_selected_domain_split_counter", metricType: Counter},
 		ProcessingQueueRandomSplitCounter:                 {metricName: "processing_queue_random_split_counter", metricType: Counter},
+		ProcessingQueueThrottledCounter:                   {metricName: "processing_queue_throttled_counter", metricType: Counter},
 		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},

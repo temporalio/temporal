@@ -74,6 +74,10 @@ func (c *processingQueueCollection) AddTasks(
 }
 
 func (c *processingQueueCollection) UpdateAckLevels() (task.Key, int) {
+	if len(c.queues) == 0 {
+		return nil, 0
+	}
+
 	remainingQueues := make([]ProcessingQueue, 0, len(c.queues))
 	totalPendingTasks := 0
 	var minAckLevel task.Key
@@ -100,6 +104,10 @@ func (c *processingQueueCollection) UpdateAckLevels() (task.Key, int) {
 func (c *processingQueueCollection) Split(
 	policy ProcessingQueueSplitPolicy,
 ) []ProcessingQueue {
+	if len(c.queues) == 0 {
+		return nil
+	}
+
 	newQueues := make([]ProcessingQueue, 0, len(c.queues))
 	nextLevelQueues := []ProcessingQueue{}
 

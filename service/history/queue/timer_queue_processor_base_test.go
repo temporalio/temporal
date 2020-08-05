@@ -506,7 +506,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessQueueCollections_SkipRead() {
 
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
-	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
+	s.Empty(timerQueueProcessBase.backoffTimer)
 	time.Sleep(100 * time.Millisecond)
 	s.True(timerQueueProcessBase.nextPollTime[queueLevel].Before(s.mockShard.GetTimeSource().Now()))
 	select {
@@ -598,7 +598,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_HasNextPage() {
 	}, timerQueueProcessBase.processingQueueReadProgress[0])
 
 	s.True(timerQueueProcessBase.nextPollTime[queueLevel].IsZero())
-	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
+	s.Empty(timerQueueProcessBase.backoffTimer)
 	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-timerQueueProcessBase.timerGate.FireChan():
@@ -690,7 +690,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_HasLookAhead(
 
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
-	s.Empty(timerQueueProcessBase.pollTimeUpdateTimer)
+	s.Empty(timerQueueProcessBase.backoffTimer)
 	s.Equal(lookAheadTaskTimestamp, timerQueueProcessBase.nextPollTime[queueLevel])
 	time.Sleep(100 * time.Millisecond)
 	select {
@@ -791,7 +791,7 @@ func (s *timerQueueProcessorBaseSuite) TestProcessBatch_NoNextPage_NoLookAhead()
 	s.Empty(timerQueueProcessBase.processingQueueReadProgress)
 
 	_, ok := timerQueueProcessBase.nextPollTime[queueLevel]
-	s.False(ok)
+	s.True(ok) // this is the poll time for max poll interval
 	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-timerQueueProcessBase.timerGate.FireChan():
