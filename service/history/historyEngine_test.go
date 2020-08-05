@@ -1299,7 +1299,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 		},
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
 	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)
@@ -1379,7 +1379,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 		},
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
 	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)
@@ -3784,7 +3784,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadRequestCancelActivityAttributes", err.Error())
+	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event", err.Error())
 	s.Equal(int64(5), ms2.ExecutionInfo.NextEventID)
 	s.Equal(common.EmptyEventID, ms2.ExecutionInfo.LastProcessedEvent)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.ExecutionInfo.State)
@@ -4427,7 +4427,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("StartTimerDuplicateId", err.Error())
+	s.Equal("StartTimerDuplicateId: invalid history builder state for action: add-timer-started-event", err.Error())
 
 	s.True(workflowTaskFailedEvent)
 

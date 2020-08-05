@@ -396,10 +396,7 @@ Update_History_Loop:
 
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
-			workflowTaskFailedErr = &workflowTaskFailedError{
-				cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
-				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
-			}
+			workflowTaskFailedErr = NewWorkflowTaskFailedError(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
 		} else {
 			namespace := namespaceEntry.GetInfo().Name
 			workflowSizeChecker := newWorkflowSizeChecker(
@@ -560,11 +557,16 @@ Update_History_Loop:
 
 		if workflowTaskHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("workflow task heartbeat timeout"))
+			return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 		}
 
 		if workflowTaskFailedErr != nil {
-			return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
+			switch workflowTaskFailedErr.causeErr.(type) {
+			case nil:
+				return nil, serviceerror.NewInternal(workflowTaskFailedErr.Error())
+			case *serviceerror.InvalidArgument:
+				return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
+			}
 		}
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}

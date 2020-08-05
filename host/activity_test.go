@@ -35,6 +35,7 @@ import (
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -1216,15 +1217,18 @@ func (s *integrationSuite) TestActivityCancellation() {
 		scheduleActivity = false
 		requestCancellation = true
 		_, err := poller.PollAndProcessWorkflowTask(false, false)
-		s.True(err == nil || err == matching.ErrNoTasks, err)
+		s.Error(err)
+		s.IsType(&serviceerror.InvalidArgument{}, err)
+		s.Equal("BadRequestCancelActivityAttributes", err.Error())
 		cancelCh <- struct{}{}
 	}()
 
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
-	<-cancelCh
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	<-cancelCh
+	s.Logger.Info("Workflow completed", tag.WorkflowRunID(we.RunId))
 }
 
 func (s *integrationSuite) TestActivityCancellationNotStarted() {
