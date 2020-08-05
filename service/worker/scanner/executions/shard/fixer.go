@@ -58,7 +58,7 @@ func NewFixer(
 	id := uuid.New()
 	return &fixer{
 		shardID:          shardID,
-		itr:              common.NewBlobstoreIterator(blobstoreClient, keys),
+		itr:              common.NewBlobstoreIterator(blobstoreClient, keys, scanType),
 		skippedWriter:    common.NewBlobstoreWriter(id, common.SkippedExtension, blobstoreClient, blobstoreFlushThreshold),
 		failedWriter:     common.NewBlobstoreWriter(id, common.FailedExtension, blobstoreClient, blobstoreFlushThreshold),
 		fixedWriter:      common.NewBlobstoreWriter(id, common.FixedExtension, blobstoreClient, blobstoreFlushThreshold),
