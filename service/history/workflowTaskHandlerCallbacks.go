@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -43,7 +42,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -375,7 +373,7 @@ Update_History_Loop:
 		}
 
 		var (
-			failWorkflowTask            *failWorkflowTaskInfo
+			workflowTaskFailedErr       *workflowTaskFailedError
 			activityNotStartedCancelled bool
 			continueAsNewBuilder        mutableState
 
@@ -398,12 +396,11 @@ Update_History_Loop:
 
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
-			failWorkflowTask = &failWorkflowTaskInfo{
+			workflowTaskFailedErr = &workflowTaskFailedError{
 				cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
-
 			namespace := namespaceEntry.GetInfo().Name
 			workflowSizeChecker := newWorkflowSizeChecker(
 				handler.config.BlobSizeLimitWarn(namespace),
@@ -440,7 +437,7 @@ Update_History_Loop:
 
 			// set the vars used by following logic
 			// further refactor should also clean up the vars used below
-			failWorkflowTask = workflowTaskHandler.failWorkflowTaskInfo
+			workflowTaskFailedErr = workflowTaskHandler.workflowTaskFailedErr
 
 			// failMessage is not used by workflowTaskHandlerCallbacks
 			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
@@ -451,15 +448,14 @@ Update_History_Loop:
 			hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
 		}
 
-		if failWorkflowTask != nil {
+		if workflowTaskFailedErr != nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedWorkflowTasksCounter)
 			handler.logger.Info("Failing the workflow task.",
-				tag.WorkflowTaskFailedCause(failWorkflowTask.cause),
-				tag.Error(errors.New(failWorkflowTask.message)),
+				tag.Error(workflowTaskFailedErr),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunID(token.GetRunId()),
 				tag.WorkflowNamespaceID(namespaceID))
-			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, failWorkflowTask.cause, failure.NewServerFailure(failWorkflowTask.message, true), request)
+			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, workflowTaskFailedErr, request)
 			if err != nil {
 				return nil, err
 			}
@@ -567,8 +563,8 @@ Update_History_Loop:
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("workflow task heartbeat timeout"))
 		}
 
-		if failWorkflowTask != nil {
-			return nil, serviceerror.NewInvalidArgument(failWorkflowTask.message)
+		if workflowTaskFailedErr != nil {
+			return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
 		}
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}

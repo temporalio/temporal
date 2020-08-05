@@ -57,7 +57,7 @@ type (
 
 		// internal state
 		hasBufferedEvents               bool
-		failWorkflowTaskInfo            *failWorkflowTaskInfo
+		workflowTaskFailedErr           *workflowTaskFailedError
 		activityNotStartedCancelled     bool
 		continueAsNewBuilder            mutableState
 		stopProcessing                  bool // should stop processing any more commands
@@ -74,7 +74,7 @@ type (
 		config         *Config
 	}
 
-	failWorkflowTaskInfo struct {
+	workflowTaskFailedError struct {
 		cause   enumspb.WorkflowTaskFailedCause
 		message string
 	}
@@ -100,7 +100,7 @@ func newWorkflowTaskHandler(
 
 		// internal state
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
-		failWorkflowTaskInfo:            nil,
+		workflowTaskFailedErr:           nil,
 		activityNotStartedCancelled:     false,
 		continueAsNewBuilder:            nil,
 		stopProcessing:                  false,
@@ -955,10 +955,18 @@ func (handler *workflowTaskHandlerImpl) handlerFailCommand(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	failMessage string,
 ) error {
-	handler.failWorkflowTaskInfo = &failWorkflowTaskInfo{
+	handler.workflowTaskFailedErr = &workflowTaskFailedError{
 		cause:   failedCause,
 		message: failMessage,
 	}
 	handler.stopProcessing = true
 	return nil
+}
+
+func (fwti *workflowTaskFailedError) Error() string {
+	message := fwti.cause.String()
+	if fwti.message != "" {
+		message += ": " + fwti.message
+	}
+	return message
 }
