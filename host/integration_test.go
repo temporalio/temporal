@@ -1098,7 +1098,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		executions = append(executions, execution)
 		return []*commandpb.Command{
 			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            "timer-id",
@@ -2653,7 +2653,9 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 	// so it will fail and create a new workflow task
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
+	s.Error(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Equal("Workflow task not found.", err.Error())
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
@@ -3744,7 +3746,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("MarkerName is not set on command.", err.Error())
+	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())
 
 	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
