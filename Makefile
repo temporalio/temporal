@@ -241,7 +241,9 @@ clean-test-results:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	EXIT_CODE=0
+	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log ; EXIT_CODE=$(shell expr $(EXIT_CODE) + $(PIPESTATUS[0]) )$(NEWLINE))
+	exit $(EXIT_CODE)
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
@@ -390,3 +392,6 @@ go-generate:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+
+echo:
+	true | tee 1.log ; test ${PIPESTATUS[0]} -eq 0
