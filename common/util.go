@@ -231,8 +231,7 @@ func IsServiceTransientError(err error) bool {
 		return true
 	case *yarpcerrors.Status:
 		// We only selectively retry the following yarpc errors client can safe retry with a backoff
-		if yarpcerrors.IsDeadlineExceeded(err) ||
-			yarpcerrors.IsUnavailable(err) ||
+		if yarpcerrors.IsUnavailable(err) ||
 			yarpcerrors.IsUnknown(err) ||
 			yarpcerrors.IsInternal(err) {
 			return true
@@ -250,6 +249,15 @@ func IsServiceBusyError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// IsContextTimeoutError checks if the error is context timeout error
+func IsContextTimeoutError(err error) bool {
+	switch err := err.(type) {
+	case *workflow.InternalServiceError:
+		return err.Message == context.DeadlineExceeded.Error()
+	}
+	return err == context.DeadlineExceeded || yarpcerrors.IsDeadlineExceeded(err)
 }
 
 // WorkflowIDToHistoryShard is used to map a workflowID to a shardID

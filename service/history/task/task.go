@@ -346,7 +346,7 @@ func (t *taskBase) HandleErr(
 func (t *taskBase) RetryErr(
 	err error,
 ) bool {
-	if err == ErrTaskRedispatch || err == ErrTaskPendingActive {
+	if err == ErrTaskRedispatch || err == ErrTaskPendingActive || common.IsContextTimeoutError(err) {
 		return false
 	}
 

@@ -24,12 +24,14 @@ package common
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/yarpc/yarpcerrors"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
@@ -42,10 +44,32 @@ func TestIsServiceTransientError_ContextTimeout(t *testing.T) {
 	require.False(t, IsServiceTransientError(ctx.Err()))
 }
 
+func TestIsServiceTransientError_YARPCDeadlineExceeded(t *testing.T) {
+	yarpcErr := yarpcerrors.DeadlineExceededErrorf("yarpc deadline exceeded")
+	require.False(t, IsServiceTransientError(yarpcErr))
+}
+
 func TestIsServiceTransientError_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.False(t, IsServiceTransientError(ctx.Err()))
+}
+
+func TestIsContextTimeoutError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	time.Sleep(50 * time.Millisecond)
+	require.True(t, IsContextTimeoutError(ctx.Err()))
+	require.True(t, IsContextTimeoutError(&workflow.InternalServiceError{Message: ctx.Err().Error()}))
+
+	yarpcErr := yarpcerrors.DeadlineExceededErrorf("yarpc deadline exceeded")
+	require.True(t, IsContextTimeoutError(yarpcErr))
+
+	require.False(t, IsContextTimeoutError(errors.New("some random error")))
+
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	require.False(t, IsContextTimeoutError(ctx.Err()))
 }
 
 func TestConvertDynamicConfigMapPropertyToIntMap(t *testing.T) {
