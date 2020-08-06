@@ -72,7 +72,7 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
-      rpcAddress: "localhost:7933"
+      rpcAddress: "localhost:7233"
     standby:
       enabled: true
       initialFailoverVersion: 2
