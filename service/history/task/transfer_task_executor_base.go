@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 30 * time.Second
+	transferActiveTaskDefaultTimeout = 3 * time.Second
 	secondsInDay                     = int32(24 * time.Hour / time.Second)
 	defaultDomainName                = "defaultDomainName"
 )
