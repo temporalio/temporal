@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/environment"
 	"go.temporal.io/server/schema/cassandra"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -216,7 +217,7 @@ func validateCQLClientConfig(config *CQLClientConfig, isDryRun bool) error {
 		config.Keyspace = schema.DryrunDBName
 	}
 	if config.Port == 0 {
-		config.Port = defaultCassandraPort
+		config.Port = environment.GetCassandraPort()
 	}
 	if config.numReplicas == 0 {
 		config.numReplicas = defaultNumReplicas
