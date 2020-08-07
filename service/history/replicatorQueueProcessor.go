@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
@@ -57,7 +58,7 @@ type (
 		logger                log.Logger
 		retryPolicy           backoff.RetryPolicy
 		// This is the batch size used by pull based RPC replicator.
-		fetchTasksBatchSize int
+		fetchTasksBatchSize   dynamicconfig.IntPropertyFnWithShardIDFilter
 		*queueProcessorBase
 		queueAckMgr
 
@@ -122,7 +123,7 @@ func newReplicatorQueueProcessor(
 		options:               options,
 		logger:                logger,
 		retryPolicy:           retryPolicy,
-		fetchTasksBatchSize:   config.ReplicatorProcessorFetchTasksBatchSize(),
+		fetchTasksBatchSize:   config.ReplicatorProcessorFetchTasksBatchSize,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
@@ -441,7 +442,8 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
 	)
 	taskGeneratedTimer := replicationScope.StartTimer(metrics.TaskLatency)
-	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
+	shardID := p.shard.GetShardID()
+	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize(shardID))
 	if err != nil {
 		return nil, err
 	}
