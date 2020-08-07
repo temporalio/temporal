@@ -403,8 +403,10 @@ func (t *timerStandbyTaskExecutor) processTimer(
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(timerTask),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		timerTask.DomainID,
+		getWorkflowExecution(timerTask),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err

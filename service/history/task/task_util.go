@@ -23,7 +23,7 @@ package task
 import (
 	"fmt"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -352,6 +352,16 @@ func retryWorkflow(
 		return nil, err
 	}
 	return newMutableState, nil
+}
+
+func getWorkflowExecution(
+	taskInfo Info,
+) workflow.WorkflowExecution {
+
+	return workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(taskInfo.GetWorkflowID()),
+		RunId:      common.StringPtr(taskInfo.GetRunID()),
+	}
 }
 
 // NewMockTaskMatcher creates a gomock matcher for mock Task

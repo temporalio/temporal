@@ -479,8 +479,10 @@ func (t *transferStandbyTaskExecutor) processTransfer(
 ) (retError error) {
 
 	transferTask := taskInfo.(*persistence.TransferTaskInfo)
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(transferTask),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		transferTask.DomainID,
+		getWorkflowExecution(transferTask),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
