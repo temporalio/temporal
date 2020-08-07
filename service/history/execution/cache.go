@@ -23,6 +23,7 @@ package execution
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 
@@ -155,12 +156,26 @@ func (c *Cache) GetAndCreateWorkflowExecution(
 }
 
 // GetOrCreateWorkflowExecutionForBackground gets or creates workflow execution context with background context
+// currently only used in tests
 func (c *Cache) GetOrCreateWorkflowExecutionForBackground(
 	domainID string,
 	execution workflow.WorkflowExecution,
 ) (Context, ReleaseFunc, error) {
 
 	return c.GetOrCreateWorkflowExecution(context.Background(), domainID, execution)
+}
+
+// GetOrCreateWorkflowExecutionWithTimeout gets or creates workflow execution context with timeout
+func (c *Cache) GetOrCreateWorkflowExecutionWithTimeout(
+	domainID string,
+	execution workflow.WorkflowExecution,
+	timeout time.Duration,
+) (Context, ReleaseFunc, error) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return c.GetOrCreateWorkflowExecution(ctx, domainID, execution)
 }
 
 // GetOrCreateWorkflowExecution gets or creates workflow execution context

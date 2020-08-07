@@ -39,9 +39,9 @@ import (
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 3 * time.Second
-	secondsInDay                     = int32(24 * time.Hour / time.Second)
-	defaultDomainName                = "defaultDomainName"
+	taskDefaultTimeout = 3 * time.Second
+	secondsInDay       = int32(24 * time.Hour / time.Second)
+	defaultDomainName  = "defaultDomainName"
 )
 
 type (
@@ -77,22 +77,12 @@ func newTransferTaskExecutorBase(
 	}
 }
 
-func (t *transferTaskExecutorBase) getDomainIDAndWorkflowExecution(
-	task *persistence.TransferTaskInfo,
-) (string, workflow.WorkflowExecution) {
-
-	return task.DomainID, workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
-	}
-}
-
 func (t *transferTaskExecutorBase) pushActivity(
 	task *persistence.TransferTaskInfo,
 	activityScheduleToStartTimeout int32,
 ) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), taskDefaultTimeout)
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
@@ -120,7 +110,7 @@ func (t *transferTaskExecutorBase) pushDecision(
 	decisionScheduleToStartTimeout int32,
 ) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), taskDefaultTimeout)
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
