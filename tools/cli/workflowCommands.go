@@ -1725,8 +1725,8 @@ func isLastEventWorkflowTaskFailedWithNonDeterminism(ctx context.Context, namesp
 func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
-	case "LastWorkflowTaskCompleted":
-		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "LastWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1735,8 +1735,8 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 		if err != nil {
 			return
 		}
-	case "FirstWorkflowTaskCompleted":
-		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskCompletedID(ctx, namespace, wid, rid, frontendClient)
+	case "FirstWorkflowTask":
+		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1752,7 +1752,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	return
 }
 
-func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
+func getLastWorkflowTaskID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1770,8 +1770,8 @@ func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid str
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskCompletedID = e.GetEventId()
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				workflowTaskID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1780,8 +1780,8 @@ func getLastWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid str
 			break
 		}
 	}
-	if workflowTaskCompletedID == 0 {
-		return "", 0, printErrorAndReturn("Get LastWorkflowTaskCompletedID failed", fmt.Errorf("no WorkflowTaskCompletedID"))
+	if workflowTaskID == 0 {
+		return "", 0, printErrorAndReturn("Get LastWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }
@@ -1814,7 +1814,7 @@ func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, bin
 	return
 }
 
-func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskCompletedID int64, err error) {
+func getFirstWorkflowTaskID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1825,16 +1825,15 @@ func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid st
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
 	}
-
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskCompletedID = e.GetEventId()
-				return resetBaseRunID, workflowTaskCompletedID, nil
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				workflowTaskID = e.GetEventId() + 1
+				return resetBaseRunID, workflowTaskID, nil
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1843,8 +1842,8 @@ func getFirstWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid st
 			break
 		}
 	}
-	if workflowTaskCompletedID == 0 {
-		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskCompletedID failed", fmt.Errorf("no WorkflowTaskCompletedID"))
+	if workflowTaskID == 0 {
+		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
 }
