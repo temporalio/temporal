@@ -1726,7 +1726,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	fmt.Println("resetType:", resetType)
 	switch resetType {
 	case "LastWorkflowTask":
-		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getLastWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1736,7 +1736,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 			return
 		}
 	case "FirstWorkflowTask":
-		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskID(ctx, namespace, wid, rid, frontendClient)
+		resetBaseRunID, workflowTaskFinishID, err = getFirstWorkflowTaskEventID(ctx, namespace, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1752,7 +1752,8 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, names
 	return
 }
 
-func getLastWorkflowTaskID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskID int64, err error) {
+// Returns event id of the last completed task or id of the next event after scheduled task.
+func getLastWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1770,8 +1771,10 @@ func getLastWorkflowTaskID(ctx context.Context, namespace, wid, rid string, fron
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				workflowTaskID = e.GetEventId() + 1
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskEventID = e.GetEventId()
+			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1780,7 +1783,7 @@ func getLastWorkflowTaskID(ctx context.Context, namespace, wid, rid string, fron
 			break
 		}
 	}
-	if workflowTaskID == 0 {
+	if workflowTaskEventID == 0 {
 		return "", 0, printErrorAndReturn("Get LastWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
@@ -1814,7 +1817,8 @@ func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, bin
 	return
 }
 
-func getFirstWorkflowTaskID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskID int64, err error) {
+// Returns id of the first workflow task completed event or if it doesn't exist then id of the event after task scheduled event.
+func getFirstWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, workflowTaskEventID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1831,9 +1835,11 @@ func getFirstWorkflowTaskID(ctx context.Context, namespace, wid, rid string, fro
 			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				return resetBaseRunID, workflowTaskEventID, nil
+			}
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				workflowTaskID = e.GetEventId() + 1
-				return resetBaseRunID, workflowTaskID, nil
+				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -1842,7 +1848,7 @@ func getFirstWorkflowTaskID(ctx context.Context, namespace, wid, rid string, fro
 			break
 		}
 	}
-	if workflowTaskID == 0 {
+	if workflowTaskEventID == 0 {
 		return "", 0, printErrorAndReturn("Get FirstWorkflowTaskID failed", fmt.Errorf("unable to find any scheduled or completed task"))
 	}
 	return
