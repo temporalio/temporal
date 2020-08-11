@@ -61,11 +61,10 @@ var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	defaultTimeout       = 30    // Timeout in seconds
-	cqlProtoVersion      = 4     // default CQL protocol version
-	defaultConsistency   = "ALL" // schema updates must always be ALL
-	defaultCassandraPort = 9042
-	systemKeyspace       = "system"
+	defaultTimeout     = 30    // Timeout in seconds
+	cqlProtoVersion    = 4     // default CQL protocol version
+	defaultConsistency = "ALL" // schema updates must always be ALL
+	systemKeyspace     = "system"
 )
 
 const (

@@ -39,35 +39,35 @@ const (
 	// CassandraPort env
 	CassandraPort = "CASSANDRA_PORT"
 	// CassandraDefaultPort Cassandra default port
-	CassandraDefaultPort = "9042"
+	CassandraDefaultPort = 9042
 
 	// MySQLSeeds env
 	MySQLSeeds = "MYSQL_SEEDS"
 	// MySQLPort env
 	MySQLPort = "MYSQL_PORT"
 	// MySQLDefaultPort MySQL default port
-	MySQLDefaultPort = "3306"
+	MySQLDefaultPort = 3306
 
 	// KafkaSeeds env
 	KafkaSeeds = "KAFKA_SEEDS"
 	// KafkaPort env
 	KafkaPort = "KAFKA_PORT"
 	// KafkaDefaultPort Kafka default port
-	KafkaDefaultPort = "9092"
+	KafkaDefaultPort = 9092
 
 	// ESSeeds env
 	ESSeeds = "ES_SEEDS"
 	// ESPort env
 	ESPort = "ES_PORT"
 	// ESDefaultPort ES default port
-	ESDefaultPort = "9200"
+	ESDefaultPort = 9200
 
 	// PostgresSeeds env
 	PostgresSeeds = "POSTGRES_SEEDS"
 	// PostgresPort env
 	PostgresPort = "POSTGRES_PORT"
 	// PostgresDefaultPort Postgres default port
-	PostgresDefaultPort = "5432"
+	PostgresDefaultPort = 5432
 )
 
 // SetupEnv setup the necessary env
@@ -80,7 +80,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(CassandraPort) == "" {
-		err := os.Setenv(CassandraPort, CassandraDefaultPort)
+		err := os.Setenv(CassandraPort, strconv.Itoa(CassandraDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", CassandraPort))
 		}
@@ -94,7 +94,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(MySQLPort) == "" {
-		err := os.Setenv(MySQLPort, MySQLDefaultPort)
+		err := os.Setenv(MySQLPort, strconv.Itoa(MySQLDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", MySQLPort))
 		}
@@ -108,7 +108,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(PostgresPort) == "" {
-		err := os.Setenv(PostgresPort, PostgresDefaultPort)
+		err := os.Setenv(PostgresPort, strconv.Itoa(PostgresDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", PostgresPort))
 		}
@@ -122,7 +122,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(KafkaPort) == "" {
-		err := os.Setenv(KafkaPort, KafkaDefaultPort)
+		err := os.Setenv(KafkaPort, strconv.Itoa(KafkaDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", KafkaPort))
 		}
@@ -136,7 +136,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(ESPort) == "" {
-		err := os.Setenv(ESPort, ESDefaultPort)
+		err := os.Setenv(ESPort, strconv.Itoa(ESDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", ESPort))
 		}
@@ -156,7 +156,7 @@ func GetCassandraAddress() string {
 func GetCassandraPort() int {
 	port := os.Getenv(CassandraPort)
 	if port == "" {
-		port = CassandraDefaultPort
+		return CassandraDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
@@ -178,7 +178,7 @@ func GetMySQLAddress() string {
 func GetMySQLPort() int {
 	port := os.Getenv(MySQLPort)
 	if port == "" {
-		port = MySQLDefaultPort
+		return MySQLDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
@@ -200,7 +200,7 @@ func GetPostgresAddress() string {
 func GetPostgresPort() int {
 	port := os.Getenv(PostgresPort)
 	if port == "" {
-		port = PostgresDefaultPort
+		return PostgresDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
@@ -222,7 +222,7 @@ func GetKafkaAddress() string {
 func GetKafkaPort() int {
 	port := os.Getenv(KafkaPort)
 	if port == "" {
-		port = KafkaDefaultPort
+		return KafkaDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
@@ -244,7 +244,7 @@ func GetESAddress() string {
 func GetESPort() int {
 	port := os.Getenv(ESPort)
 	if port == "" {
-		port = ESDefaultPort
+		return ESDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
