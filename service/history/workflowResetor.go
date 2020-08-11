@@ -321,7 +321,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 		return
 	}
 	// replay received signals back to mutableState/history:
-	retError = w.replayReceivedSignals(ctx, receivedSignals, continueRunID, newMutableState, currMutableState)
+	retError = w.replayReceivedSignals(ctx, resetWorkflowTaskCompletedEventID, receivedSignals, continueRunID, newMutableState, currMutableState)
 	if retError != nil {
 		return
 	}
@@ -472,9 +472,10 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(
 	return currRepTasks, insertRepTasks, nil
 }
 
-// replay signals in the base run, and also signals in all the runs along the chain of contineAsNew
+// replay signals in the base run, and also signals in all the runs along the chain of continueAsNew
 func (w *workflowResetorImpl) replayReceivedSignals(
 	ctx context.Context,
+	workflowTaskFinishEventID int64,
 	receivedSignals []*historypb.HistoryEvent,
 	continueRunID string,
 	newMutableState, currMutableState mutableState,
@@ -530,7 +531,8 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 		for {
 			var readResp *persistence.ReadHistoryBranchByBatchResponse
 			readResp, err := w.eng.historyV2Mgr.ReadHistoryBranchByBatch(readReq)
-			if err != nil {
+			// Fail if we don't have enough events to perform the reset, otherwise continue with what we've got.
+			if err != nil && (readResp == nil || readResp.LastEventID < workflowTaskFinishEventID) {
 				return err
 			}
 			for _, batch := range readResp.History {
@@ -647,7 +649,11 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		var readResp *persistence.ReadHistoryBranchByBatchResponse
 		readResp, retError = w.eng.historyV2Mgr.ReadHistoryBranchByBatch(readReq)
 		if retError != nil {
-			return
+			if readResp == nil || readResp.LastEventID < workflowTaskFinishEventID {
+				return
+			}
+			// Proceed with the reset if we've got sufficient number of events.
+			retError = nil
 		}
 
 		for _, batch := range readResp.History {
