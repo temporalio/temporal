@@ -1299,7 +1299,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 		},
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.Internal{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
 	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)
@@ -1379,7 +1379,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 		},
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.Internal{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("UnhandledCommand", err.Error())
 
 	s.Equal(int64(15), ms2.ExecutionInfo.NextEventID)

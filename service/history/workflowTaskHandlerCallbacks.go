@@ -561,12 +561,7 @@ Update_History_Loop:
 		}
 
 		if workflowTaskFailedErr != nil {
-			switch workflowTaskFailedErr.causeErr.(type) {
-			case nil:
-				return nil, serviceerror.NewInternal(workflowTaskFailedErr.Error())
-			case *serviceerror.InvalidArgument:
-				return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
-			}
+			return nil, workflowTaskFailedErr.ServiceError()
 		}
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
