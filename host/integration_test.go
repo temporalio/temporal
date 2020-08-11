@@ -2654,8 +2654,8 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
-	s.IsType(&serviceerror.NotFound{}, err)
-	s.Equal("Workflow task not found.", err.Error())
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("UnhandledCommand", err.Error())
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
