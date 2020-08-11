@@ -187,7 +187,7 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 	if retError := newMutableState.CheckResettable(); retError != nil {
 		return retError
 	}
-	if !newMutableState.HasInFlightWorkflowTask() && !newMutableState.HasPendingWorkflowTask() {
+	if !newMutableState.HasPendingWorkflowTask() {
 		return serviceerror.NewInternal(fmt.Sprintf("can't find the last started workflow task"))
 	}
 	if newMutableState.HasBufferedEvents() {
@@ -290,10 +290,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 
 	// failed the in-flight workflow task(started).
 	// Note that we need to ensure WorkflowTaskFailed event is appended right after WorkflowTaskStarted event
-	workflowTask, _ := newMutableState.GetInFlightWorkflowTask()
-	if workflowTask == nil {
-		workflowTask, _ = newMutableState.GetPendingWorkflowTask()
-	}
+	workflowTask, _ := newMutableState.GetPendingWorkflowTask()
 	_, err := newMutableState.AddWorkflowTaskFailedEvent(workflowTask.ScheduleID, workflowTask.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
 	if err != nil {
