@@ -239,17 +239,18 @@ check: copyright goimports-check lint vet staticcheck errcheck
 clean-test-results:
 	@rm -f test.log
 
+UNIT_TEST_DIRS := "go.temporal.io/server/cmd/server/temporal"
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	EXIT_CODE=0
-	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log ; EXIT_CODE=$(shell expr $(EXIT_CODE) + $(PIPESTATUS[0]) )$(NEWLINE))
-	exit $(EXIT_CODE)
+	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
+	@grep -qzwv "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
+	@grep -qzwv "^--- FAIL" test.log
 
 test: unit-test integration-test
 
@@ -392,6 +393,3 @@ go-generate:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
-
-echo:
-	true | tee 1.log ; test ${PIPESTATUS[0]} -eq 0
