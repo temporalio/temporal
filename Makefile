@@ -239,7 +239,6 @@ check: copyright goimports-check lint vet staticcheck errcheck
 clean-test-results:
 	@rm -f test.log
 
-UNIT_TEST_DIRS := "go.temporal.io/server/cmd/server/temporal"
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
