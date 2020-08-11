@@ -494,6 +494,12 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		p.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 	}
 
+	if err := p.shard.UpdateReplicatorAckLevel(
+		lastReadTaskID,
+	);  err != nil {
+		p.logger.Error("error updating kafka replication level", tag.Error(err), tag.OperationFailed)
+	}
+
 	return &replicator.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,
 		HasMore:                common.BoolPtr(hasMore),

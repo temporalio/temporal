@@ -255,11 +255,6 @@ func (p *taskProcessorImpl) cleanupAckedReplicationTasks() error {
 		metrics.ReplicationTasksLag,
 		time.Duration(p.shard.GetTransferMaxReadLevel()-minAckLevel),
 	)
-	// update replication queue ack level.
-	// this ack level currently use by Kafka replication
-	if err := p.shard.UpdateReplicatorAckLevel(minAckLevel); err != nil {
-		return err
-	}
 	return p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{
 			InclusiveEndTaskID: minAckLevel,
