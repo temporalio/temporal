@@ -752,7 +752,7 @@ func validateLastBatchOfReset(lastBatch []*historypb.HistoryEvent, workflowTaskF
 
 	if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED &&
 		lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to use provided event id %v as a reset point as previous batch [%v-%v] should end with s or WorkflowTaskScheduled event.",
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to use provided event id %v as a reset point as previous batch [%v-%v] should end with WorkflowTaskStarted or WorkflowTaskScheduled event",
 			workflowTaskFinishEventID, firstEvent.GetEventId(), lastEvent.GetEventId()))
 	}
 
