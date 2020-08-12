@@ -876,7 +876,7 @@ const (
 type Filter int
 
 func (f Filter) String() string {
-	if f <= unknownFilter || f > TaskType {
+	if f <= unknownFilter || f > ShardID {
 		return filters[unknownFilter]
 	}
 	return filters[f]
