@@ -2077,12 +2077,12 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
-	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
+	return (time.Duration(milliseconds) * time.Millisecond).Nanoseconds()
 }
 
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
-	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+	return time.Duration(timestamp).Milliseconds()
 }
 
 // NewHistoryBranchToken return a new branch token
