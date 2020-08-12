@@ -2317,7 +2317,9 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow next event ID.")
 	}
-
+	if baseRunID == "" {
+		baseRunID = baseMutableState.GetExecutionInfo().RunID
+	}
 	// also load the current run of the workflow, it can be different from the base runID
 	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,

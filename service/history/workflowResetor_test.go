@@ -183,7 +183,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	currRunID := uuid.New().String()
 	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
-		RunId:      forkRunID,
+		RunId:      "",
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 "testNamespace",
@@ -259,6 +259,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
+	}
+
+	gforkResponse := &persistence.GetCurrentExecutionResponse{
+		RunID: forkRunID,
 	}
 
 	readHistoryReq := &persistence.ReadHistoryBranchRequest{
@@ -725,6 +729,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", forkGwmsRequest).Return(forkGwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gforkResponse, nil).Once()
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gcurResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
@@ -766,8 +771,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// verify executionManager request
 	calls = s.mockExecutionMgr.Calls
-	s.Equal(4, len(calls))
-	resetCall := calls[3]
+	s.Equal(5, len(calls))
+	resetCall := calls[4]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*persistence.ResetWorkflowExecutionRequest)
 	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
