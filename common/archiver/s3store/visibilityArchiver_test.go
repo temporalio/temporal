@@ -160,16 +160,16 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
-		Namespace:          testNamespace,
-		NamespaceId:        testNamespaceID,
-		WorkflowId:         testWorkflowID,
-		RunId:              testRunID,
-		WorkflowTypeName:   testWorkflowTypeName,
-		StartTime:     timestamp.TimeNowPtrUtc(),
-		ExecutionTime: nil, // workflow without backoff
-		CloseTime:     timestamp.TimeNowPtrUtc(),
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		HistoryLength:      int64(101),
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		ExecutionTime:    nil, // workflow without backoff
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.Error(err)
@@ -437,8 +437,8 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowId:       testWorkflowID,
 			RunId:            fmt.Sprintf("%s-%d", testRunID, i),
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:   timestamp.UnixOrZeroTimePtr(testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
-			CloseTime:   timestamp.UnixOrZeroTimePtr((testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			StartTime:        timestamp.UnixOrZeroTimePtr(testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			CloseTime:        timestamp.UnixOrZeroTimePtr((testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		}
@@ -574,8 +574,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:   timestamp.UnixOrZeroTimePtr(1),
-			CloseTime:   timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds()),
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds()),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
@@ -585,8 +585,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:   timestamp.UnixOrZeroTimePtr(1),
-			CloseTime:   timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds() + 30*time.Minute.Nanoseconds()),
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(time.Hour.Nanoseconds() + 30*time.Minute.Nanoseconds()),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},
@@ -596,8 +596,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowId:       testWorkflowID,
 			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:   timestamp.UnixOrZeroTimePtr(1),
-			CloseTime:   timestamp.UnixOrZeroTimePtr(3 * time.Hour.Nanoseconds()),
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(3 * time.Hour.Nanoseconds()),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		},

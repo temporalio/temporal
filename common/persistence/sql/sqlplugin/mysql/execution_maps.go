@@ -160,12 +160,11 @@ func expandBatchInsertQuery(q string, rowCount int) string {
 	// into the sql query when we don't use a semicolon when we don't terminate with a `;`.
 	// Removing that while writing the second half of the query if it exists.
 	lastIdx := strings.LastIndex(q, ",")
-	if lastIdx == -1  || lastIdx <= valEndIdx{
+	if lastIdx == -1 || lastIdx <= valEndIdx {
 		b.WriteString(q[valEndIdx:])
 	} else {
 		b.WriteString(q[valEndIdx:lastIdx])
 	}
-
 
 	return b.String()
 }
