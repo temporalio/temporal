@@ -434,7 +434,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	replicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, replicationConfig.Clusters)
 
 	var responseFailoverEndTime *int64
-	if failoverEndTime != emptyFailoverEndTime {
+	if failoverEndTime > emptyFailoverEndTime {
 		domainFailoverEndTime := failoverEndTime
 		responseFailoverEndTime = common.Int64Ptr(domainFailoverEndTime)
 	}
@@ -515,7 +515,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 			domain.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 			domain.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, domain.ReplicationConfig.Clusters)
 
-			if failoverEndTime != emptyFailoverEndTime {
+			if failoverEndTime > emptyFailoverEndTime {
 				domainFailoverEndTime := failoverEndTime
 				domain.FailoverEndTime = common.Int64Ptr(domainFailoverEndTime)
 			}
