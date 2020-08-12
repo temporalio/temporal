@@ -98,10 +98,6 @@ type (
 		// check net.ParseIP for supported syntax, only IPv4 is supported,
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
-		// DisableLogging disables all logging for rpc
-		DisableLogging bool `yaml:"disableLogging"`
-		// LogLevel is the desired log level
-		LogLevel string `yaml:"logLevel"`
 	}
 
 	// Global contains config items that apply process-wide to all services
