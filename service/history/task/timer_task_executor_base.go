@@ -73,7 +73,11 @@ func (t *timerTaskExecutorBase) executeDeleteHistoryEventTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
+	)
 	if err != nil {
 		return err
 	}
@@ -270,14 +274,4 @@ func (t *timerTaskExecutorBase) deleteWorkflowVisibility(
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerTaskExecutorBase) getDomainIDAndWorkflowExecution(
-	task *persistence.TimerTaskInfo,
-) (string, workflow.WorkflowExecution) {
-
-	return task.DomainID, workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
-	}
 }

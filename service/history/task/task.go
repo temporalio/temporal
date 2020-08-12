@@ -26,6 +26,7 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
@@ -34,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	ctask "github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -276,6 +278,7 @@ func (t *taskBase) HandleErr(
 
 			t.attempt++
 			if t.attempt > t.maxRetryCount() {
+				t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
 				t.logger.Error("Critical error processing task, retrying.",
 					tag.Error(err), tag.OperationCritical, tag.TaskType(t.GetTaskType()))
 			}
@@ -287,6 +290,15 @@ func (t *taskBase) HandleErr(
 	}
 
 	if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		return nil
+	}
+
+	if transferTask, ok := t.Info.(*persistence.TransferTaskInfo); ok &&
+		transferTask.TaskType == persistence.TransferTaskTypeCloseExecution &&
+		err == execution.ErrMissingWorkflowStartEvent &&
+		t.shard.GetConfig().EnableDropStuckTaskByDomainID(t.Info.GetDomainID()) { // use domainID here to avoid accessing domainCache
+		t.scope.IncCounter(metrics.TransferTaskMissingEventCounter)
+		t.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
@@ -327,7 +339,7 @@ func (t *taskBase) HandleErr(
 func (t *taskBase) RetryErr(
 	err error,
 ) bool {
-	if err == ErrTaskRedispatch || err == ErrTaskPendingActive {
+	if err == ErrTaskRedispatch || err == ErrTaskPendingActive || common.IsContextTimeoutError(err) {
 		return false
 	}
 

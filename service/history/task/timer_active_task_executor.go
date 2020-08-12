@@ -101,8 +101,10 @@ func (t *timerActiveTaskExecutor) executeUserTimerTimeoutTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
@@ -153,8 +155,10 @@ func (t *timerActiveTaskExecutor) executeActivityTimeoutTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
@@ -250,8 +254,10 @@ func (t *timerActiveTaskExecutor) executeDecisionTimeoutTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
@@ -322,8 +328,10 @@ func (t *timerActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
@@ -357,8 +365,10 @@ func (t *timerActiveTaskExecutor) executeActivityRetryTimerTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
@@ -441,8 +451,10 @@ func (t *timerActiveTaskExecutor) executeWorkflowTimeoutTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionWithTimeout(
+		task.DomainID,
+		getWorkflowExecution(task),
+		taskDefaultTimeout,
 	)
 	if err != nil {
 		return err
