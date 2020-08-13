@@ -225,7 +225,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 		}
 		morePage = len(pageToken) != 0
 		t.logger.Debug("readTimerTasks",
-			tag.QueryLevel(minQueryLevel), tag.QueryLevel(maxQueryLevel), tag.Counter(len(tasks)), tag.Bool(morePage))
+			tag.MinQueryLevel(minQueryLevel), tag.MaxQueryLevel(maxQueryLevel), tag.Counter(len(tasks)), tag.Bool(morePage))
 	}
 
 	t.Lock()
@@ -271,7 +271,7 @@ TaskFilterLoop:
 		} else {
 			t.minQueryLevel = t.maxQueryLevel
 		}
-		t.logger.Debug("Moved timer minQueryLevel", tag.QueryLevel(t.minQueryLevel))
+		t.logger.Debug("Moved timer minQueryLevel", tag.MinQueryLevel(t.minQueryLevel))
 		t.pageToken = nil
 	}
 	t.Unlock()
