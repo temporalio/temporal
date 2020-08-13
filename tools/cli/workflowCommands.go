@@ -1361,11 +1361,11 @@ func ObserveHistory(c *cli.Context) {
 func ResetWorkflow(c *cli.Context) {
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
-	rid := getRequiredOption(c, FlagRunID)
 	reason := getRequiredOption(c, FlagReason)
 	if len(reason) == 0 {
 		ErrorAndExit("wrong reason", fmt.Errorf("reason cannot be empty"))
 	}
+	rid := c.String(FlagRunID)
 	eventID := c.Int64(FlagEventID)
 	resetType := c.String(FlagResetType)
 	extraForResetType, ok := resetTypesMap[resetType]
