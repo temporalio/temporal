@@ -92,7 +92,7 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityTimerHeartbeats map[int64]int64                             // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityTimerHeartbeats map[int64]time.Time                         // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
 		pendingActivityInfoIDs         map[int64]*persistenceblobs.ActivityInfo    // Schedule Event ID -> Activity Info.
 		pendingActivityIDToEventID     map[string]int64                            // Activity ID -> Schedule Event ID of the activity.
 		updateActivityInfos            map[*persistenceblobs.ActivityInfo]struct{} // Modified activities from last update.
@@ -180,7 +180,7 @@ func newMutableStateBuilder(
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[*persistenceblobs.ActivityInfo]struct{}),
-		pendingActivityTimerHeartbeats: make(map[int64]int64),
+		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
 		pendingActivityInfoIDs:         make(map[int64]*persistenceblobs.ActivityInfo),
 		pendingActivityIDToEventID:     make(map[string]int64),
 		deleteActivityInfos:            make(map[int64]struct{}),
@@ -1038,7 +1038,7 @@ func (e *mutableStateBuilder) GetActivityInfo(
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *mutableStateBuilder) GetActivityInfoWithTimerHeartbeat(
 	scheduleEventID int64,
-) (*persistenceblobs.ActivityInfo, int64, bool) {
+) (*persistenceblobs.ActivityInfo, time.Time, bool) {
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
 
@@ -1363,7 +1363,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 // UpdateActivity updates an activity
 func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
 	ai *persistenceblobs.ActivityInfo,
-	timerTimeoutVisiblityInSeconds int64,
+	timerTimeoutVisibility time.Time,
 ) error {
 
 	err := e.UpdateActivity(ai)
@@ -1371,7 +1371,7 @@ func (e *mutableStateBuilder) UpdateActivityWithTimerHeartbeat(
 		return err
 	}
 
-	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisiblityInSeconds
+	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisibility
 	return nil
 }
 

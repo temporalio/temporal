@@ -854,6 +854,16 @@ func QueryLevel(s time.Time) Tag {
 	return newTimeTag("query-level", s)
 }
 
+// QueryLevel returns tag for query level
+func MinQueryLevel(s time.Time) Tag {
+	return newTimeTag("min-query-level", s)
+}
+
+// QueryLevel returns tag for query level
+func MaxQueryLevel(s time.Time) Tag {
+	return newTimeTag("max-query-level", s)
+}
+
 // TaskQueueInfo returns tag for task queue info
 func TaskQueueInfo(s interface{}) Tag {
 	return newObjectTag("task-queue-info", s)

@@ -220,7 +220,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 
 	var activityInfoUpdated = *activityInfo // make a copy
 	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedHeartbeat
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp.Unix()).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
