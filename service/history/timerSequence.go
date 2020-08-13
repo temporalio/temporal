@@ -101,6 +101,7 @@ func (t *timerSequenceImpl) isExpired(
 ) bool {
 
 	// Cassandra timestamp resolution is in millisecond
+	println(fmt.Sprintf("timerSeq %v - referenceTime %v", timerSequenceID.timestamp, referenceTime))
 	return (timerSequenceID.timestamp.UnixNano() / 10e6) <= (referenceTime.UnixNano() / 10e6)
 }
 
