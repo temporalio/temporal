@@ -281,14 +281,8 @@ func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replica
 func (p *ReplicationTaskProcessorImpl) processResponse(response *replicationspb.ReplicationMessages) {
 
 	p.syncShardChan <- response.GetSyncShardStatus()
-	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
-	// we will receive replication tasks but hasMore is false (meaning that we are always catching up).
-	// So hasMore might not be a good indicator for additional wait.
-	if len(response.ReplicationTasks) == 0 {
-		backoffDuration := p.noTaskRetrier.NextBackOff()
-		time.Sleep(backoffDuration)
-		return
-	}
+	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
+	batchRequestStartTime := time.Now()
 
 	for _, replicationTask := range response.ReplicationTasks {
 		err := p.processSingleTask(replicationTask)
@@ -298,9 +292,18 @@ func (p *ReplicationTaskProcessorImpl) processResponse(response *replicationspb.
 		}
 	}
 
+	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
+	// we will receive replication tasks but hasMore is false (meaning that we are always catching up).
+	// So hasMore might not be a good indicator for additional wait.
+	if len(response.ReplicationTasks) == 0 {
+		backoffDuration := p.noTaskRetrier.NextBackOff()
+		time.Sleep(backoffDuration)
+	} else {
+		scope.RecordTimer(metrics.ReplicationTasksAppliedLatency, time.Now().Sub(batchRequestStartTime))
+	}
+
 	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
 	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
-	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	scope.UpdateGauge(metrics.LastRetrievedMessageID, float64(p.lastRetrievedMessageID))
 	p.noTaskRetrier.Reset()
 }

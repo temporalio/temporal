@@ -119,6 +119,8 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		return err
 	}
 
+	replicationStopWatch := e.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ServiceLatency)
+	defer replicationStopWatch.Stop()
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:        attr.NamespaceId,
 		WorkflowId:         attr.WorkflowId,
@@ -177,6 +179,8 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 
+	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationV2TaskScope, metrics.ServiceLatency)
+	defer replicationStopWatch.Stop()
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -197,8 +201,8 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
+	defer resendStopWatch.Stop()
 
 	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 		retryErr.NamespaceId,
