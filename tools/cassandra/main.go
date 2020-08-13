@@ -29,6 +29,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -75,7 +76,7 @@ func buildCLIOptions() *cli.App {
 		},
 		cli.IntFlag{
 			Name:   schema.CLIFlagPort,
-			Value:  defaultCassandraPort,
+			Value:  environment.GetCassandraPort(),
 			Usage:  "Port of cassandra host to connect to",
 			EnvVar: "CASSANDRA_PORT",
 		},

@@ -79,7 +79,7 @@ func (s *CQLClientTestSuite) TestCQLClient() {
 func newTestCQLClient(keyspace string) (*cqlClient, error) {
 	return newCQLClient(&CQLClientConfig{
 		Hosts:       environment.GetCassandraAddress(),
-		Port:        defaultCassandraPort,
+		Port:        environment.GetCassandraPort(),
 		Keyspace:    keyspace,
 		Timeout:     defaultTimeout,
 		numReplicas: 1,

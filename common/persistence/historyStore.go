@@ -26,7 +26,6 @@ package persistence
 
 import (
 	"fmt"
-
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -238,11 +237,8 @@ func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(
 
 	resp := &ReadHistoryBranchByBatchResponse{}
 	var err error
-	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(true, request)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, resp.LastEventID, err = m.readHistoryBranch(true, request)
+	return resp, err
 }
 
 // ReadHistoryBranch returns history node data for a branch
@@ -253,11 +249,8 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(
 
 	resp := &ReadHistoryBranchResponse{}
 	var err error
-	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, _, err = m.readHistoryBranch(false, request)
+	return resp, err
 }
 
 // ReadRawHistoryBranch returns raw history binary data for a branch
@@ -408,11 +401,11 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
-		return nil, nil, nil, 0, 0, err
+		return nil, nil, nil, 0, 0, 0, err
 	}
 	defaultLastEventID := request.MinEventID - 1
 
@@ -420,15 +413,15 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
-
 	for _, batch := range dataBlobs {
 		events, err := m.historySerializer.DeserializeBatchEvents(batch)
 		if err != nil {
-			return nil, nil, nil, 0, 0, err
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID, err
 		}
 		if len(events) == 0 {
 			logger.Error("Empty events in a batch")
-			return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, empty events"))
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
+				serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -436,12 +429,13 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		lastEvent := events[eventCount-1] // last
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
-			// in a single batch, version should be the same, and ID should be continous
+			// in a single batch, version should be the same, and ID should be continuous
 			logger.Error("Corrupted event batch",
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, wrong version and IDs"))
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
+				serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, wrong version and IDs"))
 		}
 
 		if firstEvent.GetVersion() < token.LastEventVersion {
@@ -465,7 +459,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
-				return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continuous"))
+				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
+					serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continuous"))
 			}
 		}
 
@@ -481,10 +476,10 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 
 	nextPageToken, err := m.serializeToken(token)
 	if err != nil {
-		return nil, nil, nil, 0, 0, err
+		return nil, nil, nil, 0, 0, 0, err
 	}
 
-	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, nil
+	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, token.LastEventID, nil
 }
 
 func (m *historyV2ManagerImpl) deserializeToken(
