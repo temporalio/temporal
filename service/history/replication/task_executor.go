@@ -132,6 +132,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return err
 	}
 
+	replicationStopWatch := e.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.CadenceLatency)
+	defer replicationStopWatch.Stop()
 	request := &history.SyncActivityRequest{
 		DomainId:           attr.DomainId,
 		WorkflowId:         attr.WorkflowId,
@@ -272,6 +274,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 
+	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationV2TaskScope, metrics.CadenceLatency)
+	defer replicationStopWatch.Stop()
 	request := &history.ReplicateEventsV2Request{
 		DomainUUID: attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
@@ -292,8 +296,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientRequests)
-	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
-	defer stopwatch.Stop()
+	resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
+	defer resendStopWatch.Stop()
 
 	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 		retryErr.GetDomainId(),

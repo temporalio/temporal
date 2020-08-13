@@ -288,6 +288,8 @@ func (p *taskProcessorImpl) processResponse(response *r.ReplicationMessages) {
 	default:
 	}
 
+	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
+	batchRequestStartTime := time.Now()
 	for _, replicationTask := range response.ReplicationTasks {
 		err := p.processSingleTask(replicationTask)
 		if err != nil {
@@ -302,11 +304,12 @@ func (p *taskProcessorImpl) processResponse(response *r.ReplicationMessages) {
 	if len(response.ReplicationTasks) == 0 {
 		backoffDuration := p.noTaskRetrier.NextBackOff()
 		time.Sleep(backoffDuration)
+	} else {
+		scope.RecordTimer(metrics.ReplicationTasksAppliedLatency, time.Now().Sub(batchRequestStartTime))
 	}
 
 	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
 	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
-	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	scope.UpdateGauge(metrics.LastRetrievedMessageID, float64(p.lastRetrievedMessageID))
 	p.noTaskRetrier.Reset()
 }
