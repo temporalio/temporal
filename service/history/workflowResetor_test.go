@@ -709,7 +709,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -1403,7 +1403,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -1998,7 +1998,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -2703,7 +2703,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -3304,7 +3304,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -3923,7 +3923,7 @@ func (s *resetorSuite) TestApplyReset() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -4319,7 +4319,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_WithoutRunID() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -4459,7 +4459,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoCompletedTasks() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
