@@ -709,7 +709,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -1403,7 +1403,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -1998,7 +1998,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -2703,7 +2703,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -3304,7 +3304,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -3923,7 +3923,7 @@ func (s *resetorSuite) TestApplyReset() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -4319,7 +4319,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_WithoutRunID() {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
-				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
 			}
 			e.EventTime = &eventTime
 		}
@@ -4354,6 +4354,168 @@ func (s *resetorSuite) TestResetWorkflowExecution_WithoutRunID() {
 		BranchToken:   preResetBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(6),
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+		ShardID:       &s.shardID,
+	}).Return(readHistoryResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(&persistence.ForkHistoryBranchResponse{
+		NewBranchToken: []byte("newBranch"),
+	}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{
+		Size: 200,
+	}, nil).Times(2)
+	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	// Perform a reset and make sure there is no error.
+	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
+	s.Nil(err)
+	s.NotNil(response.RunId)
+}
+
+func (s *resetorSuite) TestResetWorkflowExecution_NoCompletedTasks() {
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+
+	namespaceID := testNamespaceID
+
+	request := &historyservice.ResetWorkflowExecutionRequest{NamespaceId: namespaceID, ResetRequest: &workflowservice.ResetWorkflowExecutionRequest{}}
+
+	wid := "wId"
+	wfType := "wfType"
+	taskQueueName := "taskQueue"
+	forkRunID := uuid.New().String()
+	currRunID := uuid.New().String()
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
+	}
+
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 "testNamespace",
+		WorkflowExecution:         &we,
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.New().String(),
+	}
+
+	forkBranchToken := []byte("forkBranchToken")
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+	}
+	// Prepare history event sequence.
+	readHistoryResponse := &persistence.ReadHistoryBranchByBatchResponse{
+		NextPageToken:    nil,
+		Size:             1000,
+		LastFirstEventID: int64(3),
+		History: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonpb.WorkflowType{
+								Name: wfType,
+							},
+							TaskQueue:                taskQueue,
+							Input:                    payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
+							WorkflowRunTimeout:       timestamp.DurationPtr(50 * time.Second),
+							WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
+						}},
+					},
+					{
+						EventId:   2,
+						Version:   common.EmptyVersion,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+							TaskQueue:           taskQueue,
+							StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						}},
+					},
+				},
+			},
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:    3,
+						Version:    common.EmptyVersion,
+						EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+						Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{}},
+					},
+				},
+			},
+		},
+	}
+
+	eid := int64(0)
+	eventTime := time.Unix(0, 1000).UTC()
+	for _, be := range readHistoryResponse.History {
+		for _, e := range be.Events {
+			eid++
+			if e.GetEventId() != eid {
+				s.Fail(fmt.Sprintf("non-continuous eventID: %v, %v", eid, e.GetEventId()))
+			}
+			e.EventTime = &eventTime
+		}
+	}
+
+	// Mock calls.
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		Execution: commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceID:            namespaceID,
+			WorkflowID:             wid,
+			WorkflowTypeName:       wfType,
+			TaskQueue:              taskQueueName,
+			RunID:                  forkRunID,
+			BranchToken:            forkBranchToken,
+			NextEventID:            4,
+			WorkflowTaskVersion:    common.EmptyVersion,
+			WorkflowTaskScheduleID: common.EmptyEventID,
+			WorkflowTaskStartedID:  common.EmptyEventID,
+			State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
+	}}, nil).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currRunID,
+	}, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		Execution: commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceID:            namespaceID,
+			WorkflowID:             wid,
+			WorkflowTypeName:       wfType,
+			TaskQueue:              taskQueueName,
+			RunID:                  currRunID,
+			NextEventID:            common.FirstEventID,
+			WorkflowTaskVersion:    common.EmptyVersion,
+			WorkflowTaskScheduleID: common.EmptyEventID,
+			WorkflowTaskStartedID:  common.EmptyEventID,
+			State:                  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		},
+		ExecutionStats: &persistenceblobs.ExecutionStats{},
+	}}, nil).Once()
+	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
+		BranchToken:   forkBranchToken,
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    int64(4),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
 		ShardID:       &s.shardID,
