@@ -38,14 +38,17 @@ import (
 	"github.com/uber/cadence/common/quotas"
 )
 
+// Loader loads timer task information
 type Loader interface {
 	Load() []*persistence.TimerTaskInfo
 }
 
+// Printer prints timer task information
 type Printer interface {
 	Print(timers []*persistence.TimerTaskInfo) error
 }
 
+// Reporter wraps Loader, Printer and a filter on time task type and domainID
 type Reporter struct {
 	domainID   string
 	timerTypes []int
@@ -67,22 +70,25 @@ type histogramPrinter struct {
 	timeFormat string
 }
 
-type JSONPrinter struct {
+type jsonPrinter struct {
 	ctx *cli.Context
 }
 
+// NewCassLoader creates a new Loader to load timer task information from cassandra
 func NewCassLoader(c *cli.Context) Loader {
 	return &cassandraLoader{
 		ctx: c,
 	}
 }
 
+// NewFileLoader creates a new Loader to load timer task information from file
 func NewFileLoader(c *cli.Context) Loader {
 	return &fileLoader{
 		ctx: c,
 	}
 }
 
+// NewReporter creates a new Reporter
 func NewReporter(domain string, timerTypes []int, loader Loader, printer Printer) *Reporter {
 	return &Reporter{
 		timerTypes: timerTypes,
@@ -92,6 +98,7 @@ func NewReporter(domain string, timerTypes []int, loader Loader, printer Printer
 	}
 }
 
+// NewHistogramPrinter creates a new Printer to display timer task information in a histogram
 func NewHistogramPrinter(c *cli.Context, timeFormat string) Printer {
 	return &histogramPrinter{
 		ctx:        c,
@@ -99,8 +106,9 @@ func NewHistogramPrinter(c *cli.Context, timeFormat string) Printer {
 	}
 }
 
+// NewJSONPrinter creates a new Printer to display timer task information in a JSON format
 func NewJSONPrinter(c *cli.Context) Printer {
-	return &JSONPrinter{
+	return &jsonPrinter{
 		ctx: c,
 	}
 }
@@ -123,6 +131,7 @@ func (r *Reporter) filter(timers []*persistence.TimerTaskInfo) []*persistence.Ti
 	return timers
 }
 
+// Report loads, filters and prints timer tasks
 func (r *Reporter) Report() error {
 	return r.printer.Print(r.filter(r.loader.Load()))
 }
@@ -181,7 +190,7 @@ func AdminTimers(c *cli.Context) {
 	}
 }
 
-func (jp *JSONPrinter) Print(timers []*persistence.TimerTaskInfo) error {
+func (jp *jsonPrinter) Print(timers []*persistence.TimerTaskInfo) error {
 	for _, t := range timers {
 		if t == nil {
 			continue

@@ -39,6 +39,7 @@ type counter struct {
 	count int
 }
 
+// Histogram holds the occurrence count for each key
 type Histogram struct {
 	maxCount int    // used to format output
 	maxKey   string // used to format output
@@ -46,6 +47,7 @@ type Histogram struct {
 	counters []*counter
 }
 
+// NewHistogram creates a new Histogram
 func NewHistogram() *Histogram {
 	return &Histogram{
 		maxCount: defaultWidth,

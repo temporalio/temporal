@@ -37,9 +37,9 @@ const (
 	ConcreteScannerContextKey = ContextKey(0)
 	// ConcreteFixerContextKey is the key used to access FixerContext in activities for concrete executions
 	ConcreteFixerContextKey = ContextKey(1)
-	// ConcreteScannerContextKey is the key used to access ScannerContext in activities for current executions
+	// CurrentScannerContextKey is the key used to access ScannerContext in activities for current executions
 	CurrentScannerContextKey = ContextKey(2)
-	// ConcreteFixerContextKey is the key used to access FixerContext in activities for current executions
+	// CurrentFixerContextKey is the key used to access FixerContext in activities for current executions
 	CurrentFixerContextKey = ContextKey(3)
 
 	// ShardReportQuery is the query name for the query used to get a single shard's report
@@ -68,11 +68,13 @@ const (
 	maxShardQueryResult = 1000
 )
 
+// ScanTypeScannerContextKeyMap maps execution type to the context key used by scanner
 var ScanTypeScannerContextKeyMap = map[common.ScanType]interface{}{
 	common.ConcreteExecutionType: ConcreteScannerContextKey,
 	common.CurrentExecutionType:  CurrentScannerContextKey,
 }
 
+// ScanTypeFixerContextKeyMap maps execution type to the context key used by fixer
 var ScanTypeFixerContextKeyMap = map[common.ScanType]interface{}{
 	common.ConcreteExecutionType: ConcreteFixerContextKey,
 	common.CurrentExecutionType:  CurrentFixerContextKey,
