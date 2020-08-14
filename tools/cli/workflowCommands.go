@@ -1836,10 +1836,13 @@ func getFirstWorkflowTaskEventID(ctx context.Context, namespace, wid, rid string
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				workflowTaskEventID = e.GetEventId()
 				return resetBaseRunID, workflowTaskEventID, nil
 			}
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				workflowTaskEventID = e.GetEventId() + 1
+				if workflowTaskEventID == 0 {
+					workflowTaskEventID = e.GetEventId() + 1
+				}
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
